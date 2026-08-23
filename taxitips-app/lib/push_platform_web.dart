@@ -1,0 +1,1 @@
+String pushPlatformName() => 'web';

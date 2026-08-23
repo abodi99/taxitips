@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Återställ lösenord — Taxi Tips</title>
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/brand.css" />
+  <link rel="stylesheet" href="/portal.css" />
+</head>
+<body class="portal">
+  <header class="top">
+    <a class="brand brand-logo" href="/"><img src="/brand/logo.svg" alt="taxitips" height="32" /></a>
+  </header>
+  <main class="card">
+    <h1>Återställ lösenord</h1>
+    <form id="forgotForm">
+      <label>E-post
+        <input type="email" name="email" required autocomplete="email" />
+      </label>
+      <button type="submit" class="btn btn-primary">Skicka länk</button>
+    </form>
+    <form id="resetForm" hidden>
+      <label>Nytt lösenord (minst 8 tecken)
+        <input type="password" name="password" minlength="8" required autocomplete="new-password" />
+      </label>
+      <button type="submit" class="btn btn-primary">Spara lösenord</button>
+    </form>
+    <p id="msg" class="muted"></p>
+    <p><a href="/login.html">Tillbaka till login</a></p>
+  </main>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const token = params.get("token");
+    const msg = document.getElementById("msg");
+    const forgotForm = document.getElementById("forgotForm");
+    const resetForm = document.getElementById("resetForm");
+    if (token) {
+      forgotForm.hidden = true;
+      resetForm.hidden = false;
+    }
+    forgotForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      msg.textContent = "Skickar…";
+      const email = new FormData(forgotForm).get("email");
+      const res = await fetch("/api/auth/forgot-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = await res.json();
+      msg.textContent = data.message || data.error || "Klart";
+    });
+    resetForm.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      msg.textContent = "Sparar…";
+      const password = new FormData(resetForm).get("password");
+      const res = await fetch("/api/auth/reset-password", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        msg.textContent = data.error || "Kunde inte spara";
+        return;
+      }
+      msg.textContent = "Lösenordet är uppdaterat. Du kan logga in.";
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,9 @@
+{
+  "projects": [
+    {
+      "id": "taxitips",
+      "name": "taxitips",
+      "path": "."
+    }
+  ]
+}

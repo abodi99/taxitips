@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#08254c" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="Taxi Tips" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <link rel="manifest" href="/site.webmanifest" />
+  <title>Taxi Tips — Tips</title>
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/brand.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="stylesheet" href="/app.css" />
+  <link rel="stylesheet" href="/cookie-consent.css" />
+</head>
+<body class="app">
+  <header class="app-header">
+    <div class="app-header-top">
+      <a class="brand brand-logo" href="/"><img src="/brand/logo-on-dark.svg" alt="taxitips" height="32" /></a>
+      <div class="header-actions">
+        <div class="status-pill" title="Status">
+          <span class="dot" id="statusDot"></span>
+          <span id="statusLabel">…</span>
+        </div>
+        <button type="button" class="icon-btn" id="menuBtn" aria-label="Meny">⋯</button>
+      </div>
+    </div>
+
+    <div class="focus-block">
+      <h1 class="focus-title" id="focusTitle">Tips i Skåne</h1>
+      <p class="focus-sub" id="focusSub" hidden>Tips när taxi behövs.</p>
+    </div>
+
+    <div class="controls-row">
+      <div class="mode-switch" role="tablist" aria-label="Visa">
+        <button type="button" class="mode-btn on" data-mode="now" id="modeNow" role="tab" aria-selected="true">Kör nu</button>
+        <button type="button" class="mode-btn" data-mode="events" id="modeEvents" role="tab" aria-selected="false">Evenemang</button>
+      </div>
+    </div>
+    <p class="status-meta" id="statusMeta" hidden>—</p>
+  </header>
+
+  <!-- Hidden form controls kept for existing JS logic -->
+  <input type="checkbox" id="highOnlyToggle" checked hidden />
+  <input type="checkbox" id="nearMeToggle" hidden />
+  <p id="summaryLine" hidden>—</p>
+  <button type="button" id="refreshBtn" hidden>Uppdatera</button>
+  <button type="button" id="legendBtn" hidden>Ikoner</button>
+  <button type="button" id="notifyBtn" hidden>Notiser</button>
+  <button type="button" id="highOnlyBtn" hidden aria-pressed="true">Bara starka</button>
+  <button type="button" id="filterBtn" hidden>Filter</button>
+  <button type="button" id="nearMeBtn" hidden aria-pressed="false">Nära mig</button>
+  <a href="/dashboard.html" id="settingsLink" hidden>Konto</a>
+
+  <dialog class="sheet" id="menuDialog">
+    <form method="dialog" class="sheet-inner">
+      <header class="sheet-head">
+        <h2>Meny</h2>
+        <button type="submit" class="text-btn" value="cancel">Stäng</button>
+      </header>
+      <nav class="menu-list">
+        <button type="button" class="menu-item" id="menuFilter">Filter</button>
+        <button type="button" class="menu-item" id="menuNearMe">Nära mig</button>
+        <button type="button" class="menu-item" id="menuRefresh">Uppdatera tips</button>
+        <button type="button" class="menu-item" id="menuLegend">Så läser du appen</button>
+        <button type="button" class="menu-item" id="menuNotify" hidden>Notiser</button>
+        <a class="menu-item" href="/dashboard.html">Konto &amp; bolag</a>
+        <a class="menu-item" href="/">Till startsidan</a>
+      </nav>
+    </form>
+  </dialog>
+
+  <dialog class="sheet" id="filterDialog">
+    <form method="dialog" class="sheet-inner">
+      <header class="sheet-head">
+        <h2>Filter</h2>
+        <button type="submit" class="text-btn" value="cancel">Klar</button>
+      </header>
+      <p class="sheet-lead">Visa de tips som ger kunder i Skåne.</p>
+      <label class="filter-check">
+        <input type="checkbox" id="highOnlyCheck" checked />
+        Bara starka tips (inställda tåg m.m.)
+      </label>
+      <div class="kind-filters" role="group" aria-label="Typ">
+        <button type="button" class="kind-chip on" data-kind="all" id="kindAll">Alla</button>
+        <button type="button" class="kind-chip" data-kind="traffic" id="kindTraffic">Tåg &amp; väg</button>
+      </div>
+      <button type="button" class="text-btn dangerish" id="clearFiltersInDialog">Nollställ filter</button>
+    </form>
+  </dialog>
+
+  <div class="app-body">
+    <section class="map-panel" aria-label="Karta">
+      <div id="hotspotMap" class="hotspot-map"></div>
+    </section>
+
+    <div class="app-feed">
+      <nav class="hotspot-bar" id="hotspotBar" aria-label="Hetaste orter" hidden></nav>
+      <main class="main" id="cardList" aria-live="polite"></main>
+      <details class="history" id="historyPanel">
+        <summary>Äldre tips</summary>
+        <div class="history-list" id="historyList"></div>
+      </details>
+    </div>
+  </div>
+
+  <dialog class="sheet map-detail-dialog" id="mapDetailDialog">
+    <form method="dialog" class="sheet-inner">
+      <header class="sheet-head">
+        <h2 id="mapDetailTitle">Tipset</h2>
+        <button type="submit" class="text-btn" value="cancel">Stäng</button>
+      </header>
+      <p class="sheet-lead" id="mapDetailLead"></p>
+      <div class="map-detail-body" id="mapDetailBody"></div>
+    </form>
+  </dialog>
+
+  <dialog class="sheet" id="legendDialog">
+    <form method="dialog" class="sheet-inner">
+      <header class="sheet-head">
+        <h2>Så läser du tipsen</h2>
+        <button type="submit" class="text-btn" value="cancel">Stäng</button>
+      </header>
+      <div class="legend-body">
+        <h3>Kör nu</h3>
+        <p>Tips från tåg- och vägstörningar i Skåne. Du får notis vid starka tips.</p>
+        <h3>Evenemang</h3>
+        <p>Separat flöde för arenor — planera körningar före/efter.</p>
+        <h3>Kartan</h3>
+        <ul>
+          <li><strong>Röd prick</strong> — starkt tips</li>
+          <li><strong>Gul prick</strong> — bevaka</li>
+          <li><strong>Orange linje</strong> — påverkad väg</li>
+          <li><strong>Blå E</strong> — evenemang</li>
+        </ul>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog class="sheet" id="notifyDialog">
+    <form method="dialog" class="sheet-inner">
+      <header class="sheet-head">
+        <h2>Notiser</h2>
+        <button type="submit" class="text-btn" value="cancel">Stäng</button>
+      </header>
+      <p class="sheet-lead">Välj orter och vilka händelser som får störa dig.</p>
+      <p class="notify-error" id="notifyError" hidden></p>
+      <label class="notify-master">
+        <input type="checkbox" id="notifyEnabled" checked />
+        <span>
+          <strong>Alla notiser</strong>
+          <small id="notifyEnabledHint">På — filtreras enligt nedan</small>
+        </span>
+      </label>
+      <section class="notify-section">
+        <h3>Orter du kör i</h3>
+        <p class="muted" id="notifyCitiesHint">Inga valda = bolagets bevakade orter.</p>
+        <div class="city-chips" id="notifyCities"></div>
+        <button type="button" class="linkish" id="notifyClearCities">Rensa ortval</button>
+      </section>
+      <section class="notify-section">
+        <h3>Vilka händelser?</h3>
+        <div id="notifyTypes"></div>
+      </section>
+      <section class="notify-tips" id="notifyTips"></section>
+      <p class="notify-save" id="notifySaveHint" hidden>Sparat</p>
+    </form>
+  </dialog>
+
+  <nav class="app-tabbar" aria-label="Appnavigering">
+    <a class="tab on" href="/app.html" id="tabDriver" aria-current="page">Tips</a>
+    <a class="tab" href="/?kontor=1" id="tabOffice">Kontor</a>
+  </nav>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="/app.js"></script>
+  <script src="/firebase-public-config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.0/dist/umd/supabase.min.js"></script>
+  <script src="/js/config.js"></script>
+  <script src="/js/supabase-api.js"></script>
+  <script src="/cookie-consent.js"></script>
+</body>
+</html>

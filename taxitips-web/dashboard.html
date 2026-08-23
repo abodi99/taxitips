@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Dashboard — Taxi Tips</title>
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/brand.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/portal.css" />
+  <link rel="stylesheet" href="/cookie-consent.css" />
+</head>
+<body class="portal">
+  <nav class="portal-nav">
+    <a class="brand brand-logo" href="/"><img src="/brand/logo.svg" alt="taxitips" height="32" /></a>
+    <div class="row">
+      <a class="btn btn-ghost" href="/app.html" id="openApp">Öppna app</a>
+      <a class="btn btn-ghost" href="/admin.html" id="adminLink" hidden>Admin</a>
+      <button class="btn btn-ghost" id="logoutBtn" type="button">Logga ut</button>
+    </div>
+  </nav>
+
+  <main class="shell wide">
+    <h1 id="companyName">Dashboard</h1>
+    <p class="lead" id="statusLine">Laddar…</p>
+    <p class="error" id="graceBanner" hidden style="margin:0 0 1rem"></p>
+
+    <div class="grid-2">
+      <section class="card" id="billing">
+        <h3>Medlemskap</h3>
+        <p class="muted" id="planLine">—</p>
+        <p class="muted" id="priceLine" style="margin-top:0.25rem">—</p>
+        <div class="row" style="margin-top:0.75rem;gap:0.5rem;flex-wrap:wrap">
+          <label style="margin:0;flex:1">Plan
+            <select id="planSelect">
+              <option value="driver">Driver</option>
+              <option value="fleet">Fleet</option>
+            </select>
+          </label>
+          <label style="margin:0;flex:1">Intervall
+            <select id="intervalSelect">
+              <option value="month">Månad</option>
+              <option value="year">År</option>
+            </select>
+          </label>
+          <label style="margin:0;flex:1">Bilar / mobiler
+            <input id="seatsInput" type="number" min="1" value="1" />
+          </label>
+        </div>
+        <div class="row" style="margin-top:0.75rem;gap:0.5rem;flex-wrap:wrap">
+          <button class="btn btn-primary" id="checkoutBtn" type="button" style="width:auto">Starta medlemskap</button>
+          <button class="btn btn-ghost" id="qtySyncBtn" type="button" style="width:auto" hidden>Spara antal</button>
+          <button class="btn btn-ghost" id="portalBtn" type="button" style="width:auto" hidden>Hantera i Stripe</button>
+        </div>
+        <p class="muted" style="margin-top:0.5rem" id="billingNote">199 kr per bil/mobil och månad via Stripe. Provperiod ingår. Ändrar du antalet uppdateras fakturan direkt.</p>
+        <p class="ok" id="paidNote" hidden></p>
+        <p class="error" id="billingError" hidden></p>
+      </section>
+
+      <section class="card">
+        <h3>Företagsuppgifter</h3>
+        <p class="muted" id="orgLine">Org.nr saknas</p>
+        <label>Organisationsnummer
+          <input id="orgInput" placeholder="XXXXXX-XXXX" />
+        </label>
+        <button class="btn btn-ghost" id="saveOrgBtn" type="button">Spara / hämta bolagsinfo</button>
+        <p class="muted" id="orgHint" style="margin-top:0.5rem"></p>
+        <p class="error" id="orgError" hidden></p>
+      </section>
+    </div>
+
+    <section class="card" id="accountCard" style="margin-top:1rem">
+      <h3>Kontoinställningar</h3>
+      <p class="muted">Bolagsnamn, e-post och lösenord. <a href="/privacy.html">Datapolicy</a> · <a href="/terms.html">Villkor</a></p>
+      <label>Bolagsnamn
+        <input id="accountName" />
+      </label>
+      <button class="btn btn-ghost" id="saveNameBtn" type="button">Spara namn</button>
+      <p class="muted" style="margin-top:0.75rem">Nuvarande e-post: <strong id="accountEmailLine">—</strong></p>
+      <label>Ny e-post
+        <input id="accountNewEmail" type="email" autocomplete="email" />
+      </label>
+      <label>Bekräfta med lösenord
+        <input id="accountEmailPassword" type="password" autocomplete="current-password" />
+      </label>
+      <button class="btn btn-ghost" id="saveEmailBtn" type="button">Byt e-post</button>
+      <label style="margin-top:0.75rem">Nuvarande lösenord
+        <input id="accountCurrentPassword" type="password" autocomplete="current-password" />
+      </label>
+      <label>Nytt lösenord (minst 8)
+        <input id="accountNewPassword" type="password" autocomplete="new-password" />
+      </label>
+      <button class="btn btn-primary" id="savePasswordBtn" type="button">Byt lösenord</button>
+      <p class="ok" id="accountOk" hidden></p>
+      <p class="error" id="accountError" hidden></p>
+    </section>
+
+    <div class="grid-2" style="margin-top:1rem">
+      <section class="card">
+        <h3>Lägg till förare</h3>
+        <p class="muted">Ge bolagskoden till föraren. De öppnar <a href="/join.html">join-sidan</a> eller appen och anger koden.</p>
+        <div class="link-box" id="joinCodeBox" style="font-size:1.8rem;letter-spacing:0.2em;font-weight:800;text-align:center">—</div>
+        <div class="row" style="margin-top:0.75rem;gap:0.5rem;flex-wrap:wrap">
+          <button class="btn btn-ghost" id="copyJoinBtn" type="button" style="width:auto">Kopiera kod</button>
+          <button class="btn btn-primary" id="regenJoinBtn" type="button" style="width:auto">Ny kod</button>
+          <a class="btn btn-ghost" href="/join.html" style="width:auto">Öppna join</a>
+        </div>
+        <p class="muted" id="joinHint" style="margin-top:0.5rem"></p>
+        <p class="error" id="joinError" hidden></p>
+        <div id="transferResult" hidden style="margin-top:0.75rem">
+          <p class="muted">Byteskod (giltig 30 min) — ange på nya telefonen:</p>
+          <div class="link-box" id="transferCodeBox" style="font-size:1.6rem;letter-spacing:0.25em;font-weight:800;text-align:center"></div>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Områden att följa</h3>
+        <p class="muted">Välj orter där förarna ska se uppdateringar. Tom lista = hela Skåne.</p>
+        <div class="area-grid" id="areaGrid"></div>
+        <label style="margin-top:0.75rem">Lägg till ort
+          <div class="row">
+            <input id="customArea" placeholder="t.ex. Hyllie" style="flex:1" />
+            <button class="btn btn-ghost" id="addAreaBtn" type="button" style="width:auto">Lägg till</button>
+          </div>
+        </label>
+        <button class="btn btn-primary" id="saveAreasBtn" type="button">Spara områden</button>
+        <p class="ok" id="areasOk" hidden></p>
+        <p class="error" id="areasError" hidden></p>
+      </section>
+    </div>
+
+    <div class="grid-2" style="margin-top:1rem">
+      <section class="card">
+        <h3>Support</h3>
+        <p class="muted">Skicka ett ärende — vi ser bolag, enheter och teknisk status i efterhand.</p>
+        <label>Ämne
+          <input id="ticketSubject" placeholder="t.ex. Enhet syns inte" />
+        </label>
+        <label>Kategori
+          <select id="ticketCategory">
+            <option value="teknik">Teknik</option>
+            <option value="enheter">Enheter</option>
+            <option value="faktura">Faktura</option>
+            <option value="konto">Konto</option>
+            <option value="forslag">Förslag</option>
+            <option value="annat">Annat</option>
+          </select>
+        </label>
+        <label>Beskrivning
+          <textarea id="ticketBody" rows="4" placeholder="Vad hände? Vilken enhet?"></textarea>
+        </label>
+        <button class="btn btn-primary" id="ticketBtn" type="button">Skicka ärende</button>
+        <p class="ok" id="ticketOk" hidden></p>
+        <p class="error" id="ticketError" hidden></p>
+      </section>
+
+      <section class="card">
+        <h3>Snabbinfo</h3>
+        <p class="muted">Efter att du sparat områden får alla enheter samma filter. Demo-vyn visar alltid hela Skåne.</p>
+        <p class="muted" id="areasSummary">Inga områden valda — visar allt.</p>
+      </section>
+    </div>
+
+    <section class="card" style="margin-top:1rem">
+      <h3>Era ärenden</h3>
+      <div class="list" id="ticketList"></div>
+    </section>
+
+    <section class="card" style="margin-top:1rem">
+      <h3>Enheter — bilar &amp; mobiler</h3>
+      <p class="muted" id="seatUsageLine">—</p>
+      <p class="muted">Telefoner som registrerats med bolagskoden. Ta bort eller skapa byteskod vid telefonbyte.</p>
+      <div class="list" id="deviceList"></div>
+    </section>
+
+    <section class="card" style="margin-top:1rem">
+      <h3>Medlemmar &amp; admin</h3>
+      <p class="muted">Lägg till kollegor som ska logga in på kontoret. De sätter sitt eget lösenord via e-post.</p>
+      <div class="row" style="align-items:flex-end">
+        <label style="margin:0;flex:2">Namn
+          <input id="memberName" placeholder="t.ex. Anna Karlsson" autocomplete="off" />
+        </label>
+        <label style="margin:0;flex:2">E-post
+          <input id="memberEmail" type="email" placeholder="anna@taxibolaget.se" autocomplete="off" />
+        </label>
+        <label style="margin:0;flex:1">Roll
+          <select id="memberRole">
+            <option value="company_admin">Admin</option>
+            <option value="driver">Förare</option>
+          </select>
+        </label>
+        <button class="btn btn-primary" id="addMemberBtn" type="button" style="width:auto">Lägg till</button>
+      </div>
+      <p class="ok" id="memberOk" hidden></p>
+      <p class="error" id="memberError" hidden></p>
+      <div class="list" id="memberList"></div>
+    </section>
+  </main>
+
+  <script src="/dashboard.js"></script>
+  <script src="/firebase-public-config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.0/dist/umd/supabase.min.js"></script>
+  <script src="/js/config.js"></script>
+  <script src="/js/supabase-api.js"></script>
+  <script src="/cookie-consent.js"></script>
+</body>
+</html>

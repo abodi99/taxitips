@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "963263574599",
+    "project_id": "taxibehov",
+    "storage_bucket": "taxibehov.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:963263574599:android:18f6a9e821aac3e17f7762",
+        "android_client_info": {
+          "package_name": "se.taxibehov.taxibehov_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBcaBKtr2sqEtx9kYtHbAJOw7zaVx0ZtCQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

@@ -1,0 +1,8 @@
+{
+  "name": "taxitips-web",
+  "private": true,
+  "scripts": {
+    "start": "npx --yes serve -l 5173 .",
+    "dev": "npm start"
+  }
+}

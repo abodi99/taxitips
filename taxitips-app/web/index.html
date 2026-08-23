@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <base href="$FLUTTER_BASE_HREF">
+  <meta charset="UTF-8">
+  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+  <meta name="description" content="Taxi Tips — var behövs taxi just nu?">
+  <meta name="theme-color" content="#1A1816">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Taxi Tips">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Taxi Tips</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <link rel="stylesheet" href="cookie-consent.css">
+  <style>
+    html, body {
+      margin: 0;
+      height: 100%;
+      background: #1A1816;
+    }
+    .boot {
+      min-height: 100%;
+      display: grid;
+      place-items: center;
+      font-family: system-ui, sans-serif;
+      color: #F0B429;
+      font-weight: 800;
+      letter-spacing: 0.04em;
+    }
+  </style>
+  <!-- Consent Mode v2 defaults BEFORE any analytics / Flutter bootstrap -->
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('consent', 'default', {
+      ad_storage: 'denied',
+      ad_user_data: 'denied',
+      ad_personalization: 'denied',
+      analytics_storage: 'denied',
+      functionality_storage: 'granted',
+      security_storage: 'granted',
+      wait_for_update: 500
+    });
+  </script>
+</head>
+<body>
+  <div class="boot" id="boot">Taxi Tips</div>
+  <script>
+    window.addEventListener('flutter-first-frame', function () {
+      var el = document.getElementById('boot');
+      if (el) el.remove();
+    });
+  </script>
+  <script src="firebase-public-config.js"></script>
+  <script src="cookie-consent.js"></script>
+  <script src="flutter_bootstrap.js" async></script>
+</body>
+</html>

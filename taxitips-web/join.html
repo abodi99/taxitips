@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#08254c" />
+  <title>Registrera telefon — Taxi Tips</title>
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/brand.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/portal.css" />
+  <style>
+    body.portal { background: #08254c; color: #f7f2ea; }
+    .join-card { max-width: 420px; margin: 3rem auto; background: #f7f2ea; color: #08254c; border-radius: 16px; padding: 1.5rem; }
+    .join-card h1 { font-family: "Plus Jakarta Sans", sans-serif; font-size: 2rem; margin: 0 0 0.5rem; letter-spacing: 0.04em; }
+    .code-input { font-size: 1.6rem; letter-spacing: 0.25em; text-align: center; font-weight: 800; text-transform: uppercase; }
+  </style>
+  <link rel="stylesheet" href="/cookie-consent.css" />
+</head>
+<body class="portal">
+  <nav class="portal-nav">
+    <a class="brand brand-logo" href="/"><img src="/brand/logo-on-dark.svg" alt="taxitips" height="32" /></a>
+    <a class="btn btn-ghost" href="/app.html">Full app</a>
+  </nav>
+  <main class="join-card">
+    <h1 id="title">Registrera telefon</h1>
+    <p class="muted" id="lead">Ange bolagskoden från kontoret.</p>
+    <label>Kod
+      <input id="code" class="code-input" placeholder="AB12CD" autocomplete="off" />
+    </label>
+    <label>Namn / bil (valfritt)
+      <input id="label" placeholder="t.ex. Ahmed" />
+    </label>
+    <button class="btn btn-primary" id="submit" type="button">Registrera</button>
+    <p class="error" id="error" hidden></p>
+    <p class="ok" id="ok" hidden></p>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.0/dist/umd/supabase.min.js"></script>
+  <script src="/js/config.js"></script>
+  <script src="/js/supabase-api.js"></script>
+  <script>
+    document.getElementById("submit").addEventListener("click", async () => {
+      const error = document.getElementById("error");
+      const ok = document.getElementById("ok");
+      error.hidden = true;
+      ok.hidden = true;
+      try {
+        if (!window.tt?.api) throw new Error("Supabase inte konfigurerad (js/config.js)");
+        const data = await window.tt.api.joinDevice(
+          document.getElementById("code").value.trim(),
+          document.getElementById("label").value.trim() || "Förare"
+        );
+        localStorage.setItem("tt_device_token", data.token || "");
+        ok.textContent = "Klart — öppnar förarvyn…";
+        ok.hidden = false;
+        location.href = "/app.html";
+      } catch (err) {
+        error.textContent = err?.message || "Kunde inte koppla telefonen";
+        error.hidden = false;
+      }
+    });
+  </script>
+  <script src="/cookie-consent.js"></script>
+</body>
+</html>

@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Admin — Taxi Tips</title>
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/brand.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/portal.css" />
+  <style>
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+      gap: 0.65rem;
+      margin: 0.75rem 0 0.25rem;
+    }
+    .metric {
+      background: #fff;
+      border: 1px solid rgba(26,24,22,0.1);
+      border-radius: 12px;
+      padding: 0.7rem 0.8rem;
+      display: grid;
+      gap: 0.15rem;
+    }
+    .metric-num { font-size: 1.35rem; font-weight: 800; font-family: var(--font-display); }
+    .metric-label { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: #6a635a; }
+    .admin-layout { display: grid; gap: 1rem; }
+    @media (min-width: 900px) {
+      .admin-layout.has-detail {
+        grid-template-columns: minmax(260px, 0.9fr) minmax(340px, 1.1fr);
+        align-items: start;
+      }
+    }
+    .company-row {
+      cursor: pointer;
+      border: 1px solid rgba(26,24,22,0.1);
+      border-radius: 12px;
+      padding: 0.8rem 1rem;
+      background: #fff;
+      margin-bottom: 0.45rem;
+    }
+    .company-row:hover, .company-row.active {
+      border-color: rgba(196,138,18,0.55);
+      background: #fffdf7;
+    }
+    .chip-row { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.45rem; }
+    .area-chip {
+      border: 1px solid rgba(26,24,22,0.15);
+      background: #f7f4ef;
+      border-radius: 999px;
+      padding: 0.28rem 0.6rem;
+      font-size: 0.78rem;
+      cursor: pointer;
+    }
+    .area-chip.on { background: #08254c; color: #ffc400; border-color: #08254c; }
+    .detail-card h4 { margin: 1rem 0 0.35rem; font-size: 0.9rem; }
+    .detail-card .muted { font-size: 0.84rem; }
+    .device-item {
+      display: flex; flex-wrap: wrap; gap: 0.45rem; align-items: center;
+      justify-content: space-between; padding: 0.5rem 0;
+      border-bottom: 1px solid rgba(26,24,22,0.08);
+    }
+    #detailPanel[hidden] { display: none !important; }
+    .filters-row { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 0.75rem; }
+    .filters-row input, .filters-row select { min-height: 40px; }
+    .stat-line { font-size: 0.95rem; margin: 0 0 0.35rem; }
+    details.more-box { margin-top: 1rem; }
+    details.more-box > summary {
+      cursor: pointer; font-weight: 600; color: #6a635a; padding: 0.4rem 0;
+    }
+    .chain-step {
+      display: flex; gap: 0.5rem; align-items: flex-start;
+      padding: 0.28rem 0; font-size: 0.84rem;
+      border-bottom: 1px solid rgba(26,24,22,0.06);
+    }
+    .chain-dot {
+      width: 0.65rem; height: 0.65rem; border-radius: 50%;
+      margin-top: 0.28rem; flex-shrink: 0;
+      background: #c45c26;
+    }
+    .chain-dot.ok { background: #2f6b3a; }
+    .status-pill {
+      display: inline-block; font-size: 0.72rem; font-weight: 600;
+      padding: 0.12rem 0.45rem; border-radius: 999px;
+      background: #f0ebe3; color: #3a342c;
+    }
+    .status-pill.active { background: #e4f0e6; color: #1f4d28; }
+    .status-pill.trial { background: #eef2f8; color: #2a3f66; }
+    .status-pill.past_due, .status-pill.suspended, .status-pill.canceled {
+      background: #f8e8e4; color: #7a2e1f;
+    }
+    .status-pill.owner { background: #08254c; color: #ffc400; }
+  </style>
+</head>
+<body class="portal">
+  <nav class="portal-nav">
+    <a class="brand brand-logo" href="/"><img src="/brand/logo.svg" alt="taxitips" height="32" /></a>
+    <div class="row">
+      <a class="btn btn-ghost" href="/dashboard.html">Dashboard</a>
+      <a class="btn btn-ghost" href="/app.html">App</a>
+      <button class="btn btn-ghost" id="logoutBtn" type="button">Logga ut</button>
+    </div>
+  </nav>
+
+  <main class="shell wide">
+    <h1>Din admin</h1>
+    <p class="lead">Taxibolag, förare, notiser, ärenden och betalning — hela kedjan.</p>
+    <p class="stat-line muted" id="countsLine">Laddar…</p>
+    <div class="metrics-grid" id="metricsGrid">
+      <div class="metric"><span class="metric-num" id="mCompanies">—</span><span class="metric-label">Kunder</span></div>
+      <div class="metric"><span class="metric-num" id="mSeats">—</span><span class="metric-label">Bilar/mobiler</span></div>
+      <div class="metric"><span class="metric-num" id="mRevenue">—</span><span class="metric-label">Intäkt/mån</span></div>
+      <div class="metric"><span class="metric-num" id="mDevices">—</span><span class="metric-label">Enheter</span></div>
+      <div class="metric"><span class="metric-num" id="mPush">—</span><span class="metric-label">Med push</span></div>
+      <div class="metric"><span class="metric-num" id="mTrials">—</span><span class="metric-label">Provperioder</span></div>
+      <div class="metric"><span class="metric-num" id="mTrialsSoon">—</span><span class="metric-label">Går ut < 3 dgr</span></div>
+      <div class="metric"><span class="metric-num" id="mTickets">—</span><span class="metric-label">Öppna ärenden</span></div>
+    </div>
+    <p class="muted" id="metricsHint" style="font-size:0.8rem;margin-top:0.35rem">Intäkt = 199 kr × betalda bilar/mobiler (aktiva + förfallna).</p>
+    <p class="muted" id="billingHint">—</p>
+    <p class="muted" id="chainHint">—</p>
+    <div class="row" style="gap:0.5rem;flex-wrap:wrap;margin:0.5rem 0 0" id="seedRow" hidden>
+      <button class="btn btn-primary" type="button" id="seedBtn" style="width:auto">Ladda testdata</button>
+      <span class="muted" style="align-self:center">Skapar demo-bolag, förare, push och ärenden (endast lokal).</span>
+    </div>
+    <p class="error" id="companyError" hidden></p>
+    <p class="ok" id="seedOk" hidden></p>
+
+    <section class="card" style="margin-top:1rem">
+      <div class="row" style="justify-content:space-between;align-items:center;gap:0.75rem;flex-wrap:wrap;margin-bottom:0.75rem">
+        <h3 style="margin:0">Taxibolag</h3>
+        <button class="btn btn-ghost" id="refreshBtn" type="button" style="width:auto">Uppdatera</button>
+      </div>
+      <div class="filters-row">
+        <input id="companyQ" placeholder="Sök namn, e-post, org.nr…" style="flex:1;min-width:180px" />
+        <select id="companyStatusFilter" style="width:auto">
+          <option value="">Alla</option>
+          <option value="trial">Provperiod</option>
+          <option value="active">Aktiv</option>
+          <option value="past_due">Förfallen</option>
+          <option value="suspended">Pausad</option>
+          <option value="canceled">Avslutad</option>
+          <option value="owner">Ägare</option>
+        </select>
+      </div>
+
+      <div class="admin-layout" id="adminLayout">
+        <div id="companyList"></div>
+
+        <aside class="card detail-card" id="detailPanel" hidden>
+          <div class="row" style="justify-content:space-between;align-items:flex-start">
+            <div>
+              <h3 id="detailName" style="margin:0">—</h3>
+              <p class="muted" id="detailMeta">—</p>
+            </div>
+            <button class="btn btn-ghost" type="button" id="closeDetail" style="width:auto">Stäng</button>
+          </div>
+
+          <h4>Status</h4>
+          <div class="row" style="gap:0.5rem;flex-wrap:wrap;align-items:flex-end">
+            <label style="margin:0">Status
+              <select id="detailStatus" style="width:auto;min-height:40px"></select>
+            </label>
+            <label style="margin:0">Platser
+              <input id="detailSeats" type="number" min="1" style="width:5rem;min-height:40px" />
+            </label>
+            <button class="btn btn-primary" type="button" id="detailSave" style="width:auto">Spara</button>
+            <button class="btn btn-ghost" type="button" id="detailActivate" style="width:auto">Aktivera</button>
+          </div>
+          <p class="muted" id="detailBilling" style="margin-top:0.45rem">—</p>
+          <div class="row" style="gap:0.5rem;flex-wrap:wrap;margin-top:0.45rem">
+            <button class="btn btn-ghost" type="button" id="detailPortal" style="width:auto">Öppna Stripe</button>
+            <button class="btn btn-ghost" type="button" id="detailCheckout" style="width:auto">Checkout-länk</button>
+            <select id="detailPlan" hidden>
+              <option value="driver" selected>Driver</option>
+              <option value="fleet">Fleet</option>
+            </select>
+            <select id="detailInterval" hidden>
+              <option value="month" selected>Månad</option>
+              <option value="year">År</option>
+            </select>
+          </div>
+
+          <h4>Kedja</h4>
+          <div id="detailChain" class="muted">—</div>
+
+          <h4>Anteckningar</h4>
+          <textarea id="detailNotes" rows="3" placeholder="Bara synligt för dig…" style="width:100%"></textarea>
+          <button class="btn btn-ghost" type="button" id="detailSaveNotes" style="width:auto;margin-top:0.4rem">Spara anteckning</button>
+
+          <h4>Bolagskod</h4>
+          <div class="row" style="gap:0.5rem;align-items:center">
+            <code id="detailJoinCode" class="link-box" style="margin:0;padding:0.4rem 0.65rem">—</code>
+            <button class="btn btn-ghost" type="button" id="detailRegenCode" style="width:auto">Ny kod</button>
+          </div>
+
+          <h4>Orter / behov</h4>
+          <p class="muted">Tomt = hela Skåne.</p>
+          <div class="chip-row" id="detailAreas"></div>
+          <button class="btn btn-ghost" type="button" id="detailSaveAreas" style="width:auto;margin-top:0.4rem">Spara orter</button>
+
+          <h4>Enheter</h4>
+          <div id="detailDevices"><p class="muted">Inga enheter.</p></div>
+
+          <h4>Ärenden</h4>
+          <div id="detailTickets"><p class="muted">Inga.</p></div>
+        </aside>
+      </div>
+    </section>
+
+    <details class="more-box card" style="padding:1rem">
+      <summary>Ärenden (support)</summary>
+      <div class="row" style="margin:0.75rem 0">
+        <input id="ticketQ" placeholder="Sök…" style="flex:1" />
+        <select id="ticketStatus" style="width:auto">
+          <option value="">Alla</option>
+          <option value="open">Öppen</option>
+          <option value="in_progress">Pågår</option>
+          <option value="waiting">Väntar</option>
+          <option value="resolved">Löst</option>
+          <option value="closed">Stängd</option>
+        </select>
+        <button class="btn btn-ghost" id="ticketFilterBtn" type="button">Filtrera</button>
+      </div>
+      <div class="list" id="ticketList"></div>
+    </details>
+
+    <details class="more-box card" style="padding:1rem">
+      <summary>Felsökning</summary>
+      <p class="muted" id="pollLine">—</p>
+      <p class="muted" id="envLine">—</p>
+      <button class="btn btn-ghost" id="pollBtn" type="button" style="width:auto;margin-top:0.5rem">Tvinga poll</button>
+      <pre id="debugBox" class="link-box" style="margin-top:0.75rem;white-space:pre-wrap;font-size:0.78rem"></pre>
+    </details>
+  </main>
+
+  <script src="/admin.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.0/dist/umd/supabase.min.js"></script>
+  <script src="/js/config.js"></script>
+  <script src="/js/supabase-api.js"></script>
+</body>
+</html>

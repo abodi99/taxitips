@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Skapa konto — Taxi Tips</title>
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/brand.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/portal.css" />
+  <link rel="stylesheet" href="/cookie-consent.css" />
+</head>
+<body class="portal">
+  <nav class="portal-nav">
+    <a class="brand brand-logo" href="/"><img src="/brand/logo.svg" alt="taxitips" height="32" /></a>
+    <a href="/login.html">Logga in</a>
+  </nav>
+
+  <main class="shell">
+    <h1>Rulla in ert taxibolag</h1>
+    <p class="lead">Skapa konto, välj orter, koppla förartelefoner. Förarna öppnar en länk — klart.</p>
+
+    <form id="signupForm">
+      <label>Organisationsnummer / personnummer
+        <input name="orgNumber" id="orgNumber" inputmode="numeric" placeholder="XXXXXX-XXXX eller personnummer" autocomplete="off" />
+      </label>
+      <p class="muted" id="lookupHint" style="margin:-0.4rem 0 0.85rem">AB/HB: org.nr. Enskild firma: ditt personnummer (10 eller 12 siffror). Vi hämtar namn automatiskt om det finns hos Bolagsverket.</p>
+      <label>Företagsnamn
+        <input name="name" id="companyName" required placeholder="t.ex. Malmö Taxi AB" />
+      </label>
+      <label>E-post
+        <input name="email" type="email" required autocomplete="email" />
+      </label>
+      <label>Lösenord
+        <input name="password" type="password" required minlength="6" autocomplete="new-password" />
+      </label>
+      <label>Antal enheter
+        <input name="seats" type="number" min="1" value="1" required />
+      </label>
+      <div class="price-box" id="priceBox">—</div>
+      <button class="btn btn-primary" type="submit">Starta gratisprov</button>
+      <p class="error" id="error" hidden></p>
+    </form>
+    <p class="muted" style="margin-top:1rem">Har ni redan konto? <a href="/login.html"><u>Logga in</u></a></p>
+  </main>
+
+  <script>
+    const priceBox = document.getElementById("priceBox");
+    const seatsInput = document.querySelector('[name="seats"]');
+    const orgInput = document.getElementById("orgNumber");
+    const nameInput = document.getElementById("companyName");
+    const lookupHint = document.getElementById("lookupHint");
+    let pricing = null;
+    let lookupTimer = null;
+
+    async function loadPricing() {
+      const res = await fetch("/api/pricing");
+      pricing = await res.json();
+      renderPrice();
+    }
+
+    function renderPrice() {
+      if (!pricing) return;
+      const seats = Math.max(1, Number(seatsInput.value) || 1);
+      const unit = seats >= pricing.fleetMin ? pricing.fleetPerDevice : pricing.perDevice;
+      const total = unit * seats;
+      priceBox.innerHTML = `<strong>${seats} enhet${seats > 1 ? "er" : ""}</strong> · ${unit} kr/enhet/mån · <strong>${total} kr/mån</strong><br><span class="muted">${pricing.trialDays} dagar gratis först. Ägaren av Taxi Tips betalar aldrig.</span>`;
+    }
+
+    async function lookupOrg() {
+      const org = orgInput.value.trim();
+      if (org.replace(/\D/g, "").length < 10) {
+        lookupHint.textContent = "Valfritt — vi validerar och kan hämta bolagsinfo automatiskt.";
+        return;
+      }
+      lookupHint.textContent = "Hämtar företagsinfo…";
+      const res = await fetch(`/api/company/lookup?orgNumber=${encodeURIComponent(org)}`);
+      const data = await res.json();
+      if (!data.valid) {
+        lookupHint.textContent = data.error || "Ogiltigt organisationsnummer";
+        return;
+      }
+      if (data.found && data.name) {
+        if (!nameInput.value.trim()) nameInput.value = data.name;
+        const addr = data.address
+          ? [data.address.street, data.address.zip, data.address.city].filter(Boolean).join(", ")
+          : "";
+        const kind = data.companyKind === "enskild_firma" || data.idKind === "person" ? "enskild firma · " : "";
+        lookupHint.textContent = `Hittade: ${kind}${data.name}${data.legalForm ? " · " + data.legalForm : ""}${addr ? " · " + addr : ""} (${data.source})`;
+      } else {
+        lookupHint.textContent =
+          data.message ||
+          (data.idKind === "person"
+            ? "Personnummer giltigt. Ingen registrerad enskild firma hittades — fyll i företagsnamn manuellt."
+            : "Org.nr giltigt. Företagsnamn fylls i manuellt om uppslag saknas.");
+      }
+    }
+
+    orgInput.addEventListener("input", () => {
+      clearTimeout(lookupTimer);
+      lookupTimer = setTimeout(lookupOrg, 450);
+    });
+    seatsInput.addEventListener("input", renderPrice);
+    loadPricing();
+
+    document.getElementById("signupForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const error = document.getElementById("error");
+      error.hidden = true;
+      const fd = new FormData(e.target);
+      const body = Object.fromEntries(fd.entries());
+      body.seats = Number(body.seats);
+      if (!body.orgNumber) delete body.orgNumber;
+      const res = await fetch("/api/signup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        error.textContent = data.error || "Kunde inte skapa konto";
+        error.hidden = false;
+        return;
+      }
+      // Stripe Checkout om tillgängligt — annars dashboard (dev autoaktiverar)
+      if (data.checkout?.url) {
+        location.href = data.checkout.url;
+        return;
+      }
+      location.href = "/dashboard.html";
+    });
+  </script>
+  <script src="/firebase-public-config.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.0/dist/umd/supabase.min.js"></script>
+  <script src="/js/config.js"></script>
+  <script src="/js/supabase-api.js"></script>
+  <script src="/cookie-consent.js"></script>
+</body>
+</html>

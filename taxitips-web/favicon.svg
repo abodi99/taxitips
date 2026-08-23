@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" role="img" aria-label="taxitips">
+  <rect width="120" height="120" rx="28" fill="#08254C"/>
+  <g transform="translate(10,6)">
+    <path d="M50 8c-20.4 0-37 15.8-37 38 0 15.2 8.2 28 19.8 38.2L50 100l17.2-15.8C79 74 87 61.2 87 46c0-22.2-16.6-38-37-38z" fill="none" stroke="#FFFFFF" stroke-width="12" stroke-linecap="round" pathLength="100" stroke-dasharray="52 100"/>
+    <path d="M50 8c-20.4 0-37 15.8-37 38 0 15.2 8.2 28 19.8 38.2L50 100l17.2-15.8C79 74 87 61.2 87 46c0-22.2-16.6-38-37-38z" fill="none" stroke="#19C2D1" stroke-width="12" stroke-linecap="round" pathLength="100" stroke-dasharray="48 100" stroke-dashoffset="-52"/>
+    <path d="M50 32 L70 66 H30 Z" fill="#FFFFFF"/>
+    <path d="M50 42l3.2 8.2 8.8.6-6.8 5.6 2.2 8.6L50 60.4 42.6 65l2.2-8.6-6.8-5.6 8.8-.6z" fill="#FFC400"/>
+  </g>
+</svg>

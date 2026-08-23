@@ -1,0 +1,32 @@
+{
+  "name": "taxitips",
+  "short_name": "taxitips",
+  "description": "Tips när taxi behövs — tåg, väg och evenemang i Skåne.",
+  "start_url": "/app.html",
+  "display": "standalone",
+  "background_color": "#08254C",
+  "theme_color": "#08254C",
+  "orientation": "portrait-primary",
+  "lang": "sv",
+  "categories": ["business", "navigation"],
+  "icons": [
+    {
+      "src": "/brand/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/brand/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/brand/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

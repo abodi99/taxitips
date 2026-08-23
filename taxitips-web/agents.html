@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Agent-guide — Taxi Tips</title>
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/brand.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/portal.css" />
+  <style>
+    pre {
+      overflow: auto;
+      background: #102018;
+      color: #e8f0ed;
+      padding: 1rem;
+      font-size: 0.82rem;
+      line-height: 1.45;
+    }
+    code { font-family: ui-monospace, monospace; }
+  </style>
+</head>
+<body class="portal">
+  <nav class="portal-nav">
+    <a class="brand brand-logo" href="/"><img src="/brand/logo.svg" alt="taxitips" height="32" /></a>
+    <a href="/signup.html">Skapa konto</a>
+  </nav>
+
+  <main class="shell wide">
+    <h1>Låt agenter sköta flödet</h1>
+    <p class="lead">En agent (Cursor, n8n, egen bot) kan rulla in taxibolag från lead till aktiverad enhet — utan manuell admin.</p>
+
+    <section class="card">
+      <h3>1. Skapa bolag</h3>
+      <pre>POST /api/agent/provision
+Authorization: Bearer AGENT_API_KEY
+{
+  "name": "Malmö Taxi AB",
+  "email": "trafik@malmotaxi.se",
+  "password": "tillfalligt-losen",
+  "orgNumber": "556000-0000",
+  "seats": 8,
+  "devices": [
+    { "label": "Bil 1", "kind": "shared" },
+    { "label": "Ahmed", "kind": "driver" }
+  ]
+}</pre>
+      <p class="muted">Returnerar företags-ID, dashboard-session tips, enhetslänkar och QR-URL:er.</p>
+    </section>
+
+    <section class="card" style="margin-top:1rem">
+      <h3>2. Starta betalning (valfritt)</h3>
+      <pre>POST /api/agent/checkout
+Authorization: Bearer AGENT_API_KEY
+{ "companyId": "co_…", "seats": 8 }</pre>
+      <p class="muted">Med Stripe → Checkout-URL. Utan Stripe → aktiveras direkt (bra för demo/agenter i test).</p>
+    </section>
+
+    <section class="card" style="margin-top:1rem">
+      <h3>3. Skicka länkar till förare</h3>
+      <p class="muted">Agenten SMS:ar eller mejlar <code>appUrl</code> / QR. När föraren öppnar länken aktiveras enheten automatiskt.</p>
+    </section>
+
+    <section class="card" style="margin-top:1rem">
+      <h3>API-nyckel</h3>
+      <p class="muted">Sätt <code>AGENT_API_KEY</code> i serverns miljö. Utan nyckel är agent-endpoints avstängda (säkerhet).</p>
+      <p class="muted">Ägare (<code>OWNER_EMAIL</code>) är alltid gratis och kan ha obegränsat antal enheter.</p>
+    </section>
+  </main>
+</body>
+</html>

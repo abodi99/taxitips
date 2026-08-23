@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Aktivera enhet — Taxi Tips</title>
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/brand.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/portal.css" />
+  <link rel="stylesheet" href="/cookie-consent.css" />
+</head>
+<body class="portal">
+  <nav class="portal-nav">
+    <a class="brand brand-logo" href="/"><img src="/brand/logo.svg" alt="taxitips" height="32" /></a>
+  </nav>
+  <main class="shell">
+    <h1>Aktiverar enhet…</h1>
+    <p class="lead" id="msg">Kopplar den här telefonen/surfplattan till ert Taxi Tips-konto.</p>
+    <p class="error" id="error" hidden></p>
+  </main>
+  <script>
+    (async () => {
+      const token = new URLSearchParams(location.search).get("token");
+      const error = document.getElementById("error");
+      if (!token) {
+        error.textContent = "Saknar aktiveringskod";
+        error.hidden = false;
+        return;
+      }
+      const res = await fetch("/api/devices/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        error.textContent = data.error || "Kunde inte aktivera";
+        error.hidden = false;
+        return;
+      }
+      document.getElementById("msg").textContent = `${data.device.label} är klar. Öppnar appen…`;
+      location.replace("/app.html");
+    })();
+  </script>
+  <script src="/firebase-public-config.js"></script>
+  <script src="/cookie-consent.js"></script>
+</body>
+</html>

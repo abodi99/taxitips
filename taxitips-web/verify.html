@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bekräfta e-post — Taxi Tips</title>
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/brand.css" />
+  <link rel="stylesheet" href="/portal.css" />
+</head>
+<body class="portal">
+  <header class="top">
+    <a class="brand brand-logo" href="/"><img src="/brand/logo.svg" alt="taxitips" height="32" /></a>
+  </header>
+  <main class="card">
+    <h1>Bekräfta e-post</h1>
+    <p id="msg" class="muted">Verifierar…</p>
+    <p><a href="/login.html">Till inloggning</a></p>
+  </main>
+  <script>
+    (async () => {
+      const msg = document.getElementById("msg");
+      const token = new URLSearchParams(location.search).get("token");
+      if (!token) {
+        msg.textContent = "Länken saknar token.";
+        return;
+      }
+      try {
+        const res = await fetch("/api/auth/verify-email", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error || "Kunde inte verifiera");
+        msg.textContent = "E-post bekräftad. Du kan logga in.";
+      } catch (err) {
+        msg.textContent = err.message || "Något gick fel";
+      }
+    })();
+  </script>
+</body>
+</html>

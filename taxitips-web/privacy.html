@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Datapolicy — Taxi Tips</title>
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/brand.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/landing.css" />
+  <style>
+    .legal-page { max-width: 720px; margin: 0 auto; padding: 5rem 1.25rem 3rem; }
+    .legal-page h1 { font-family: var(--font-display); font-size: 2.6rem; margin: 0 0 0.5rem; }
+    .legal-page h2 { font-size: 1.15rem; margin: 1.75rem 0 0.5rem; }
+    .legal-page p, .legal-page li { color: var(--ink-soft); line-height: 1.55; }
+    .legal-nav { position: sticky; top: 0; background: var(--foam); border-bottom: 1px solid var(--line); padding: 0.85rem 1.25rem; display: flex; justify-content: space-between; z-index: 5; }
+  </style>
+  <link rel="stylesheet" href="/cookie-consent.css" />
+</head>
+<body class="landing">
+  <nav class="legal-nav">
+    <a class="brand brand-logo" href="/"><img src="/brand/logo.svg" alt="taxitips" height="32" /></a>
+    <a href="/#kontakt">Kontakt</a>
+  </nav>
+  <main class="legal-page">
+    <h1>Datapolicy</h1>
+    <p>Senast uppdaterad: augusti 2026. Taxi Tips drivs av A2M Tech (Malmö).</p>
+
+    <h2>Vad vi samlar in</h2>
+    <ul>
+      <li>Kontouppgifter: bolagsnamn, e-post, lösenord (hashat), organisationsnummer.</li>
+      <li>Förartelefoner: bolagskod, telefonetikett, notispreferenser, push-token.</li>
+      <li>Användning: vilka orter ni följer, tekniska loggar för felsökning.</li>
+      <li>Betalning: hanteras av Stripe (kort/Klarna/Swish) — vi sparar inte kortnummer.</li>
+    </ul>
+
+    <h2>Varför</h2>
+    <p>För att leverera live-signaler om var taxi behövs, skicka notiser ni valt, fakturera abonnemang och ge support.</p>
+
+    <h2>Datakällor</h2>
+    <p>Trafikstörningar och väginfo hämtas från Trafiklab/Trafikverket. Evenemang kan komma från Ticketmaster. Uppgifterna filtreras till taxirelevanta signaler för era orter.</p>
+
+    <h2>Delning</h2>
+    <p>Vi säljer inte era uppgifter. Underleverantörer (t.ex. hosting, Stripe, push) får bara det som behövs för tjänsten.</p>
+
+    <h2>Lagring &amp; rättigheter</h2>
+    <p>Ni kan begära utdrag, rättelse eller radering via <a href="mailto:hej@taxiprognos.se">hej@taxiprognos.se</a>. Kontot kan avslutas när ni vill. Förartelefon kan avregistreras i appen.</p>
+
+    <h2 id="cookies">Cookies &amp; analys</h2>
+    <p>Nödvändiga cookies behövs för inloggning och säkerhet. Om du godkänner analyscookies använder vi Firebase / Google Analytics (GA4) för att förstå hur landningssida och app används (sidvisningar, knappar, enhetstyp). Du kan när som helst ändra valet via Cookieinställningar. IP anonymiseras där det stöds.</p>
+
+    <h2>Push-notiser (FCM)</h2>
+    <p>Push skickas via Firebase Cloud Messaging. Token lagras kopplad till er förartelefon och används bara för de notistyper och orter ni valt.</p>
+
+    <h2>Kontakt</h2>
+    <p>Personuppgiftsfrågor: <a href="mailto:hej@taxiprognos.se">hej@taxiprognos.se</a></p>
+    <p><a href="/terms.html">Villkor</a> · <a href="/">Till startsidan</a>
+      · <button type="button" class="linkish" onclick="window.tbOpenCookieSettings && tbOpenCookieSettings()">Cookieinställningar</button>
+    </p>
+  </main>
+  <script src="/firebase-public-config.js"></script>
+  <script src="/cookie-consent.js"></script>
+</body>
+</html>

@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Logga in — Taxi Tips</title>
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/brand.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/portal.css" />
+  <link rel="stylesheet" href="/cookie-consent.css" />
+</head>
+<body class="portal">
+  <nav class="portal-nav">
+    <a class="brand brand-logo" href="/"><img src="/brand/logo.svg" alt="taxitips" height="32" /></a>
+    <a href="/signup.html">Skapa konto</a>
+  </nav>
+  <main class="shell">
+    <h1>Logga in</h1>
+    <p class="lead">För företagsadmin. Förare öppnar sin enhetslänk i stället.</p>
+    <form id="loginForm">
+      <label>E-post
+        <input name="email" id="email" type="email" required autocomplete="email" />
+      </label>
+      <label>Lösenord
+        <input name="password" id="password" type="password" required autocomplete="current-password" />
+      </label>
+      <button class="btn btn-primary" type="submit">Logga in</button>
+      <p class="error" id="error" hidden></p>
+    </form>
+    <p class="muted"><a href="/reset.html">Glömt lösenord?</a></p>
+  </main>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.57.0/dist/umd/supabase.min.js"></script>
+  <script src="/js/config.js"></script>
+  <script src="/js/supabase-api.js"></script>
+  <script>
+    document.getElementById("loginForm").addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const error = document.getElementById("error");
+      error.hidden = true;
+      const body = Object.fromEntries(new FormData(e.target).entries());
+      try {
+        if (!window.tt?.api) {
+          throw new Error("Supabase inte konfigurerad — sätt anon key i js/config.js");
+        }
+        await window.tt.api.login(body.email, body.password);
+        const me = await window.tt.api.me();
+        location.href = me.profile?.is_platform_owner ? "/admin.html" : "/dashboard.html";
+      } catch (err) {
+        error.textContent = err?.message || "Inloggning misslyckades";
+        error.hidden = false;
+      }
+    });
+  </script>
+  <script src="/firebase-public-config.js"></script>
+  <script src="/cookie-consent.js"></script>
+</body>
+</html>

@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Priser — Taxi Tips</title>
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+  <link rel="stylesheet" href="/brand.css" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/landing.css" />
+  <link rel="stylesheet" href="/cookie-consent.css" />
+  <style>
+    .pricing-page { max-width: 960px; margin: 0 auto; padding: 5rem 1.25rem 3rem; }
+    .pricing-page h1 { font-family: var(--font-display); font-size: clamp(2.4rem, 6vw, 3.4rem); margin: 0 0 0.4rem; }
+    .toggle { display: inline-flex; gap: 0.35rem; background: var(--sand); padding: 0.25rem; border-radius: 999px; margin: 1.25rem 0 1.75rem; }
+    .toggle button { border: 0; background: transparent; padding: 0.55rem 1rem; border-radius: 999px; font: inherit; font-weight: 600; cursor: pointer; }
+    .toggle button.on { background: var(--asphalt); color: #fff; }
+    .plan-grid { display: grid; gap: 1.25rem; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); }
+    .plan { background: #fff; border: 1px solid var(--line); border-radius: 18px; padding: 1.4rem 1.35rem; }
+    .plan h2 { margin: 0 0 0.35rem; font-size: 1.35rem; }
+    .plan .price { font-size: 2rem; font-weight: 700; margin: 0.6rem 0; }
+    .plan ul { margin: 0.75rem 0 1.1rem; padding-left: 1.1rem; color: var(--ink-soft); }
+    .nav-sticky { position: sticky; top: 0; z-index: 5; background: var(--foam); border-bottom: 1px solid var(--line); padding: 0.85rem 1.25rem; display: flex; justify-content: space-between; }
+  </style>
+</head>
+<body class="landing">
+  <nav class="nav-sticky">
+    <a class="brand brand-logo" href="/"><img src="/brand/logo.svg" alt="taxitips" height="32" /></a>
+    <a href="/login.html">Logga in</a>
+  </nav>
+  <main class="pricing-page">
+    <h1>Enkelt pris. Full access.</h1>
+    <p class="section-lead">14 dagar gratis. Därefter enligt plan. Avsluta när du vill.</p>
+    <div class="toggle" role="group" aria-label="Faktureringsintervall">
+      <button type="button" class="on" data-interval="month" id="btnMonth">Månadsvis</button>
+      <button type="button" data-interval="year" id="btnYear">Årsvis</button>
+    </div>
+    <div class="plan-grid">
+      <article class="plan" id="driverPlan">
+        <h2>Driver</h2>
+        <p>För dig som kör själv.</p>
+        <p class="price" id="driverPrice">—</p>
+        <ul>
+          <li>TaxiSignaler &amp; karta</li>
+          <li>Evenemang &amp; störningar</li>
+          <li>Pushnotiser</li>
+          <li>Personliga områden</li>
+        </ul>
+        <a class="btn btn-primary" href="/signup.html?plan=driver" id="driverCta">Starta gratis</a>
+      </article>
+      <article class="plan" id="fleetPlan">
+        <h2>Fleet</h2>
+        <p>För bolag med flera förare. Min 5 seats.</p>
+        <p class="price" id="fleetPrice">—</p>
+        <ul>
+          <li>Allt i Driver till varje förare</li>
+          <li>Central faktura</li>
+          <li>Invite-länk / QR</li>
+          <li>Seat-hantering</li>
+        </ul>
+        <a class="btn btn-primary" href="/signup.html?plan=fleet" id="fleetCta">Starta för företaget</a>
+      </article>
+    </div>
+    <p class="muted" id="plansNote" style="margin-top:1.5rem"></p>
+  </main>
+  <script src="/firebase-public-config.js"></script>
+  <script src="/cookie-consent.js"></script>
+  <script>
+    let plans = null;
+    let interval = "month";
+    function formatAmount(plan) {
+      if (!plan || plan.unitAmount == null) return "—";
+      const sek = Math.round(plan.unitAmount / 100);
+      const suffix = plan.interval === "year" ? "/år" : "/mån";
+      const seat = plan.perSeat ? " / förare" : "";
+      return `${sek} kr${seat}${suffix} exkl. moms`;
+    }
+    function render() {
+      if (!plans) return;
+      const driver = interval === "year" ? (plans.driver?.year || plans.driver?.month) : plans.driver?.month;
+      const fleet = plans.fleet?.month;
+      document.getElementById("driverPrice").textContent = formatAmount(driver);
+      document.getElementById("fleetPrice").textContent = formatAmount(fleet);
+      const trial = plans.trialDays || 14;
+      document.getElementById("plansNote").textContent =
+        `${trial} dagar gratis` + (plans.trialRequiresPaymentMethod ? " (betalmetod lämnas vid checkout)." : ".") +
+        (plans.stripeEnabled ? " Priser från Stripe." : " Visningspriser (Stripe ej kopplat i denna miljö).");
+      document.getElementById("driverCta").href = `/signup.html?plan=driver&interval=${interval}`;
+      document.getElementById("fleetCta").href = `/signup.html?plan=fleet&interval=month`;
+    }
+    document.getElementById("btnMonth").addEventListener("click", () => {
+      interval = "month";
+      document.getElementById("btnMonth").classList.add("on");
+      document.getElementById("btnYear").classList.remove("on");
+      render();
+    });
+    document.getElementById("btnYear").addEventListener("click", () => {
+      interval = "year";
+      document.getElementById("btnYear").classList.add("on");
+      document.getElementById("btnMonth").classList.remove("on");
+      render();
+    });
+    fetch("/api/billing/plans").then((r) => r.json()).then((data) => {
+      plans = data;
+      render();
+    }).catch(() => {
+      document.getElementById("plansNote").textContent = "Kunde inte hämta priser.";
+    });
+  </script>
+</body>
+</html>

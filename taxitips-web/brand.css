@@ -1,0 +1,56 @@
+/* taxitips brand tokens — from Canva brand kit TaxiTips */
+:root {
+  --navy: #08254c;
+  --navy-deep: #051a36;
+  --yellow: #ffc400;
+  --yellow-deep: #e0ac00;
+  --cyan: #19c2d1;
+  --cyan-deep: #1098a6;
+  --foam: #f8f7f2;
+  --foam-soft: #efeee8;
+  --ink: #08254c;
+  --ink-soft: #3d4f6a;
+  --line: rgba(11, 37, 76, 0.14);
+  --danger: #c0392b;
+  --ok: #1f8a5b;
+  --shadow: 0 12px 40px rgba(11, 37, 76, 0.12);
+
+  /* aliases used across older stylesheets */
+  --taxi: var(--yellow);
+  --taxi-deep: var(--yellow-deep);
+  --asphalt: var(--navy);
+  --road: var(--navy-deep);
+  --signal: var(--cyan);
+  --live: var(--ok);
+  --sand: var(--foam-soft);
+  --petrol: var(--cyan-deep);
+  --amber: var(--yellow);
+  --mist: var(--foam);
+  --ink-muted: var(--ink-soft);
+
+  --font-display: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, sans-serif;
+  --radius: 14px;
+  --radius-pill: 999px;
+}
+
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  color: inherit;
+  line-height: 0;
+}
+
+.brand-logo img {
+  display: block;
+  height: 2rem;
+  width: auto;
+}
+
+.hero-brand img {
+  display: block;
+  height: 2.5rem;
+  width: auto;
+}
