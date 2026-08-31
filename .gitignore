@@ -7,3 +7,7 @@ taxitips-app/build/
 taxitips-app/.flutter-plugins-dependencies
 *.iml
 .idea/
+.agents/
+taxitips-app/.playwright-mcp/
+taxitips-api/supabase/.branches/
+taxitips-api/supabase/.temp/

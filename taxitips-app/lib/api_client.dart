@@ -1,9 +1,46 @@
 import 'dart:math';
 
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'config.dart';
+
+const _taxiAreaCatalog = [
+  'Malmö',
+  'Lund',
+  'Helsingborg',
+  'Kristianstad',
+  'Hässleholm',
+  'Landskrona',
+  'Ystad',
+  'Trelleborg',
+  'Eslöv',
+  'Ängelholm',
+  'Bjuv',
+  'Bromölla',
+  'Burlöv',
+  'Båstad',
+  'Hörby',
+  'Höör',
+  'Klippan',
+  'Kävlinge',
+  'Lomma',
+  'Lönsboda',
+  'Osby',
+  'Perstorp',
+  'Simrishamn',
+  'Sjöbo',
+  'Skurup',
+  'Staffanstorp',
+  'Svalöv',
+  'Svedala',
+  'Tomelilla',
+  'Vellinge',
+  'Åstorp',
+  'Örkelljunga',
+  'Östra Göinge',
+];
 
 class ApiException implements Exception {
   ApiException(this.status, this.message);
@@ -35,8 +72,40 @@ class ApiClient {
   SupabaseClient get _sb => Supabase.instance.client;
 
   Future<void> ensureInitialized() async {
-    if (Supabase.instance.isInitialized) return;
-    await Supabase.initialize(url: supabaseUrl, anonKey: supabaseAnonKey);
+    // Safe to call multiple times; supabase_flutter skips re-init internally.
+    await Supabase.initialize(
+      url: supabaseUrl,
+      publishableKey: supabaseAnonKey,
+      debug: false,
+    );
+  }
+
+  Never _rethrowAsApiException(
+    Object e, {
+    StackTrace? stackTrace,
+    String operation = 'unknown',
+  }) {
+    debugPrint('ApiClient[$operation] error: $e');
+    if (stackTrace != null) {
+      debugPrint('ApiClient[$operation] stack: $stackTrace');
+    }
+
+    if (e is ApiException) throw e;
+    if (e is PostgrestException) {
+      final parts = <String>[e.message];
+      final details = e.details?.toString() ?? '';
+      final hint = e.hint?.toString() ?? '';
+      if (details.isNotEmpty) parts.add(details);
+      if (hint.isNotEmpty) parts.add('hint: $hint');
+      if ((e.code ?? '').isNotEmpty) parts.add('code: ${e.code}');
+      final message = 'Databasfel: ${parts.join(' | ')}';
+      debugPrint('ApiClient[$operation] PostgREST: $message');
+      throw ApiException(500, message);
+    }
+    if (e is AuthException) {
+      throw ApiException(401, 'Auth-fel: ${e.message}');
+    }
+    throw ApiException(500, e.toString());
   }
 
   Future<void> loadTokens() async {
@@ -103,21 +172,69 @@ class ApiClient {
     required String email,
     required String password,
   }) async {
-    await ensureInitialized();
-    final res = await _sb.auth.signInWithPassword(
-      email: email,
-      password: password,
-    );
-    await saveSession(res.session?.accessToken);
-    await saveCredentials(email, password);
-    return me();
+    try {
+      await ensureInitialized();
+      final res = await _sb.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+      await saveSession(res.session?.accessToken);
+      await saveCredentials(email, password);
+
+      // Auth is enough to consider login successful; profile/company bootstrap
+      // can fail in environments where those tables are not yet provisioned.
+      try {
+        return await me();
+      } catch (_) {
+        return {
+          'user': {'id': res.user?.id, 'email': res.user?.email, 'name': null},
+          'profile': null,
+          'company': null,
+          'role': null,
+          'devices': const [],
+          'isOwner': false,
+          'degraded': true,
+        };
+      }
+    } catch (e, st) {
+      _rethrowAsApiException(e, stackTrace: st, operation: 'login');
+    }
   }
 
   Future<void> logout() async {
     try {
-      if (Supabase.instance.isInitialized) await _sb.auth.signOut();
+      await ensureInitialized();
+      await _sb.auth.signOut();
     } catch (_) {}
     await saveSession(null);
+  }
+
+  Future<bool> signInWithGoogle() => _signInWithOAuth(OAuthProvider.google);
+
+  Future<bool> signInWithApple() => _signInWithOAuth(OAuthProvider.apple);
+
+  Future<bool> _signInWithOAuth(OAuthProvider provider) async {
+    await ensureInitialized();
+    // On mobile the browser returns via a deep link; on web Supabase uses its
+    // configured site URL and the page reloads with a fresh session.
+    final redirectTo = kIsWeb ? null : 'taxitips://auth-callback';
+    final ok = await _sb.auth.signInWithOAuth(provider, redirectTo: redirectTo);
+    final session = _sb.auth.currentSession;
+    if (session != null) {
+      await saveSession(session.accessToken);
+    }
+    return ok;
+  }
+
+  /// Completes a session that was established by an OAuth redirect (mobile).
+  void listenForAuthSignIn(void Function() onSignedIn) {
+    _sb.auth.onAuthStateChange.listen((state) {
+      final session = state.session;
+      if (session != null) {
+        saveSession(session.accessToken);
+        onSignedIn();
+      }
+    });
   }
 
   Future<Map<String, dynamic>> signup({
@@ -162,7 +279,13 @@ class ApiClient {
 
     await saveSession(auth.session?.accessToken);
     await saveCredentials(email, password);
-    return me();
+    final result = await me();
+    if (!startCheckout) return result;
+    final checkout = await createCheckoutSession(seats: seats);
+    return {
+      ...result,
+      'checkout': {...checkout, 'mode': 'stripe'},
+    };
   }
 
   String _randomJoinCode() {
@@ -172,63 +295,96 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> me() async {
-    await ensureInitialized();
-    final user = _sb.auth.currentUser;
-    if (user == null) throw ApiException(401, 'Inte inloggad');
+    try {
+      await ensureInitialized();
+      final user = _sb.auth.currentUser;
+      if (user == null) throw ApiException(401, 'Inte inloggad');
 
-    final profile = await _sb
-        .from('profiles')
-        .select()
-        .eq('id', user.id)
-        .maybeSingle();
-    final memberships = await _sb
-        .from('company_members')
-        .select('role, status, company:companies(*)')
-        .eq('user_id', user.id)
-        .eq('status', 'active');
-
-    Map<String, dynamic>? company;
-    String? role;
-    List devices = const [];
-    if (memberships.isNotEmpty) {
-      final m = Map<String, dynamic>.from(memberships.first as Map);
-      role = m['role']?.toString();
-      company = m['company'] is Map
-          ? Map<String, dynamic>.from(m['company'] as Map)
-          : null;
-      if (company != null) {
-        final devs = await _sb
-            .from('devices')
+      Map<String, dynamic>? profile;
+      try {
+        final p = await _sb
+            .from('profiles')
             .select()
-            .eq('company_id', company['id']);
-        devices = (devs as List).map((d) {
-          final row = Map<String, dynamic>.from(d as Map);
-          return {
-            ...row,
-            'hasPush': (row['push_token']?.toString().isNotEmpty ?? false),
-          };
-        }).toList();
+            .eq('id', user.id)
+            .maybeSingle();
+        profile = p == null ? null : Map<String, dynamic>.from(p as Map);
+      } on PostgrestException {
+        profile = null;
       }
-    }
 
-    return {
-      'user': {'id': user.id, 'email': user.email, 'name': profile?['name']},
-      'profile': profile,
-      'company': company == null
-          ? null
-          : {
-              ...company,
-              'watchedAreas': company['watched_areas'] ?? [],
-              'joinCode': company['join_code'],
-              'orgNumber': company['org_number'],
-            },
-      'role': role,
-      'devices': devices,
-      'isOwner': profile?['is_platform_owner'] == true,
-    };
+      List memberships = const [];
+      try {
+        memberships = await _sb
+            .from('company_members')
+            .select('role, status, company:companies(*)')
+            .eq('user_id', user.id)
+            .eq('status', 'active');
+      } on PostgrestException {
+        memberships = const [];
+      }
+
+      Map<String, dynamic>? company;
+      String? role;
+      List devices = const [];
+      if (memberships.isNotEmpty) {
+        final m = Map<String, dynamic>.from(memberships.first as Map);
+        role = m['role']?.toString();
+        company = m['company'] is Map
+            ? Map<String, dynamic>.from(m['company'] as Map)
+            : null;
+        if (company != null) {
+          try {
+            final devs = await _sb
+                .from('devices')
+                .select()
+                .eq('company_id', company['id']);
+            devices = (devs as List).map((d) {
+              final row = Map<String, dynamic>.from(d as Map);
+              return {
+                ...row,
+                'hasPush': (row['push_token']?.toString().isNotEmpty ?? false),
+              };
+            }).toList();
+          } on PostgrestException {
+            devices = const [];
+          }
+        }
+      }
+
+      return {
+        'user': {'id': user.id, 'email': user.email, 'name': profile?['name']},
+        'profile': profile,
+        'company': company == null
+            ? null
+            : {
+                ...company,
+                'watchedAreas': company['watched_areas'] ?? [],
+                'joinCode': company['join_code'],
+                'orgNumber': company['org_number'],
+              },
+        'role': role,
+        'devices': devices,
+        'isOwner': profile?['is_platform_owner'] == true,
+      };
+    } catch (e, st) {
+      _rethrowAsApiException(e, stackTrace: st, operation: 'me');
+    }
   }
 
-  Future<Map<String, dynamic>> entitlements() async => {'ok': true};
+  Future<Map<String, dynamic>> entitlements() async {
+    await ensureInitialized();
+    if (deviceToken == null) return {'ok': false, 'entitled': false};
+    try {
+      final entitled = await _sb.rpc(
+        'current_entitlement',
+        params: {'p_device_token': deviceToken},
+      );
+      return {'ok': true, 'entitled': entitled == true};
+    } catch (e) {
+      debugPrint('ApiClient[entitlements] error: $e');
+      return {'ok': false, 'entitled': false};
+    }
+  }
   Future<Map<String, dynamic>> publicConfig() async => {
     'supabaseUrl': supabaseUrl,
   };
@@ -240,6 +396,7 @@ class ApiClient {
         'unitAmount': 19900,
         'currency': 'sek',
         'displayName': 'Taxi Tips Driver',
+        'priceId': 'price_1U7cJrP67HXLcerWkJ3vKy7I',
       },
     ],
   };
@@ -254,6 +411,7 @@ class ApiClient {
     return {
       'watchedAreas':
           company?['watchedAreas'] ?? company?['watched_areas'] ?? [],
+      'catalog': _taxiAreaCatalog,
     };
   }
 
@@ -374,6 +532,7 @@ class ApiClient {
     List<String>? cities,
     Map<String, bool>? types,
   }) async {
+    await ensureInitialized();
     final current = await getNotifyPrefs();
     if (enabled != null) current['enabled'] = enabled;
     if (cities != null) current['cities'] = cities;
@@ -390,6 +549,7 @@ class ApiClient {
     String? name,
     String? orgNumber,
   }) async {
+    await ensureInitialized();
     final meData = await me();
     final company = meData['company'] as Map<String, dynamic>?;
     if (company == null) throw ApiException(400, 'Inget bolag');
@@ -418,6 +578,62 @@ class ApiClient {
     return {'ok': true};
   }
 
+  Future<void> sendPasswordCode(String email) async {
+    await ensureInitialized();
+    await _sb.auth.signInWithOtp(
+      email: email.trim().toLowerCase(),
+      shouldCreateUser: false,
+    );
+  }
+
+  Future<void> sendEmailChangeCode(String email) async {
+    await ensureInitialized();
+    await _sb.auth.signInWithOtp(
+      email: email.trim().toLowerCase(),
+      shouldCreateUser: false,
+    );
+  }
+
+  Future<void> changeEmailWithCode({
+    required String oldEmail,
+    required String code,
+    required String newEmail,
+  }) async {
+    await ensureInitialized();
+    final response = await _sb.auth.verifyOTP(
+      email: oldEmail.trim().toLowerCase(),
+      token: code.trim(),
+      type: OtpType.email,
+    );
+    final session = response.session;
+    if (session == null) {
+      throw ApiException(401, 'Verifieringskoden är ogiltig');
+    }
+    await saveSession(session.accessToken);
+    await _sb.auth.updateUser(
+      UserAttributes(email: newEmail.trim().toLowerCase()),
+    );
+  }
+
+  Future<void> changePasswordWithCode({
+    required String email,
+    required String code,
+    required String newPassword,
+  }) async {
+    await ensureInitialized();
+    final response = await _sb.auth.verifyOTP(
+      email: email.trim().toLowerCase(),
+      token: code.trim(),
+      type: OtpType.email,
+    );
+    final session = response.session;
+    if (session == null) {
+      throw ApiException(401, 'Verifieringskoden är ogiltig');
+    }
+    await saveSession(session.accessToken);
+    await _sb.auth.updateUser(UserAttributes(password: newPassword));
+  }
+
   Future<Map<String, dynamic>> getDeviceMe() async {
     await ensureInitialized();
     if (deviceToken == null) throw ApiException(401, 'Ingen enhet');
@@ -429,34 +645,133 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> updateDeviceLabel(String label) async {
+    await ensureInitialized();
     final meDev = await getDeviceMe();
     await _sb.from('devices').update({'label': label}).eq('id', meDev['id']);
     return {'label': label};
   }
 
-  Future<Map<String, dynamic>> taxi({bool demo = false}) async {
-    await ensureInitialized();
-    final rows = await _sb
-        .from('alerts')
-        .select()
-        .order('updated_at', ascending: false)
-        .limit(200);
-    final alerts = (rows as List).map((r) {
-      final m = Map<String, dynamic>.from(r as Map);
-      final payload = m['payload'];
-      if (payload is Map) return Map<String, dynamic>.from(payload);
+  Future<Map<String, dynamic>> submitAlertFeedback(
+    String alertId,
+    bool result,
+  ) async {
+    try {
+      await ensureInitialized();
+      await _sb.from('alert_feedback').insert({
+        'alert_id': alertId,
+        'device_token': deviceToken,
+        'result': result,
+      });
+      return {'success': true};
+    } catch (e) {
+      return {'error': e.toString()};
+    }
+  }
+
+  Future<Map<String, dynamic>> taxi({
+    bool demo = false,
+    double? userLat,
+    double? userLon,
+  }) async {
+    try {
+      await ensureInitialized();
+      final rows = await _sb.rpc(
+        'get_smart_alerts',
+        params: {
+          'p_lat': userLat ?? 55.604981, // Default Malmö if no location
+          'p_lon': userLon ?? 13.003822,
+          'p_device_token': deviceToken,
+        },
+      );
+
+      final now = DateTime.now().toUtc();
+      final active = <Map<String, dynamic>>[];
+      final week = <Map<String, dynamic>>[];
+      final all = <Map<String, dynamic>>[];
+      for (final r in (rows as List)) {
+        final m = Map<String, dynamic>.from(r as Map);
+        // Map the RPC output back to the format the UI expects, plus the new fields
+        final alert = <String, dynamic>{
+          'id': m['id'],
+          'title': m['title'],
+          'summary': m['summary'],
+          'lat': m['lat'],
+          'lon': m['lon'],
+          'end_time': m['end_time'],
+          'demand_score': m['demand_score'],
+          'reasons': m['reasons'] ?? [],
+          'distance_km': m['distance_km'],
+          'worth_it_score': m['worth_it_score'],
+          'taxi': {
+            'level': m['worth_it_score'] > 50
+                ? 'high'
+                : (m['worth_it_score'] > 20 ? 'medium' : 'low'),
+            'places': [],
+          }, // Mock place/level for compatibility
+        };
+        alert['id'] ??= m['id'];
+
+        // The RPC 'get_smart_alerts' already filters for end_time > NOW(),
+        // so we can safely consider all returned alerts as active.
+        active.add(alert);
+        week.add(alert);
+        all.add(alert);
+      }
+
       return {
-        'id': m['id'],
-        'kind': m['kind'],
-        'level': m['level'],
-        'title': m['title'],
-        'summary': m['summary'],
-        'lat': m['lat'],
-        'lon': m['lon'],
-        'taxi': {'level': m['level'], 'places': m['places'] ?? []},
+        'alerts': all,
+        'active': active,
+        'week': week,
+        'events': const [],
+        'placeStats': _buildPlaceStats(all),
+        'demo': demo,
+        'updatedAt': now.millisecondsSinceEpoch,
+        'source': 'trafiklab',
       };
-    }).toList();
-    return {'alerts': alerts, 'demo': demo};
+    } on PostgrestException catch (e) {
+      // Some environments are not provisioned with the alerts table yet.
+      if (e.code == 'PGRST205' && e.message.contains("public.alerts")) {
+        debugPrint(
+          'ApiClient[taxi.alerts] alerts table missing, returning empty alerts.',
+        );
+        return {
+          'alerts': const [],
+          'active': const [],
+          'week': const [],
+          'events': const [],
+          'placeStats': const [],
+          'demo': demo,
+          'updatedAt': DateTime.now().millisecondsSinceEpoch,
+          'source': 'trafiklab',
+        };
+      }
+      _rethrowAsApiException(e, operation: 'taxi.alerts');
+    } catch (e, st) {
+      _rethrowAsApiException(e, stackTrace: st, operation: 'taxi.alerts');
+    }
+  }
+
+  List<Map<String, dynamic>> _buildPlaceStats(
+    List<Map<String, dynamic>> alerts,
+  ) {
+    final map = <String, Map<String, dynamic>>{};
+    for (final a in alerts) {
+      final places = ((a['taxi'] as Map?)?['places'] as List?) ?? const [];
+      final lat = (a['lat'] as num?)?.toDouble();
+      final lon = (a['lon'] as num?)?.toDouble();
+      for (final p in places) {
+        final name = p.toString();
+        if (name.isEmpty) continue;
+        final cur = map[name] ?? <String, dynamic>{'name': name, 'count': 0};
+        cur['count'] = ((cur['count'] as num?)?.toInt() ?? 0) + 1;
+        if (lat != null && lon != null && !cur.containsKey('lat')) {
+          cur['lat'] = lat;
+          cur['lon'] = lon;
+        }
+        map[name] = cur;
+      }
+    }
+    return map.values.toList();
   }
 
   Future<Map<String, dynamic>> health() async => {
@@ -464,25 +779,56 @@ class ApiClient {
     'backend': 'supabase',
   };
 
-  Future<Map<String, dynamic>> billingPortal() async {
-    throw ApiException(
-      501,
-      'Stripe portal via worker Edge Function — kommer snart',
-    );
+  Future<Map<String, dynamic>> _invokeFunction(
+    String name, {
+    Map<String, dynamic>? body,
+  }) async {
+    await ensureInitialized();
+    try {
+      final res = await _sb.functions.invoke(name, body: body);
+      final data = res.data;
+      if (data is Map<String, dynamic>) {
+        final error = data['error']?.toString();
+        if (error != null && error.isNotEmpty) {
+          throw ApiException(500, error);
+        }
+        return data;
+      }
+      return <String, dynamic>{};
+    } on ApiException {
+      rethrow;
+    } catch (e) {
+      throw ApiException(
+        500,
+        e.toString().replaceFirst('FunctionException: ', ''),
+      );
+    }
   }
 
+  Future<Map<String, dynamic>> billingPortal() =>
+      _invokeFunction('billing-portal');
+
+  Future<Map<String, dynamic>> createCheckoutSession({required int seats}) =>
+      _invokeFunction('create-checkout-session', body: {'seats': seats});
+
   Future<Map<String, dynamic>> updateBillingQuantity(int seats) async {
+    await ensureInitialized();
     final meData = await me();
     final company = meData['company'] as Map<String, dynamic>?;
     if (company == null) throw ApiException(400, 'Inget bolag');
-    await _sb
-        .from('companies')
-        .update({'seats': seats})
-        .eq('id', company['id']);
-    return {'seats': seats};
+    try {
+      final res = await _invokeFunction(
+        'update-subscription-quantity',
+        body: {'seats': seats},
+      );
+      return {'quantity': seats, 'synced': res['synced'] == true};
+    } catch (_) {
+      return {'quantity': seats, 'synced': false};
+    }
   }
 
   Future<Map<String, dynamic>> listMembers() async {
+    await ensureInitialized();
     final meData = await me();
     final company = meData['company'] as Map<String, dynamic>?;
     if (company == null) return {'members': []};
@@ -505,6 +851,7 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> removeMember(String userId) async {
+    await ensureInitialized();
     final meData = await me();
     final company = meData['company'] as Map<String, dynamic>?;
     if (company == null) throw ApiException(400, 'Inget bolag');

@@ -1,6 +1,40 @@
 # TaxiTips API (Supabase + worker)
 
-Coolify service: **supabase-taxitips** (`kjrcb9ghbpegwyyxb05vjo66`) in project **labb** / env **production**.
+Coolify service: **supabase-taxitips** (`kjrcb9ghbpegwyyxb05vjo66`) in project **taxitips** / env **production**, on server `abbe-worker` (192.168.0.7).
+
+## Local dev
+
+Requires Docker (Colima works: `brew install colima docker docker-compose && colima start`) and the Supabase CLI (`brew install supabase/tap/supabase`).
+
+```bash
+cd taxitips-api
+supabase start   # applies every migration in supabase/migrations/ to a fresh local Postgres
+supabase status  # prints local API_URL, ANON_KEY, SERVICE_ROLE_KEY, STUDIO_URL
+```
+
+Worker against local Supabase:
+
+```bash
+cd taxitips-api/worker
+npm install
+cp .env.local.example .env.local   # fill SUPABASE_SERVICE_ROLE_KEY from `supabase status`
+set -a && source .env.local && set +a
+node src/index.js
+```
+
+Flutter app against local Supabase:
+
+```bash
+cd taxitips-app
+flutter run --dart-define=SUPABASE_URL=http://127.0.0.1:54321 --dart-define=SUPABASE_ANON_KEY=<local ANON_KEY from `supabase status`>
+```
+
+`supabase/migrations_historical/` holds two early migration files that described a schema
+design that was never actually applied to production as written (confirmed schema drift —
+see `TAXITIPS_STATUS.md`). `20260828999999_baseline_actual_schema.sql` is the real source of
+truth for the schema shape and is what `supabase start` actually builds from.
+
+`supabase stop` to tear the local stack down; `supabase stop --no-backup` to also wipe local data.
 
 ## Kong URL (default after create)
 

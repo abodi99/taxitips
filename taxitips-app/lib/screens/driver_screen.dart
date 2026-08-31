@@ -9,6 +9,7 @@ import '../api_client.dart';
 import '../push_service.dart';
 import '../theme.dart';
 import '../widgets/hotspot_map.dart';
+import '../widgets/smart_alert_card.dart';
 
 class DriverScreen extends StatefulWidget {
   const DriverScreen({
@@ -39,6 +40,7 @@ class _DriverScreenState extends State<DriverScreen> {
   Timer? _timer;
   bool _claiming = false;
   bool _refreshing = false;
+  bool? _entitled; // null = okänt/inte kollat än, kör inte spärr förrän vi vet.
   bool _highOnly = false;
   bool _nearMe = false;
   String _kindFilter = 'all'; // all | traffic | event
@@ -88,7 +90,11 @@ class _DriverScreenState extends State<DriverScreen> {
   Future<void> _load({bool silent = false}) async {
     if (!silent && mounted) setState(() => _refreshing = true);
     try {
-      final data = await widget.api.taxi(demo: widget.demo);
+      final results = await Future.wait([
+        widget.api.taxi(demo: widget.demo, userLat: _userLat, userLon: _userLon),
+        _checkEntitlement(),
+      ]);
+      final data = results[0] as Map<String, dynamic>;
       if (!mounted) return;
       setState(() {
         _data = data;
@@ -99,6 +105,23 @@ class _DriverScreenState extends State<DriverScreen> {
       setState(() => _error = _friendly(e));
     } finally {
       if (mounted) setState(() => _refreshing = false);
+    }
+  }
+
+  /// Kollar entitlement separat från _load så att ett fel här inte döljer
+  /// alert-datan (t.ex. i demo-läge finns ingen deviceToken alls).
+  Future<void> _checkEntitlement() async {
+    if (widget.demo) {
+      if (mounted) setState(() => _entitled = true);
+      return;
+    }
+    try {
+      final result = await widget.api.entitlements();
+      if (!mounted) return;
+      setState(() => _entitled = result['entitled'] == true);
+    } catch (e) {
+      // Nätverksfel etc — behåll senast kända status hellre än att larma i onödan.
+      debugPrint('DriverScreen[_checkEntitlement] error: $e');
     }
   }
 
@@ -771,6 +794,9 @@ class _DriverScreenState extends State<DriverScreen> {
                     ),
                   ),
 
+                  if (_entitled == false)
+                    _EntitlementBanner(onOpenSettings: widget.onOpenSettings),
+
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
                     child: Column(
@@ -929,23 +955,19 @@ class _DriverScreenState extends State<DriverScreen> {
                                 if (_hotEvents.isNotEmpty || _trafficSignalsVisible.isNotEmpty) ...[
                                   const _SectionTitle('Nu — kör hit'),
                                   for (final a in _hotEvents) ...[
-                                    _SignalCard(
-                                      alert: a,
-                                      place: _placeName(a),
-                                      hint: _hint(a),
-                                      phaseLabel: _phaseLabel((a['taxi'] as Map?)?['phase']),
-                                      onTap: () => _openAlertDetail(a),
-                                    ),
+                                    SmartAlertCard(
+                                        alert: a,
+                                        api: widget.api,
+                                        onTap: () => _openAlertDetail(a),
+                                      ),
                                     const SizedBox(height: 10),
                                   ],
                                   for (final a in _trafficSignalsVisible.take(8)) ...[
-                                    _SignalCard(
-                                      alert: a,
-                                      place: _placeName(a),
-                                      hint: _hint(a),
-                                      phaseLabel: null,
-                                      onTap: () => _openAlertDetail(a),
-                                    ),
+                                    SmartAlertCard(
+                                        alert: a,
+                                        api: widget.api,
+                                        onTap: () => _openAlertDetail(a),
+                                      ),
                                     const SizedBox(height: 10),
                                   ],
                                   if (_trafficSignalsVisible.length > 8)
@@ -960,13 +982,11 @@ class _DriverScreenState extends State<DriverScreen> {
                                 if (_upcomingEvents.isNotEmpty) ...[
                                   const _SectionTitle('Kommande 48 h — planera'),
                                   for (final a in _upcomingEvents) ...[
-                                    _SignalCard(
-                                      alert: a,
-                                      place: _placeName(a),
-                                      hint: _hint(a),
-                                      phaseLabel: _phaseLabel((a['taxi'] as Map?)?['phase']),
-                                      onTap: () => _openAlertDetail(a),
-                                    ),
+                                    SmartAlertCard(
+                                        alert: a,
+                                        api: widget.api,
+                                        onTap: () => _openAlertDetail(a),
+                                      ),
                                     const SizedBox(height: 10),
                                   ],
                                 ],
@@ -984,14 +1004,11 @@ class _DriverScreenState extends State<DriverScreen> {
                                       ),
                                       children: [
                                         for (final a in _weekSignals) ...[
-                                          _SignalCard(
-                                            alert: a,
-                                            place: _placeName(a),
-                                            hint: _hint(a),
-                                            phaseLabel: null,
-                                            compact: true,
-                                            onTap: () => _openAlertDetail(a),
-                                          ),
+                                          SmartAlertCard(
+                                        alert: a,
+                                        api: widget.api,
+                                        onTap: () => _openAlertDetail(a),
+                                      ),
                                           const SizedBox(height: 10),
                                         ],
                                       ],
@@ -1030,143 +1047,55 @@ class _SectionTitle extends StatelessWidget {
   }
 }
 
-class _SignalCard extends StatelessWidget {
-  const _SignalCard({
-    required this.alert,
-    required this.place,
-    required this.hint,
-    required this.onTap,
-    this.phaseLabel,
-    this.compact = false,
-  });
+/// Icke-blockerande banner som visas när bolagets provperiod/prenumeration
+/// inte längre är aktiv. Signalerna töms redan tyst server-side i det läget
+/// (get_smart_alerts), så det här ger föraren en förklaring i stället för
+/// en tom skärm utan anledning.
+class _EntitlementBanner extends StatelessWidget {
+  const _EntitlementBanner({this.onOpenSettings});
 
-  final Map<String, dynamic> alert;
-  final String place;
-  final String hint;
-  final String? phaseLabel;
-  final VoidCallback onTap;
-  final bool compact;
+  final VoidCallback? onOpenSettings;
 
   @override
   Widget build(BuildContext context) {
-    final level = (alert['taxi'] as Map?)?['level'];
-    final high = level == 'high';
-    final isEvent =
-        alert['sourceKind'] == 'event' || (alert['taxi'] as Map?)?['reason'] == 'event';
-    final venue = alert['venue']?.toString();
-    final accent = isEvent
-        ? const Color(0xFF2F6FED)
-        : high
-            ? TbColors.signal
-            : TbColors.taxi;
-
-    return Material(
-      color: isEvent ? const Color(0xFFEEF3FF) : Colors.white,
-      borderRadius: BorderRadius.circular(14),
-      child: InkWell(
-        onTap: onTap,
+    return Container(
+      margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: TbColors.sand,
         borderRadius: BorderRadius.circular(14),
-        child: Container(
-          padding: EdgeInsets.all(compact ? 12 : 16),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(14),
-            border: Border(
-              left: BorderSide(width: 6, color: accent),
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.04),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    isEvent
-                        ? 'EVENEMANG'
-                        : alert['sourceKind'] == 'road'
-                            ? 'VÄG'
-                            : 'KOLLEKTIV',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.6,
-                      color: isEvent ? const Color(0xFF2F6FED) : Colors.grey.shade700,
-                    ),
-                  ),
-                  const Spacer(),
-                  Icon(Icons.chevron_right, color: Colors.grey.shade500, size: 22),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      place,
-                      style: TextStyle(
-                        fontSize: compact ? 20 : 26,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: -0.4,
-                        height: 1.05,
-                        color: isEvent ? const Color(0xFF1A3A8A) : TbColors.ink,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: accent,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Text(
-                      isEvent ? 'EVENT' : high ? 'KÖR' : 'Kolla',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        fontSize: 13,
-                        color: isEvent || high ? Colors.white : TbColors.ink,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                hint,
-                style: TextStyle(
-                  fontSize: compact ? 14 : 16,
-                  height: 1.35,
-                  fontWeight: FontWeight.w600,
+        border: Border.all(color: TbColors.taxiDeep, width: 1.5),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.info_outline, color: TbColors.taxiDeep),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Ditt företags provperiod har gått ut',
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: TbColors.ink),
                 ),
-              ),
-              if (isEvent && venue != null) ...[
-                const SizedBox(height: 6),
-                Text(venue, style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
-              ],
-              if (isEvent && phaseLabel != null) ...[
                 const SizedBox(height: 4),
-                Text(
-                  phaseLabel!,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF2F6FED),
-                  ),
+                const Text(
+                  'Prenumerationen är inte aktiv just nu, så nya taxisignaler visas inte förrän kontoret förnyar den.',
+                  style: TextStyle(fontSize: 13, height: 1.35, fontWeight: FontWeight.w600, color: TbColors.muted),
                 ),
+                if (onOpenSettings != null) ...[
+                  const SizedBox(height: 8),
+                  TextButton(
+                    onPressed: onOpenSettings,
+                    style: TextButton.styleFrom(padding: EdgeInsets.zero, alignment: Alignment.centerLeft),
+                    child: const Text('Se inställningar'),
+                  ),
+                ],
               ],
-              const SizedBox(height: 6),
-              Text(
-                'Tryck för mer info',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.grey.shade600),
-              ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

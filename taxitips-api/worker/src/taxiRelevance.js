@@ -353,3 +353,40 @@ module.exports = {
   filterForTaxi,
   isTaxiNotifyWorthy,
 };
+
+const h3 = require("h3-js");
+
+function calculateDemandSignal(alert) {
+  let h3_index = null;
+  // Get lat/lon from alert (from raw payload or parsed)
+  const lat = alert.lat || alert.payload?.lat;
+  const lon = alert.lon || alert.payload?.lon;
+  
+  if (lat && lon) {
+    h3_index = h3.latLngToCell(lat, lon, 8);
+  }
+
+  let demand_score = alert.taxi?.score || 0;
+  let reasons = alert.taxi?.why ? alert.taxi.why.split(',').map(s => s.trim()) : [];
+  
+  const text = (alert.header + " " + alert.description).toLowerCase();
+  const isTrain = text.includes("tåg") || text.includes("påga") || text.includes("öresund");
+  
+  // Last train risk: late night check
+  // NOTE: raw source alerts carry active_to (ms epoch), not endsAt -- this never matched
+  // before, so the +30 "Last Train Risk" boost has never actually applied.
+  const end = alert.active_to ? new Date(alert.active_to) : null;
+  if (isTrain && end) {
+    const hours = end.getHours();
+    // Late night / early morning (e.g. 22:00 - 04:00)
+    if (hours >= 22 || hours <= 4) {
+      demand_score = Math.min(100, demand_score + 30);
+      reasons.push("Last Train Risk");
+    }
+  }
+
+  return { h3_index, demand_score, reasons };
+}
+
+module.exports.calculateDemandSignal = calculateDemandSignal;
+
