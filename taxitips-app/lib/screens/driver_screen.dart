@@ -199,6 +199,27 @@ class _DriverScreenState extends State<DriverScreen> {
     return list.where((a) => a['kind'] == _sourceFilter).toList();
   }
 
+  // "Bara hög prio" means "severe disruption", NOT "reachable from here" --
+  // those are different questions. taxi.level is worth_it_score-derived (it
+  // folds in distance/time-to-reach), so a genuinely severe but far-away
+  // line_paused event was silently disappearing under this filter even at a
+  // demand_score of 90, which is backwards: severity is what "priority" should
+  // mean here, reachability is what worth_it_score/sorting already handles
+  // separately. Falls back to taxi.level for events, which don't carry
+  // severity_tier/demand_score at all.
+  bool _isHighSeverity(Map<String, dynamic> a) {
+    final severityTier = a['severity_tier']?.toString();
+    if (severityTier != null) {
+      const highTiers = {
+        'line_paused',
+        'road_accident_or_closure',
+      };
+      return highTiers.contains(severityTier) ||
+          ((a['demand_score'] as num?) ?? 0) >= 70;
+    }
+    return (a['taxi'] as Map?)?['level'] == 'high';
+  }
+
   void _sortSignals(List<Map<String, dynamic>> list) {
     list.sort((a, b) {
       final pe =
@@ -241,7 +262,7 @@ class _DriverScreenState extends State<DriverScreen> {
     }).toList();
     if (_highOnly) {
       list = list
-          .where((a) => (a['taxi'] as Map?)?['level'] == 'high')
+          .where(_isHighSeverity)
           .toList();
     }
     _sortSignals(list);
@@ -263,7 +284,7 @@ class _DriverScreenState extends State<DriverScreen> {
     var list = _sourceFilterList(_geoFilter(_rawActive));
     if (_highOnly) {
       list = list
-          .where((a) => (a['taxi'] as Map?)?['level'] == 'high')
+          .where(_isHighSeverity)
           .toList();
     }
     _sortSignals(list);
@@ -285,7 +306,7 @@ class _DriverScreenState extends State<DriverScreen> {
     );
     if (_highOnly) {
       list = list
-          .where((a) => (a['taxi'] as Map?)?['level'] == 'high')
+          .where(_isHighSeverity)
           .toList();
     }
     _sortSignals(list);
@@ -376,7 +397,9 @@ class _DriverScreenState extends State<DriverScreen> {
                         'Bara hög prio',
                         style: TextStyle(fontWeight: FontWeight.w800),
                       ),
-                      subtitle: const Text('Starkaste signalerna först'),
+                      subtitle: const Text(
+                        'Bara allvarliga störningar (oavsett avstånd)',
+                      ),
                       value: _highOnly,
                       onChanged: (v) => apply(() => _highOnly = v),
                     ),
@@ -906,10 +929,16 @@ class _DriverScreenState extends State<DriverScreen> {
                 )
               : Column(
                   children: [
-                    // Top bar
+                    // Top bar -- kept to one job each: identity (title + live
+                    // status), and three actions (filter/settings/refresh).
+                    // Previously carried a redundant subtitle ("Tips när taxi
+                    // behövs" duplicating the "Var behövs taxi?" heading right
+                    // below it) and crowded 3-4 icon buttons with no visual
+                    // grouping -- simplified to reduce what's competing for
+                    // attention in the one bar that's always on screen.
                     Container(
                       color: TbColors.asphalt,
-                      padding: const EdgeInsets.fromLTRB(12, 6, 8, 10),
+                      padding: const EdgeInsets.fromLTRB(4, 6, 4, 10),
                       child: Row(
                         children: [
                           if (widget.onBack != null)
@@ -921,35 +950,22 @@ class _DriverScreenState extends State<DriverScreen> {
                               ),
                             )
                           else
-                            const SizedBox(width: 4),
-                          const Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Taxi Tips',
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w900,
-                                  color: TbColors.foam,
-                                  height: 1.1,
-                                ),
-                              ),
-                              Text(
-                                'Tips när taxi behövs',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                  color: Color(0xFFB9AFA2),
-                                ),
-                              ),
-                            ],
+                            const SizedBox(width: 12),
+                          const Text(
+                            'Taxi Tips',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                              color: TbColors.foam,
+                            ),
                           ),
-                          const Spacer(),
+                          const SizedBox(width: 10),
                           _LivePill(
                             live: live,
                             demo: widget.demo,
                             time: _clock(_data?['updatedAt']),
                           ),
+                          const Spacer(),
                           IconButton(
                             tooltip: 'Filter',
                             onPressed: _openFilters,
@@ -973,6 +989,7 @@ class _DriverScreenState extends State<DriverScreen> {
                               ),
                             ),
                           IconButton(
+                            tooltip: 'Uppdatera',
                             onPressed: _refreshing ? null : () => _load(),
                             icon: _refreshing
                                 ? const SizedBox(

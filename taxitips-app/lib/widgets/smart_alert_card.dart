@@ -27,17 +27,20 @@ class SmartAlertCard extends StatelessWidget {
       endTime = DateTime.tryParse(endTimeStr);
     }
 
-    String timeLeft = 'Okänt tidsfönster';
+    // "kvar" alone doesn't say remaining until WHAT -- this is the disruption's
+    // own expected end, not a deadline to act by, and a driver reading "46 min
+    // kvar" could easily assume the latter. Say explicitly what's ending.
+    String timeLeft = 'Okänt hur länge det pågår';
     if (endTime != null) {
       final diff = endTime.difference(DateTime.now());
       if (diff.isNegative) {
-        timeLeft = 'Möjligheten har passerat';
+        timeLeft = 'Störningen bör ha upphört';
       } else if (diff.inMinutes < 60) {
-        timeLeft = '${diff.inMinutes} min kvar';
+        timeLeft = 'Pågår i ${diff.inMinutes} min till';
       } else if (diff.inHours < 24) {
-        timeLeft = '${diff.inHours} tim ${diff.inMinutes % 60} min kvar';
+        timeLeft = 'Pågår i ${diff.inHours} tim ${diff.inMinutes % 60} min till';
       } else {
-        timeLeft = '${diff.inDays} dagar kvar';
+        timeLeft = 'Pågår i ${diff.inDays} dagar till';
       }
     }
 
