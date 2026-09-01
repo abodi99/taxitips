@@ -703,6 +703,9 @@ class ApiClient {
           'distance_km': m['distance_km'],
           'worth_it_score': m['worth_it_score'],
           'kind': m['kind'],
+          'mode': m['mode'],
+          'severity_tier': m['severity_tier'],
+          'confidence': m['confidence'],
           'taxi': {
             'level': m['worth_it_score'] > 50
                 ? 'high'

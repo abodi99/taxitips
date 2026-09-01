@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../api_client.dart';
 import '../push_service.dart';
+import '../severity_labels.dart';
 import '../theme.dart';
 import '../widgets/hotspot_map.dart';
 import '../widgets/smart_alert_card.dart';
@@ -1148,23 +1149,6 @@ class _ExplainSectionState extends State<_ExplainSection> {
   Map<String, dynamic>? _detail;
   String? _error;
 
-  static const _severityLabels = {
-    'line_paused': 'Hela linjen är stoppad',
-    'line_delayed': 'Försening på linjen',
-    'vehicle_cancelled': 'En avgång inställd (andra avgångar/ersättning finns)',
-    'vehicle_delayed': 'En avgång försenad',
-    'road_accident_or_closure': 'Olycka eller avstängd väg',
-    'road_work_or_queue': 'Vägarbete eller köbildning',
-    'road_work': 'Mindre vägarbete',
-    'disruption_unclassified': 'Störning (osäker klassificering)',
-  };
-
-  static const _confidenceLabels = {
-    'high': 'Hög — tydligt i källdatan',
-    'medium': 'Medel',
-    'low': 'Låg — osäker tolkning av källdatan',
-  };
-
   Future<void> _load() async {
     setState(() {
       _loading = true;
@@ -1230,8 +1214,8 @@ class _ExplainSectionState extends State<_ExplainSection> {
         children: [
           Text('Varför visas detta?', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.grey.shade800)),
           const SizedBox(height: 8),
-          _ExplainRow(label: 'Bedömning', value: _severityLabels[severityTier] ?? severityTier ?? 'Okänd'),
-          _ExplainRow(label: 'Säkerhet', value: _confidenceLabels[confidence] ?? confidence ?? 'Okänd'),
+          _ExplainRow(label: 'Bedömning', value: severityTierLabels[severityTier] ?? severityTier ?? 'Okänd'),
+          _ExplainRow(label: 'Säkerhet', value: confidenceLabels[confidence] ?? confidence ?? 'Okänd'),
           _ExplainRow(label: 'Poäng', value: '${opp['demand_score'] ?? '—'} / 100'),
           if (opp['expired_reason'] != null)
             _ExplainRow(label: 'Status', value: opp['expired_reason'].toString()),

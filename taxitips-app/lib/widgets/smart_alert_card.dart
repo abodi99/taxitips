@@ -1,0 +1,214 @@
+import 'package:flutter/material.dart';
+import '../api_client.dart';
+import '../severity_labels.dart';
+import '../theme.dart';
+
+/// Compact, glanceable card for the live signal list. Full detail (raw summary,
+/// all reasons, source attribution, raw source-event JSON) lives one tap away in
+/// the detail sheet (`_openAlertDetail` / `_ExplainSection` in driver_screen.dart) --
+/// this card only needs to answer "is this worth a glance while I'm driving?".
+class SmartAlertCard extends StatefulWidget {
+  final Map<String, dynamic> alert;
+  final ApiClient api;
+  final VoidCallback? onTap;
+
+  const SmartAlertCard({super.key, required this.alert, required this.api, this.onTap});
+
+  @override
+  State<SmartAlertCard> createState() => _SmartAlertCardState();
+}
+
+class _SmartAlertCardState extends State<SmartAlertCard> {
+  bool _feedbackGiven = false;
+
+  Future<void> _submitFeedback(bool result) async {
+    if (_feedbackGiven) return;
+    final alertId = widget.alert['id'];
+    if (alertId != null) {
+      await widget.api.submitAlertFeedback(alertId.toString(), result);
+    }
+    if (mounted) {
+      setState(() {
+        _feedbackGiven = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result ? 'Tack för feedback! (Fick körning)' : 'Tack för feedback! (Dött)')),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final title = widget.alert['title'] ?? 'Tips';
+    final summary = widget.alert['summary']?.toString() ?? '';
+    final score = ((widget.alert['worth_it_score'] as num?) ?? 0).round();
+    final endTimeStr = widget.alert['end_time'] ?? widget.alert['ends_at'];
+    final kind = widget.alert['kind']?.toString();
+    final severityTier = widget.alert['severity_tier']?.toString();
+    final confidence = widget.alert['confidence']?.toString();
+
+    DateTime? endTime;
+    if (endTimeStr != null) {
+      endTime = DateTime.tryParse(endTimeStr);
+    }
+
+    String timeLeft = 'Okänt tidsfönster';
+    if (endTime != null) {
+      final diff = endTime.difference(DateTime.now());
+      if (diff.isNegative) {
+        timeLeft = 'Möjligheten har passerat';
+      } else if (diff.inMinutes < 60) {
+        timeLeft = '${diff.inMinutes} min kvar';
+      } else if (diff.inHours < 24) {
+        timeLeft = '${diff.inHours} tim ${diff.inMinutes % 60} min kvar';
+      } else {
+        timeLeft = '${diff.inDays} dagar kvar';
+      }
+    }
+
+    // A low-confidence read is worth flagging inline -- a driver shouldn't treat
+    // a guess with the same weight as a clearly-stated cancellation.
+    final isLowConfidence = confidence == 'low';
+
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: InkWell(
+        onTap: widget.onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Row 1: mode/severity chip on the left, Worth-It score on the right.
+              // This is the single most important glance -- what kind of disruption,
+              // how sure are we, how urgent is it -- without reading any prose.
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      children: [
+                        if (kind == 'transit' || kind == 'road')
+                          Icon(
+                            kind == 'transit' ? Icons.train : Icons.directions_car,
+                            size: 15,
+                            color: TbColors.muted,
+                          ),
+                        if (severityTierShortLabels.containsKey(severityTier))
+                          Text(
+                            severityTierShortLabels[severityTier]!,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w800,
+                              color: TbColors.muted,
+                            ),
+                          ),
+                        if (isLowConfidence)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: TbColors.sand,
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: const Color(0xFFC9D0DA)),
+                            ),
+                            child: const Text(
+                              'osäker',
+                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: TbColors.muted),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: score > 50 ? Colors.green.shade100 : Colors.orange.shade100,
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      'Worth It: $score',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 13,
+                        color: score > 50 ? Colors.green.shade800 : Colors.orange.shade800,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 2),
+              Row(
+                children: [
+                  const Icon(Icons.timer_outlined, size: 13, color: Colors.grey),
+                  const SizedBox(width: 4),
+                  Text(
+                    timeLeft,
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+                  ),
+                ],
+              ),
+              if (summary.isNotEmpty) ...[
+                const SizedBox(height: 6),
+                Text(
+                  summary,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13.5, color: Colors.grey.shade800, height: 1.3),
+                ),
+              ],
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    'Mer info & varför →',
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TbColors.cyanDeep),
+                  ),
+                  if (!_feedbackGiven)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          onPressed: () => _submitFeedback(true),
+                          icon: const Icon(Icons.thumb_up_outlined, size: 20, color: Colors.green),
+                          tooltip: 'Fick körning',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                        ),
+                        IconButton(
+                          onPressed: () => _submitFeedback(false),
+                          icon: const Icon(Icons.thumb_down_outlined, size: 20, color: Colors.red),
+                          tooltip: 'Dött',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
+                        ),
+                      ],
+                    )
+                  else
+                    const Text(
+                      'Tack!',
+                      style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
