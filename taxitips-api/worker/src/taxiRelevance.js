@@ -186,6 +186,10 @@ function scoreAlert(alert) {
     places,
     hubs: hubs.map((h) => h.name),
     driverHint,
+    // Exposed so mode-aware severity tiering (scoring.js) can reuse the same
+    // serious/mediumish signals instead of re-deriving them with a second regex pass.
+    serious,
+    mediumish,
   };
 }
 
@@ -352,6 +356,7 @@ module.exports = {
   enrichAlert,
   filterForTaxi,
   isTaxiNotifyWorthy,
+  isRoadAlert,
 };
 
 const h3 = require("h3-js");
