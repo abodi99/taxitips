@@ -702,6 +702,7 @@ class ApiClient {
           'reasons': m['reasons'] ?? [],
           'distance_km': m['distance_km'],
           'worth_it_score': m['worth_it_score'],
+          'kind': m['kind'],
           'taxi': {
             'level': m['worth_it_score'] > 50
                 ? 'high'
@@ -748,6 +749,27 @@ class ApiClient {
       _rethrowAsApiException(e, operation: 'taxi.alerts');
     } catch (e, st) {
       _rethrowAsApiException(e, stackTrace: st, operation: 'taxi.alerts');
+    }
+  }
+
+  /// Explainability: fetches the raw source event(s) and scoring provenance
+  /// (rule_id/confidence) behind one opportunity. Only called on demand when a
+  /// driver taps "Varför visas detta?" -- not fetched eagerly for every card, to
+  /// avoid hitting the backend for detail nobody asked to see.
+  Future<Map<String, dynamic>> opportunityDetail(String opportunityId) async {
+    try {
+      await ensureInitialized();
+      final data = await _sb.rpc(
+        'get_opportunity_detail',
+        params: {
+          'p_opportunity_id': opportunityId,
+          'p_device_token': deviceToken,
+        },
+      );
+      if (data == null) return {};
+      return Map<String, dynamic>.from(data as Map);
+    } catch (e, st) {
+      _rethrowAsApiException(e, stackTrace: st, operation: 'opportunityDetail');
     }
   }
 

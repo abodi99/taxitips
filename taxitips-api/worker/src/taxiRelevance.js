@@ -15,7 +15,7 @@ const NOISE_RE =
 
 /** Allvarliga kollektivstörningar som brukar ge taxibehov. */
 const SERIOUS_RE =
-  /\b(inställd|inställda|ställs in|inga avgångar|ingen trafik|trafikstopp|stopp i trafiken|totalt stopp|stora störningar|stora förseningar|ersättningsbuss|ersättningstrafik|strejk|nedrivning|strömavbrott|växelfel|signalproblem|tågtrafik (står|stoppad|inställd)|alla (pågatåg|öresundståg|tåg) (är )?inställda|avgång(ar)? inställd|inställd avgång|tåg(en)? (går|kör) inte|banan (är )?avstängd)\b/i;
+  /\b(inställd|inställda|ställs in|inga avgångar|ingen trafik|trafikstopp|stopp i (trafiken|tågtrafiken|busstrafiken)|totalt stopp|stora störningar|stora förseningar|ersättningsbuss|ersättningstrafik|strejk|nedrivning|strömavbrott|växelfel|signalproblem|tågtrafik (står|stoppad|inställd)|alla (pågatåg|öresundståg|tåg) (är )?inställda|avgång(ar)? inställd|inställd avgång|tåg(en)? (går|kör) inte|banan (är )?avstängd)\b/i;
 
 /** Medel — kan ge efterfrågan men inte alltid “kör hit nu”. */
 const MEDIUM_RE =

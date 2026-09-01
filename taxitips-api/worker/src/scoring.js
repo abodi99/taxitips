@@ -1,6 +1,29 @@
 const { classifyMode } = require("./mode");
 
 /**
+ * A single cancelled train departure is NOT the same thing as a whole line being
+ * down -- if another train runs a few minutes later, nobody is actually stranded.
+ * Trafiklab's real alert text distinguishes these cases explicitly:
+ *   - "Vi hänvisar till övriga avgångar" (other departures exist) -> one train
+ *     cancelled, service otherwise continuing. Not a strong stranded-passenger signal.
+ *   - "Ersättningsbuss" / "Buss ersätter" -> cancelled but a replacement is running.
+ *     Some inconvenience, but not "no way to get anywhere."
+ *   - "Stopp i tågtrafiken" / "ingen trafik" / "inga avgångar" with NO mention of an
+ *     alternative -> genuinely no service on the line. This is the real
+ *     stranded-passenger case a taxi driver should treat as high-value.
+ * Without GTFS static timetable data (next scheduled departure), this is the best
+ * available signal from the realtime feed's own text -- verified against real
+ * alerts in this session, not guessed.
+ */
+function hasStatedAlternative(text) {
+  return /(övriga avgångar|ersättningsbuss|ersättningstrafik|buss ersätter|tågbyte)/i.test(text);
+}
+
+function isWholeLineStop(text) {
+  return /(stopp i tågtrafiken|ingen trafik|inga avgångar|trafikstopp)/i.test(text);
+}
+
+/**
  * Maps a scored alert (taxi.level/serious/mediumish, already computed by
  * taxiRelevance.js's scoreAlert/scoreRoadAlert) plus its transport mode into a
  * severity_tier -- the axis that distinguishes "a whole train line is paused" from
@@ -32,10 +55,25 @@ function classifySeverity(alert, taxi) {
 
   const serious = taxi.serious === true;
   const mediumish = taxi.mediumish === true;
+  const text = `${alert.header || ""} ${alert.description || ""}`;
 
   if (mode === "train") {
     if (serious) {
-      return { mode, severityTier: "line_paused", score: Math.max(taxi.score, 85), confidence: "high" };
+      if (isWholeLineStop(text) && !hasStatedAlternative(text)) {
+        // Genuinely no service on the line -- the real stranded-passenger case.
+        return { mode, severityTier: "line_paused", score: Math.max(taxi.score, 85), confidence: "high" };
+      }
+      if (hasStatedAlternative(text)) {
+        // One departure cancelled, but the alert itself names a next train or a
+        // replacement bus -- treat as a single vehicle issue, not a line pause,
+        // since most passengers just wait for the next departure.
+        return { mode, severityTier: "vehicle_cancelled", score: Math.min(taxi.score, 55), confidence: "medium" };
+      }
+      // Serious language, but neither signal is explicit in the text -- can't
+      // confidently tell whether this is a full stop or a single cancellation.
+      // Score conservatively and flag the uncertainty rather than assuming the
+      // worse (and more score-inflating) case.
+      return { mode, severityTier: "line_paused", score: Math.max(taxi.score, 70), confidence: "low" };
     }
     if (mediumish) {
       return { mode, severityTier: "line_delayed", score: Math.min(taxi.score, 45), confidence: "high" };

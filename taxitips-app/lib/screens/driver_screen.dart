@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -722,6 +723,13 @@ class _DriverScreenState extends State<DriverScreen> {
                       ),
                     ),
                   ],
+                  if (!isEvent && a['id'] != null) ...[
+                    const SizedBox(height: 16),
+                    _ExplainSection(
+                      opportunityId: a['id'].toString(),
+                      api: widget.api,
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   TextButton(
                     onPressed: () => Navigator.pop(ctx),
@@ -1113,6 +1121,175 @@ class _SectionTitle extends StatelessWidget {
           fontSize: 18,
           fontWeight: FontWeight.w900,
           color: Colors.grey.shade800,
+        ),
+      ),
+    );
+  }
+}
+
+/// "Varför visas detta?" -- lazy-loaded on tap, not fetched for every card, so
+/// browsing the list doesn't cost an extra round-trip per signal. Shows the
+/// scoring rule/confidence and the underlying source event(s) in plain language,
+/// with the full raw API payload available behind a secondary expand for anyone
+/// who wants to see exactly what Trafiklab/Trafikverket sent.
+class _ExplainSection extends StatefulWidget {
+  const _ExplainSection({required this.opportunityId, required this.api});
+  final String opportunityId;
+  final ApiClient api;
+
+  @override
+  State<_ExplainSection> createState() => _ExplainSectionState();
+}
+
+class _ExplainSectionState extends State<_ExplainSection> {
+  bool _expanded = false;
+  bool _loading = false;
+  bool _showRaw = false;
+  Map<String, dynamic>? _detail;
+  String? _error;
+
+  static const _severityLabels = {
+    'line_paused': 'Hela linjen är stoppad',
+    'line_delayed': 'Försening på linjen',
+    'vehicle_cancelled': 'En avgång inställd (andra avgångar/ersättning finns)',
+    'vehicle_delayed': 'En avgång försenad',
+    'road_accident_or_closure': 'Olycka eller avstängd väg',
+    'road_work_or_queue': 'Vägarbete eller köbildning',
+    'road_work': 'Mindre vägarbete',
+    'disruption_unclassified': 'Störning (osäker klassificering)',
+  };
+
+  static const _confidenceLabels = {
+    'high': 'Hög — tydligt i källdatan',
+    'medium': 'Medel',
+    'low': 'Låg — osäker tolkning av källdatan',
+  };
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final detail = await widget.api.opportunityDetail(widget.opportunityId);
+      if (!mounted) return;
+      setState(() => _detail = detail);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = 'Kunde inte hämta detaljer.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!_expanded) {
+      return Align(
+        alignment: Alignment.centerLeft,
+        child: TextButton.icon(
+          onPressed: () {
+            setState(() => _expanded = true);
+            _load();
+          },
+          icon: const Icon(Icons.info_outline, size: 16),
+          label: const Text('Varför visas detta?', style: TextStyle(fontWeight: FontWeight.w700)),
+          style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
+        ),
+      );
+    }
+
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)),
+      );
+    }
+
+    if (_error != null) {
+      return Text(_error!, style: TextStyle(color: Colors.red.shade700, fontSize: 13));
+    }
+
+    final opp = _detail?['opportunity'] as Map?;
+    final sourceEvents = (_detail?['source_events'] as List?) ?? const [];
+    if (opp == null) {
+      return const Text('Ingen ytterligare information tillgänglig.', style: TextStyle(fontSize: 13));
+    }
+
+    final severityTier = opp['severity_tier']?.toString();
+    final confidence = opp['confidence']?.toString();
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: TbColors.sand,
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('Varför visas detta?', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.grey.shade800)),
+          const SizedBox(height: 8),
+          _ExplainRow(label: 'Bedömning', value: _severityLabels[severityTier] ?? severityTier ?? 'Okänd'),
+          _ExplainRow(label: 'Säkerhet', value: _confidenceLabels[confidence] ?? confidence ?? 'Okänd'),
+          _ExplainRow(label: 'Poäng', value: '${opp['demand_score'] ?? '—'} / 100'),
+          if (opp['expired_reason'] != null)
+            _ExplainRow(label: 'Status', value: opp['expired_reason'].toString()),
+          if (sourceEvents.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text('Källa', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.grey.shade800, fontSize: 13)),
+            for (final se in sourceEvents.cast<Map>()) ...[
+              const SizedBox(height: 4),
+              Text(
+                (se['source'] == 'trafiklab' ? 'Trafiklab' : se['source'] == 'trafikverket' ? 'Trafikverket' : se['source']?.toString() ?? '—'),
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+              ),
+              Text(
+                (se['raw'] as Map?)?['description']?.toString() ??
+                    (se['raw'] as Map?)?['header']?.toString() ??
+                    '—',
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+              ),
+            ],
+          ],
+          const SizedBox(height: 6),
+          TextButton(
+            onPressed: () => setState(() => _showRaw = !_showRaw),
+            style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
+            child: Text(_showRaw ? 'Dölj rådata' : 'Visa rådata', style: const TextStyle(fontSize: 12)),
+          ),
+          if (_showRaw)
+            Container(
+              margin: const EdgeInsets.only(top: 6),
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(6)),
+              child: SelectableText(
+                const JsonEncoder.withIndent('  ').convert(sourceEvents),
+                style: const TextStyle(fontSize: 10, color: Colors.white, fontFamily: 'monospace'),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ExplainRow extends StatelessWidget {
+  const _ExplainRow({required this.label, required this.value});
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: RichText(
+        text: TextSpan(
+          style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
+          children: [
+            TextSpan(text: '$label: ', style: const TextStyle(fontWeight: FontWeight.w800)),
+            TextSpan(text: value),
+          ],
         ),
       ),
     );
