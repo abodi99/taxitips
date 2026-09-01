@@ -154,7 +154,14 @@ function mapOpportunity(alert, sourceEventId) {
     places: taxi.places || alert.places || [],
     start_time,
     end_time,
-    demand_score: signal.demand_score,
+    // classifySeverity's score IS the score -- it caps signal.demand_score down
+    // for severity tiers where the raw text-severity heuristic (plus the flat
+    // Last Train Risk boost) overstates real driver value, e.g. a single
+    // cancelled departure with a stated alternative (vehicle_cancelled, capped
+    // at 55) shouldn't reach the same score as a genuine whole-line stop
+    // (line_paused, floor of 85). Using signal.demand_score directly here was
+    // a bug -- classifySeverity's cap was computed but never actually stored.
+    demand_score: severity.score,
     confidence: severity.confidence,
     reasons: signal.reasons,
     // Phase 1 stub: derived from the existing short reason tag until Phase 2's
