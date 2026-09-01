@@ -258,7 +258,7 @@ class _DriverScreenState extends State<DriverScreen> {
     if (_highOnly) bits.add('Hög prio');
     if (_nearMe) bits.add('Nära dig');
     if (_place != null) bits.add(_place!);
-    if (bits.isEmpty) return 'Alla signaler · tryck filter för att smalna av';
+    if (bits.isEmpty) return 'Alla signaler';
     return bits.join(' · ');
   }
 
@@ -747,12 +747,10 @@ class _DriverScreenState extends State<DriverScreen> {
               : Column(
                   children: [
                     // Top bar -- kept to one job each: identity (title + live
-                    // status), and three actions (filter/settings/refresh).
-                    // Previously carried a redundant subtitle ("Tips när taxi
-                    // behövs" duplicating the "Var behövs taxi?" heading right
-                    // below it) and crowded 3-4 icon buttons with no visual
-                    // grouping -- simplified to reduce what's competing for
-                    // attention in the one bar that's always on screen.
+                    // status), and two standard actions (settings/refresh).
+                    // Filter moved down next to the list it actually affects
+                    // (see _filterSummary row below) instead of living here --
+                    // it's not identity/global-app chrome, it's a list control.
                     Container(
                       color: TbColors.asphalt,
                       padding: const EdgeInsets.fromLTRB(4, 6, 4, 10),
@@ -783,19 +781,6 @@ class _DriverScreenState extends State<DriverScreen> {
                             time: _clock(_data?['updatedAt']),
                           ),
                           const Spacer(),
-                          IconButton(
-                            tooltip: 'Filter',
-                            onPressed: _openFilters,
-                            icon: Badge(
-                              isLabelVisible: _filtersActive,
-                              smallSize: 8,
-                              backgroundColor: TbColors.taxi,
-                              child: const Icon(
-                                Icons.tune,
-                                color: TbColors.foam,
-                              ),
-                            ),
-                          ),
                           if (widget.onOpenSettings != null)
                             IconButton(
                               tooltip: 'Inställningar',
@@ -834,14 +819,47 @@ class _DriverScreenState extends State<DriverScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Var behövs taxi?',
-                            style: TextStyle(
-                              fontSize: 28,
-                              fontWeight: FontWeight.w900,
-                              height: 1.1,
-                              color: TbColors.ink,
-                            ),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'Var behövs taxi?',
+                                  style: TextStyle(
+                                    fontSize: 28,
+                                    fontWeight: FontWeight.w900,
+                                    height: 1.1,
+                                    color: TbColors.ink,
+                                  ),
+                                ),
+                              ),
+                              // Filter lives here, next to the list it controls,
+                              // instead of in the top bar's global-app chrome.
+                              Padding(
+                                padding: const EdgeInsets.only(top: 2),
+                                child: OutlinedButton.icon(
+                                  onPressed: _openFilters,
+                                  icon: Badge(
+                                    isLabelVisible: _filtersActive,
+                                    smallSize: 8,
+                                    backgroundColor: TbColors.taxi,
+                                    child: const Icon(Icons.tune, size: 16),
+                                  ),
+                                  label: const Text('Filter'),
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: TbColors.ink,
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 10,
+                                    ),
+                                    minimumSize: const Size(0, 34),
+                                    textStyle: const TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
                           const SizedBox(height: 6),
                           Text(

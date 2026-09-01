@@ -16,7 +16,11 @@ class SmartAlertCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final title = alert['title'] ?? 'Tips';
     final summary = alert['summary']?.toString() ?? '';
-    final score = ((alert['worth_it_score'] as num?) ?? 0).round();
+    final score = ((alert['worth_it_score'] as num?) ?? 0);
+    final likelihood = customerLikelihood(
+      severityTier: alert['severity_tier']?.toString(),
+      worthItScore: score,
+    );
     final endTimeStr = alert['end_time'] ?? alert['ends_at'];
     final kind = alert['kind']?.toString();
     final severityTier = alert['severity_tier']?.toString();
@@ -121,19 +125,23 @@ class SmartAlertCard extends StatelessWidget {
                       vertical: 5,
                     ),
                     decoration: BoxDecoration(
-                      color: score > 50
-                          ? Colors.green.shade100
-                          : Colors.orange.shade100,
+                      color: switch (likelihood) {
+                        CustomerLikelihood.high => Colors.green.shade100,
+                        CustomerLikelihood.medium => Colors.orange.shade100,
+                        CustomerLikelihood.low => Colors.grey.shade200,
+                      },
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      'Worth It: $score',
+                      customerLikelihoodLabels[likelihood]!,
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        fontSize: 13,
-                        color: score > 50
-                            ? Colors.green.shade800
-                            : Colors.orange.shade800,
+                        fontSize: 12,
+                        color: switch (likelihood) {
+                          CustomerLikelihood.high => Colors.green.shade800,
+                          CustomerLikelihood.medium => Colors.orange.shade800,
+                          CustomerLikelihood.low => Colors.grey.shade700,
+                        },
                       ),
                     ),
                   ),

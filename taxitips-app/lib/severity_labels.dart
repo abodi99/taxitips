@@ -31,3 +31,39 @@ const confidenceLabels = {
   'medium': 'Medel',
   'low': 'Låg — osäker tolkning av källdatan',
 };
+
+/// Driver-facing "how likely are there customers here" read, replacing the
+/// raw Worth-It number on the list card. worth_it_score is 0 both when a
+/// disruption is genuinely weak AND when it's too far/too close to ending to
+/// reach in time -- as a bare number those two cases are indistinguishable
+/// and a legitimate 0 reads as "the app is broken". Splitting on severity_tier
+/// (how strong the underlying signal is) crossed with whether worth_it_score
+/// actually reached 0 (not reachable in time) says which case it is.
+enum CustomerLikelihood { high, medium, low }
+
+const _highSeverityTiers = {'line_paused', 'road_accident_or_closure'};
+const _mediumSeverityTiers = {
+  'line_delayed',
+  'vehicle_cancelled',
+  'road_work_or_queue',
+};
+
+CustomerLikelihood customerLikelihood({
+  required String? severityTier,
+  required num worthItScore,
+}) {
+  if (worthItScore <= 0) return CustomerLikelihood.low;
+  if (_highSeverityTiers.contains(severityTier)) {
+    return CustomerLikelihood.high;
+  }
+  if (_mediumSeverityTiers.contains(severityTier)) {
+    return CustomerLikelihood.medium;
+  }
+  return CustomerLikelihood.low;
+}
+
+const customerLikelihoodLabels = {
+  CustomerLikelihood.high: 'Troligt att det finns kunder',
+  CustomerLikelihood.medium: 'Möjligt att det finns kunder',
+  CustomerLikelihood.low: 'Osannolikt just nu',
+};
