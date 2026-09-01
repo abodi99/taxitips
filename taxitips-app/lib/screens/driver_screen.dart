@@ -34,6 +34,13 @@ class DriverScreen extends StatefulWidget {
 }
 
 class _DriverScreenState extends State<DriverScreen> {
+  // Anti-overload cap: how many live signals to show at once when no explicit
+  // filter narrows the list. Tunable here after live driving -- don't hardcode
+  // inline where it's easy to lose track of. Signals are sorted by severity/score
+  // (see _sortSignals) before this cap is applied, so the cap always drops the
+  // weakest signals, not an arbitrary tail.
+  static const int _maxVisibleSignals = 10;
+
   Map<String, dynamic>? _data;
   String? _error;
   String? _status;
@@ -44,6 +51,8 @@ class _DriverScreenState extends State<DriverScreen> {
   bool _highOnly = false;
   bool _nearMe = false;
   String _kindFilter = 'all'; // all | traffic | event
+  String _sourceFilter = 'all'; // all | transit | road — bara relevant inom "traffic"
+  bool _mapShowsPerOpportunity = false; // false = platsaggregerad karta (default), true = en markör per signal
   String? _place; // null = alla
   double? _userLat;
   double? _userLon;
@@ -165,6 +174,13 @@ class _DriverScreenState extends State<DriverScreen> {
     return out;
   }
 
+  /// Väg/kollektivtrafik-filter — gäller bara live-signaler (kind: 'road'/'transit'),
+  /// ett no-op för evenemang som saknar 'kind'.
+  List<Map<String, dynamic>> _sourceFilterList(List<Map<String, dynamic>> list) {
+    if (_sourceFilter == 'all') return list;
+    return list.where((a) => a['kind'] == _sourceFilter).toList();
+  }
+
   void _sortSignals(List<Map<String, dynamic>> list) {
     list.sort((a, b) {
       final pe = _phaseRank((a['taxi'] as Map?)?['phase']) - _phaseRank((b['taxi'] as Map?)?['phase']);
@@ -172,6 +188,12 @@ class _DriverScreenState extends State<DriverScreen> {
       final ra = _rank((a['taxi'] as Map?)?['level']);
       final rb = _rank((b['taxi'] as Map?)?['level']);
       if (rb != ra) return rb.compareTo(ra);
+      // Within the same phase/level bucket, break ties on the actual numeric
+      // worth_it_score (e.g. two 'high' alerts aren't equally worth chasing --
+      // a 100-point cancelled train line should still rank above an 85-point one).
+      final sa = ((a['worth_it_score'] as num?) ?? 0);
+      final sb = ((b['worth_it_score'] as num?) ?? 0);
+      if (sa != sb) return sb.compareTo(sa);
       return _placeName(a).compareTo(_placeName(b));
     });
   }
@@ -216,7 +238,7 @@ class _DriverScreenState extends State<DriverScreen> {
 
   List<Map<String, dynamic>> get _trafficSignals {
     if (_kindFilter == 'event') return [];
-    var list = _geoFilter(_rawActive);
+    var list = _sourceFilterList(_geoFilter(_rawActive));
     if (_highOnly) {
       list = list.where((a) => (a['taxi'] as Map?)?['level'] == 'high').toList();
     }
@@ -226,13 +248,15 @@ class _DriverScreenState extends State<DriverScreen> {
 
   List<Map<String, dynamic>> get _trafficSignalsVisible {
     final list = _trafficSignals;
-    if (_kindFilter == 'all' && list.length > 20) return list.take(20).toList();
+    if (_kindFilter == 'all' && list.length > _maxVisibleSignals) {
+      return list.take(_maxVisibleSignals).toList();
+    }
     return list;
   }
 
   List<Map<String, dynamic>> get _weekSignals {
     if (_kindFilter == 'event') return [];
-    var list = _geoFilter(_rawWeek).where((a) => !_isEvent(a)).toList();
+    var list = _sourceFilterList(_geoFilter(_rawWeek).where((a) => !_isEvent(a)).toList());
     if (_highOnly) {
       list = list.where((a) => (a['taxi'] as Map?)?['level'] == 'high').toList();
     }
@@ -247,12 +271,14 @@ class _DriverScreenState extends State<DriverScreen> {
       ];
 
   bool get _filtersActive =>
-      _highOnly || _nearMe || _place != null || _kindFilter != 'all';
+      _highOnly || _nearMe || _place != null || _kindFilter != 'all' || _sourceFilter != 'all';
 
   String get _filterSummary {
     final bits = <String>[];
     if (_kindFilter == 'traffic') bits.add('Tåg & väg');
     if (_kindFilter == 'event') bits.add('Evenemang');
+    if (_sourceFilter == 'transit') bits.add('Bara kollektivtrafik');
+    if (_sourceFilter == 'road') bits.add('Bara vägtrafik');
     if (_highOnly) bits.add('Hög prio');
     if (_nearMe) bits.add('Nära dig');
     if (_place != null) bits.add(_place!);
@@ -266,6 +292,7 @@ class _DriverScreenState extends State<DriverScreen> {
       _highOnly = false;
       _nearMe = false;
       _kindFilter = 'all';
+      _sourceFilter = 'all';
       _status = null;
     });
   }
@@ -345,6 +372,27 @@ class _DriverScreenState extends State<DriverScreen> {
                           ),
                       ],
                     ),
+                    if (_kindFilter != 'event') ...[
+                      const SizedBox(height: 16),
+                      const Text('Källa', style: TextStyle(fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 8),
+                      Wrap(
+                        spacing: 8,
+                        children: [
+                          for (final opt in const [
+                            ('all', 'Alla källor'),
+                            ('transit', 'Kollektivtrafik'),
+                            ('road', 'Vägtrafik'),
+                          ])
+                            ChoiceChip(
+                              label: Text(opt.$2, style: const TextStyle(fontWeight: FontWeight.w800)),
+                              selected: _sourceFilter == opt.$1,
+                              selectedColor: TbColors.taxi,
+                              onSelected: (_) => apply(() => _sourceFilter = opt.$1),
+                            ),
+                        ],
+                      ),
+                    ],
                     const SizedBox(height: 16),
                     Row(
                       children: [
@@ -838,6 +886,28 @@ class _DriverScreenState extends State<DriverScreen> {
                           ],
                         ),
                         const SizedBox(height: 10),
+                        if (_kindFilter != 'event')
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(
+                              onPressed: () => setState(() {
+                                _mapShowsPerOpportunity = !_mapShowsPerOpportunity;
+                              }),
+                              icon: Icon(
+                                _mapShowsPerOpportunity ? Icons.blur_on : Icons.pin_drop_outlined,
+                                size: 16,
+                              ),
+                              label: Text(
+                                _mapShowsPerOpportunity ? 'Visa orter' : 'Visa signaler + avstånd',
+                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                              ),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(horizontal: 4),
+                                minimumSize: Size.zero,
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                            ),
+                          ),
                         HotspotMap(
                           placeStats: _kindFilter == 'event'
                               ? const []
@@ -847,6 +917,8 @@ class _DriverScreenState extends State<DriverScreen> {
                           userLon: _userLon,
                           selectedPlace: _place,
                           highOnly: _highOnly && _kindFilter != 'event',
+                          perOpportunity: _mapShowsPerOpportunity && _kindFilter != 'event',
+                          opportunities: _sourceFilterList(_geoFilter(_rawActive)),
                           onSelectPlace: (name) => setState(() {
                             _place = _place == name ? null : name;
                           }),

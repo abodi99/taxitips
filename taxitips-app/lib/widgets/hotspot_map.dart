@@ -14,6 +14,8 @@ class HotspotMap extends StatelessWidget {
     this.selectedPlace,
     this.onSelectPlace,
     this.highOnly = false,
+    this.perOpportunity = false,
+    this.opportunities = const [],
   });
 
   final List<Map<String, dynamic>> placeStats;
@@ -24,12 +26,86 @@ class HotspotMap extends StatelessWidget {
   final ValueChanged<String?>? onSelectPlace;
   final bool highOnly;
 
+  /// When true, show one marker per opportunity (colored/labeled by transport
+  /// mode, with distance-from-driver) instead of the default place-aggregated
+  /// view. Opt-in, not the default -- per-opportunity markers can get noisy with
+  /// many simultaneous disruptions, which is exactly the "over-informed" clutter
+  /// the place-aggregated view was built to avoid.
+  final bool perOpportunity;
+
+  /// Raw opportunity rows from get_smart_alerts (id/title/mode/lat/lon/
+  /// distance_km/worth_it_score), only read when [perOpportunity] is true.
+  final List<Map<String, dynamic>> opportunities;
+
   @override
   Widget build(BuildContext context) {
     final markers = <Marker>[];
     final points = <LatLng>[];
 
+    if (perOpportunity) {
+      for (final o in opportunities) {
+        final lat = (o['lat'] as num?)?.toDouble();
+        final lon = (o['lon'] as num?)?.toDouble();
+        if (lat == null || lon == null) continue;
+        final mode = o['mode']?.toString();
+        final distanceKm = (o['distance_km'] as num?)?.toDouble();
+        final point = LatLng(lat, lon);
+        points.add(point);
+        final color = mode == 'train'
+            ? TbColors.signal
+            : mode == 'bus'
+                ? TbColors.taxi
+                : TbColors.muted; // road / unknown
+        final icon = mode == 'train'
+            ? Icons.train
+            : mode == 'bus'
+                ? Icons.directions_bus
+                : Icons.directions_car;
+        markers.add(
+          Marker(
+            point: point,
+            width: 64,
+            height: 58,
+            alignment: Alignment.bottomCenter,
+            child: GestureDetector(
+              onTap: () => onSelectPlace?.call(o['title']?.toString()),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.white, width: 2),
+                      boxShadow: const [BoxShadow(blurRadius: 6, color: Colors.black26)],
+                    ),
+                    child: Icon(icon, size: 16, color: Colors.white),
+                  ),
+                  if (distanceKm != null)
+                    Container(
+                      margin: const EdgeInsets.only(top: 2),
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: const Color(0xFFC9D0DA)),
+                      ),
+                      child: Text(
+                        '${distanceKm.toStringAsFixed(1)} km',
+                        style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: TbColors.ink),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ),
+        );
+      }
+    }
+
     for (final p in placeStats) {
+      if (perOpportunity) break; // per-opportunity view replaces place aggregation
       if (highOnly && p['maxLevel'] != 'high') continue;
       final lat = (p['lat'] as num?)?.toDouble();
       final lon = (p['lon'] as num?)?.toDouble();
