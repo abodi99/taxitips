@@ -239,28 +239,36 @@ function scoreRoadAlert(alert) {
     };
   }
 
+  // A road accident/closure/queue delays people who are ALREADY in a car (their
+  // own or someone else's) -- it doesn't strand pedestrians the way a cancelled
+  // train or bus does. Nobody abandons their car mid-drive and hails a taxi
+  // because of congestion. The only real taxi-demand case here is a closure
+  // severe enough to cancel a *bus route* through the area, and that shows up
+  // as its own transit alert already, so it isn't duplicated here. Road
+  // disruptions are therefore capped low across the board -- useful context
+  // for a driver already en route (expect delay, maybe reroute), never a
+  // "drive here, people need taxis" signal on their own.
   let level = "ignore";
   let score = 0;
 
   if (isAccident && inSkaneSphere) {
-    level = "high";
-    score = 75;
-  } else if (isAccident) {
-    level = "medium";
-    score = 40;
-  } else if (isFullClosure && inSkaneSphere && !isRoadwork) {
-    level = "high";
-    score = 65;
-  } else if (isQueue && inSkaneSphere) {
-    level = "medium";
-    score = 40;
-  } else if (isFullClosure && inSkaneSphere && isRoadwork) {
-    // Avstängd väg i Skåne p.g.a. arbete — bevaka, inte “kör hit”
-    level = "medium";
-    score = 32;
-  } else if (isRoadwork && inSkaneSphere) {
     level = "low";
     score = 15;
+  } else if (isAccident) {
+    level = "low";
+    score = 8;
+  } else if (isFullClosure && inSkaneSphere && !isRoadwork) {
+    level = "low";
+    score = 15;
+  } else if (isQueue && inSkaneSphere) {
+    level = "low";
+    score = 10;
+  } else if (isFullClosure && inSkaneSphere && isRoadwork) {
+    level = "low";
+    score = 8;
+  } else if (isRoadwork && inSkaneSphere) {
+    level = "low";
+    score = 5;
   } else {
     return {
       score: 0,
@@ -272,12 +280,6 @@ function scoreRoadAlert(alert) {
     };
   }
 
-  // Vägarbete får aldrig bli high
-  if (isRoadwork && !isAccident && level === "high") {
-    level = "medium";
-    score = Math.min(score, 40);
-  }
-
   const place = places[0] || hubs[0]?.name || "vägen";
   return {
     score,
@@ -285,12 +287,7 @@ function scoreRoadAlert(alert) {
     why: isAccident ? "olycka" : isRoadwork ? "vägarbete" : "väg",
     places,
     hubs: hubs.map((h) => h.name),
-    driverHint:
-      level === "high"
-        ? `${alert.cause || "Väg"} nära ${place}: omväg + mer efterfrågan.`
-        : level === "medium"
-          ? `${alert.cause || "Väginfo"} i ${place} — bra att känna till.`
-          : null,
+    driverHint: `${alert.cause || "Väginfo"} i ${place} — bra att känna till, men skapar inte taxibehov i sig.`,
   };
 }
 

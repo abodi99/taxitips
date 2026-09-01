@@ -41,12 +41,13 @@ const confidenceLabels = {
 /// actually reached 0 (not reachable in time) says which case it is.
 enum CustomerLikelihood { high, medium, low }
 
-const _highSeverityTiers = {'line_paused', 'road_accident_or_closure'};
-const _mediumSeverityTiers = {
-  'line_delayed',
-  'vehicle_cancelled',
-  'road_work_or_queue',
-};
+// Road tiers are deliberately excluded from both sets -- an accident or
+// closure delays people already in a car, it doesn't strand pedestrians who'd
+// need a taxi. Only transit disruptions (a stopped line, a cancelled vehicle)
+// actually leave people without transport, so only those drive "likely
+// customers" up. Road incidents fall through to `low` regardless of tier.
+const _highSeverityTiers = {'line_paused'};
+const _mediumSeverityTiers = {'line_delayed', 'vehicle_cancelled'};
 
 CustomerLikelihood customerLikelihood({
   required String? severityTier,

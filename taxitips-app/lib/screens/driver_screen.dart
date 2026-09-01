@@ -190,15 +190,16 @@ class _DriverScreenState extends State<DriverScreen> {
   // mean here, reachability is what worth_it_score/sorting already handles
   // separately. Falls back to taxi.level for events, which don't carry
   // severity_tier/demand_score at all.
+  //
+  // Road tiers are deliberately excluded -- an accident/closure delays people
+  // already in a car, it doesn't strand pedestrians who'd need a taxi, so it's
+  // never "high priority" here regardless of how bad the road situation reads.
   bool _isHighSeverity(Map<String, dynamic> a) {
     final severityTier = a['severity_tier']?.toString();
     if (severityTier != null) {
-      const highTiers = {
-        'line_paused',
-        'road_accident_or_closure',
-      };
-      return highTiers.contains(severityTier) ||
-          ((a['demand_score'] as num?) ?? 0) >= 70;
+      if (severityTier == 'line_paused') return true;
+      if (severityTier.startsWith('road_')) return false;
+      return ((a['demand_score'] as num?) ?? 0) >= 70;
     }
     return (a['taxi'] as Map?)?['level'] == 'high';
   }
@@ -747,10 +748,11 @@ class _DriverScreenState extends State<DriverScreen> {
               : Column(
                   children: [
                     // Top bar -- kept to one job each: identity (title + live
-                    // status), and two standard actions (settings/refresh).
-                    // Filter moved down next to the list it actually affects
-                    // (see _filterSummary row below) instead of living here --
-                    // it's not identity/global-app chrome, it's a list control.
+                    // status), and one standard action (settings). Filter and
+                    // refresh both moved down next to the list they actually
+                    // affect (see _filterSummary row below) instead of living
+                    // here -- neither is identity/global-app chrome, they're
+                    // both list controls.
                     Container(
                       color: TbColors.asphalt,
                       padding: const EdgeInsets.fromLTRB(4, 6, 4, 10),
@@ -790,23 +792,6 @@ class _DriverScreenState extends State<DriverScreen> {
                                 color: TbColors.foam,
                               ),
                             ),
-                          IconButton(
-                            tooltip: 'Uppdatera',
-                            onPressed: _refreshing ? null : () => _load(),
-                            icon: _refreshing
-                                ? const SizedBox(
-                                    width: 20,
-                                    height: 20,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: TbColors.taxi,
-                                    ),
-                                  )
-                                : const Icon(
-                                    Icons.refresh,
-                                    color: TbColors.foam,
-                                  ),
-                          ),
                         ],
                       ),
                     ),
@@ -833,30 +818,67 @@ class _DriverScreenState extends State<DriverScreen> {
                                   ),
                                 ),
                               ),
-                              // Filter lives here, next to the list it controls,
-                              // instead of in the top bar's global-app chrome.
+                              // Filter and refresh live here, next to the list
+                              // they control, instead of in the top bar's
+                              // global-app chrome.
                               Padding(
                                 padding: const EdgeInsets.only(top: 2),
-                                child: OutlinedButton.icon(
-                                  onPressed: _openFilters,
-                                  icon: Badge(
-                                    isLabelVisible: _filtersActive,
-                                    smallSize: 8,
-                                    backgroundColor: TbColors.taxi,
-                                    child: const Icon(Icons.tune, size: 16),
-                                  ),
-                                  label: const Text('Filter'),
-                                  style: OutlinedButton.styleFrom(
-                                    foregroundColor: TbColors.ink,
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 10,
+                                child: Row(
+                                  children: [
+                                    SizedBox(
+                                      width: 34,
+                                      height: 34,
+                                      child: IconButton(
+                                        tooltip: 'Uppdatera',
+                                        onPressed: _refreshing
+                                            ? null
+                                            : () => _load(),
+                                        padding: EdgeInsets.zero,
+                                        icon: _refreshing
+                                            ? const SizedBox(
+                                                width: 16,
+                                                height: 16,
+                                                child:
+                                                    CircularProgressIndicator(
+                                                  strokeWidth: 2,
+                                                ),
+                                              )
+                                            : const Icon(
+                                                Icons.refresh,
+                                                size: 18,
+                                                color: TbColors.ink,
+                                              ),
+                                        style: IconButton.styleFrom(
+                                          side: const BorderSide(
+                                            color: Color(0xFFC9D0DA),
+                                          ),
+                                          shape: const CircleBorder(),
+                                        ),
+                                      ),
                                     ),
-                                    minimumSize: const Size(0, 34),
-                                    textStyle: const TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w700,
+                                    const SizedBox(width: 8),
+                                    OutlinedButton.icon(
+                                      onPressed: _openFilters,
+                                      icon: Badge(
+                                        isLabelVisible: _filtersActive,
+                                        smallSize: 8,
+                                        backgroundColor: TbColors.taxi,
+                                        child: const Icon(Icons.tune, size: 16),
+                                      ),
+                                      label: const Text('Filter'),
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: TbColors.ink,
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 10,
+                                        ),
+                                        minimumSize: const Size(0, 34),
+                                        textStyle: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
                                     ),
-                                  ),
+                                  ],
                                 ),
                               ),
                             ],

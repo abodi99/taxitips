@@ -42,12 +42,20 @@ function classifySeverity(alert, taxi) {
   }
 
   if (mode === "road") {
-    // Road severity is already well-tuned in scoreRoadAlert (accident/closure/
-    // roadwork tiers) -- carry it through as-is, just labeled for the new column.
-    const tierByLevel = { high: "road_accident_or_closure", medium: "road_work_or_queue", low: "road_work" };
+    // A road accident/closure/queue delays people already in a car -- it doesn't
+    // strand pedestrians who'd need a taxi, unlike a cancelled train/bus. scoreRoadAlert
+    // already caps these low for that reason; just label the tier here, don't re-score.
+    const text = `${alert.header || ""} ${alert.description || ""} ${alert.cause || ""}`.toLowerCase();
+    const tier = /olycka/.test(text)
+      ? "road_accident_or_closure"
+      : /avstäng|avstangning/.test(text)
+        ? "road_accident_or_closure"
+        : /kö|köbildning|kövarning/.test(text)
+          ? "road_work_or_queue"
+          : "road_work";
     return {
       mode,
-      severityTier: tierByLevel[taxi.level] || "road_unclassified",
+      severityTier: tier,
       score: taxi.score,
       confidence: "medium",
     };
