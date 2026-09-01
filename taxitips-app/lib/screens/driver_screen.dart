@@ -1225,13 +1225,20 @@ class _ExplainSectionState extends State<_ExplainSection> {
             for (final se in sourceEvents.cast<Map>()) ...[
               const SizedBox(height: 4),
               Text(
-                (se['source'] == 'trafiklab' ? 'Trafiklab' : se['source'] == 'trafikverket' ? 'Trafikverket' : se['source']?.toString() ?? '—'),
+                switch (se['source']) {
+                  'trafiklab' => 'Trafiklab',
+                  'trafikverket' => 'Trafikverket',
+                  'smhi' => 'SMHI (väder)',
+                  _ => se['source']?.toString() ?? '—',
+                },
                 style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
               ),
               Text(
-                (se['raw'] as Map?)?['description']?.toString() ??
-                    (se['raw'] as Map?)?['header']?.toString() ??
-                    '—',
+                se['source'] == 'smhi' ? _weatherSummary(se['raw'] as Map?) : (
+                  (se['raw'] as Map?)?['description']?.toString() ??
+                      (se['raw'] as Map?)?['header']?.toString() ??
+                      '—'
+                ),
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
               ),
             ],
@@ -1256,6 +1263,29 @@ class _ExplainSectionState extends State<_ExplainSection> {
       ),
     );
   }
+}
+
+/// SMHI's raw fields (see worker/src/smhi.js summarize()) aren't prose like
+/// Trafiklab/Trafikverket's, so render a short human sentence instead of
+/// falling back to a missing 'description'/'header' key.
+String _weatherSummary(Map? raw) {
+  if (raw == null) return '—';
+  final point = raw['point']?.toString();
+  final temp = (raw['temperatureC'] as num?)?.round();
+  final bits = <String>[];
+  if (temp != null) bits.add('$temp°C');
+  final precip = (raw['precipitationMmPerH'] as num?) ?? 0;
+  final precipProb = (raw['precipitationProbabilityPct'] as num?) ?? 0;
+  if (precip >= 1.0 && precipProb >= 40) {
+    final frozen = (raw['frozenPrecipitationProbabilityPct'] as num?) ?? 0;
+    bits.add(frozen >= 40 ? 'snöfall' : 'regn');
+  }
+  final gust = (raw['windGustMs'] as num?) ?? (raw['windSpeedMs'] as num?) ?? 0;
+  if (gust >= 12) bits.add('hård vind (${gust.round()} m/s)');
+  final thunder = (raw['thunderstormProbabilityPct'] as num?) ?? 0;
+  if (thunder >= 30) bits.add('åskrisk $thunder%');
+  final where = point != null ? '$point: ' : '';
+  return bits.isEmpty ? '${where}inga varningsvärda förhållanden' : '$where${bits.join(', ')}';
 }
 
 class _ExplainRow extends StatelessWidget {

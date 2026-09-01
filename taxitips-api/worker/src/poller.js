@@ -4,6 +4,7 @@ const { fetchSkaneAlerts } = require("./trafiklab");
 const { fetchRoadSituations } = require("./trafikverket");
 const { enrichAlert, isTaxiNotifyWorthy, calculateDemandSignal, isRoadAlert } = require("./taxiRelevance");
 const { classifySeverity } = require("./scoring");
+const { fetchRegionWeather, nearestWeather, isAdverseWeather, describeWeather } = require("./smhi");
 const { resolvePlaceCoords } = require("./hubs");
 
 // Many Trafiklab transit alerts carry no lat/lon at all -- only a station/place name
@@ -125,10 +126,24 @@ async function upsertSourceEvents(client, alerts) {
   return { upserted: rows.length, rows: data || [] };
 }
 
+// Flat bonus applied when adverse weather (real rain/snow/high wind/thunder) coincides
+// with a transit or road disruption at the same location -- a cancelled train in a
+// downpour strands people who now also can't comfortably wait/walk for an alternative,
+// which is a stronger taxi-demand signal than the same cancellation on a clear day.
+// Deliberately modest and additive (not a multiplier) so it nudges rather than
+// dominates the underlying disruption severity classifySeverity already computed.
+const WEATHER_BONUS = 12;
+
 // opportunities: the derived, scored thing shown to a driver. Reuses the same
 // demand/h3 signal and taxi-relevance scoring as mapAlert, plus the new mode-aware
 // severity tier and explicit provenance (source_event_ids/rule_id/confidence).
-function mapOpportunity(alert, sourceEventId) {
+//
+// weatherIdByPoint maps region point name -> that weather source_event's real DB
+// id, so that when the bonus applies we can cite it in source_event_ids the same
+// way the underlying disruption's own source_event is cited -- get_opportunity_detail
+// joins source_events strictly via that array, so a weather event stored but not
+// referenced there would never actually surface in the explain panel.
+function mapOpportunity(alert, sourceEventId, regionWeather, weatherIdByPoint) {
   const taxi = alert.taxi || {};
   const signal = calculateDemandSignal(alert);
   const severity = classifySeverity(alert, taxi);
@@ -139,6 +154,19 @@ function mapOpportunity(alert, sourceEventId) {
     : new Date((alert.active_from || Date.now()) + FALLBACK_DURATION_MS).toISOString();
 
   const coords = resolveCoords(alert, taxi);
+
+  // Only apply the weather bonus to disruptions that are already genuinely
+  // relevant (not "ignore" tier) -- weather shouldn't be what turns a
+  // non-signal into a signal on its own, only sharpen a real one.
+  const weather = severity.severityTier !== "ignore" ? nearestWeather(coords.lat, coords.lon, regionWeather || []) : null;
+  const weatherAdverse = isAdverseWeather(weather);
+  const weatherReason = weatherAdverse ? describeWeather(weather) : null;
+  const score = weatherAdverse ? Math.min(100, severity.score + WEATHER_BONUS) : severity.score;
+  const reasons = weatherReason ? [...signal.reasons, `väder: ${weatherReason}`] : signal.reasons;
+
+  const sourceEventIds = sourceEventId ? [sourceEventId] : [];
+  const weatherId = weatherAdverse ? weatherIdByPoint?.get(weather.point) : null;
+  if (weatherId) sourceEventIds.push(weatherId);
 
   return {
     external_id: String(alert.id),
@@ -161,24 +189,57 @@ function mapOpportunity(alert, sourceEventId) {
     // at 55) shouldn't reach the same score as a genuine whole-line stop
     // (line_paused, floor of 85). Using signal.demand_score directly here was
     // a bug -- classifySeverity's cap was computed but never actually stored.
-    demand_score: severity.score,
+    // The weather bonus (see WEATHER_BONUS) is applied on top of that capped
+    // score, not the raw uncapped one.
+    demand_score: score,
     confidence: severity.confidence,
-    reasons: signal.reasons,
+    reasons,
     // Phase 1 stub: derived from the existing short reason tag until Phase 2's
     // richer rule_id naming (e.g. "transit.train.line_paused") is wired through.
     rule_id: `${severity.mode || "unknown"}.${severity.severityTier}`,
-    source_event_ids: sourceEventId ? [sourceEventId] : [],
+    source_event_ids: sourceEventIds,
     computed_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
 }
 
-async function upsertOpportunities(client, alerts, sourceEventIdByExternalId) {
+async function upsertOpportunities(client, alerts, sourceEventIdByExternalId, regionWeather, weatherIdByPoint) {
   if (!alerts.length) return { upserted: 0 };
-  const rows = alerts.map((a) => mapOpportunity(a, sourceEventIdByExternalId.get(String(a.id))));
+  const rows = alerts.map((a) =>
+    mapOpportunity(a, sourceEventIdByExternalId.get(String(a.id)), regionWeather, weatherIdByPoint)
+  );
   const { error } = await client.from("opportunities").upsert(rows, { onConflict: "external_id" });
   if (error) throw error;
   return { upserted: rows.length };
+}
+
+// weather is its own source_event too (source='smhi'), one row per region point,
+// upserted on external_id so it doesn't grow unbounded -- same pattern as the
+// transit/road source_events, and gives the explain panel a real citation
+// ("SMHI, Malmö, 21:00") instead of just a bare "väder: regn" reason string.
+// Returns the point-name -> db-id map mapOpportunity needs to actually cite a
+// weather event in source_event_ids when its bonus applied.
+async function upsertWeatherSourceEvents(client, regionWeather) {
+  if (!regionWeather.length) return { upserted: 0, idByPoint: new Map() };
+  const rows = regionWeather.map((w) => ({
+    source: "smhi",
+    external_id: `smhi:${w.point}`,
+    mode: "weather",
+    active_from: w.observedAt,
+    active_to: null,
+    raw: w,
+    lat: w.lat,
+    lon: w.lon,
+  }));
+  const { data, error } = await client
+    .from("source_events")
+    .upsert(rows, { onConflict: "external_id" })
+    .select("id, external_id");
+  if (error) throw error;
+  const idByPoint = new Map(
+    (data || []).map((r) => [r.external_id.replace(/^smhi:/, ""), r.id])
+  );
+  return { upserted: rows.length, idByPoint };
 }
 
 async function pollOnce() {
@@ -203,6 +264,16 @@ async function pollOnce() {
     road = await fetchRoadSituations("mock");
   }
 
+  // Fetched once per poll cycle (not per-alert -- see smhi.js), and failures here
+  // never block the traffic-disruption pipeline: weather only sharpens an
+  // existing signal, a driver still gets the disruption itself without it.
+  let regionWeather = [];
+  try {
+    regionWeather = await fetchRegionWeather();
+  } catch (err) {
+    console.error("[smhi]", err.message);
+  }
+
   const enriched = [];
   let notifyWorthy = 0;
   for (const raw of [...(transit.alerts || []), ...(road.alerts || [])]) {
@@ -224,13 +295,14 @@ async function pollOnce() {
     const sourceEventIdByExternalId = new Map(
       (seResult.rows || []).map((r) => [r.external_id, r.id])
     );
-    await upsertOpportunities(client, enriched, sourceEventIdByExternalId);
+    const { idByPoint: weatherIdByPoint } = await upsertWeatherSourceEvents(client, regionWeather);
+    await upsertOpportunities(client, enriched, sourceEventIdByExternalId, regionWeather, weatherIdByPoint);
   } catch (err) {
     console.error("[opportunities] dual-write failed", err.message || err);
   }
 
   console.log(
-    `[poll] upserted=${result.upserted} notifyWorthy=${notifyWorthy} transit=${(transit.alerts || []).length} road=${(road.alerts || []).length}`
+    `[poll] upserted=${result.upserted} notifyWorthy=${notifyWorthy} transit=${(transit.alerts || []).length} road=${(road.alerts || []).length} weather=${regionWeather.length}`
   );
   return result;
 }
