@@ -373,7 +373,13 @@ class ApiClient {
 
   Future<Map<String, dynamic>> entitlements() async {
     await ensureInitialized();
-    if (deviceToken == null) return {'ok': false, 'entitled': false};
+    // current_entitlement() also accepts an authenticated owner/manager session
+    // (no device pairing needed) via auth.uid() -- so only short-circuit when
+    // there's neither a device token nor a logged-in user, since the RPC would
+    // have nothing to check either way.
+    if (deviceToken == null && _sb.auth.currentUser == null) {
+      return {'ok': false, 'entitled': false};
+    }
     try {
       final entitled = await _sb.rpc(
         'current_entitlement',
