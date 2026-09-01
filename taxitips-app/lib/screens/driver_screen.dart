@@ -52,9 +52,7 @@ class _DriverScreenState extends State<DriverScreen> {
   bool? _entitled; // null = okänt/inte kollat än, kör inte spärr förrän vi vet.
   bool _highOnly = false;
   bool _nearMe = false;
-  String _kindFilter = 'all'; // all | traffic | event
-  String _sourceFilter =
-      'all'; // all | transit | road — bara relevant inom "traffic"
+  String _sourceFilter = 'all'; // all | transit | road
   bool _mapShowsPerOpportunity =
       false; // false = platsaggregerad karta (default), true = en markör per signal
   String? _place; // null = alla
@@ -155,21 +153,6 @@ class _DriverScreenState extends State<DriverScreen> {
     ];
   }
 
-  bool _isEvent(Map<String, dynamic> a) =>
-      a['sourceKind'] == 'event' || (a['taxi'] as Map?)?['reason'] == 'event';
-
-  List<Map<String, dynamic>> get _rawEvents =>
-      _asMaps(_data?['events']).map((e) {
-        return {
-          ...e,
-          'header': e['name'] ?? e['header'],
-          'taxi': e['taxi'] is Map
-              ? Map<String, dynamic>.from(e['taxi'] as Map)
-              : e['taxi'],
-          'sourceKind': 'event',
-        };
-      }).toList();
-
   List<Map<String, dynamic>> get _rawActive => _asMaps(_data?['active']);
 
   List<Map<String, dynamic>> get _rawWeek => _asMaps(_data?['week']);
@@ -222,14 +205,10 @@ class _DriverScreenState extends State<DriverScreen> {
 
   void _sortSignals(List<Map<String, dynamic>> list) {
     list.sort((a, b) {
-      final pe =
-          _phaseRank((a['taxi'] as Map?)?['phase']) -
-          _phaseRank((b['taxi'] as Map?)?['phase']);
-      if (pe != 0) return pe;
       final ra = _rank((a['taxi'] as Map?)?['level']);
       final rb = _rank((b['taxi'] as Map?)?['level']);
       if (rb != ra) return rb.compareTo(ra);
-      // Within the same phase/level bucket, break ties on the actual numeric
+      // Within the same level bucket, break ties on the actual numeric
       // worth_it_score (e.g. two 'high' alerts aren't equally worth chasing --
       // a 100-point cancelled train line should still rank above an 85-point one).
       final sa = ((a['worth_it_score'] as num?) ?? 0);
@@ -239,48 +218,7 @@ class _DriverScreenState extends State<DriverScreen> {
     });
   }
 
-  int _phaseRank(Object? phase) {
-    switch (phase) {
-      case 'after':
-        return 0;
-      case 'approaching':
-        return 1;
-      case 'live':
-        return 2;
-      case 'upcoming':
-        return 3;
-      default:
-        return 4;
-    }
-  }
-
-  List<Map<String, dynamic>> get _hotEvents {
-    if (_kindFilter == 'traffic') return [];
-    var list = _geoFilter(_rawEvents).where((a) {
-      final phase = (a['taxi'] as Map?)?['phase']?.toString();
-      return phase != 'upcoming';
-    }).toList();
-    if (_highOnly) {
-      list = list
-          .where(_isHighSeverity)
-          .toList();
-    }
-    _sortSignals(list);
-    return list;
-  }
-
-  /// Kommande evenemang — visas även när "bara hög prio" (annars försvinner de).
-  List<Map<String, dynamic>> get _upcomingEvents {
-    if (_kindFilter == 'traffic') return [];
-    final list = _geoFilter(_rawEvents).where((a) {
-      return (a['taxi'] as Map?)?['phase']?.toString() == 'upcoming';
-    }).toList();
-    _sortSignals(list);
-    return list;
-  }
-
   List<Map<String, dynamic>> get _trafficSignals {
-    if (_kindFilter == 'event') return [];
     var list = _sourceFilterList(_geoFilter(_rawActive));
     if (_highOnly) {
       list = list
@@ -293,43 +231,28 @@ class _DriverScreenState extends State<DriverScreen> {
 
   List<Map<String, dynamic>> get _trafficSignalsVisible {
     final list = _trafficSignals;
-    if (_kindFilter == 'all' && list.length > _maxVisibleSignals) {
+    if (list.length > _maxVisibleSignals) {
       return list.take(_maxVisibleSignals).toList();
     }
     return list;
   }
 
   List<Map<String, dynamic>> get _weekSignals {
-    if (_kindFilter == 'event') return [];
-    var list = _sourceFilterList(
-      _geoFilter(_rawWeek).where((a) => !_isEvent(a)).toList(),
-    );
+    var list = _sourceFilterList(_geoFilter(_rawWeek));
     if (_highOnly) {
-      list = list
-          .where(_isHighSeverity)
-          .toList();
+      list = list.where(_isHighSeverity).toList();
     }
     _sortSignals(list);
     return list.take(12).toList();
   }
 
-  List<Map<String, dynamic>> get _signals => [
-    ..._hotEvents,
-    ..._upcomingEvents,
-    ..._trafficSignalsVisible,
-  ];
+  List<Map<String, dynamic>> get _signals => _trafficSignalsVisible;
 
   bool get _filtersActive =>
-      _highOnly ||
-      _nearMe ||
-      _place != null ||
-      _kindFilter != 'all' ||
-      _sourceFilter != 'all';
+      _highOnly || _nearMe || _place != null || _sourceFilter != 'all';
 
   String get _filterSummary {
     final bits = <String>[];
-    if (_kindFilter == 'traffic') bits.add('Tåg & väg');
-    if (_kindFilter == 'event') bits.add('Evenemang');
     if (_sourceFilter == 'transit') bits.add('Bara kollektivtrafik');
     if (_sourceFilter == 'road') bits.add('Bara vägtrafik');
     if (_highOnly) bits.add('Hög prio');
@@ -344,7 +267,6 @@ class _DriverScreenState extends State<DriverScreen> {
       _place = null;
       _highOnly = false;
       _nearMe = false;
-      _kindFilter = 'all';
       _sourceFilter = 'all';
       _status = null;
     });
@@ -422,7 +344,7 @@ class _DriverScreenState extends State<DriverScreen> {
                     ),
                     const SizedBox(height: 8),
                     const Text(
-                      'Visa',
+                      'Källa',
                       style: TextStyle(fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(height: 8),
@@ -430,9 +352,9 @@ class _DriverScreenState extends State<DriverScreen> {
                       spacing: 8,
                       children: [
                         for (final opt in const [
-                          ('all', 'Alla'),
-                          ('traffic', 'Tåg & väg'),
-                          ('event', 'Evenemang'),
+                          ('all', 'Alla källor'),
+                          ('transit', 'Kollektivtrafik'),
+                          ('road', 'Vägtrafik'),
                         ])
                           ChoiceChip(
                             label: Text(
@@ -441,43 +363,13 @@ class _DriverScreenState extends State<DriverScreen> {
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
-                            selected: _kindFilter == opt.$1,
+                            selected: _sourceFilter == opt.$1,
                             selectedColor: TbColors.taxi,
                             onSelected: (_) =>
-                                apply(() => _kindFilter = opt.$1),
+                                apply(() => _sourceFilter = opt.$1),
                           ),
                       ],
                     ),
-                    if (_kindFilter != 'event') ...[
-                      const SizedBox(height: 16),
-                      const Text(
-                        'Källa',
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        children: [
-                          for (final opt in const [
-                            ('all', 'Alla källor'),
-                            ('transit', 'Kollektivtrafik'),
-                            ('road', 'Vägtrafik'),
-                          ])
-                            ChoiceChip(
-                              label: Text(
-                                opt.$2,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                              selected: _sourceFilter == opt.$1,
-                              selectedColor: TbColors.taxi,
-                              onSelected: (_) =>
-                                  apply(() => _sourceFilter = opt.$1),
-                            ),
-                        ],
-                      ),
-                    ],
                     const SizedBox(height: 16),
                     Row(
                       children: [
@@ -505,11 +397,10 @@ class _DriverScreenState extends State<DriverScreen> {
     );
   }
 
-  List<Map<String, dynamic>> get _mapEvents {
-    if (_kindFilter == 'traffic') return [];
-    // Kartan visar alla event i filtret (inkl. kommande), även vid hög prio.
-    return _geoFilter(_rawEvents);
-  }
+  // No scheduled-event data source exists yet (api_client.dart's taxi() always
+  // returns events: []) -- HotspotMap still accepts an events list for when
+  // that's built, so keep passing an empty one rather than changing its API.
+  List<Map<String, dynamic>> get _mapEvents => const [];
 
   bool _alertNear(Map<String, dynamic> a, List<Map<String, dynamic>> stats) {
     final lat = (a['lat'] as num?)?.toDouble();
@@ -620,19 +511,9 @@ class _DriverScreenState extends State<DriverScreen> {
     };
 
     // Räkna från samma signaler som listan (före ort-filter).
-    final sources = <Map<String, dynamic>>[
-      if (_kindFilter != 'traffic') ..._rawEvents,
-      if (_kindFilter != 'event') ..._rawActive,
-    ];
-
-    var list = sources;
+    var list = _rawActive;
     if (_highOnly) {
-      list = list.where((a) {
-        final phase = (a['taxi'] as Map?)?['phase']?.toString();
-        // Kommande evenemang syns ändå — räkna dem i chips.
-        if (_isEvent(a) && phase == 'upcoming') return true;
-        return (a['taxi'] as Map?)?['level'] == 'high';
-      }).toList();
+      list = list.where(_isHighSeverity).toList();
     }
     if (_nearMe && _userLat != null && _userLon != null) {
       final stats = statsByName.values.toList();
@@ -680,81 +561,25 @@ class _DriverScreenState extends State<DriverScreen> {
     return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
   }
 
-  String? _phaseLabel(Object? phase) {
-    switch (phase) {
-      case 'approaching':
-        return 'Folk på väg dit (före start)';
-      case 'live':
-        return 'Pågår nu';
-      case 'after':
-        return 'Folk vill hem (efter slut)';
-      case 'upcoming':
-        return 'Kommande — bra att veta';
-      default:
-        return null;
-    }
-  }
-
-  String? _formatWhen(Object? iso) {
-    if (iso == null) return null;
-    final d = DateTime.tryParse(iso.toString())?.toLocal();
-    if (d == null) return null;
-    const days = ['mån', 'tis', 'ons', 'tor', 'fre', 'lör', 'sön'];
-    const months = [
-      'jan',
-      'feb',
-      'mar',
-      'apr',
-      'maj',
-      'jun',
-      'jul',
-      'aug',
-      'sep',
-      'okt',
-      'nov',
-      'dec',
-    ];
-    final wd = days[(d.weekday - 1).clamp(0, 6)];
-    final mo = months[(d.month - 1).clamp(0, 11)];
-    final hh = d.hour.toString().padLeft(2, '0');
-    final mm = d.minute.toString().padLeft(2, '0');
-    return '$wd ${d.day} $mo $hh:$mm';
-  }
 
   List<String> _detailLines(Map<String, dynamic> a) {
     final lines = <String>[];
-    if (_isEvent(a)) {
-      final venue = a['venue']?.toString();
-      final city = a['city']?.toString();
-      final when = _formatWhen(a['startsAt']);
-      final phase = _phaseLabel((a['taxi'] as Map?)?['phase']);
-      final size = a['sizeHint']?.toString();
-      final source = a['source']?.toString();
-      if (venue != null && venue.isNotEmpty) lines.add('Plats: $venue');
-      if (city != null && city.isNotEmpty) lines.add('Ort: $city');
-      if (when != null) lines.add('Start: $when');
-      if (phase != null) lines.add(phase);
-      if (size != null && size.isNotEmpty) lines.add(size);
-      if (source != null && source.isNotEmpty) lines.add('Källa: $source');
-    } else {
-      final desc = a['description']?.toString().trim();
-      final header = a['header']?.toString().trim();
-      final hint = (a['taxi'] as Map?)?['driverHint']?.toString().trim();
-      if (desc != null && desc.isNotEmpty) {
-        lines.add(desc);
-      } else if (header != null && header.isNotEmpty && header != hint) {
-        lines.add(header);
-      }
-      final effect = a['effect']?.toString();
-      final cause = a['cause']?.toString();
-      if (effect != null && effect.isNotEmpty) lines.add('Effekt: $effect');
-      if (cause != null && cause.isNotEmpty) lines.add('Orsak: $cause');
+    final desc = a['description']?.toString().trim();
+    final header = a['header']?.toString().trim();
+    final hint = (a['taxi'] as Map?)?['driverHint']?.toString().trim();
+    if (desc != null && desc.isNotEmpty) {
+      lines.add(desc);
+    } else if (header != null && header.isNotEmpty && header != hint) {
+      lines.add(header);
     }
+    final effect = a['effect']?.toString();
+    final cause = a['cause']?.toString();
+    if (effect != null && effect.isNotEmpty) lines.add('Effekt: $effect');
+    if (cause != null && cause.isNotEmpty) lines.add('Orsak: $cause');
     return lines;
   }
 
   Future<void> _openAlertDetail(Map<String, dynamic> a) async {
-    final isEvent = _isEvent(a);
     final lines = _detailLines(a);
     final url = a['url']?.toString();
     await showModalBottomSheet<void>(
@@ -785,18 +610,12 @@ class _DriverScreenState extends State<DriverScreen> {
                     ),
                   ),
                   Text(
-                    isEvent
-                        ? 'EVENEMANG'
-                        : a['sourceKind'] == 'road'
-                        ? 'VÄG'
-                        : 'KOLLEKTIV',
+                    a['sourceKind'] == 'road' ? 'VÄG' : 'KOLLEKTIV',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 0.6,
-                      color: isEvent
-                          ? const Color(0xFF2F6FED)
-                          : Colors.grey.shade700,
+                      color: Colors.grey.shade700,
                     ),
                   ),
                   const SizedBox(height: 6),
@@ -820,7 +639,7 @@ class _DriverScreenState extends State<DriverScreen> {
                   if (lines.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Text(
-                      isEvent ? 'Om evenemanget' : 'Mer info',
+                      'Mer info',
                       style: TextStyle(
                         fontWeight: FontWeight.w900,
                         color: Colors.grey.shade800,
@@ -855,13 +674,11 @@ class _DriverScreenState extends State<DriverScreen> {
                           }
                         },
                         icon: const Icon(Icons.open_in_new),
-                        label: Text(
-                          isEvent ? 'Öppna evenemang' : 'Öppna mer info',
-                        ),
+                        label: const Text('Öppna mer info'),
                       ),
                     ),
                   ],
-                  if (!isEvent && a['id'] != null) ...[
+                  if (a['id'] != null) ...[
                     const SizedBox(height: 16),
                     _ExplainSection(
                       opportunityId: a['id'].toString(),
@@ -1061,51 +878,46 @@ class _DriverScreenState extends State<DriverScreen> {
                             ],
                           ),
                           const SizedBox(height: 10),
-                          if (_kindFilter != 'event')
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton.icon(
-                                onPressed: () => setState(() {
-                                  _mapShowsPerOpportunity =
-                                      !_mapShowsPerOpportunity;
-                                }),
-                                icon: Icon(
-                                  _mapShowsPerOpportunity
-                                      ? Icons.blur_on
-                                      : Icons.pin_drop_outlined,
-                                  size: 16,
-                                ),
-                                label: Text(
-                                  _mapShowsPerOpportunity
-                                      ? 'Visa orter'
-                                      : 'Visa signaler + avstånd',
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                style: TextButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 4,
-                                  ),
-                                  minimumSize: Size.zero,
-                                  tapTargetSize:
-                                      MaterialTapTargetSize.shrinkWrap,
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton.icon(
+                              onPressed: () => setState(() {
+                                _mapShowsPerOpportunity =
+                                    !_mapShowsPerOpportunity;
+                              }),
+                              icon: Icon(
+                                _mapShowsPerOpportunity
+                                    ? Icons.blur_on
+                                    : Icons.pin_drop_outlined,
+                                size: 16,
+                              ),
+                              label: Text(
+                                _mapShowsPerOpportunity
+                                    ? 'Visa orter'
+                                    : 'Visa signaler + avstånd',
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
                                 ),
                               ),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                                minimumSize: Size.zero,
+                                tapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                              ),
                             ),
+                          ),
                           HotspotMap(
-                            placeStats: _kindFilter == 'event'
-                                ? const []
-                                : _asMaps(_data?['placeStats']),
+                            placeStats: _asMaps(_data?['placeStats']),
                             events: _mapEvents,
                             userLat: _userLat,
                             userLon: _userLon,
                             selectedPlace: _place,
-                            highOnly: _highOnly && _kindFilter != 'event',
-                            perOpportunity:
-                                _mapShowsPerOpportunity &&
-                                _kindFilter != 'event',
+                            highOnly: _highOnly,
+                            perOpportunity: _mapShowsPerOpportunity,
                             opportunities: _sourceFilterList(
                               _geoFilter(_rawActive),
                             ),
@@ -1176,19 +988,10 @@ class _DriverScreenState extends State<DriverScreen> {
                       padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
                       child: Text(
                         () {
-                          final hotE = _hotEvents.length;
-                          final upE = _upcomingEvents.length;
                           final traf = _trafficSignals.length;
-                          if (hotE + upE + traf == 0) return 'Inget just nu';
-                          final bits = <String>[];
-                          if (_kindFilter != 'traffic') {
-                            bits.add('${hotE + upE} event');
-                          }
-                          if (_kindFilter != 'event') {
-                            bits.add('$traf trafik');
-                          }
+                          if (traf == 0) return 'Inget just nu';
                           final where = _place == null ? '' : ' · $_place';
-                          return '${bits.join(' · ')}$where';
+                          return '$traf trafik$where';
                         }(),
                         style: TextStyle(
                           fontWeight: FontWeight.w700,
@@ -1243,32 +1046,23 @@ class _DriverScreenState extends State<DriverScreen> {
                                   28,
                                 ),
                                 children: [
-                                  if (_hotEvents.isNotEmpty ||
-                                      _trafficSignalsVisible.isNotEmpty) ...[
+                                  if (_trafficSignalsVisible.isNotEmpty) ...[
                                     const _SectionTitle('Nu — kör hit'),
-                                    for (final a in _hotEvents) ...[
+                                    for (final a in _trafficSignalsVisible) ...[
                                       SmartAlertCard(
                                         alert: a,
                                         onTap: () => _openAlertDetail(a),
                                       ),
                                       const SizedBox(height: 10),
                                     ],
-                                    for (final a in _trafficSignalsVisible.take(
-                                      8,
-                                    )) ...[
-                                      SmartAlertCard(
-                                        alert: a,
-                                        onTap: () => _openAlertDetail(a),
-                                      ),
-                                      const SizedBox(height: 10),
-                                    ],
-                                    if (_trafficSignalsVisible.length > 8)
+                                    if (_trafficSignals.length >
+                                        _trafficSignalsVisible.length)
                                       Padding(
                                         padding: const EdgeInsets.only(
                                           bottom: 10,
                                         ),
                                         child: Text(
-                                          '+${_trafficSignalsVisible.length - 8} fler trafiksignaler — öppna Filter → Tåg & väg',
+                                          '+${_trafficSignals.length - _trafficSignalsVisible.length} fler trafiksignaler — öppna Filter → Källa',
                                           style: TextStyle(
                                             fontSize: 13,
                                             color: Colors.grey.shade700,
@@ -1276,18 +1070,6 @@ class _DriverScreenState extends State<DriverScreen> {
                                           ),
                                         ),
                                       ),
-                                  ],
-                                  if (_upcomingEvents.isNotEmpty) ...[
-                                    const _SectionTitle(
-                                      'Kommande 48 h — planera',
-                                    ),
-                                    for (final a in _upcomingEvents) ...[
-                                      SmartAlertCard(
-                                        alert: a,
-                                        onTap: () => _openAlertDetail(a),
-                                      ),
-                                      const SizedBox(height: 10),
-                                    ],
                                   ],
                                   if (_weekSignals.isNotEmpty) ...[
                                     const SizedBox(height: 8),
