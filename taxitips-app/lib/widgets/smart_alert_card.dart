@@ -1,51 +1,26 @@
 import 'package:flutter/material.dart';
-import '../api_client.dart';
 import '../severity_labels.dart';
 import '../theme.dart';
 
-/// Compact, glanceable card for the live signal list. Full detail (raw summary,
-/// all reasons, source attribution, raw source-event JSON) lives one tap away in
-/// the detail sheet (`_openAlertDetail` / `_ExplainSection` in driver_screen.dart) --
-/// this card only needs to answer "is this worth a glance while I'm driving?".
-class SmartAlertCard extends StatefulWidget {
+/// Compact, glanceable card for the live signal list. Tapping it opens the full
+/// detail sheet (`_openAlertDetail` in driver_screen.dart), which now shows the
+/// "why" reasoning immediately, no extra tap required -- this card only needs to
+/// answer "is this worth a glance while I'm driving?".
+class SmartAlertCard extends StatelessWidget {
   final Map<String, dynamic> alert;
-  final ApiClient api;
   final VoidCallback? onTap;
 
-  const SmartAlertCard({super.key, required this.alert, required this.api, this.onTap});
-
-  @override
-  State<SmartAlertCard> createState() => _SmartAlertCardState();
-}
-
-class _SmartAlertCardState extends State<SmartAlertCard> {
-  bool _feedbackGiven = false;
-
-  Future<void> _submitFeedback(bool result) async {
-    if (_feedbackGiven) return;
-    final alertId = widget.alert['id'];
-    if (alertId != null) {
-      await widget.api.submitAlertFeedback(alertId.toString(), result);
-    }
-    if (mounted) {
-      setState(() {
-        _feedbackGiven = true;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result ? 'Tack för feedback! (Fick körning)' : 'Tack för feedback! (Dött)')),
-      );
-    }
-  }
+  const SmartAlertCard({super.key, required this.alert, this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    final title = widget.alert['title'] ?? 'Tips';
-    final summary = widget.alert['summary']?.toString() ?? '';
-    final score = ((widget.alert['worth_it_score'] as num?) ?? 0).round();
-    final endTimeStr = widget.alert['end_time'] ?? widget.alert['ends_at'];
-    final kind = widget.alert['kind']?.toString();
-    final severityTier = widget.alert['severity_tier']?.toString();
-    final confidence = widget.alert['confidence']?.toString();
+    final title = alert['title'] ?? 'Tips';
+    final summary = alert['summary']?.toString() ?? '';
+    final score = ((alert['worth_it_score'] as num?) ?? 0).round();
+    final endTimeStr = alert['end_time'] ?? alert['ends_at'];
+    final kind = alert['kind']?.toString();
+    final severityTier = alert['severity_tier']?.toString();
+    final confidence = alert['confidence']?.toString();
 
     DateTime? endTime;
     if (endTimeStr != null) {
@@ -75,7 +50,7 @@ class _SmartAlertCardState extends State<SmartAlertCard> {
       elevation: 1,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: InkWell(
-        onTap: widget.onTap,
+        onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
@@ -96,7 +71,9 @@ class _SmartAlertCardState extends State<SmartAlertCard> {
                       children: [
                         if (kind == 'transit' || kind == 'road')
                           Icon(
-                            kind == 'transit' ? Icons.train : Icons.directions_car,
+                            kind == 'transit'
+                                ? Icons.train
+                                : Icons.directions_car,
                             size: 15,
                             color: TbColors.muted,
                           ),
@@ -111,15 +88,24 @@ class _SmartAlertCardState extends State<SmartAlertCard> {
                           ),
                         if (isLowConfidence)
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 5,
+                              vertical: 1,
+                            ),
                             decoration: BoxDecoration(
                               color: TbColors.sand,
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(color: const Color(0xFFC9D0DA)),
+                              border: Border.all(
+                                color: const Color(0xFFC9D0DA),
+                              ),
                             ),
                             child: const Text(
                               'osäker',
-                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: TbColors.muted),
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: TbColors.muted,
+                              ),
                             ),
                           ),
                       ],
@@ -127,9 +113,14 @@ class _SmartAlertCardState extends State<SmartAlertCard> {
                   ),
                   const SizedBox(width: 8),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
                     decoration: BoxDecoration(
-                      color: score > 50 ? Colors.green.shade100 : Colors.orange.shade100,
+                      color: score > 50
+                          ? Colors.green.shade100
+                          : Colors.orange.shade100,
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
@@ -137,7 +128,9 @@ class _SmartAlertCardState extends State<SmartAlertCard> {
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         fontSize: 13,
-                        color: score > 50 ? Colors.green.shade800 : Colors.orange.shade800,
+                        color: score > 50
+                            ? Colors.green.shade800
+                            : Colors.orange.shade800,
                       ),
                     ),
                   ),
@@ -148,16 +141,27 @@ class _SmartAlertCardState extends State<SmartAlertCard> {
                 title,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
               const SizedBox(height: 2),
               Row(
                 children: [
-                  const Icon(Icons.timer_outlined, size: 13, color: Colors.grey),
+                  const Icon(
+                    Icons.timer_outlined,
+                    size: 13,
+                    color: Colors.grey,
+                  ),
                   const SizedBox(width: 4),
                   Text(
                     timeLeft,
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      fontSize: 13,
+                      color: Colors.grey.shade700,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
@@ -167,44 +171,13 @@ class _SmartAlertCardState extends State<SmartAlertCard> {
                   summary,
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 13.5, color: Colors.grey.shade800, height: 1.3),
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: Colors.grey.shade800,
+                    height: 1.3,
+                  ),
                 ),
               ],
-              const SizedBox(height: 4),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    'Mer info & varför →',
-                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: TbColors.cyanDeep),
-                  ),
-                  if (!_feedbackGiven)
-                    Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        IconButton(
-                          onPressed: () => _submitFeedback(true),
-                          icon: const Icon(Icons.thumb_up_outlined, size: 20, color: Colors.green),
-                          tooltip: 'Fick körning',
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-                        ),
-                        IconButton(
-                          onPressed: () => _submitFeedback(false),
-                          icon: const Icon(Icons.thumb_down_outlined, size: 20, color: Colors.red),
-                          tooltip: 'Dött',
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(minWidth: 34, minHeight: 34),
-                        ),
-                      ],
-                    )
-                  else
-                    const Text(
-                      'Tack!',
-                      style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic),
-                    ),
-                ],
-              ),
             ],
           ),
         ),

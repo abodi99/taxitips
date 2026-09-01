@@ -13,6 +13,7 @@ class HotspotMap extends StatelessWidget {
     this.userLon,
     this.selectedPlace,
     this.onSelectPlace,
+    this.onSelectOpportunity,
     this.highOnly = false,
     this.perOpportunity = false,
     this.opportunities = const [],
@@ -24,6 +25,13 @@ class HotspotMap extends StatelessWidget {
   final double? userLon;
   final String? selectedPlace;
   final ValueChanged<String?>? onSelectPlace;
+
+  /// Tapping a per-opportunity marker should show that opportunity's own detail
+  /// directly (same sheet as tapping its list card), not just filter the list by
+  /// place name the way onSelectPlace does for the aggregated view -- a marker on
+  /// the map IS a specific disruption, filtering-then-scrolling-to-find-it is an
+  /// unnecessary extra step. Only used when [perOpportunity] is true.
+  final ValueChanged<Map<String, dynamic>>? onSelectOpportunity;
   final bool highOnly;
 
   /// When true, show one marker per opportunity (colored/labeled by transport
@@ -68,7 +76,10 @@ class HotspotMap extends StatelessWidget {
             height: 58,
             alignment: Alignment.bottomCenter,
             child: GestureDetector(
-              onTap: () => onSelectPlace?.call(o['title']?.toString()),
+              behavior: HitTestBehavior.opaque,
+              onTap: () => onSelectOpportunity != null
+                  ? onSelectOpportunity!(o)
+                  : onSelectPlace?.call(o['title']?.toString()),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [

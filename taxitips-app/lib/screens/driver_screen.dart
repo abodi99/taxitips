@@ -53,8 +53,10 @@ class _DriverScreenState extends State<DriverScreen> {
   bool _highOnly = false;
   bool _nearMe = false;
   String _kindFilter = 'all'; // all | traffic | event
-  String _sourceFilter = 'all'; // all | transit | road — bara relevant inom "traffic"
-  bool _mapShowsPerOpportunity = false; // false = platsaggregerad karta (default), true = en markör per signal
+  String _sourceFilter =
+      'all'; // all | transit | road — bara relevant inom "traffic"
+  bool _mapShowsPerOpportunity =
+      false; // false = platsaggregerad karta (default), true = en markör per signal
   String? _place; // null = alla
   double? _userLat;
   double? _userLon;
@@ -88,13 +90,18 @@ class _DriverScreenState extends State<DriverScreen> {
       await registerForPush(widget.api);
     }
     await _load();
-    _timer = Timer.periodic(const Duration(seconds: 30), (_) => _load(silent: true));
+    _timer = Timer.periodic(
+      const Duration(seconds: 30),
+      (_) => _load(silent: true),
+    );
   }
 
   String _friendly(Object e) {
     final s = e.toString();
-    if (s.contains('Ogiltig')) return 'Koden funkar inte — be kontoret om rätt bolags-/byteskod.';
-    if (s.contains('401') || s.contains('licens')) return 'Ingen access. Registrera telefonen med bolagskod eller logga in.';
+    if (s.contains('Ogiltig'))
+      return 'Koden funkar inte — be kontoret om rätt bolags-/byteskod.';
+    if (s.contains('401') || s.contains('licens'))
+      return 'Ingen access. Registrera telefonen med bolagskod eller logga in.';
     return s.replaceFirst(RegExp(r'^(ApiException|Exception):\s*'), '');
   }
 
@@ -102,7 +109,11 @@ class _DriverScreenState extends State<DriverScreen> {
     if (!silent && mounted) setState(() => _refreshing = true);
     try {
       final results = await Future.wait([
-        widget.api.taxi(demo: widget.demo, userLat: _userLat, userLon: _userLon),
+        widget.api.taxi(
+          demo: widget.demo,
+          userLat: _userLat,
+          userLon: _userLon,
+        ),
         _checkEntitlement(),
       ]);
       final data = results[0] as Map<String, dynamic>;
@@ -147,11 +158,14 @@ class _DriverScreenState extends State<DriverScreen> {
   bool _isEvent(Map<String, dynamic> a) =>
       a['sourceKind'] == 'event' || (a['taxi'] as Map?)?['reason'] == 'event';
 
-  List<Map<String, dynamic>> get _rawEvents => _asMaps(_data?['events']).map((e) {
+  List<Map<String, dynamic>> get _rawEvents =>
+      _asMaps(_data?['events']).map((e) {
         return {
           ...e,
           'header': e['name'] ?? e['header'],
-          'taxi': e['taxi'] is Map ? Map<String, dynamic>.from(e['taxi'] as Map) : e['taxi'],
+          'taxi': e['taxi'] is Map
+              ? Map<String, dynamic>.from(e['taxi'] as Map)
+              : e['taxi'],
           'sourceKind': 'event',
         };
       }).toList();
@@ -178,14 +192,18 @@ class _DriverScreenState extends State<DriverScreen> {
 
   /// Väg/kollektivtrafik-filter — gäller bara live-signaler (kind: 'road'/'transit'),
   /// ett no-op för evenemang som saknar 'kind'.
-  List<Map<String, dynamic>> _sourceFilterList(List<Map<String, dynamic>> list) {
+  List<Map<String, dynamic>> _sourceFilterList(
+    List<Map<String, dynamic>> list,
+  ) {
     if (_sourceFilter == 'all') return list;
     return list.where((a) => a['kind'] == _sourceFilter).toList();
   }
 
   void _sortSignals(List<Map<String, dynamic>> list) {
     list.sort((a, b) {
-      final pe = _phaseRank((a['taxi'] as Map?)?['phase']) - _phaseRank((b['taxi'] as Map?)?['phase']);
+      final pe =
+          _phaseRank((a['taxi'] as Map?)?['phase']) -
+          _phaseRank((b['taxi'] as Map?)?['phase']);
       if (pe != 0) return pe;
       final ra = _rank((a['taxi'] as Map?)?['level']);
       final rb = _rank((b['taxi'] as Map?)?['level']);
@@ -222,7 +240,9 @@ class _DriverScreenState extends State<DriverScreen> {
       return phase != 'upcoming';
     }).toList();
     if (_highOnly) {
-      list = list.where((a) => (a['taxi'] as Map?)?['level'] == 'high').toList();
+      list = list
+          .where((a) => (a['taxi'] as Map?)?['level'] == 'high')
+          .toList();
     }
     _sortSignals(list);
     return list;
@@ -242,7 +262,9 @@ class _DriverScreenState extends State<DriverScreen> {
     if (_kindFilter == 'event') return [];
     var list = _sourceFilterList(_geoFilter(_rawActive));
     if (_highOnly) {
-      list = list.where((a) => (a['taxi'] as Map?)?['level'] == 'high').toList();
+      list = list
+          .where((a) => (a['taxi'] as Map?)?['level'] == 'high')
+          .toList();
     }
     _sortSignals(list);
     return list;
@@ -258,22 +280,30 @@ class _DriverScreenState extends State<DriverScreen> {
 
   List<Map<String, dynamic>> get _weekSignals {
     if (_kindFilter == 'event') return [];
-    var list = _sourceFilterList(_geoFilter(_rawWeek).where((a) => !_isEvent(a)).toList());
+    var list = _sourceFilterList(
+      _geoFilter(_rawWeek).where((a) => !_isEvent(a)).toList(),
+    );
     if (_highOnly) {
-      list = list.where((a) => (a['taxi'] as Map?)?['level'] == 'high').toList();
+      list = list
+          .where((a) => (a['taxi'] as Map?)?['level'] == 'high')
+          .toList();
     }
     _sortSignals(list);
     return list.take(12).toList();
   }
 
   List<Map<String, dynamic>> get _signals => [
-        ..._hotEvents,
-        ..._upcomingEvents,
-        ..._trafficSignalsVisible,
-      ];
+    ..._hotEvents,
+    ..._upcomingEvents,
+    ..._trafficSignalsVisible,
+  ];
 
   bool get _filtersActive =>
-      _highOnly || _nearMe || _place != null || _kindFilter != 'all' || _sourceFilter != 'all';
+      _highOnly ||
+      _nearMe ||
+      _place != null ||
+      _kindFilter != 'all' ||
+      _sourceFilter != 'all';
 
   String get _filterSummary {
     final bits = <String>[];
@@ -332,18 +362,30 @@ class _DriverScreenState extends State<DriverScreen> {
                         ),
                       ),
                     ),
-                    const Text('Filter', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900)),
+                    const Text(
+                      'Filter',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Bara hög prio', style: TextStyle(fontWeight: FontWeight.w800)),
+                      title: const Text(
+                        'Bara hög prio',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
                       subtitle: const Text('Starkaste signalerna först'),
                       value: _highOnly,
                       onChanged: (v) => apply(() => _highOnly = v),
                     ),
                     SwitchListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: const Text('Nära mig', style: TextStyle(fontWeight: FontWeight.w800)),
+                      title: const Text(
+                        'Nära mig',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
                       subtitle: const Text('Inom ca 25 km'),
                       value: _nearMe,
                       onChanged: (v) async {
@@ -356,7 +398,10 @@ class _DriverScreenState extends State<DriverScreen> {
                       },
                     ),
                     const SizedBox(height: 8),
-                    const Text('Visa', style: TextStyle(fontWeight: FontWeight.w800)),
+                    const Text(
+                      'Visa',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
@@ -367,16 +412,25 @@ class _DriverScreenState extends State<DriverScreen> {
                           ('event', 'Evenemang'),
                         ])
                           ChoiceChip(
-                            label: Text(opt.$2, style: const TextStyle(fontWeight: FontWeight.w800)),
+                            label: Text(
+                              opt.$2,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
                             selected: _kindFilter == opt.$1,
                             selectedColor: TbColors.taxi,
-                            onSelected: (_) => apply(() => _kindFilter = opt.$1),
+                            onSelected: (_) =>
+                                apply(() => _kindFilter = opt.$1),
                           ),
                       ],
                     ),
                     if (_kindFilter != 'event') ...[
                       const SizedBox(height: 16),
-                      const Text('Källa', style: TextStyle(fontWeight: FontWeight.w800)),
+                      const Text(
+                        'Källa',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
                       const SizedBox(height: 8),
                       Wrap(
                         spacing: 8,
@@ -387,10 +441,16 @@ class _DriverScreenState extends State<DriverScreen> {
                             ('road', 'Vägtrafik'),
                           ])
                             ChoiceChip(
-                              label: Text(opt.$2, style: const TextStyle(fontWeight: FontWeight.w800)),
+                              label: Text(
+                                opt.$2,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                ),
+                              ),
                               selected: _sourceFilter == opt.$1,
                               selectedColor: TbColors.taxi,
-                              onSelected: (_) => apply(() => _sourceFilter = opt.$1),
+                              onSelected: (_) =>
+                                  apply(() => _sourceFilter = opt.$1),
                             ),
                         ],
                       ),
@@ -445,7 +505,10 @@ class _DriverScreenState extends State<DriverScreen> {
       }
       final plat = (st?['lat'] as num?)?.toDouble();
       final plon = (st?['lon'] as num?)?.toDouble();
-      if (plat != null && plon != null && _userLat != null && _userLon != null) {
+      if (plat != null &&
+          plon != null &&
+          _userLat != null &&
+          _userLon != null) {
         if (_km(_userLat!, _userLon!, plat, plon) <= _nearKm) return true;
       }
     }
@@ -457,8 +520,12 @@ class _DriverScreenState extends State<DriverScreen> {
     const r = 6371.0;
     final dLat = _rad(lat2 - lat1);
     final dLon = _rad(lon2 - lon1);
-    final a = math.sin(dLat / 2) * math.sin(dLat / 2) +
-        math.cos(_rad(lat1)) * math.cos(_rad(lat2)) * math.sin(dLon / 2) * math.sin(dLon / 2);
+    final a =
+        math.sin(dLat / 2) * math.sin(dLat / 2) +
+        math.cos(_rad(lat1)) *
+            math.cos(_rad(lat2)) *
+            math.sin(dLon / 2) *
+            math.sin(dLon / 2);
     return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
   }
 
@@ -474,7 +541,8 @@ class _DriverScreenState extends State<DriverScreen> {
       if (perm == LocationPermission.denied) {
         perm = await Geolocator.requestPermission();
       }
-      if (perm == LocationPermission.denied || perm == LocationPermission.deniedForever) {
+      if (perm == LocationPermission.denied ||
+          perm == LocationPermission.deniedForever) {
         setState(() {
           _nearMe = false;
           _error = 'GPS-tillstånd saknas';
@@ -499,7 +567,11 @@ class _DriverScreenState extends State<DriverScreen> {
     }
   }
 
-  int _rank(Object? level) => level == 'high' ? 3 : level == 'medium' ? 2 : 1;
+  int _rank(Object? level) => level == 'high'
+      ? 3
+      : level == 'medium'
+      ? 2
+      : 1;
 
   String _placeName(Map<String, dynamic> a) {
     final places = ((a['taxi'] as Map?)?['places'] as List?) ?? [];
@@ -509,7 +581,9 @@ class _DriverScreenState extends State<DriverScreen> {
 
   String _hint(Map<String, dynamic> a) {
     final taxiRaw = a['taxi'];
-    final taxi = taxiRaw is Map ? Map<String, dynamic>.from(taxiRaw) : <String, dynamic>{};
+    final taxi = taxiRaw is Map
+        ? Map<String, dynamic>.from(taxiRaw)
+        : <String, dynamic>{};
     final hint = taxi['driverHint']?.toString().trim();
     if (hint != null && hint.isNotEmpty) return hint;
     final header = a['header']?.toString().trim() ?? '';
@@ -550,7 +624,8 @@ class _DriverScreenState extends State<DriverScreen> {
         final name = p.toString();
         if (name.isEmpty) continue;
         final base = statsByName[name];
-        final cur = map[name] ??
+        final cur =
+            map[name] ??
             {
               'name': name,
               'count': 0,
@@ -603,8 +678,18 @@ class _DriverScreenState extends State<DriverScreen> {
     if (d == null) return null;
     const days = ['mån', 'tis', 'ons', 'tor', 'fre', 'lör', 'sön'];
     const months = [
-      'jan', 'feb', 'mar', 'apr', 'maj', 'jun',
-      'jul', 'aug', 'sep', 'okt', 'nov', 'dec',
+      'jan',
+      'feb',
+      'mar',
+      'apr',
+      'maj',
+      'jun',
+      'jul',
+      'aug',
+      'sep',
+      'okt',
+      'nov',
+      'dec',
     ];
     final wd = days[(d.weekday - 1).clamp(0, 6)];
     final mo = months[(d.month - 1).clamp(0, 11)];
@@ -677,35 +762,59 @@ class _DriverScreenState extends State<DriverScreen> {
                     ),
                   ),
                   Text(
-                    isEvent ? 'EVENEMANG' : a['sourceKind'] == 'road' ? 'VÄG' : 'KOLLEKTIV',
+                    isEvent
+                        ? 'EVENEMANG'
+                        : a['sourceKind'] == 'road'
+                        ? 'VÄG'
+                        : 'KOLLEKTIV',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w900,
                       letterSpacing: 0.6,
-                      color: isEvent ? const Color(0xFF2F6FED) : Colors.grey.shade700,
+                      color: isEvent
+                          ? const Color(0xFF2F6FED)
+                          : Colors.grey.shade700,
                     ),
                   ),
                   const SizedBox(height: 6),
                   Text(
                     _placeName(a),
-                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, height: 1.1),
+                    style: const TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
+                      height: 1.1,
+                    ),
                   ),
                   const SizedBox(height: 8),
                   Text(
                     _hint(a),
-                    style: const TextStyle(fontSize: 17, height: 1.35, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                      fontSize: 17,
+                      height: 1.35,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                   if (lines.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Text(
                       isEvent ? 'Om evenemanget' : 'Mer info',
-                      style: TextStyle(fontWeight: FontWeight.w900, color: Colors.grey.shade800),
+                      style: TextStyle(
+                        fontWeight: FontWeight.w900,
+                        color: Colors.grey.shade800,
+                      ),
                     ),
                     const SizedBox(height: 8),
                     for (final line in lines)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 6),
-                        child: Text(line, style: TextStyle(fontSize: 15, height: 1.4, color: Colors.grey.shade800)),
+                        child: Text(
+                          line,
+                          style: TextStyle(
+                            fontSize: 15,
+                            height: 1.4,
+                            color: Colors.grey.shade800,
+                          ),
+                        ),
                       ),
                   ],
                   if (url != null && url.isNotEmpty) ...[
@@ -716,11 +825,16 @@ class _DriverScreenState extends State<DriverScreen> {
                         onPressed: () async {
                           final uri = Uri.tryParse(url);
                           if (uri != null) {
-                            await launchUrl(uri, mode: LaunchMode.externalApplication);
+                            await launchUrl(
+                              uri,
+                              mode: LaunchMode.externalApplication,
+                            );
                           }
                         },
                         icon: const Icon(Icons.open_in_new),
-                        label: Text(isEvent ? 'Öppna evenemang' : 'Öppna mer info'),
+                        label: Text(
+                          isEvent ? 'Öppna evenemang' : 'Öppna mer info',
+                        ),
                       ),
                     ),
                   ],
@@ -751,12 +865,16 @@ class _DriverScreenState extends State<DriverScreen> {
     if (_place != null && !places.any((p) => p['name'] == _place)) {
       // Ort finns inte i aktuellt filter — nollställ utan att störa setState mid-build.
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _place != null && !_places.any((p) => p['name'] == _place)) {
+        if (mounted &&
+            _place != null &&
+            !_places.any((p) => p['name'] == _place)) {
           setState(() => _place = null);
         }
       });
     }
-    final live = _data?['source'] == 'trafiklab' || (_data?['source']?.toString().contains('trafik') ?? false);
+    final live =
+        _data?['source'] == 'trafiklab' ||
+        (_data?['source']?.toString().contains('trafik') ?? false);
 
     return Scaffold(
       backgroundColor: TbColors.foam,
@@ -768,340 +886,427 @@ class _DriverScreenState extends State<DriverScreen> {
           decoration: TextDecoration.none,
         ),
         child: SafeArea(
-        child: _claiming
-            ? const Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+          child: _claiming
+              ? const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircularProgressIndicator(color: TbColors.taxi),
+                      SizedBox(height: 16),
+                      Text(
+                        'Kopplar telefon…',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          color: TbColors.ink,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : Column(
                   children: [
-                    CircularProgressIndicator(color: TbColors.taxi),
-                    SizedBox(height: 16),
-                    Text(
-                      'Kopplar telefon…',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: TbColors.ink),
-                    ),
-                  ],
-                ),
-              )
-            : Column(
-                children: [
-                  // Top bar
-                  Container(
-                    color: TbColors.asphalt,
-                    padding: const EdgeInsets.fromLTRB(12, 6, 8, 10),
-                    child: Row(
-                      children: [
-                        if (widget.onBack != null)
-                          IconButton(
-                            onPressed: widget.onBack,
-                            icon: const Icon(Icons.arrow_back, color: TbColors.foam),
-                          )
-                        else
-                          const SizedBox(width: 4),
-                        const Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Taxi Tips',
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.w900,
-                                color: TbColors.foam,
-                                height: 1.1,
-                              ),
-                            ),
-                            Text(
-                              'Tips när taxi behövs',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: Color(0xFFB9AFA2),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const Spacer(),
-                        _LivePill(live: live, demo: widget.demo, time: _clock(_data?['updatedAt'])),
-                        IconButton(
-                          tooltip: 'Filter',
-                          onPressed: _openFilters,
-                          icon: Badge(
-                            isLabelVisible: _filtersActive,
-                            smallSize: 8,
-                            backgroundColor: TbColors.taxi,
-                            child: const Icon(Icons.tune, color: TbColors.foam),
-                          ),
-                        ),
-                        if (widget.onOpenSettings != null)
-                          IconButton(
-                            tooltip: 'Inställningar',
-                            onPressed: widget.onOpenSettings,
-                            icon: const Icon(Icons.settings_outlined, color: TbColors.foam),
-                          ),
-                        IconButton(
-                          onPressed: _refreshing ? null : () => _load(),
-                          icon: _refreshing
-                              ? const SizedBox(
-                                  width: 20,
-                                  height: 20,
-                                  child: CircularProgressIndicator(strokeWidth: 2, color: TbColors.taxi),
-                                )
-                              : const Icon(Icons.refresh, color: TbColors.foam),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  if (_entitled == false)
-                    _EntitlementBanner(onOpenSettings: widget.onOpenSettings),
-
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Var behövs taxi?',
-                          style: TextStyle(
-                            fontSize: 28,
-                            fontWeight: FontWeight.w900,
-                            height: 1.1,
-                            color: TbColors.ink,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          _filterSummary,
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          children: [
-                            Icon(
-                              live ? Icons.circle : Icons.circle_outlined,
-                              size: 8,
-                              color: live ? TbColors.live : Colors.grey.shade400,
-                            ),
-                            const SizedBox(width: 6),
-                            Text(
-                              live
-                                  ? 'Live · uppdaterad ${_clock(_data?['updatedAt'])}'
-                                  : 'Data ej live · senast ${_clock(_data?['updatedAt'])}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: live ? TbColors.live : Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 10),
-                        if (_kindFilter != 'event')
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton.icon(
-                              onPressed: () => setState(() {
-                                _mapShowsPerOpportunity = !_mapShowsPerOpportunity;
-                              }),
-                              icon: Icon(
-                                _mapShowsPerOpportunity ? Icons.blur_on : Icons.pin_drop_outlined,
-                                size: 16,
-                              ),
-                              label: Text(
-                                _mapShowsPerOpportunity ? 'Visa orter' : 'Visa signaler + avstånd',
-                                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
-                              ),
-                              style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(horizontal: 4),
-                                minimumSize: Size.zero,
-                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                              ),
-                            ),
-                          ),
-                        HotspotMap(
-                          placeStats: _kindFilter == 'event'
-                              ? const []
-                              : _asMaps(_data?['placeStats']),
-                          events: _mapEvents,
-                          userLat: _userLat,
-                          userLon: _userLon,
-                          selectedPlace: _place,
-                          highOnly: _highOnly && _kindFilter != 'event',
-                          perOpportunity: _mapShowsPerOpportunity && _kindFilter != 'event',
-                          opportunities: _sourceFilterList(_geoFilter(_rawActive)),
-                          onSelectPlace: (name) => setState(() {
-                            _place = _place == name ? null : name;
-                          }),
-                        ),
-                        if (_status != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Text(_status!, style: const TextStyle(color: TbColors.live, fontWeight: FontWeight.w700)),
-                          ),
-                        if (_error != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8),
-                            child: Text(_error!, style: const TextStyle(color: TbColors.danger, fontWeight: FontWeight.w700)),
-                          ),
-                      ],
-                    ),
-                  ),
-
-                  if (_places.isNotEmpty) ...[
-                    const SizedBox(height: 10),
-                    SizedBox(
-                      height: 44,
-                      child: ListView(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                    // Top bar
+                    Container(
+                      color: TbColors.asphalt,
+                      padding: const EdgeInsets.fromLTRB(12, 6, 8, 10),
+                      child: Row(
                         children: [
-                          _OrtChip(
-                            label: 'Alla',
-                            selected: _place == null,
-                            onTap: () => setState(() => _place = null),
+                          if (widget.onBack != null)
+                            IconButton(
+                              onPressed: widget.onBack,
+                              icon: const Icon(
+                                Icons.arrow_back,
+                                color: TbColors.foam,
+                              ),
+                            )
+                          else
+                            const SizedBox(width: 4),
+                          const Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Taxi Tips',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w900,
+                                  color: TbColors.foam,
+                                  height: 1.1,
+                                ),
+                              ),
+                              Text(
+                                'Tips när taxi behövs',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w600,
+                                  color: Color(0xFFB9AFA2),
+                                ),
+                              ),
+                            ],
                           ),
-                          for (final p in _places.take(12))
-                            Padding(
-                              padding: const EdgeInsets.only(left: 8),
-                              child: _OrtChip(
-                                label: p['name']?.toString() ?? '',
-                                count: (p['count'] as num?)?.toInt(),
-                                hot: p['maxLevel'] == 'high',
-                                selected: _place == p['name'],
-                                onTap: () => setState(() {
-                                  final name = p['name']?.toString();
-                                  _place = _place == name ? null : name;
+                          const Spacer(),
+                          _LivePill(
+                            live: live,
+                            demo: widget.demo,
+                            time: _clock(_data?['updatedAt']),
+                          ),
+                          IconButton(
+                            tooltip: 'Filter',
+                            onPressed: _openFilters,
+                            icon: Badge(
+                              isLabelVisible: _filtersActive,
+                              smallSize: 8,
+                              backgroundColor: TbColors.taxi,
+                              child: const Icon(
+                                Icons.tune,
+                                color: TbColors.foam,
+                              ),
+                            ),
+                          ),
+                          if (widget.onOpenSettings != null)
+                            IconButton(
+                              tooltip: 'Inställningar',
+                              onPressed: widget.onOpenSettings,
+                              icon: const Icon(
+                                Icons.settings_outlined,
+                                color: TbColors.foam,
+                              ),
+                            ),
+                          IconButton(
+                            onPressed: _refreshing ? null : () => _load(),
+                            icon: _refreshing
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: TbColors.taxi,
+                                    ),
+                                  )
+                                : const Icon(
+                                    Icons.refresh,
+                                    color: TbColors.foam,
+                                  ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    if (_entitled == false)
+                      _EntitlementBanner(onOpenSettings: widget.onOpenSettings),
+
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Var behövs taxi?',
+                            style: TextStyle(
+                              fontSize: 28,
+                              fontWeight: FontWeight.w900,
+                              height: 1.1,
+                              color: TbColors.ink,
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            _filterSummary,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Row(
+                            children: [
+                              Icon(
+                                live ? Icons.circle : Icons.circle_outlined,
+                                size: 8,
+                                color: live
+                                    ? TbColors.live
+                                    : Colors.grey.shade400,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                live
+                                    ? 'Live · uppdaterad ${_clock(_data?['updatedAt'])}'
+                                    : 'Data ej live · senast ${_clock(_data?['updatedAt'])}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                  color: live
+                                      ? TbColors.live
+                                      : Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          if (_kindFilter != 'event')
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton.icon(
+                                onPressed: () => setState(() {
+                                  _mapShowsPerOpportunity =
+                                      !_mapShowsPerOpportunity;
                                 }),
+                                icon: Icon(
+                                  _mapShowsPerOpportunity
+                                      ? Icons.blur_on
+                                      : Icons.pin_drop_outlined,
+                                  size: 16,
+                                ),
+                                label: Text(
+                                  _mapShowsPerOpportunity
+                                      ? 'Visa orter'
+                                      : 'Visa signaler + avstånd',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                  ),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                              ),
+                            ),
+                          HotspotMap(
+                            placeStats: _kindFilter == 'event'
+                                ? const []
+                                : _asMaps(_data?['placeStats']),
+                            events: _mapEvents,
+                            userLat: _userLat,
+                            userLon: _userLon,
+                            selectedPlace: _place,
+                            highOnly: _highOnly && _kindFilter != 'event',
+                            perOpportunity:
+                                _mapShowsPerOpportunity &&
+                                _kindFilter != 'event',
+                            opportunities: _sourceFilterList(
+                              _geoFilter(_rawActive),
+                            ),
+                            onSelectPlace: (name) => setState(() {
+                              _place = _place == name ? null : name;
+                            }),
+                            onSelectOpportunity: (o) => _openAlertDetail(o),
+                          ),
+                          if (_status != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                _status!,
+                                style: const TextStyle(
+                                  color: TbColors.live,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          if (_error != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8),
+                              child: Text(
+                                _error!,
+                                style: const TextStyle(
+                                  color: TbColors.danger,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
                         ],
                       ),
                     ),
-                  ],
 
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                    child: Text(
-                      () {
-                        final hotE = _hotEvents.length;
-                        final upE = _upcomingEvents.length;
-                        final traf = _trafficSignals.length;
-                        if (hotE + upE + traf == 0) return 'Inget just nu';
-                        final bits = <String>[];
-                        if (_kindFilter != 'traffic') {
-                          bits.add('${hotE + upE} event');
-                        }
-                        if (_kindFilter != 'event') {
-                          bits.add('$traf trafik');
-                        }
-                        final where = _place == null ? '' : ' · $_place';
-                        return '${bits.join(' · ')}$where';
-                      }(),
-                      style: TextStyle(fontWeight: FontWeight.w700, color: Colors.grey.shade700),
-                    ),
-                  ),
-
-                  Expanded(
-                    child: RefreshIndicator(
-                      color: TbColors.taxiDeep,
-                      onRefresh: () => _load(),
-                      child: _signals.isEmpty && _weekSignals.isEmpty
-                          ? ListView(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              padding: const EdgeInsets.all(40),
-                              children: [
-                                Icon(Icons.local_taxi, size: 64, color: Colors.grey.shade300),
-                                const SizedBox(height: 12),
-                                Text(
-                                  _filtersActive
-                                      ? 'Inget i filtret.\nÄndra Alla / typ / nära mig / hög prio.'
-                                      : 'Lugnt läge — inga starka taxisignaler.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontSize: 17, height: 1.4, color: Colors.grey.shade700),
-                                ),
-                                if (_filtersActive) ...[
-                                  const SizedBox(height: 16),
-                                  Center(
-                                    child: FilledButton(
-                                      onPressed: _clearFilters,
-                                      child: const Text('Visa allt'),
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            )
-                          : ListView(
-                              physics: const AlwaysScrollableScrollPhysics(),
-                              padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
-                              children: [
-                                if (_hotEvents.isNotEmpty || _trafficSignalsVisible.isNotEmpty) ...[
-                                  const _SectionTitle('Nu — kör hit'),
-                                  for (final a in _hotEvents) ...[
-                                    SmartAlertCard(
-                                        alert: a,
-                                        api: widget.api,
-                                        onTap: () => _openAlertDetail(a),
-                                      ),
-                                    const SizedBox(height: 10),
-                                  ],
-                                  for (final a in _trafficSignalsVisible.take(8)) ...[
-                                    SmartAlertCard(
-                                        alert: a,
-                                        api: widget.api,
-                                        onTap: () => _openAlertDetail(a),
-                                      ),
-                                    const SizedBox(height: 10),
-                                  ],
-                                  if (_trafficSignalsVisible.length > 8)
-                                    Padding(
-                                      padding: const EdgeInsets.only(bottom: 10),
-                                      child: Text(
-                                        '+${_trafficSignalsVisible.length - 8} fler trafiksignaler — öppna Filter → Tåg & väg',
-                                        style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
-                                      ),
-                                    ),
-                                ],
-                                if (_upcomingEvents.isNotEmpty) ...[
-                                  const _SectionTitle('Kommande 48 h — planera'),
-                                  for (final a in _upcomingEvents) ...[
-                                    SmartAlertCard(
-                                        alert: a,
-                                        api: widget.api,
-                                        onTap: () => _openAlertDetail(a),
-                                      ),
-                                    const SizedBox(height: 10),
-                                  ],
-                                ],
-                                if (_weekSignals.isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  Theme(
-                                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-                                    child: ExpansionTile(
-                                      initiallyExpanded: false,
-                                      tilePadding: EdgeInsets.zero,
-                                      childrenPadding: EdgeInsets.zero,
-                                      title: const Text(
-                                        'Senaste veckan',
-                                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900),
-                                      ),
-                                      children: [
-                                        for (final a in _weekSignals) ...[
-                                          SmartAlertCard(
-                                        alert: a,
-                                        api: widget.api,
-                                        onTap: () => _openAlertDetail(a),
-                                      ),
-                                          const SizedBox(height: 10),
-                                        ],
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ],
+                    if (_places.isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        height: 44,
+                        child: ListView(
+                          scrollDirection: Axis.horizontal,
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          children: [
+                            _OrtChip(
+                              label: 'Alla',
+                              selected: _place == null,
+                              onTap: () => setState(() => _place = null),
                             ),
+                            for (final p in _places.take(12))
+                              Padding(
+                                padding: const EdgeInsets.only(left: 8),
+                                child: _OrtChip(
+                                  label: p['name']?.toString() ?? '',
+                                  count: (p['count'] as num?)?.toInt(),
+                                  hot: p['maxLevel'] == 'high',
+                                  selected: _place == p['name'],
+                                  onTap: () => setState(() {
+                                    final name = p['name']?.toString();
+                                    _place = _place == name ? null : name;
+                                  }),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                      child: Text(
+                        () {
+                          final hotE = _hotEvents.length;
+                          final upE = _upcomingEvents.length;
+                          final traf = _trafficSignals.length;
+                          if (hotE + upE + traf == 0) return 'Inget just nu';
+                          final bits = <String>[];
+                          if (_kindFilter != 'traffic') {
+                            bits.add('${hotE + upE} event');
+                          }
+                          if (_kindFilter != 'event') {
+                            bits.add('$traf trafik');
+                          }
+                          final where = _place == null ? '' : ' · $_place';
+                          return '${bits.join(' · ')}$where';
+                        }(),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
                     ),
-                  ),
-                ],
-              ),
+
+                    Expanded(
+                      child: RefreshIndicator(
+                        color: TbColors.taxiDeep,
+                        onRefresh: () => _load(),
+                        child: _signals.isEmpty && _weekSignals.isEmpty
+                            ? ListView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                padding: const EdgeInsets.all(40),
+                                children: [
+                                  Icon(
+                                    Icons.local_taxi,
+                                    size: 64,
+                                    color: Colors.grey.shade300,
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Text(
+                                    _filtersActive
+                                        ? 'Inget i filtret.\nÄndra Alla / typ / nära mig / hög prio.'
+                                        : 'Lugnt läge — inga starka taxisignaler.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 17,
+                                      height: 1.4,
+                                      color: Colors.grey.shade700,
+                                    ),
+                                  ),
+                                  if (_filtersActive) ...[
+                                    const SizedBox(height: 16),
+                                    Center(
+                                      child: FilledButton(
+                                        onPressed: _clearFilters,
+                                        child: const Text('Visa allt'),
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              )
+                            : ListView(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  4,
+                                  16,
+                                  28,
+                                ),
+                                children: [
+                                  if (_hotEvents.isNotEmpty ||
+                                      _trafficSignalsVisible.isNotEmpty) ...[
+                                    const _SectionTitle('Nu — kör hit'),
+                                    for (final a in _hotEvents) ...[
+                                      SmartAlertCard(
+                                        alert: a,
+                                        onTap: () => _openAlertDetail(a),
+                                      ),
+                                      const SizedBox(height: 10),
+                                    ],
+                                    for (final a in _trafficSignalsVisible.take(
+                                      8,
+                                    )) ...[
+                                      SmartAlertCard(
+                                        alert: a,
+                                        onTap: () => _openAlertDetail(a),
+                                      ),
+                                      const SizedBox(height: 10),
+                                    ],
+                                    if (_trafficSignalsVisible.length > 8)
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          bottom: 10,
+                                        ),
+                                        child: Text(
+                                          '+${_trafficSignalsVisible.length - 8} fler trafiksignaler — öppna Filter → Tåg & väg',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: Colors.grey.shade700,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                  if (_upcomingEvents.isNotEmpty) ...[
+                                    const _SectionTitle(
+                                      'Kommande 48 h — planera',
+                                    ),
+                                    for (final a in _upcomingEvents) ...[
+                                      SmartAlertCard(
+                                        alert: a,
+                                        onTap: () => _openAlertDetail(a),
+                                      ),
+                                      const SizedBox(height: 10),
+                                    ],
+                                  ],
+                                  if (_weekSignals.isNotEmpty) ...[
+                                    const SizedBox(height: 8),
+                                    Theme(
+                                      data: Theme.of(context).copyWith(
+                                        dividerColor: Colors.transparent,
+                                      ),
+                                      child: ExpansionTile(
+                                        initiallyExpanded: false,
+                                        tilePadding: EdgeInsets.zero,
+                                        childrenPadding: EdgeInsets.zero,
+                                        title: const Text(
+                                          'Senaste veckan',
+                                          style: TextStyle(
+                                            fontSize: 18,
+                                            fontWeight: FontWeight.w900,
+                                          ),
+                                        ),
+                                        children: [
+                                          for (final a in _weekSignals) ...[
+                                            SmartAlertCard(
+                                              alert: a,
+                                              onTap: () => _openAlertDetail(a),
+                                            ),
+                                            const SizedBox(height: 10),
+                                          ],
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
         ),
       ),
     );
@@ -1143,11 +1348,19 @@ class _ExplainSection extends StatefulWidget {
 }
 
 class _ExplainSectionState extends State<_ExplainSection> {
-  bool _expanded = false;
-  bool _loading = false;
+  bool _loading = true;
   bool _showRaw = false;
   Map<String, dynamic>? _detail;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    // Load immediately -- the driver already tapped the card to see this detail
+    // sheet, an extra "Varför visas detta?" tap just to reveal the reasoning
+    // that's the whole point of opening it was a redundant step, not a real gate.
+    _load();
+  }
 
   Future<void> _load() async {
     setState(() {
@@ -1168,36 +1381,31 @@ class _ExplainSectionState extends State<_ExplainSection> {
 
   @override
   Widget build(BuildContext context) {
-    if (!_expanded) {
-      return Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton.icon(
-          onPressed: () {
-            setState(() => _expanded = true);
-            _load();
-          },
-          icon: const Icon(Icons.info_outline, size: 16),
-          label: const Text('Varför visas detta?', style: TextStyle(fontWeight: FontWeight.w700)),
-          style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
+    if (_loading) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 12),
+        child: SizedBox(
+          height: 20,
+          width: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
         ),
       );
     }
 
-    if (_loading) {
-      return const Padding(
-        padding: EdgeInsets.symmetric(vertical: 12),
-        child: SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)),
-      );
-    }
-
     if (_error != null) {
-      return Text(_error!, style: TextStyle(color: Colors.red.shade700, fontSize: 13));
+      return Text(
+        _error!,
+        style: TextStyle(color: Colors.red.shade700, fontSize: 13),
+      );
     }
 
     final opp = _detail?['opportunity'] as Map?;
     final sourceEvents = (_detail?['source_events'] as List?) ?? const [];
     if (opp == null) {
-      return const Text('Ingen ytterligare information tillgänglig.', style: TextStyle(fontSize: 13));
+      return const Text(
+        'Ingen ytterligare information tillgänglig.',
+        style: TextStyle(fontSize: 13),
+      );
     }
 
     final severityTier = opp['severity_tier']?.toString();
@@ -1212,16 +1420,41 @@ class _ExplainSectionState extends State<_ExplainSection> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Varför visas detta?', style: TextStyle(fontWeight: FontWeight.w900, color: Colors.grey.shade800)),
+          Text(
+            'Varför visas detta?',
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              color: Colors.grey.shade800,
+            ),
+          ),
           const SizedBox(height: 8),
-          _ExplainRow(label: 'Bedömning', value: severityTierLabels[severityTier] ?? severityTier ?? 'Okänd'),
-          _ExplainRow(label: 'Säkerhet', value: confidenceLabels[confidence] ?? confidence ?? 'Okänd'),
-          _ExplainRow(label: 'Poäng', value: '${opp['demand_score'] ?? '—'} / 100'),
+          _ExplainRow(
+            label: 'Bedömning',
+            value: severityTierLabels[severityTier] ?? severityTier ?? 'Okänd',
+          ),
+          _ExplainRow(
+            label: 'Säkerhet',
+            value: confidenceLabels[confidence] ?? confidence ?? 'Okänd',
+          ),
+          _ExplainRow(
+            label: 'Poäng',
+            value: '${opp['demand_score'] ?? '—'} / 100',
+          ),
           if (opp['expired_reason'] != null)
-            _ExplainRow(label: 'Status', value: opp['expired_reason'].toString()),
+            _ExplainRow(
+              label: 'Status',
+              value: opp['expired_reason'].toString(),
+            ),
           if (sourceEvents.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text('Källa', style: TextStyle(fontWeight: FontWeight.w800, color: Colors.grey.shade800, fontSize: 13)),
+            Text(
+              'Källa',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: Colors.grey.shade800,
+                fontSize: 13,
+              ),
+            ),
             for (final se in sourceEvents.cast<Map>()) ...[
               const SizedBox(height: 4),
               Text(
@@ -1231,14 +1464,17 @@ class _ExplainSectionState extends State<_ExplainSection> {
                   'smhi' => 'SMHI (väder)',
                   _ => se['source']?.toString() ?? '—',
                 },
-                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                ),
               ),
               Text(
-                se['source'] == 'smhi' ? _weatherSummary(se['raw'] as Map?) : (
-                  (se['raw'] as Map?)?['description']?.toString() ??
-                      (se['raw'] as Map?)?['header']?.toString() ??
-                      '—'
-                ),
+                se['source'] == 'smhi'
+                    ? _weatherSummary(se['raw'] as Map?)
+                    : ((se['raw'] as Map?)?['description']?.toString() ??
+                          (se['raw'] as Map?)?['header']?.toString() ??
+                          '—'),
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
               ),
             ],
@@ -1246,17 +1482,30 @@ class _ExplainSectionState extends State<_ExplainSection> {
           const SizedBox(height: 6),
           TextButton(
             onPressed: () => setState(() => _showRaw = !_showRaw),
-            style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero),
-            child: Text(_showRaw ? 'Dölj rådata' : 'Visa rådata', style: const TextStyle(fontSize: 12)),
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: Size.zero,
+            ),
+            child: Text(
+              _showRaw ? 'Dölj rådata' : 'Visa rådata',
+              style: const TextStyle(fontSize: 12),
+            ),
           ),
           if (_showRaw)
             Container(
               margin: const EdgeInsets.only(top: 6),
               padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(color: Colors.black87, borderRadius: BorderRadius.circular(6)),
+              decoration: BoxDecoration(
+                color: Colors.black87,
+                borderRadius: BorderRadius.circular(6),
+              ),
               child: SelectableText(
                 const JsonEncoder.withIndent('  ').convert(sourceEvents),
-                style: const TextStyle(fontSize: 10, color: Colors.white, fontFamily: 'monospace'),
+                style: const TextStyle(
+                  fontSize: 10,
+                  color: Colors.white,
+                  fontFamily: 'monospace',
+                ),
               ),
             ),
         ],
@@ -1285,7 +1534,9 @@ String _weatherSummary(Map? raw) {
   final thunder = (raw['thunderstormProbabilityPct'] as num?) ?? 0;
   if (thunder >= 30) bits.add('åskrisk $thunder%');
   final where = point != null ? '$point: ' : '';
-  return bits.isEmpty ? '${where}inga varningsvärda förhållanden' : '$where${bits.join(', ')}';
+  return bits.isEmpty
+      ? '${where}inga varningsvärda förhållanden'
+      : '$where${bits.join(', ')}';
 }
 
 class _ExplainRow extends StatelessWidget {
@@ -1301,7 +1552,10 @@ class _ExplainRow extends StatelessWidget {
         text: TextSpan(
           style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
           children: [
-            TextSpan(text: '$label: ', style: const TextStyle(fontWeight: FontWeight.w800)),
+            TextSpan(
+              text: '$label: ',
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
             TextSpan(text: value),
           ],
         ),
@@ -1340,18 +1594,30 @@ class _EntitlementBanner extends StatelessWidget {
               children: [
                 const Text(
                   'Ditt företags provperiod har gått ut',
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: TbColors.ink),
+                  style: TextStyle(
+                    fontWeight: FontWeight.w900,
+                    fontSize: 15,
+                    color: TbColors.ink,
+                  ),
                 ),
                 const SizedBox(height: 4),
                 const Text(
                   'Prenumerationen är inte aktiv just nu, så nya taxisignaler visas inte förrän kontoret förnyar den.',
-                  style: TextStyle(fontSize: 13, height: 1.35, fontWeight: FontWeight.w600, color: TbColors.muted),
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.35,
+                    fontWeight: FontWeight.w600,
+                    color: TbColors.muted,
+                  ),
                 ),
                 if (onOpenSettings != null) ...[
                   const SizedBox(height: 8),
                   TextButton(
                     onPressed: onOpenSettings,
-                    style: TextButton.styleFrom(padding: EdgeInsets.zero, alignment: Alignment.centerLeft),
+                    style: TextButton.styleFrom(
+                      padding: EdgeInsets.zero,
+                      alignment: Alignment.centerLeft,
+                    ),
                     child: const Text('Se inställningar'),
                   ),
                 ],
@@ -1373,8 +1639,16 @@ class _LivePill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final label = demo ? 'Demo' : live ? 'Live $time' : 'Offline';
-    final color = demo ? TbColors.taxiDeep : live ? TbColors.live : Colors.grey;
+    final label = demo
+        ? 'Demo'
+        : live
+        ? 'Live $time'
+        : 'Offline';
+    final color = demo
+        ? TbColors.taxiDeep
+        : live
+        ? TbColors.live
+        : Colors.grey;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
@@ -1385,9 +1659,16 @@ class _LivePill extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+          ),
           const SizedBox(width: 6),
-          Text(label, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12)),
+          Text(
+            label,
+            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+          ),
         ],
       ),
     );
@@ -1436,7 +1717,11 @@ class _OrtChip extends StatelessWidget {
           ),
           child: Text(
             count == null ? label : '$label  $count',
-            style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: fg),
+            style: TextStyle(
+              fontWeight: FontWeight.w900,
+              fontSize: 15,
+              color: fg,
+            ),
           ),
         ),
       ),
