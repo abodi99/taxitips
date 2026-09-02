@@ -25,6 +25,7 @@ class SmartAlertCard extends StatelessWidget {
     final kind = alert['kind']?.toString();
     final severityTier = alert['severity_tier']?.toString();
     final confidence = alert['confidence']?.toString();
+    final isActive = alert['is_active'] != false;
 
     DateTime? endTime;
     if (endTimeStr != null) {
@@ -34,17 +35,27 @@ class SmartAlertCard extends StatelessWidget {
     // "kvar" alone doesn't say remaining until WHAT -- this is the disruption's
     // own expected end, not a deadline to act by, and a driver reading "46 min
     // kvar" could easily assume the latter. Say explicitly what's ending.
+    // Ended items (is_active == false, kept around for the last-24h view) show
+    // when they actually ended instead of a vague "should have stopped" guess.
     String timeLeft = 'Okänt hur länge det pågår';
     if (endTime != null) {
-      final diff = endTime.difference(DateTime.now());
-      if (diff.isNegative) {
-        timeLeft = 'Störningen bör ha upphört';
-      } else if (diff.inMinutes < 60) {
-        timeLeft = 'Pågår i ${diff.inMinutes} min till';
-      } else if (diff.inHours < 24) {
-        timeLeft = 'Pågår i ${diff.inHours} tim ${diff.inMinutes % 60} min till';
+      if (!isActive) {
+        final local = endTime.toLocal();
+        final hh = local.hour.toString().padLeft(2, '0');
+        final mm = local.minute.toString().padLeft(2, '0');
+        timeLeft = 'Avslutades $hh:$mm';
       } else {
-        timeLeft = 'Pågår i ${diff.inDays} dagar till';
+        final diff = endTime.difference(DateTime.now());
+        if (diff.isNegative) {
+          timeLeft = 'Störningen bör ha upphört';
+        } else if (diff.inMinutes < 60) {
+          timeLeft = 'Pågår i ${diff.inMinutes} min till';
+        } else if (diff.inHours < 24) {
+          timeLeft =
+              'Pågår i ${diff.inHours} tim ${diff.inMinutes % 60} min till';
+        } else {
+          timeLeft = 'Pågår i ${diff.inDays} dagar till';
+        }
       }
     }
 
@@ -54,8 +65,14 @@ class SmartAlertCard extends StatelessWidget {
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      elevation: 1,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: isActive ? 1 : 0,
+      color: isActive ? null : Colors.grey.shade50,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+        side: isActive
+            ? BorderSide.none
+            : BorderSide(color: Colors.grey.shade300),
+      ),
       child: InkWell(
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),

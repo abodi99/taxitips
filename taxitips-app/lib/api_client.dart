@@ -703,11 +703,13 @@ class ApiClient {
           'summary': m['summary'],
           'lat': m['lat'],
           'lon': m['lon'],
+          'start_time': m['start_time'],
           'end_time': m['end_time'],
           'demand_score': m['demand_score'],
           'reasons': m['reasons'] ?? [],
           'distance_km': m['distance_km'],
           'worth_it_score': m['worth_it_score'],
+          'is_active': m['is_active'] ?? true,
           'kind': m['kind'],
           'mode': m['mode'],
           'severity_tier': m['severity_tier'],
@@ -721,8 +723,9 @@ class ApiClient {
         };
         alert['id'] ??= m['id'];
 
-        // The RPC 'get_smart_alerts' already filters for end_time > NOW(),
-        // so we can safely consider all returned alerts as active.
+        // The RPC now includes the last 24h, not just currently-active
+        // disruptions (is_active tells the two apart), so a driver can still
+        // see "what happened last night" after the fact.
         active.add(alert);
         week.add(alert);
         all.add(alert);

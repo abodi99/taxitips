@@ -206,6 +206,11 @@ class _DriverScreenState extends State<DriverScreen> {
 
   void _sortSignals(List<Map<String, dynamic>> list) {
     list.sort((a, b) {
+      // Active disruptions always rank above yesterday's ended ones,
+      // regardless of score -- "what to act on now" beats "what happened".
+      final aActive = a['is_active'] != false;
+      final bActive = b['is_active'] != false;
+      if (aActive != bActive) return aActive ? -1 : 1;
       final ra = _rank((a['taxi'] as Map?)?['level']);
       final rb = _rank((b['taxi'] as Map?)?['level']);
       if (rb != ra) return rb.compareTo(ra);
@@ -237,6 +242,17 @@ class _DriverScreenState extends State<DriverScreen> {
     }
     return list;
   }
+
+  // _trafficSignalsVisible is sorted active-first (see _sortSignals) but is
+  // one flat list -- split it for display so "Nu — kör hit" only ever shows
+  // things worth driving to right now, and yesterday's already-ended
+  // disruptions get their own clearly-labeled "Senaste dygnet" section
+  // instead of silently blending into the actionable list.
+  List<Map<String, dynamic>> get _activeSignalsVisible =>
+      _trafficSignalsVisible.where((a) => a['is_active'] != false).toList();
+
+  List<Map<String, dynamic>> get _endedSignalsVisible =>
+      _trafficSignalsVisible.where((a) => a['is_active'] == false).toList();
 
   List<Map<String, dynamic>> get _weekSignals {
     var list = _sourceFilterList(_geoFilter(_rawWeek));
@@ -491,6 +507,11 @@ class _DriverScreenState extends State<DriverScreen> {
   String _placeName(Map<String, dynamic> a) {
     final places = ((a['taxi'] as Map?)?['places'] as List?) ?? [];
     if (places.isNotEmpty) return places.first.toString();
+    // Real opportunities never carry taxi.places (that's a legacy events-era
+    // field) -- fall back to the actual title rather than a hardcoded "Skåne"
+    // that told the driver nothing about which disruption they'd tapped.
+    final title = a['title']?.toString().trim();
+    if (title != null && title.isNotEmpty) return title;
     return 'Skåne';
   }
 
@@ -563,6 +584,27 @@ class _DriverScreenState extends State<DriverScreen> {
   }
 
 
+  /// Local date+time for the detail sheet's header row, e.g. "2 sep 22:16" for
+  /// a different day or just "22:16" for today -- a driver scanning the sheet
+  /// needs to place the disruption in time at a glance, not just see "Pågår i
+  /// X min till" on the list card.
+  String _dateTimeLabel(String? iso) {
+    if (iso == null) return '—';
+    final dt = DateTime.tryParse(iso)?.toLocal();
+    if (dt == null) return '—';
+    final now = DateTime.now();
+    final time =
+        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
+      return time;
+    }
+    const months = [
+      'jan', 'feb', 'mar', 'apr', 'maj', 'jun',
+      'jul', 'aug', 'sep', 'okt', 'nov', 'dec',
+    ];
+    return '${dt.day} ${months[dt.month - 1]} $time';
+  }
+
   List<String> _detailLines(Map<String, dynamic> a) {
     final lines = <String>[];
     final desc = a['description']?.toString().trim();
@@ -611,7 +653,9 @@ class _DriverScreenState extends State<DriverScreen> {
                     ),
                   ),
                   Text(
-                    a['sourceKind'] == 'road' ? 'VÄG' : 'KOLLEKTIV',
+                    (a['kind'] ?? a['sourceKind']) == 'road'
+                        ? 'VÄG'
+                        : 'KOLLEKTIV',
                     style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w900,
@@ -627,6 +671,32 @@ class _DriverScreenState extends State<DriverScreen> {
                       fontWeight: FontWeight.w900,
                       height: 1.1,
                     ),
+                  ),
+                  const SizedBox(height: 10),
+                  // Stat row: date/time + score up front so a driver scanning
+                  // the sheet can place it in time and judge it at a glance,
+                  // without scrolling into "Varför visas detta?" for either.
+                  Row(
+                    children: [
+                      _DetailStat(
+                        icon: Icons.schedule,
+                        label: a['is_active'] == false
+                            ? '${_dateTimeLabel(a['start_time']?.toString())} → ${_dateTimeLabel(a['end_time']?.toString())}'
+                            : _dateTimeLabel(a['start_time']?.toString()),
+                      ),
+                      const SizedBox(width: 8),
+                      _DetailStat(
+                        icon: Icons.speed,
+                        label: '${(a['demand_score'] as num?)?.round() ?? '—'}/100',
+                      ),
+                      if (a['is_active'] == false) ...[
+                        const SizedBox(width: 8),
+                        const _DetailStat(
+                          icon: Icons.history,
+                          label: 'Avslutad',
+                        ),
+                      ],
+                    ],
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -1087,13 +1157,25 @@ class _DriverScreenState extends State<DriverScreen> {
                                 ),
                                 children: [
                                   if (_trafficSignalsVisible.isNotEmpty) ...[
-                                    const _SectionTitle('Nu — kör hit'),
-                                    for (final a in _trafficSignalsVisible) ...[
-                                      SmartAlertCard(
-                                        alert: a,
-                                        onTap: () => _openAlertDetail(a),
-                                      ),
-                                      const SizedBox(height: 10),
+                                    if (_activeSignalsVisible.isNotEmpty) ...[
+                                      const _SectionTitle('Nu — kör hit'),
+                                      for (final a in _activeSignalsVisible) ...[
+                                        SmartAlertCard(
+                                          alert: a,
+                                          onTap: () => _openAlertDetail(a),
+                                        ),
+                                        const SizedBox(height: 10),
+                                      ],
+                                    ],
+                                    if (_endedSignalsVisible.isNotEmpty) ...[
+                                      const _SectionTitle('Senaste dygnet'),
+                                      for (final a in _endedSignalsVisible) ...[
+                                        SmartAlertCard(
+                                          alert: a,
+                                          onTap: () => _openAlertDetail(a),
+                                        ),
+                                        const SizedBox(height: 10),
+                                      ],
                                     ],
                                     if (_trafficSignals.length >
                                         _trafficSignalsVisible.length)
@@ -1275,10 +1357,8 @@ class _ExplainSectionState extends State<_ExplainSection> {
             label: 'Säkerhet',
             value: confidenceLabels[confidence] ?? confidence ?? 'Okänd',
           ),
-          _ExplainRow(
-            label: 'Poäng',
-            value: '${opp['demand_score'] ?? '—'} / 100',
-          ),
+          // Poäng flyttat till header-raden ovan -- ingen anledning att visa
+          // samma siffra två gånger i samma blad.
           if (opp['expired_reason'] != null)
             _ExplainRow(
               label: 'Status',
@@ -1376,6 +1456,41 @@ String _weatherSummary(Map? raw) {
   return bits.isEmpty
       ? '${where}inga varningsvärda förhållanden'
       : '$where${bits.join(', ')}';
+}
+
+/// Compact icon+label chip for the detail sheet's header stat row (date/time,
+/// score, active/ended) -- deliberately small and un-colored so it reads as
+/// metadata, not another badge competing with the likelihood pill above it.
+class _DetailStat extends StatelessWidget {
+  const _DetailStat({required this.icon, required this.label});
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade100,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 13, color: Colors.grey.shade700),
+          const SizedBox(width: 4),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: Colors.grey.shade800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _ExplainRow extends StatelessWidget {
