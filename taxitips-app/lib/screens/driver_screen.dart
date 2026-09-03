@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:convert';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -622,6 +621,32 @@ class _DriverScreenState extends State<DriverScreen> {
     return lines;
   }
 
+  // Where the data comes from used to be shown directly on every card/detail
+  // sheet (raw source names, a "Visa rådata" JSON dump) -- that's internal
+  // plumbing a driver deciding whether to drive somewhere doesn't need, and it
+  // made the app read like a debug tool. Tucked behind an info button instead:
+  // still discoverable, never in the way.
+  Future<void> _openDataInfo(BuildContext context) async {
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Om datan'),
+        content: const Text(
+          'Taxi Tips bygger på officiell trafik- och väderinformation för '
+          'Skåne. Varje förslag räknas fram automatiskt utifrån aktuella '
+          'störningar i tåg- och busstrafiken, vägtrafiken och vädret.',
+          style: TextStyle(height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Stäng'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Future<void> _openAlertDetail(Map<String, dynamic> a) async {
     final lines = _detailLines(a);
     final url = a['url']?.toString();
@@ -822,10 +847,20 @@ class _DriverScreenState extends State<DriverScreen> {
                     // refresh both moved down next to the list they actually
                     // affect (see _filterSummary row below) instead of living
                     // here -- neither is identity/global-app chrome, they're
-                    // both list controls.
+                    // both list controls. A soft shadow gives it depth against
+                    // the flat sand background below instead of a hard edge.
                     Container(
-                      color: TbColors.asphalt,
-                      padding: const EdgeInsets.fromLTRB(4, 6, 4, 10),
+                      decoration: const BoxDecoration(
+                        color: TbColors.asphalt,
+                        boxShadow: [
+                          BoxShadow(
+                            color: Color(0x33000000),
+                            blurRadius: 8,
+                            offset: Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
                       child: Row(
                         children: [
                           if (widget.onBack != null)
@@ -837,13 +872,14 @@ class _DriverScreenState extends State<DriverScreen> {
                               ),
                             )
                           else
-                            const SizedBox(width: 12),
+                            const SizedBox(width: 8),
                           const Text(
                             'Taxi Tips',
                             style: TextStyle(
-                              fontSize: 20,
+                              fontSize: 21,
                               fontWeight: FontWeight.w900,
                               color: TbColors.foam,
+                              letterSpacing: -0.2,
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -853,6 +889,19 @@ class _DriverScreenState extends State<DriverScreen> {
                             time: _clock(_data?['updatedAt']),
                           ),
                           const Spacer(),
+                          IconButton(
+                            tooltip: 'Om datan',
+                            onPressed: () => _openDataInfo(context),
+                            icon: const Icon(
+                              Icons.info_outline,
+                              color: TbColors.foam,
+                            ),
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.white.withValues(
+                                alpha: 0.08,
+                              ),
+                            ),
+                          ),
                           if (widget.onOpenSettings != null)
                             IconButton(
                               tooltip: 'Inställningar',
@@ -860,6 +909,11 @@ class _DriverScreenState extends State<DriverScreen> {
                               icon: const Icon(
                                 Icons.settings_outlined,
                                 color: TbColors.foam,
+                              ),
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.white.withValues(
+                                  alpha: 0.08,
+                                ),
                               ),
                             ),
                         ],
@@ -1270,7 +1324,6 @@ class _ExplainSection extends StatefulWidget {
 
 class _ExplainSectionState extends State<_ExplainSection> {
   bool _loading = true;
-  bool _showRaw = false;
   Map<String, dynamic>? _detail;
   String? _error;
 
@@ -1364,73 +1417,34 @@ class _ExplainSectionState extends State<_ExplainSection> {
               label: 'Status',
               value: opp['expired_reason'].toString(),
             ),
+          // The underlying source (Trafiklab/Trafikverket/SMHI) and raw API
+          // payload used to be shown here directly -- that's internal
+          // plumbing, not something a driver deciding whether to drive
+          // somewhere needs to see. Only the plain-language description
+          // survives, folded into the assessment above; where the data comes
+          // from lives behind the top bar's info button instead.
           if (sourceEvents.isNotEmpty) ...[
             const SizedBox(height: 8),
-            Text(
-              'Källa',
-              style: TextStyle(
-                fontWeight: FontWeight.w800,
-                color: Colors.grey.shade800,
-                fontSize: 13,
-              ),
-            ),
-            for (final se in sourceEvents.cast<Map>()) ...[
-              const SizedBox(height: 4),
-              Text(
-                switch (se['source']) {
-                  'trafiklab' => 'Trafiklab',
-                  'trafikverket' => 'Trafikverket',
-                  'smhi' => 'SMHI (väder)',
-                  _ => se['source']?.toString() ?? '—',
-                },
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
+            for (final se in sourceEvents.cast<Map>())
+              if (_sourceDescription(se) case final desc? when desc.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Text(
+                    desc,
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+                  ),
                 ),
-              ),
-              Text(
-                se['source'] == 'smhi'
-                    ? _weatherSummary(se['raw'] as Map?)
-                    : ((se['raw'] as Map?)?['description']?.toString() ??
-                          (se['raw'] as Map?)?['header']?.toString() ??
-                          '—'),
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-              ),
-            ],
           ],
-          const SizedBox(height: 6),
-          TextButton(
-            onPressed: () => setState(() => _showRaw = !_showRaw),
-            style: TextButton.styleFrom(
-              padding: EdgeInsets.zero,
-              minimumSize: Size.zero,
-            ),
-            child: Text(
-              _showRaw ? 'Dölj rådata' : 'Visa rådata',
-              style: const TextStyle(fontSize: 12),
-            ),
-          ),
-          if (_showRaw)
-            Container(
-              margin: const EdgeInsets.only(top: 6),
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.black87,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: SelectableText(
-                const JsonEncoder.withIndent('  ').convert(sourceEvents),
-                style: const TextStyle(
-                  fontSize: 10,
-                  color: Colors.white,
-                  fontFamily: 'monospace',
-                ),
-              ),
-            ),
         ],
       ),
     );
   }
+}
+
+String? _sourceDescription(Map se) {
+  if (se['source'] == 'smhi') return _weatherSummary(se['raw'] as Map?);
+  final raw = se['raw'] as Map?;
+  return raw?['description']?.toString() ?? raw?['header']?.toString();
 }
 
 /// SMHI's raw fields (see worker/src/smhi.js summarize()) aren't prose like
