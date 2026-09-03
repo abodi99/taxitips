@@ -63,7 +63,11 @@ async function gtfsRefreshLoop({ skipIfFresh } = {}) {
         }
       }
     }
-    const result = await ingestGtfsStatic(client, process.env.TRAFIKLAB_API_KEY, GTFS_OPERATOR);
+    // GTFS Regional (static schedules) and GTFS-RT (realtime alerts, used by
+    // poller.js) are separate Trafiklab API products with independent
+    // subscriptions/keys -- confirmed the hard way via a 403 "Key does not
+    // have access to file" when this first tried reusing TRAFIKLAB_API_KEY.
+    const result = await ingestGtfsStatic(client, process.env.GTFS_STATIC_API_KEY, GTFS_OPERATOR);
     if (!result.skipped) {
       console.log(
         `[gtfs-static] ingested ${GTFS_OPERATOR}: stops=${result.stopCount} trips=${result.tripCount} departures=${result.departureCount} exceptions=${result.exceptionCount}`
