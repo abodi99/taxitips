@@ -1,17 +1,23 @@
 /**
  * GTFS-static schedule ingestion (Trafiklab GTFS Regional, Skåne operator scope).
  *
- * This closes the exact gap scoring.js's own header comment names: without a
- * real timetable, "single cancelled departure" vs "whole line paused" can only
- * be guessed from the alert's own wording. This feed gives the real answer --
- * when's the next scheduled departure at the affected stop, and is tonight's
- * service already over.
+ * Originally built to close a gap in scoring.js: without a real timetable,
+ * "single cancelled departure" vs "whole line paused" can only be guessed
+ * from the alert's own wording. That's still true, but this feed alone can't
+ * fix it -- verified against real ingested data that GTFS-RT alerts' stop_ids
+ * (Skånetrafiken's own short numbers) don't match this static feed's
+ * NOPTIS-format stop_ids, with no public mapping between the two (confirmed
+ * via Trafiklab's own support docs). See nextDeparture()'s comment for the
+ * detail. The ingestion machinery below is real, tested, and kept -- e.g.
+ * route_type here is more reliable than mode.js's keyword guessing, and it's
+ * available if a stop-id bridge ever surfaces -- but nothing currently reads
+ * gtfs_stop_departures for scoring.
  *
  * Quota is tiny (Bronze 50/month, Silver 250/month per Trafiklab's published
  * limits) -- this must be fetched at most once or twice a day, NEVER per-alert
  * or per-request. See index.js's startup guard for how that's enforced.
  *
- * Only 6 of GTFS's files are parsed -- stops/trips/stop_times/calendar/
+ * Only 7 of GTFS's files are parsed -- stops/trips/stop_times/calendar/
  * calendar_dates/routes -- everything else in the zip (shapes, frequencies,
  * transfers, fares) is irrelevant to "next departure at stop X" and is
  * skipped without error, so the zip can gain new optional files over time
@@ -311,6 +317,17 @@ async function candidateDepartures(client, feedVersionId, stopId, minSeconds, ma
 }
 
 /**
+ * NOT CURRENTLY CALLED FROM ANYWHERE -- kept because the logic is correct and
+ * tested, but it's unusable against real data today: verified against a real
+ * ingest that GTFS-RT alert stop_ids (Skånetrafiken's own short numbers, e.g.
+ * "26515") do not match this static feed's NOPTIS-format stop_id
+ * (e.g. "9022012093032001"), and stop_code (GTFS's usual bridge field for
+ * exactly this case) is empty for every stop in this feed. Trafiklab's own
+ * support team confirmed no public mapping table between the two id spaces
+ * exists (https://support.trafiklab.se -- "Stoppställenummer i GTFS Regional
+ * och GTFS Sverige 2"; they were only "investigating" building one). Revisit
+ * if Trafiklab or Skånetrafiken ever publishes that mapping.
+ *
  * Find the next scheduled departure at stopId after afterTimestamp (a real
  * Date/instant). Checks two candidate service dates -- today and yesterday,
  * by local calendar date -- because a late-night trip (e.g. departing 00:40)
