@@ -63,6 +63,8 @@ async function gtfsRefreshLoop({ skipIfFresh } = {}) {
         }
       }
     }
+    const keyDiag = process.env.TRAFIKLAB_API_KEY;
+    console.log(`[gtfs-static] DEBUG key type=${typeof keyDiag} length=${keyDiag ? keyDiag.length : 0} isMockLiteral=${keyDiag === "mock"}`);
     const result = await ingestGtfsStatic(client, process.env.TRAFIKLAB_API_KEY, GTFS_OPERATOR);
     if (!result.skipped) {
       console.log(
