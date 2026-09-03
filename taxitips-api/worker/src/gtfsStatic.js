@@ -125,6 +125,20 @@ function buildStopDepartures({ trips, stopTimes, calendar, routes }) {
   return rows;
 }
 
+// stop_code is GTFS's field for "the identifier riders/other systems see" as
+// opposed to stop_id (the feed's own internal key) -- stored specifically to
+// test/bridge the mismatch between GTFS-RT alert stop_ids (Skånetrafiken's
+// own short "hållplats" numbers) and this static feed's stop_id format
+// (Samtrafiken's national VDV-style stop-point IDs).
+function buildStops({ stops }) {
+  return (stops || []).map((row) => ({
+    stop_id: row.stop_id,
+    stop_code: row.stop_code || null,
+    stop_name: row.stop_name || null,
+    parent_station: row.parent_station || null,
+  }));
+}
+
 function buildServiceExceptions({ calendarDates }) {
   return (calendarDates || [])
     .map((row) => ({
@@ -164,6 +178,7 @@ async function ingestGtfsStatic(client, apiKey, operator) {
     routes: files["routes.txt"],
   });
   const exceptions = buildServiceExceptions({ calendarDates: files["calendar_dates.txt"] || [] });
+  const stops = buildStops({ stops: files["stops.txt"] });
 
   const { data: versionRow, error: versionErr } = await client
     .from("gtfs_feed_versions")
@@ -183,6 +198,9 @@ async function ingestGtfsStatic(client, apiKey, operator) {
     operator,
   });
   await insertInBatches(client, "gtfs_service_exceptions", exceptions, {
+    feed_version_id: versionRow.id,
+  });
+  await insertInBatches(client, "gtfs_stops", stops, {
     feed_version_id: versionRow.id,
   });
 
@@ -388,5 +406,6 @@ module.exports = {
   remainingDeparturesToday,
   buildStopDepartures,
   buildServiceExceptions,
+  buildStops,
   ingestGtfsStatic,
 };
