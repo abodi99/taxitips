@@ -82,6 +82,10 @@ app.listen(PORT, () => {
   console.log(`[taxitips-worker] listening on :${PORT}`);
   loop();
   setInterval(loop, INTERVAL);
-  gtfsRefreshLoop({ skipIfFresh: true });
+  // TEMPORARY: forcing skipIfFresh:false once to verify the new stops.txt
+  // ingestion (gtfs_stops/stop_code) against real data without waiting out
+  // the normal 20h freshness guard. Revert to skipIfFresh: true before this
+  // becomes the long-term deployed behavior.
+  gtfsRefreshLoop({ skipIfFresh: false });
   setInterval(() => gtfsRefreshLoop({ skipIfFresh: false }), GTFS_REFRESH_INTERVAL);
 });
