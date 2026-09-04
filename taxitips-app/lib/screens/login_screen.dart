@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../api_client.dart';
 import '../theme.dart';
@@ -10,6 +11,7 @@ class LoginScreen extends StatefulWidget {
     required this.onLoggedIn,
     required this.onSignup,
     required this.onJoinPhone,
+    required this.onBack,
     this.onDemo,
   });
 
@@ -17,6 +19,7 @@ class LoginScreen extends StatefulWidget {
   final VoidCallback onLoggedIn;
   final VoidCallback onSignup;
   final VoidCallback onJoinPhone;
+  final VoidCallback onBack;
   final VoidCallback? onDemo;
 
   @override
@@ -24,6 +27,19 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  static const _prefillEnabled = bool.fromEnvironment(
+    'ENABLE_TEST_LOGIN',
+    defaultValue: true,
+  );
+  static const _prefillEmail = String.fromEnvironment(
+    'PREFILL_EMAIL',
+    defaultValue: 'test@taxitips.se',
+  );
+  static const _prefillPassword = String.fromEnvironment(
+    'PREFILL_PASSWORD',
+    defaultValue: 'TaxiTips123!',
+  );
+
   final _email = TextEditingController();
   final _password = TextEditingController();
   String? _error;
@@ -37,18 +53,12 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _prefill() async {
-    final saved = await widget.api.loadSavedCredentials();
-    final dev = await widget.api.loadDevTestLogin();
-    const defEmail = String.fromEnvironment('PREFILL_EMAIL', defaultValue: '');
-    const defPass = String.fromEnvironment('PREFILL_PASSWORD', defaultValue: '');
     if (!mounted) return;
     setState(() {
-      _email.text = saved.email?.isNotEmpty == true
-          ? saved.email!
-          : (dev.email ?? (defEmail.isNotEmpty ? defEmail : ''));
-      _password.text = saved.password?.isNotEmpty == true
-          ? saved.password!
-          : (dev.password ?? (defPass.isNotEmpty ? defPass : ''));
+      if (_prefillEnabled) {
+        _email.text = _prefillEmail;
+        _password.text = _prefillPassword;
+      }
       _ready = true;
     });
   }
@@ -61,15 +71,43 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submit() async {
+    final email = _email.text.trim();
+    final password = _password.text;
+    if (email.isEmpty || password.isEmpty) {
+      setState(() => _error = 'Fyll i e-post och lösenord först.');
+      return;
+    }
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      await widget.api.login(email: _email.text.trim(), password: _password.text);
+      await widget.api.login(email: email, password: password);
       widget.onLoggedIn();
     } catch (e) {
       setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _oauth(String provider) async {
+    setState(() {
+      _busy = true;
+      _error = null;
+    });
+    try {
+      final ok = provider == 'google'
+          ? await widget.api.signInWithGoogle()
+          : await widget.api.signInWithApple();
+      if (!ok && mounted) {
+        setState(
+          () => _error =
+              'Kunde inte starta ${provider == 'google' ? 'Google' : 'Apple'}-inloggningen.',
+        );
+      }
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -85,6 +123,14 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     return Scaffold(
       backgroundColor: TbColors.asphalt,
+      appBar: AppBar(
+        backgroundColor: TbColors.asphalt,
+        leading: IconButton(
+          tooltip: 'Tillbaka',
+          onPressed: widget.onBack,
+          icon: const Icon(Icons.arrow_back),
+        ),
+      ),
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
@@ -94,11 +140,11 @@ class _LoginScreenState extends State<LoginScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Image(
-                    image: AssetImage('assets/brand/splash_wordmark.png'),
-                    height: 72,
+                  SvgPicture.asset(
+                    'assets/brand/logo-on-dark.svg',
+                    width: 320,
+                    height: 74,
                     fit: BoxFit.contain,
-                    filterQuality: FilterQuality.high,
                   ),
                   const SizedBox(height: 8),
                   const Text(
@@ -116,23 +162,39 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Text('Kontor', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+                        const Text(
+                          'Kontor',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 18,
+                          ),
+                        ),
                         const SizedBox(height: 14),
                         TextField(
                           controller: _email,
-                          decoration: const InputDecoration(labelText: 'E-post'),
+                          decoration: const InputDecoration(
+                            labelText: 'E-post',
+                          ),
                           keyboardType: TextInputType.emailAddress,
                         ),
                         const SizedBox(height: 12),
                         TextField(
                           controller: _password,
-                          decoration: const InputDecoration(labelText: 'Lösenord'),
+                          decoration: const InputDecoration(
+                            labelText: 'Lösenord',
+                          ),
                           obscureText: true,
                           onSubmitted: (_) => _submit(),
                         ),
                         if (_error != null) ...[
                           const SizedBox(height: 12),
-                          Text(_error!, style: const TextStyle(color: TbColors.danger, fontWeight: FontWeight.w600)),
+                          Text(
+                            _error!,
+                            style: const TextStyle(
+                              color: TbColors.danger,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
                         ],
                         const SizedBox(height: 18),
                         FilledButton(
@@ -142,6 +204,45 @@ class _LoginScreenState extends State<LoginScreen> {
                         TextButton(
                           onPressed: widget.onSignup,
                           child: const Text('Skapa företagskonto'),
+                        ),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: [
+                            const Expanded(child: Divider()),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                              ),
+                              child: Text(
+                                'eller',
+                                style: TextStyle(
+                                  color: Colors.grey.shade600,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ),
+                            const Expanded(child: Divider()),
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                          onPressed: _busy ? null : () => _oauth('google'),
+                          icon: const Icon(Icons.g_mobiledata, size: 22),
+                          label: const Text('Fortsätt med Google'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: TbColors.ink,
+                            minimumSize: const Size.fromHeight(48),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        OutlinedButton.icon(
+                          onPressed: _busy ? null : () => _oauth('apple'),
+                          icon: const Icon(Icons.apple, size: 22),
+                          label: const Text('Fortsätt med Apple'),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: TbColors.ink,
+                            minimumSize: const Size.fromHeight(48),
+                          ),
                         ),
                       ],
                     ),
@@ -163,7 +264,10 @@ class _LoginScreenState extends State<LoginScreen> {
                       onPressed: widget.onDemo,
                       child: const Text(
                         'Prova förardemo (utan login)',
-                        style: TextStyle(color: TbColors.foam, fontWeight: FontWeight.w700),
+                        style: TextStyle(
+                          color: TbColors.foam,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ],

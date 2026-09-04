@@ -36,14 +36,13 @@ class SmartAlertCard extends StatelessWidget {
     // own expected end, not a deadline to act by, and a driver reading "46 min
     // kvar" could easily assume the latter. Say explicitly what's ending.
     // Ended items (is_active == false, kept around for the last-24h view) show
-    // when they actually ended instead of a vague "should have stopped" guess.
+    // when they actually ended, WITH the date -- a bare "19:20" on a
+    // yesterday-vs-today list is ambiguous, and dateTimeLabel already only
+    // adds the date when it isn't today.
     String timeLeft = 'Okänt hur länge det pågår';
     if (endTime != null) {
       if (!isActive) {
-        final local = endTime.toLocal();
-        final hh = local.hour.toString().padLeft(2, '0');
-        final mm = local.minute.toString().padLeft(2, '0');
-        timeLeft = 'Avslutades $hh:$mm';
+        timeLeft = 'Avslutades ${dateTimeLabel(endTimeStr.toString())}';
       } else {
         final diff = endTime.difference(DateTime.now());
         if (diff.isNegative) {

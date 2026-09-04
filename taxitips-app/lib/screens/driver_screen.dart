@@ -514,15 +514,16 @@ class _DriverScreenState extends State<DriverScreen> {
     return 'Skåne';
   }
 
+  // 'header'/'taxi.driverHint' were legacy events-era fields never populated
+  // on real opportunities (get_smart_alerts never returns them) -- this always
+  // fell through to a generic placeholder instead of the actual, specific
+  // description that's right there in a['summary'] and already shown on the
+  // card the driver just tapped. Showing that same real text here, not a
+  // vaguer restatement, is what makes the sheet worth opening.
   String _hint(Map<String, dynamic> a) {
-    final taxiRaw = a['taxi'];
-    final taxi = taxiRaw is Map
-        ? Map<String, dynamic>.from(taxiRaw)
-        : <String, dynamic>{};
-    final hint = taxi['driverHint']?.toString().trim();
-    if (hint != null && hint.isNotEmpty) return hint;
-    final header = a['header']?.toString().trim() ?? '';
-    return header.isEmpty ? 'Störning i kollektivtrafiken' : header;
+    final summary = a['summary']?.toString().trim();
+    if (summary != null && summary.isNotEmpty) return summary;
+    return 'Ingen ytterligare beskrivning tillgänglig.';
   }
 
   List<Map<String, dynamic>> get _places {
@@ -583,72 +584,7 @@ class _DriverScreenState extends State<DriverScreen> {
   }
 
 
-  /// Local date+time for the detail sheet's header row, e.g. "2 sep 22:16" for
-  /// a different day or just "22:16" for today -- a driver scanning the sheet
-  /// needs to place the disruption in time at a glance, not just see "Pågår i
-  /// X min till" on the list card.
-  String _dateTimeLabel(String? iso) {
-    if (iso == null) return '—';
-    final dt = DateTime.tryParse(iso)?.toLocal();
-    if (dt == null) return '—';
-    final now = DateTime.now();
-    final time =
-        '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
-      return time;
-    }
-    const months = [
-      'jan', 'feb', 'mar', 'apr', 'maj', 'jun',
-      'jul', 'aug', 'sep', 'okt', 'nov', 'dec',
-    ];
-    return '${dt.day} ${months[dt.month - 1]} $time';
-  }
-
-  List<String> _detailLines(Map<String, dynamic> a) {
-    final lines = <String>[];
-    final desc = a['description']?.toString().trim();
-    final header = a['header']?.toString().trim();
-    final hint = (a['taxi'] as Map?)?['driverHint']?.toString().trim();
-    if (desc != null && desc.isNotEmpty) {
-      lines.add(desc);
-    } else if (header != null && header.isNotEmpty && header != hint) {
-      lines.add(header);
-    }
-    final effect = a['effect']?.toString();
-    final cause = a['cause']?.toString();
-    if (effect != null && effect.isNotEmpty) lines.add('Effekt: $effect');
-    if (cause != null && cause.isNotEmpty) lines.add('Orsak: $cause');
-    return lines;
-  }
-
-  // Where the data comes from used to be shown directly on every card/detail
-  // sheet (raw source names, a "Visa rådata" JSON dump) -- that's internal
-  // plumbing a driver deciding whether to drive somewhere doesn't need, and it
-  // made the app read like a debug tool. Tucked behind an info button instead:
-  // still discoverable, never in the way.
-  Future<void> _openDataInfo(BuildContext context) async {
-    await showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Om datan'),
-        content: const Text(
-          'Taxi Tips bygger på officiell trafik- och väderinformation för '
-          'Skåne. Varje förslag räknas fram automatiskt utifrån aktuella '
-          'störningar i tåg- och busstrafiken, vägtrafiken och vädret.',
-          style: TextStyle(height: 1.4),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Stäng'),
-          ),
-        ],
-      ),
-    );
-  }
-
   Future<void> _openAlertDetail(Map<String, dynamic> a) async {
-    final lines = _detailLines(a);
     final url = a['url']?.toString();
     await showModalBottomSheet<void>(
       context: context,
@@ -706,8 +642,8 @@ class _DriverScreenState extends State<DriverScreen> {
                       _DetailStat(
                         icon: Icons.schedule,
                         label: a['is_active'] == false
-                            ? '${_dateTimeLabel(a['start_time']?.toString())} → ${_dateTimeLabel(a['end_time']?.toString())}'
-                            : _dateTimeLabel(a['start_time']?.toString()),
+                            ? '${dateTimeLabel(a['start_time']?.toString())} → ${dateTimeLabel(a['end_time']?.toString())}'
+                            : dateTimeLabel(a['start_time']?.toString()),
                       ),
                       const SizedBox(width: 8),
                       _DetailStat(
@@ -723,38 +659,21 @@ class _DriverScreenState extends State<DriverScreen> {
                       ],
                     ],
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 10),
+                  // This is the real, specific description (the same text
+                  // shown on the card the driver just tapped) -- sized and
+                  // spaced to read at a glance from a driver's seat: large
+                  // enough, generous line height, high-contrast ink instead
+                  // of a lighter grey.
                   Text(
                     _hint(a),
                     style: const TextStyle(
-                      fontSize: 17,
-                      height: 1.35,
+                      fontSize: 18,
+                      height: 1.45,
                       fontWeight: FontWeight.w600,
+                      color: TbColors.ink,
                     ),
                   ),
-                  if (lines.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Text(
-                      'Mer info',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w900,
-                        color: Colors.grey.shade800,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    for (final line in lines)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Text(
-                          line,
-                          style: TextStyle(
-                            fontSize: 15,
-                            height: 1.4,
-                            color: Colors.grey.shade800,
-                          ),
-                        ),
-                      ),
-                  ],
                   if (url != null && url.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     SizedBox(
@@ -889,19 +808,6 @@ class _DriverScreenState extends State<DriverScreen> {
                             time: _clock(_data?['updatedAt']),
                           ),
                           const Spacer(),
-                          IconButton(
-                            tooltip: 'Om datan',
-                            onPressed: () => _openDataInfo(context),
-                            icon: const Icon(
-                              Icons.info_outline,
-                              color: TbColors.foam,
-                            ),
-                            style: IconButton.styleFrom(
-                              backgroundColor: Colors.white.withValues(
-                                alpha: 0.08,
-                              ),
-                            ),
-                          ),
                           if (widget.onOpenSettings != null)
                             IconButton(
                               tooltip: 'Inställningar',
@@ -1420,31 +1326,25 @@ class _ExplainSectionState extends State<_ExplainSection> {
           // The underlying source (Trafiklab/Trafikverket/SMHI) and raw API
           // payload used to be shown here directly -- that's internal
           // plumbing, not something a driver deciding whether to drive
-          // somewhere needs to see. Only the plain-language description
-          // survives, folded into the assessment above; where the data comes
-          // from lives behind the top bar's info button instead.
-          if (sourceEvents.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            for (final se in sourceEvents.cast<Map>())
-              if (_sourceDescription(se) case final desc? when desc.isNotEmpty)
+          // somewhere needs to see. The transit/road description is already
+          // shown in full above (the sheet's main hint text), so only the
+          // weather summary survives here -- it's the one piece of context
+          // that isn't shown anywhere else when a weather bonus applied.
+          for (final se in sourceEvents.cast<Map>())
+            if (se['source'] == 'smhi')
+              if (_weatherSummary(se['raw'] as Map?) case final desc
+                  when desc != '—')
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 4),
+                  padding: const EdgeInsets.only(top: 8),
                   child: Text(
                     desc,
                     style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
                   ),
                 ),
-          ],
         ],
       ),
     );
   }
-}
-
-String? _sourceDescription(Map se) {
-  if (se['source'] == 'smhi') return _weatherSummary(se['raw'] as Map?);
-  final raw = se['raw'] as Map?;
-  return raw?['description']?.toString() ?? raw?['header']?.toString();
 }
 
 /// SMHI's raw fields (see worker/src/smhi.js summarize()) aren't prose like

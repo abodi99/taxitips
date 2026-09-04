@@ -1,17 +1,25 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api_client.dart';
 import '../theme.dart';
 
 class SignupScreen extends StatefulWidget {
-  const SignupScreen({super.key, required this.api, required this.onDone, required this.onLogin});
+  const SignupScreen({
+    super.key,
+    required this.api,
+    required this.onDone,
+    required this.onLogin,
+    this.onBack,
+  });
 
   final ApiClient api;
   final VoidCallback onDone;
   final VoidCallback onLogin;
+  final VoidCallback? onBack;
 
   @override
   State<SignupScreen> createState() => _SignupScreenState();
@@ -42,7 +50,10 @@ class _SignupScreenState extends State<SignupScreen> {
     final saved = await widget.api.loadSavedCredentials();
     final dev = await widget.api.loadDevTestLogin();
     const defEmail = String.fromEnvironment('PREFILL_EMAIL', defaultValue: '');
-    const defPass = String.fromEnvironment('PREFILL_PASSWORD', defaultValue: '');
+    const defPass = String.fromEnvironment(
+      'PREFILL_PASSWORD',
+      defaultValue: '',
+    );
     if (!mounted) return;
     setState(() {
       _email.text = saved.email?.isNotEmpty == true
@@ -63,7 +74,8 @@ class _SignupScreenState extends State<SignupScreen> {
           : (p['perDevice'] as num? ?? 99);
       if (!mounted) return;
       setState(() {
-        _priceHint = '$seats enhet${seats == 1 ? '' : 'er'} · $unit kr/enhet/mån · ${unit * seats} kr/mån via Stripe';
+        _priceHint =
+            '$seats enhet${seats == 1 ? '' : 'er'} · $unit kr/enhet/mån · ${unit * seats} kr/mån via Stripe';
       });
     } catch (_) {}
   }
@@ -76,7 +88,9 @@ class _SignupScreenState extends State<SignupScreen> {
   Future<void> _lookupOrg() async {
     final org = _org.text.trim();
     if (org.replaceAll(RegExp(r'\D'), '').length < 10) {
-      setState(() => _lookupHint = 'Ange org.nr eller personnummer (enskild firma)');
+      setState(
+        () => _lookupHint = 'Ange org.nr eller personnummer (enskild firma)',
+      );
       return;
     }
     setState(() => _lookupHint = 'Hämtar företagsinfo…');
@@ -84,7 +98,9 @@ class _SignupScreenState extends State<SignupScreen> {
       final data = await widget.api.lookupCompany(org);
       if (!mounted) return;
       if (data['valid'] != true) {
-        setState(() => _lookupHint = data['error']?.toString() ?? 'Ogiltigt org.nr');
+        setState(
+          () => _lookupHint = data['error']?.toString() ?? 'Ogiltigt org.nr',
+        );
         return;
       }
       if (data['found'] == true && data['name'] != null) {
@@ -96,17 +112,25 @@ class _SignupScreenState extends State<SignupScreen> {
         final bits = <String>[
           if (data['legalForm'] != null) data['legalForm'].toString(),
           if (addr is Map)
-            [addr['street'], addr['zip'], addr['city']].whereType<String>().where((s) => s.isNotEmpty).join(', '),
+            [
+              addr['street'],
+              addr['zip'],
+              addr['city'],
+            ].whereType<String>().where((s) => s.isNotEmpty).join(', '),
         ].where((s) => s.isNotEmpty);
         setState(() {
-          final kind = data['companyKind'] == 'enskild_firma' || data['idKind'] == 'person'
+          final kind =
+              data['companyKind'] == 'enskild_firma' ||
+                  data['idKind'] == 'person'
               ? 'enskild firma · '
               : '';
-          _lookupHint = 'Hittade: $kind${data['name']}${bits.isEmpty ? '' : ' · ${bits.join(' · ')}'} (${data['source']})';
+          _lookupHint =
+              'Hittade: $kind${data['name']}${bits.isEmpty ? '' : ' · ${bits.join(' · ')}'} (${data['source']})';
         });
       } else {
         setState(() {
-          _lookupHint = data['message']?.toString() ??
+          _lookupHint =
+              data['message']?.toString() ??
               (data['idKind'] == 'person'
                   ? 'Personnummer giltigt. Ingen registrerad enskild firma hittades — fyll i namn manuellt.'
                   : 'Org.nr giltigt. Fyll i företagsnamn om uppslag saknas.');
@@ -173,6 +197,16 @@ class _SignupScreenState extends State<SignupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: TbColors.navy,
+      appBar: widget.onBack == null
+          ? null
+          : AppBar(
+              backgroundColor: TbColors.navy,
+              leading: IconButton(
+                tooltip: 'Tillbaka',
+                onPressed: widget.onBack,
+                icon: const Icon(Icons.arrow_back),
+              ),
+            ),
       body: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 480),
@@ -184,13 +218,18 @@ class _SignupScreenState extends State<SignupScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Image(
-                    image: AssetImage('assets/brand/splash_mark.png'),
-                    height: 76,
+                  SvgPicture.asset(
+                    'assets/brand/logo-on-dark.svg',
+                    width: 320,
+                    height: 74,
                     fit: BoxFit.contain,
-                    filterQuality: FilterQuality.high,
                   ),
-                  Text('Skapa konto', style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w800)),
+                  Text(
+                    'Skapa konto',
+                    style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   const Text(
                     'Org.nr → företagsinfo. Sedan väljer du orter och kopplar telefoner.',
@@ -198,17 +237,24 @@ class _SignupScreenState extends State<SignupScreen> {
                   const SizedBox(height: 20),
                   TextField(
                     controller: _org,
-                    decoration: const InputDecoration(labelText: 'Organisationsnummer'),
+                    decoration: const InputDecoration(
+                      labelText: 'Organisationsnummer',
+                    ),
                     keyboardType: TextInputType.number,
                   ),
                   if (_lookupHint != null) ...[
                     const SizedBox(height: 6),
-                    Text(_lookupHint!, style: Theme.of(context).textTheme.bodySmall),
+                    Text(
+                      _lookupHint!,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ],
                   const SizedBox(height: 12),
                   TextField(
                     controller: _name,
-                    decoration: const InputDecoration(labelText: 'Företagsnamn'),
+                    decoration: const InputDecoration(
+                      labelText: 'Företagsnamn',
+                    ),
                     onChanged: (_) => _nameFromApi = false,
                   ),
                   const SizedBox(height: 12),
@@ -220,30 +266,45 @@ class _SignupScreenState extends State<SignupScreen> {
                   const SizedBox(height: 12),
                   TextField(
                     controller: _password,
-                    decoration: const InputDecoration(labelText: 'Lösenord (minst 6)'),
+                    decoration: const InputDecoration(
+                      labelText: 'Lösenord (minst 6)',
+                    ),
                     obscureText: true,
                   ),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _seats,
-                    decoration: const InputDecoration(labelText: 'Antal telefoner/enheter'),
+                    decoration: const InputDecoration(
+                      labelText: 'Antal telefoner/enheter',
+                    ),
                     keyboardType: TextInputType.number,
                     onChanged: (_) => _loadPricing(),
                   ),
                   if (_priceHint != null) ...[
                     const SizedBox(height: 8),
-                    Text(_priceHint!, style: Theme.of(context).textTheme.bodySmall),
+                    Text(
+                      _priceHint!,
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
                   ],
                   if (_error != null) ...[
                     const SizedBox(height: 12),
-                    Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                    Text(
+                      _error!,
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
                   ],
                   const SizedBox(height: 20),
                   FilledButton(
                     onPressed: _busy ? null : _submit,
                     child: Text(_busy ? 'Skapar…' : 'Skapa konto & betala'),
                   ),
-                  TextButton(onPressed: widget.onLogin, child: const Text('Har redan konto')),
+                  TextButton(
+                    onPressed: widget.onLogin,
+                    child: const Text('Har redan konto'),
+                  ),
                 ],
               ),
             ),

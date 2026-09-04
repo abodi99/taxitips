@@ -513,6 +513,44 @@ class ApiClient {
     return transferWithCode(transferCode: token);
   }
 
+  // Event types a driver can toggle notifications for, mirroring
+  // severity_tier so the labels match what's already shown on cards instead
+  // of introducing a second, inconsistent vocabulary. Kept client-side (no
+  // server catalog table) since this is a small, stable, hand-picked list --
+  // the same reasoning as severity_labels.dart's tier labels.
+  static const notifyTypeCatalog = [
+    {
+      'id': 'line_paused',
+      'label': 'Hela linjen står stilla',
+      'short': 'Ingen trafik alls på linjen',
+      'help': 'Störst chans att det finns folk som behöver taxi.',
+    },
+    {
+      'id': 'vehicle_cancelled',
+      'label': 'Enstaka avgång inställd',
+      'short': 'En avgång inställd, andra går som vanligt',
+      'help': 'Färre påverkade, men kan ändå vara värt en titt.',
+    },
+    {
+      'id': 'road_accident_or_closure',
+      'label': 'Olycka eller avstängd väg',
+      'short': 'Vägtrafik',
+      'help': 'Påverkar mest bilister redan på väg, sällan en taxisignal.',
+    },
+    {
+      'id': 'line_delayed',
+      'label': 'Förseningar',
+      'short': 'Linjen kör, men försenad',
+      'help': 'Vanligtvis en svag signal -- av som standard.',
+    },
+    {
+      'id': 'road_work_or_queue',
+      'label': 'Vägarbete eller köbildning',
+      'short': 'Vägtrafik',
+      'help': 'Sällan en taxisignal -- av som standard.',
+    },
+  ];
+
   Future<Map<String, dynamic>> registerPushToken({
     required String fcmToken,
     String platform = 'web',
@@ -520,17 +558,28 @@ class ApiClient {
     await ensureInitialized();
     if (deviceToken == null) throw ApiException(401, 'Ingen enhet');
     final meDev = await getDeviceMe();
+    final device = meDev['device'] as Map? ?? {};
     await _sb
         .from('devices')
         .update({'push_token': fcmToken})
-        .eq('id', meDev['id']);
+        .eq('id', device['id']);
     return {'ok': true};
   }
 
   Future<Map<String, dynamic>> getNotifyPrefs() async {
     final meDev = await getDeviceMe();
-    final prefs = meDev['notify_prefs'] ?? meDev['notifyPrefs'] ?? {};
-    return Map<String, dynamic>.from(prefs is Map ? prefs : {});
+    final device = meDev['device'] as Map? ?? {};
+    final company = meDev['company'] as Map? ?? {};
+    final prefs = device['notify_prefs'] ?? {};
+    final watchedAreas =
+        (company['watched_areas'] as List?)?.map((e) => e.toString()).toList() ??
+        const <String>[];
+    return {
+      'prefs': Map<String, dynamic>.from(prefs is Map ? prefs : {}),
+      'companyAreas': watchedAreas,
+      'areaCatalog': watchedAreas,
+      'meta': {'catalog': notifyTypeCatalog, 'tips': const <String>[]},
+    };
   }
 
   Future<Map<String, dynamic>> saveNotifyPrefs({
@@ -539,15 +588,18 @@ class ApiClient {
     Map<String, bool>? types,
   }) async {
     await ensureInitialized();
-    final current = await getNotifyPrefs();
+    final meDev = await getDeviceMe();
+    final device = meDev['device'] as Map? ?? {};
+    final current = Map<String, dynamic>.from(
+      (device['notify_prefs'] as Map?) ?? {},
+    );
     if (enabled != null) current['enabled'] = enabled;
     if (cities != null) current['cities'] = cities;
     if (types != null) current['types'] = types;
-    final meDev = await getDeviceMe();
     await _sb
         .from('devices')
         .update({'notify_prefs': current})
-        .eq('id', meDev['id']);
+        .eq('id', device['id']);
     return current;
   }
 
@@ -653,7 +705,8 @@ class ApiClient {
   Future<Map<String, dynamic>> updateDeviceLabel(String label) async {
     await ensureInitialized();
     final meDev = await getDeviceMe();
-    await _sb.from('devices').update({'label': label}).eq('id', meDev['id']);
+    final device = meDev['device'] as Map? ?? {};
+    await _sb.from('devices').update({'label': label}).eq('id', device['id']);
     return {'label': label};
   }
 

@@ -68,3 +68,25 @@ const customerLikelihoodLabels = {
   CustomerLikelihood.medium: 'Möjligt att det finns kunder',
   CustomerLikelihood.low: 'Osannolikt just nu',
 };
+
+const _months = [
+  'jan', 'feb', 'mar', 'apr', 'maj', 'jun',
+  'jul', 'aug', 'sep', 'okt', 'nov', 'dec',
+];
+
+/// Local date+time, e.g. "2 sep 22:16" for a different day or just "22:16"
+/// for today. Shared between the list card and the detail sheet so a driver
+/// scanning "Senaste dygnet" can tell today's items from yesterday's at a
+/// glance, not just on the disruption's own remaining/ended duration text.
+String dateTimeLabel(String? iso) {
+  if (iso == null) return '—';
+  final dt = DateTime.tryParse(iso)?.toLocal();
+  if (dt == null) return '—';
+  final now = DateTime.now();
+  final time =
+      '${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+  if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
+    return time;
+  }
+  return '${dt.day} ${_months[dt.month - 1]} $time';
+}
