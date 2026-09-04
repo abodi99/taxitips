@@ -524,30 +524,35 @@ class ApiClient {
       'label': 'Hela linjen står stilla',
       'short': 'Ingen trafik alls på linjen',
       'help': 'Störst chans att det finns folk som behöver taxi.',
+      'defaultOn': true,
     },
     {
       'id': 'vehicle_cancelled',
       'label': 'Enstaka avgång inställd',
       'short': 'En avgång inställd, andra går som vanligt',
       'help': 'Färre påverkade, men kan ändå vara värt en titt.',
+      'defaultOn': true,
     },
     {
       'id': 'road_accident_or_closure',
       'label': 'Olycka eller avstängd väg',
       'short': 'Vägtrafik',
-      'help': 'Påverkar mest bilister redan på väg, sällan en taxisignal.',
+      'help': 'Påverkar mest bilister redan på väg, men värt att veta om.',
+      'defaultOn': true,
     },
     {
       'id': 'line_delayed',
       'label': 'Förseningar',
       'short': 'Linjen kör, men försenad',
       'help': 'Vanligtvis en svag signal -- av som standard.',
+      'defaultOn': false,
     },
     {
       'id': 'road_work_or_queue',
       'label': 'Vägarbete eller köbildning',
       'short': 'Vägtrafik',
       'help': 'Sällan en taxisignal -- av som standard.',
+      'defaultOn': false,
     },
   ];
 

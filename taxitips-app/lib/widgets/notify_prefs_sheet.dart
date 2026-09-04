@@ -222,7 +222,12 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                       style: TextStyle(fontSize: 13, height: 1.35, color: Colors.grey.shade700),
                     ),
                     isThreeLine: true,
-                    value: _types[t['id']?.toString()] == true,
+                    // A type absent from saved prefs (new device, never
+                    // touched this toggle) falls back to the catalog's
+                    // default rather than reading as "off" -- otherwise every
+                    // fresh install would silently start with zero
+                    // notifications, including for the highest-value tier.
+                    value: _types[t['id']?.toString()] ?? (t['defaultOn'] == true),
                     activeThumbColor: TbColors.ink,
                     activeTrackColor: TbColors.signal,
                     onChanged: _enabled
