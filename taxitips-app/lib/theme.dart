@@ -15,6 +15,18 @@ class TbColors {
   static const muted = Color(0xFF3D4F6A);
   static const danger = Color(0xFFC0392B);
 
+  // Customer-likelihood scale -- one color system reused identically across
+  // the card pill, both map modes, and the detail sheet's explain accent bar.
+  // Deliberately reuses existing hues (live green / yellowDeep / the map's
+  // prior one-off "low" brown) rather than inventing new ones, and is kept
+  // separate from `signal` (cyan): cyan used to double as both "high
+  // severity" on one map view and "train" on the other -- the same hue
+  // meaning two unrelated things depending on which view was active. Cyan is
+  // now purely a UI-chrome/mode accent; likelihood always uses these three.
+  static const likelihoodHigh = live;
+  static const likelihoodMedium = yellowDeep;
+  static const likelihoodLow = Color(0xFF6B6358);
+
   // aliases
   static const asphalt = navy;
   static const road = navyDeep;

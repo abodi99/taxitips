@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../severity_labels.dart';
 import '../theme.dart';
+import 'likelihood_badge.dart';
 
 /// Compact, glanceable card for the live signal list. Tapping it opens the full
 /// detail sheet (`_openAlertDetail` in driver_screen.dart), which now shows the
@@ -135,32 +136,7 @@ class SmartAlertCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: switch (likelihood) {
-                        CustomerLikelihood.high => Colors.green.shade100,
-                        CustomerLikelihood.medium => Colors.orange.shade100,
-                        CustomerLikelihood.low => Colors.grey.shade200,
-                      },
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      customerLikelihoodLabels[likelihood]!,
-                      style: TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 12,
-                        color: switch (likelihood) {
-                          CustomerLikelihood.high => Colors.green.shade800,
-                          CustomerLikelihood.medium => Colors.orange.shade800,
-                          CustomerLikelihood.low => Colors.grey.shade700,
-                        },
-                      ),
-                    ),
-                  ),
+                  LikelihoodBadge(likelihood: likelihood),
                 ],
               ),
               const SizedBox(height: 6),
@@ -169,7 +145,7 @@ class SmartAlertCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontSize: 17,
+                  fontSize: 19,
                   fontWeight: FontWeight.bold,
                 ),
               ),

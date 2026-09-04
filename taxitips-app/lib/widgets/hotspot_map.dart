@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../severity_labels.dart';
 import '../theme.dart';
 
 class HotspotMap extends StatelessWidget {
@@ -59,21 +60,31 @@ class HotspotMap extends StatelessWidget {
         final distanceKm = (o['distance_km'] as num?)?.toDouble();
         final point = LatLng(lat, lon);
         points.add(point);
-        final color = mode == 'train'
-            ? TbColors.signal
-            : mode == 'bus'
-                ? TbColors.taxi
-                : TbColors.muted; // road / unknown
+        // Mode is conveyed by the icon glyph alone, always in a neutral ink
+        // color -- never by badge color. Badge color used to double as mode
+        // (cyan=train) here while ALSO meaning "high severity" on the
+        // place-aggregated map below -- the same hue meaning two unrelated
+        // things depending on which map mode was active. Likelihood (when
+        // known) gets its own ring, decoupled from the mode icon entirely.
         final icon = mode == 'train'
             ? Icons.train
             : mode == 'bus'
                 ? Icons.directions_bus
                 : Icons.directions_car;
+        final likelihood = customerLikelihood(
+          severityTier: o['severity_tier']?.toString(),
+          worthItScore: (o['worth_it_score'] as num?) ?? 0,
+        );
+        final ringColor = switch (likelihood) {
+          CustomerLikelihood.high => TbColors.likelihoodHigh,
+          CustomerLikelihood.medium => TbColors.likelihoodMedium,
+          CustomerLikelihood.low => TbColors.likelihoodLow,
+        };
         markers.add(
           Marker(
             point: point,
             width: 64,
-            height: 58,
+            height: 66,
             alignment: Alignment.bottomCenter,
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
@@ -84,19 +95,21 @@ class HotspotMap extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(6),
+                    width: 44,
+                    height: 44,
+                    alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: color,
+                      color: TbColors.ink,
                       shape: BoxShape.circle,
-                      border: Border.all(color: Colors.white, width: 2),
+                      border: Border.all(color: ringColor, width: 3),
                       boxShadow: const [BoxShadow(blurRadius: 6, color: Colors.black26)],
                     ),
-                    child: Icon(icon, size: 16, color: Colors.white),
+                    child: Icon(icon, size: 20, color: Colors.white),
                   ),
                   if (distanceKm != null)
                     Container(
                       margin: const EdgeInsets.only(top: 2),
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(6),
@@ -104,7 +117,7 @@ class HotspotMap extends StatelessWidget {
                       ),
                       child: Text(
                         '${distanceKm.toStringAsFixed(1)} km',
-                        style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: TbColors.ink),
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: TbColors.ink),
                       ),
                     ),
                 ],
@@ -126,12 +139,12 @@ class HotspotMap extends StatelessWidget {
       final name = p['name']?.toString() ?? '';
       final point = LatLng(lat, lon);
       points.add(point);
-      final size = level == 'high' ? 44.0 : level == 'medium' ? 36.0 : 30.0;
+      final size = level == 'high' ? 56.0 : level == 'medium' ? 48.0 : 40.0;
       final color = level == 'high'
-          ? TbColors.signal
+          ? TbColors.likelihoodHigh
           : level == 'medium'
-              ? TbColors.taxi
-              : const Color(0xFF6B6358);
+              ? TbColors.likelihoodMedium
+              : TbColors.likelihoodLow;
       markers.add(
         Marker(
           point: point,
@@ -208,11 +221,20 @@ class HotspotMap extends StatelessWidget {
       );
     }
 
-    LatLng center = const LatLng(55.7, 13.2);
-    var zoom = 9.0;
-    if (points.isNotEmpty) {
-      center = points.first;
-    }
+    // Previously always centered on points.first at a fixed zoom -- an
+    // arbitrary point, not a real centroid, and a zoom level that had no
+    // relationship to how spread out the actual markers were. Fit the
+    // camera to all current markers instead so a driver never has to pan to
+    // see signals that are already there. maxZoom guards the degenerate
+    // single-marker case (a zero-area bounds box) from zooming in absurdly
+    // close on one point.
+    final cameraFit = points.isNotEmpty
+        ? CameraFit.bounds(
+            bounds: LatLngBounds.fromPoints(points),
+            padding: const EdgeInsets.all(32),
+            maxZoom: 14,
+          )
+        : null;
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
@@ -220,8 +242,9 @@ class HotspotMap extends StatelessWidget {
         height: 220,
         child: FlutterMap(
           options: MapOptions(
-            initialCenter: center,
-            initialZoom: zoom,
+            initialCenter: const LatLng(55.7, 13.2),
+            initialZoom: 9.0,
+            initialCameraFit: cameraFit,
             interactionOptions: const InteractionOptions(flags: InteractiveFlag.all),
           ),
           children: [

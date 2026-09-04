@@ -10,6 +10,7 @@ import '../push_service.dart';
 import '../severity_labels.dart';
 import '../theme.dart';
 import '../widgets/hotspot_map.dart';
+import '../widgets/likelihood_badge.dart';
 import '../widgets/smart_alert_card.dart';
 
 class DriverScreen extends StatefulWidget {
@@ -586,6 +587,10 @@ class _DriverScreenState extends State<DriverScreen> {
 
   Future<void> _openAlertDetail(Map<String, dynamic> a) async {
     final url = a['url']?.toString();
+    final likelihood = customerLikelihood(
+      severityTier: a['severity_tier']?.toString(),
+      worthItScore: (a['worth_it_score'] as num?) ?? 0,
+    );
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -613,16 +618,25 @@ class _DriverScreenState extends State<DriverScreen> {
                       ),
                     ),
                   ),
-                  Text(
-                    (a['kind'] ?? a['sourceKind']) == 'road'
-                        ? 'VÄG'
-                        : 'KOLLEKTIV',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                      letterSpacing: 0.6,
-                      color: Colors.grey.shade700,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        (a['kind'] ?? a['sourceKind']) == 'road'
+                            ? 'VÄG'
+                            : 'KOLLEKTIV',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                          letterSpacing: 0.6,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                      // Restates the same likelihood the card already showed
+                      // -- the sheet shouldn't require remembering it from
+                      // the list.
+                      LikelihoodBadge(likelihood: likelihood, fontSize: 13),
+                    ],
                   ),
                   const SizedBox(height: 6),
                   Text(
@@ -698,6 +712,7 @@ class _DriverScreenState extends State<DriverScreen> {
                     _ExplainSection(
                       opportunityId: a['id'].toString(),
                       api: widget.api,
+                      likelihood: likelihood,
                     ),
                   ],
                   const SizedBox(height: 8),
@@ -856,8 +871,8 @@ class _DriverScreenState extends State<DriverScreen> {
                                 child: Row(
                                   children: [
                                     SizedBox(
-                                      width: 34,
-                                      height: 34,
+                                      width: 48,
+                                      height: 48,
                                       child: IconButton(
                                         tooltip: 'Uppdatera',
                                         onPressed: _refreshing
@@ -866,8 +881,8 @@ class _DriverScreenState extends State<DriverScreen> {
                                         padding: EdgeInsets.zero,
                                         icon: _refreshing
                                             ? const SizedBox(
-                                                width: 16,
-                                                height: 16,
+                                                width: 20,
+                                                height: 20,
                                                 child:
                                                     CircularProgressIndicator(
                                                   strokeWidth: 2,
@@ -875,7 +890,7 @@ class _DriverScreenState extends State<DriverScreen> {
                                               )
                                             : const Icon(
                                                 Icons.refresh,
-                                                size: 18,
+                                                size: 22,
                                                 color: TbColors.ink,
                                               ),
                                         style: IconButton.styleFrom(
@@ -893,17 +908,16 @@ class _DriverScreenState extends State<DriverScreen> {
                                         isLabelVisible: _filtersActive,
                                         smallSize: 8,
                                         backgroundColor: TbColors.taxi,
-                                        child: const Icon(Icons.tune, size: 16),
+                                        child: const Icon(Icons.tune, size: 18),
                                       ),
                                       label: const Text('Filter'),
                                       style: OutlinedButton.styleFrom(
                                         foregroundColor: TbColors.ink,
                                         padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
+                                          horizontal: 12,
                                         ),
-                                        minimumSize: const Size(0, 34),
                                         textStyle: const TextStyle(
-                                          fontSize: 13,
+                                          fontSize: 15,
                                           fontWeight: FontWeight.w700,
                                         ),
                                       ),
@@ -913,88 +927,105 @@ class _DriverScreenState extends State<DriverScreen> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 6),
-                          Text(
-                            _filterSummary,
-                            style: TextStyle(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.grey.shade700,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 8),
+                          // Filter-summary and live-status used to be two
+                          // separate stacked lines doing similar "state of the
+                          // world" jobs -- merged into one so a driver scans
+                          // one line instead of two before reaching the map.
+                          // An active filter tints just that segment instead
+                          // of adding its own row.
                           Row(
                             children: [
                               Icon(
                                 live ? Icons.circle : Icons.circle_outlined,
-                                size: 8,
+                                size: 9,
                                 color: live
                                     ? TbColors.live
                                     : Colors.grey.shade400,
                               ),
                               const SizedBox(width: 6),
-                              Text(
-                                live
-                                    ? 'Live · uppdaterad ${_clock(_data?['updatedAt'])}'
-                                    : 'Data ej live · senast ${_clock(_data?['updatedAt'])}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                  color: live
-                                      ? TbColors.live
-                                      : Colors.grey.shade600,
+                              Expanded(
+                                child: RichText(
+                                  overflow: TextOverflow.ellipsis,
+                                  text: TextSpan(
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: live
+                                          ? TbColors.live
+                                          : Colors.grey.shade600,
+                                    ),
+                                    children: [
+                                      TextSpan(
+                                        text: live
+                                            ? 'Live · uppdaterad ${_clock(_data?['updatedAt'])}'
+                                            : 'Data ej live · senast ${_clock(_data?['updatedAt'])}',
+                                      ),
+                                      TextSpan(
+                                        text: ' · $_filterSummary',
+                                        style: TextStyle(
+                                          color: _filtersActive
+                                              ? TbColors.taxiDeep
+                                              : TbColors.muted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                           const SizedBox(height: 10),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton.icon(
-                              onPressed: () => setState(() {
-                                _mapShowsPerOpportunity =
-                                    !_mapShowsPerOpportunity;
-                              }),
-                              icon: Icon(
-                                _mapShowsPerOpportunity
-                                    ? Icons.blur_on
-                                    : Icons.pin_drop_outlined,
-                                size: 16,
+                          Stack(
+                            children: [
+                              HotspotMap(
+                                placeStats: _asMaps(_data?['placeStats']),
+                                events: _mapEvents,
+                                userLat: _userLat,
+                                userLon: _userLon,
+                                selectedPlace: _place,
+                                highOnly: _highOnly,
+                                perOpportunity: _mapShowsPerOpportunity,
+                                opportunities: _sourceFilterList(
+                                  _geoFilter(_rawActive),
+                                ),
+                                onSelectPlace: (name) => setState(() {
+                                  _place = _place == name ? null : name;
+                                }),
+                                onSelectOpportunity: (o) =>
+                                    _openAlertDetail(o),
                               ),
-                              label: Text(
-                                _mapShowsPerOpportunity
-                                    ? 'Visa orter'
-                                    : 'Visa signaler + avstånd',
-                                style: const TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
+                              Positioned(
+                                top: 8,
+                                right: 8,
+                                child: SizedBox(
+                                  width: 44,
+                                  height: 44,
+                                  child: IconButton(
+                                    tooltip: _mapShowsPerOpportunity
+                                        ? 'Visa orter'
+                                        : 'Visa signaler + avstånd',
+                                    onPressed: () => setState(() {
+                                      _mapShowsPerOpportunity =
+                                          !_mapShowsPerOpportunity;
+                                    }),
+                                    icon: Icon(
+                                      _mapShowsPerOpportunity
+                                          ? Icons.blur_on
+                                          : Icons.pin_drop_outlined,
+                                      size: 20,
+                                      color: TbColors.ink,
+                                    ),
+                                    style: IconButton.styleFrom(
+                                      backgroundColor: Colors.white
+                                          .withValues(alpha: 0.9),
+                                      shape: const CircleBorder(),
+                                      elevation: 2,
+                                    ),
+                                  ),
                                 ),
                               ),
-                              style: TextButton.styleFrom(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 4,
-                                ),
-                                minimumSize: Size.zero,
-                                tapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                              ),
-                            ),
-                          ),
-                          HotspotMap(
-                            placeStats: _asMaps(_data?['placeStats']),
-                            events: _mapEvents,
-                            userLat: _userLat,
-                            userLon: _userLon,
-                            selectedPlace: _place,
-                            highOnly: _highOnly,
-                            perOpportunity: _mapShowsPerOpportunity,
-                            opportunities: _sourceFilterList(
-                              _geoFilter(_rawActive),
-                            ),
-                            onSelectPlace: (name) => setState(() {
-                              _place = _place == name ? null : name;
-                            }),
-                            onSelectOpportunity: (o) => _openAlertDetail(o),
+                            ],
                           ),
                           if (_status != null)
                             Padding(
@@ -1054,22 +1085,6 @@ class _DriverScreenState extends State<DriverScreen> {
                       ),
                     ],
 
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-                      child: Text(
-                        () {
-                          final traf = _trafficSignals.length;
-                          if (traf == 0) return 'Inget just nu';
-                          final where = _place == null ? '' : ' · $_place';
-                          return '$traf trafik$where';
-                        }(),
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                    ),
-
                     Expanded(
                       child: RefreshIndicator(
                         color: TbColors.taxiDeep,
@@ -1118,7 +1133,9 @@ class _DriverScreenState extends State<DriverScreen> {
                                 children: [
                                   if (_trafficSignalsVisible.isNotEmpty) ...[
                                     if (_activeSignalsVisible.isNotEmpty) ...[
-                                      const _SectionTitle('Nu — kör hit'),
+                                      _SectionTitle(
+                                        'Nu — kör hit (${_trafficSignals.length})',
+                                      ),
                                       for (final a in _activeSignalsVisible) ...[
                                         SmartAlertCard(
                                           alert: a,
@@ -1216,13 +1233,24 @@ class _SectionTitle extends StatelessWidget {
 
 /// "Varför visas detta?" -- lazy-loaded on tap, not fetched for every card, so
 /// browsing the list doesn't cost an extra round-trip per signal. Shows the
-/// scoring rule/confidence and the underlying source event(s) in plain language,
-/// with the full raw API payload available behind a secondary expand for anyone
-/// who wants to see exactly what Trafiklab/Trafikverket sent.
+/// scoring rule/confidence and, when a weather bonus applied, a plain-language
+/// weather summary. No raw API/source payload is shown here -- that's internal
+/// plumbing, not something a driver deciding whether to drive somewhere needs
+/// to see; it's available in Settings → Om datan for anyone who wants it.
 class _ExplainSection extends StatefulWidget {
-  const _ExplainSection({required this.opportunityId, required this.api});
+  const _ExplainSection({
+    required this.opportunityId,
+    required this.api,
+    required this.likelihood,
+  });
   final String opportunityId;
   final ApiClient api;
+
+  /// Already known by the caller before this section's own fetch resolves --
+  /// passed in so the accent bar/header can render immediately instead of
+  /// waiting on the async load, and so the sheet's "why" visually ties back
+  /// to the "should I go" badge shown higher up using the same color.
+  final CustomerLikelihood likelihood;
 
   @override
   State<_ExplainSection> createState() => _ExplainSectionState();
@@ -1259,10 +1287,17 @@ class _ExplainSectionState extends State<_ExplainSection> {
     }
   }
 
+  Color get _accentColor => switch (widget.likelihood) {
+    CustomerLikelihood.high => TbColors.likelihoodHigh,
+    CustomerLikelihood.medium => TbColors.likelihoodMedium,
+    CustomerLikelihood.low => TbColors.likelihoodLow,
+  };
+
   @override
   Widget build(BuildContext context) {
+    Widget body;
     if (_loading) {
-      return const Padding(
+      body = const Padding(
         padding: EdgeInsets.symmetric(vertical: 12),
         child: SizedBox(
           height: 20,
@@ -1270,78 +1305,98 @@ class _ExplainSectionState extends State<_ExplainSection> {
           child: CircularProgressIndicator(strokeWidth: 2),
         ),
       );
-    }
-
-    if (_error != null) {
-      return Text(
+    } else if (_error != null) {
+      body = Text(
         _error!,
         style: TextStyle(color: Colors.red.shade700, fontSize: 13),
       );
+    } else {
+      final opp = _detail?['opportunity'] as Map?;
+      final sourceEvents = (_detail?['source_events'] as List?) ?? const [];
+      if (opp == null) {
+        body = const Text(
+          'Ingen ytterligare information tillgänglig.',
+          style: TextStyle(fontSize: 13),
+        );
+      } else {
+        final severityTier = opp['severity_tier']?.toString();
+        final confidence = opp['confidence']?.toString();
+        body = Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _ExplainRow(
+              label: 'Bedömning',
+              value:
+                  severityTierLabels[severityTier] ?? severityTier ?? 'Okänd',
+            ),
+            const SizedBox(height: 10),
+            _ExplainRow(
+              label: 'Säkerhet',
+              value: confidenceLabels[confidence] ?? confidence ?? 'Okänd',
+            ),
+            // Poäng flyttat till header-raden ovan -- ingen anledning att visa
+            // samma siffra två gånger i samma blad.
+            if (opp['expired_reason'] != null) ...[
+              const SizedBox(height: 10),
+              _ExplainRow(
+                label: 'Status',
+                value: opp['expired_reason'].toString(),
+              ),
+            ],
+            // Only a plain-language weather summary survives here -- it's the
+            // one piece of context not shown anywhere else when a weather
+            // bonus applied. Visually subordinate to the two facts above
+            // (smaller, below a divider) since it's genuinely the least
+            // critical line in this section.
+            for (final se in sourceEvents.cast<Map>())
+              if (se['source'] == 'smhi')
+                if (_weatherSummary(se['raw'] as Map?) case final desc
+                    when desc != '—') ...[
+                  Divider(color: TbColors.sand, height: 24),
+                  Text(
+                    desc,
+                    style: TextStyle(fontSize: 13, color: TbColors.muted),
+                  ),
+                ],
+          ],
+        );
+      }
     }
-
-    final opp = _detail?['opportunity'] as Map?;
-    final sourceEvents = (_detail?['source_events'] as List?) ?? const [];
-    if (opp == null) {
-      return const Text(
-        'Ingen ytterligare information tillgänglig.',
-        style: TextStyle(fontSize: 13),
-      );
-    }
-
-    final severityTier = opp['severity_tier']?.toString();
-    final confidence = opp['confidence']?.toString();
 
     return Container(
-      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: TbColors.sand,
-        borderRadius: BorderRadius.circular(10),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: TbColors.sand),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Varför visas detta?',
-            style: TextStyle(
-              fontWeight: FontWeight.w900,
-              color: Colors.grey.shade800,
-            ),
-          ),
-          const SizedBox(height: 8),
-          _ExplainRow(
-            label: 'Bedömning',
-            value: severityTierLabels[severityTier] ?? severityTier ?? 'Okänd',
-          ),
-          _ExplainRow(
-            label: 'Säkerhet',
-            value: confidenceLabels[confidence] ?? confidence ?? 'Okänd',
-          ),
-          // Poäng flyttat till header-raden ovan -- ingen anledning att visa
-          // samma siffra två gånger i samma blad.
-          if (opp['expired_reason'] != null)
-            _ExplainRow(
-              label: 'Status',
-              value: opp['expired_reason'].toString(),
-            ),
-          // The underlying source (Trafiklab/Trafikverket/SMHI) and raw API
-          // payload used to be shown here directly -- that's internal
-          // plumbing, not something a driver deciding whether to drive
-          // somewhere needs to see. The transit/road description is already
-          // shown in full above (the sheet's main hint text), so only the
-          // weather summary survives here -- it's the one piece of context
-          // that isn't shown anywhere else when a weather bonus applied.
-          for (final se in sourceEvents.cast<Map>())
-            if (se['source'] == 'smhi')
-              if (_weatherSummary(se['raw'] as Map?) case final desc
-                  when desc != '—')
-                Padding(
-                  padding: const EdgeInsets.only(top: 8),
-                  child: Text(
-                    desc,
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-                  ),
+      clipBehavior: Clip.antiAlias,
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(width: 4, color: _accentColor),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Varför visas detta?',
+                      style: TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w900,
+                        color: TbColors.ink,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    body,
+                  ],
                 ),
-        ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -1407,6 +1462,11 @@ class _DetailStat extends StatelessWidget {
   }
 }
 
+/// A single "why" fact -- a small uppercase eyebrow label above a large,
+/// high-contrast value line, instead of one small inline "label: value" --
+/// brings this up to the same glanceable size as the sheet's main hint text
+/// above it, since this used to be the smallest, lowest-contrast text in the
+/// whole sheet despite being the "why should I trust this" answer.
 class _ExplainRow extends StatelessWidget {
   const _ExplainRow({required this.label, required this.value});
   final String label;
@@ -1414,20 +1474,29 @@ class _ExplainRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: RichText(
-        text: TextSpan(
-          style: TextStyle(fontSize: 13, color: Colors.grey.shade800),
-          children: [
-            TextSpan(
-              text: '$label: ',
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-            TextSpan(text: value),
-          ],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label.toUpperCase(),
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            letterSpacing: 0.4,
+            color: TbColors.muted,
+          ),
         ),
-      ),
+        const SizedBox(height: 2),
+        Text(
+          value,
+          style: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            color: TbColors.ink,
+            height: 1.3,
+          ),
+        ),
+      ],
     );
   }
 }
