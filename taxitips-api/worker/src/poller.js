@@ -6,6 +6,7 @@ const { enrichAlert, isTaxiNotifyWorthy, calculateDemandSignal, isRoadAlert } = 
 const { classifySeverity } = require("./scoring");
 const { fetchRegionWeather, nearestWeather, isAdverseWeather, describeWeather } = require("./smhi");
 const { resolvePlaceCoords } = require("./hubs");
+const { runPushCycle } = require("./fcmPush");
 
 // Many Trafiklab transit alerts carry no lat/lon at all -- only a station/place name
 // in the free text. Without a fallback, get_smart_alerts' distance math on a null
@@ -301,8 +302,20 @@ async function pollOnce() {
     console.error("[opportunities] dual-write failed", err.message || err);
   }
 
+  // Push-send is a separate, non-critical step -- a failure here (bad
+  // credential, FCM outage, a single device's send erroring) must never take
+  // down alert/road ingestion. runPushCycle itself never throws, but wrap it
+  // anyway to match the isolation pattern already used for every other
+  // optional enrichment step above.
+  let pushResult = { sent: 0 };
+  try {
+    pushResult = await runPushCycle(client);
+  } catch (err) {
+    console.error("[fcm] push cycle failed", err.message || err);
+  }
+
   console.log(
-    `[poll] upserted=${result.upserted} notifyWorthy=${notifyWorthy} transit=${(transit.alerts || []).length} road=${(road.alerts || []).length} weather=${regionWeather.length}`
+    `[poll] upserted=${result.upserted} notifyWorthy=${notifyWorthy} transit=${(transit.alerts || []).length} road=${(road.alerts || []).length} weather=${regionWeather.length} pushed=${pushResult.sent || 0}`
   );
   return result;
 }
