@@ -27,16 +27,33 @@ function base64url(input) {
     .replace(/=+$/, "");
 }
 
+// Accepts either raw JSON or base64-encoded JSON for
+// FIREBASE_SERVICE_ACCOUNT_JSON -- a service account key's private_key field
+// is itself multiline PEM, and some env-var storage layers (Coolify's env
+// file included) can mangle a raw multiline JSON secret in ways that are
+// hard to diagnose after the fact. Base64 sidesteps that entirely; raw JSON
+// is still accepted so a value already stored/pasted as plain JSON keeps
+// working.
 function loadServiceAccount() {
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
   if (!raw) return null;
+  const candidates = [raw];
   try {
-    const parsed = JSON.parse(raw);
-    if (!parsed.client_email || !parsed.private_key || !parsed.project_id) return null;
-    return parsed;
+    candidates.push(Buffer.from(raw, "base64").toString("utf8"));
   } catch {
-    return null;
+    // not valid base64, raw JSON is still tried below
   }
+  for (const candidate of candidates) {
+    try {
+      const parsed = JSON.parse(candidate);
+      if (parsed.client_email && parsed.private_key && parsed.project_id) {
+        return parsed;
+      }
+    } catch {
+      // try the next candidate
+    }
+  }
+  return null;
 }
 
 // Short-lived in-memory cache -- Google access tokens last ~1h, and this
