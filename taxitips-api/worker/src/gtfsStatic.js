@@ -31,14 +31,36 @@ const GTFS_FILES = ["stops.txt", "trips.txt", "stop_times.txt", "calendar.txt", 
 const BATCH_SIZE = 5000;
 const DAY_KEYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
-async function fetchGtfsZip(apiKey, operator) {
-  const url = `https://opendata.samtrafiken.se/gtfs/${encodeURIComponent(operator)}/${encodeURIComponent(operator)}.zip?key=${encodeURIComponent(apiKey)}`;
-  const res = await fetch(url);
+function gtfsZipUrl(apiKey, operator) {
+  return `https://opendata.samtrafiken.se/gtfs/${encodeURIComponent(operator)}/${encodeURIComponent(operator)}.zip?key=${encodeURIComponent(apiKey)}`;
+}
+
+/**
+ * Conditional GET: passing a previous ETag/Last-Modified lets the server
+ * answer 304 Not Modified, which returns no body and (per Trafiklab's docs
+ * on conditional requests) is the intended way to poll without burning quota
+ * on unchanged data. That matters here because the static quota is brutally
+ * small -- Trafiklab Bronze allows 50 calls per MONTH.
+ *
+ * Returns null when the feed is unchanged, otherwise the zip plus the
+ * validators to store for next time.
+ */
+async function fetchGtfsZip(apiKey, operator, previous = null) {
+  const headers = { "Accept-Encoding": "gzip" };
+  if (previous?.etag) headers["If-None-Match"] = previous.etag;
+  if (previous?.lastModified) headers["If-Modified-Since"] = previous.lastModified;
+
+  const res = await fetch(gtfsZipUrl(apiKey, operator), { headers });
+  if (res.status === 304) return null;
   if (!res.ok) {
     const body = await res.text().catch(() => "");
     throw new Error(`gtfs-static ${operator} ${res.status}: ${body.slice(0, 160)}`);
   }
-  return Buffer.from(await res.arrayBuffer());
+  return {
+    buffer: Buffer.from(await res.arrayBuffer()),
+    etag: res.headers.get("etag"),
+    lastModified: res.headers.get("last-modified"),
+  };
 }
 
 function parseGtfsZip(buffer) {
@@ -169,8 +191,24 @@ async function ingestGtfsStatic(client, apiKey, operator) {
     return { skipped: true };
   }
 
-  const zipBuffer = await fetchGtfsZip(apiKey, operator);
-  const files = await parseGtfsZip(zipBuffer);
+  // Conditional GET against the currently-ingested version: if Trafiklab
+  // says 304 Not Modified, we already have this exact feed and can skip both
+  // the download and the reparse/reinsert entirely. Cheap insurance against
+  // a 50-calls-per-month quota.
+  const { data: currentVersion } = await client
+    .from("gtfs_feed_versions")
+    .select("source_etag, source_last_modified")
+    .eq("operator", operator)
+    .eq("is_current", true)
+    .maybeSingle();
+
+  const fetched = await fetchGtfsZip(apiKey, operator, currentVersion);
+  if (fetched === null) {
+    console.log(`[gtfs-static] ${operator} unchanged (304), skipping reingest`);
+    return { skipped: true, reason: "not_modified" };
+  }
+
+  const files = await parseGtfsZip(fetched.buffer);
   const required = ["stops", "trips", "stop_times", "calendar", "routes"];
   for (const key of required) {
     const fileName = `${key}.txt`;
@@ -194,6 +232,8 @@ async function ingestGtfsStatic(client, apiKey, operator) {
       stop_count: files["stops.txt"].length,
       trip_count: files["trips.txt"].length,
       stop_time_count: departures.length,
+      source_etag: fetched.etag,
+      source_last_modified: fetched.lastModified,
     })
     .select("id")
     .single();
@@ -317,16 +357,32 @@ async function candidateDepartures(client, feedVersionId, stopId, minSeconds, ma
 }
 
 /**
- * NOT CURRENTLY CALLED FROM ANYWHERE -- kept because the logic is correct and
- * tested, but it's unusable against real data today: verified against a real
- * ingest that GTFS-RT alert stop_ids (Skånetrafiken's own short numbers, e.g.
- * "26515") do not match this static feed's NOPTIS-format stop_id
- * (e.g. "9022012093032001"), and stop_code (GTFS's usual bridge field for
- * exactly this case) is empty for every stop in this feed. Trafiklab's own
- * support team confirmed no public mapping table between the two id spaces
- * exists (https://support.trafiklab.se -- "Stoppställenummer i GTFS Regional
- * och GTFS Sverige 2"; they were only "investigating" building one). Revisit
- * if Trafiklab or Skånetrafiken ever publishes that mapping.
+ * NOT CURRENTLY CALLED FROM ANYWHERE -- the logic is correct and tested, and
+ * there IS now a known path to making it usable; it just needs an API key we
+ * don't have yet. See docs/data-sources.md for the full write-up.
+ *
+ * Short version: we mix two feed families that Trafiklab documents as
+ * non-combinable. Our realtime alerts come from GTFS Sweden Realtime
+ * (/gtfs-rt-sweden/...), our static schedule from GTFS Regional
+ * (/gtfs/skane/skane.zip). Their stop_id spaces genuinely differ
+ * (Skånetrafiken short numbers like "26515" vs NOPTIS-format
+ * "9022012093032001"), stop_code is empty throughout, and Trafiklab support
+ * confirmed no public mapping table between them exists. That part of the
+ * earlier diagnosis was right.
+ *
+ * What was missed: Trafiklab publishes a *Regional* Realtime feed
+ * (/gtfs-rt/{operator}/ServiceAlerts.pb, same "skane" operator code) that is
+ * explicitly documented as sharing a backing system with GTFS Regional
+ * static -- "meant to be used together"
+ * (https://www.trafiklab.se/docs/using-trafiklab-data/combining-data/).
+ * Switching the alert source to that feed makes stop_id joins work by
+ * construction, no mapping table required.
+ *
+ * Blocker is access, not feasibility: TRAFIKLAB_API_KEY returns 403 "Key
+ * does not have access to file" for /gtfs-rt/skane/* -- each Trafiklab
+ * dataset needs its own key/subscription. Once a GTFS Regional Realtime key
+ * exists, point trafiklab.js at that endpoint and this function can be
+ * wired into scoring.
  *
  * Find the next scheduled departure at stopId after afterTimestamp (a real
  * Date/instant). Checks two candidate service dates -- today and yesterday,
