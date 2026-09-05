@@ -96,6 +96,13 @@ function parseFeed(buffer) {
       id: entity.id || `alert-${header.slice(0, 40)}-${activeFrom || "na"}`,
       header,
       description,
+      // Kept for shape-compatibility with road alerts (trafikverket.js sets
+      // real values here, and taxiRelevance.js reads it for both sources),
+      // but measured against live Skåne data: `effect` is UNKNOWN_EFFECT on
+      // 100% of alerts and `cause` never adds signal the Swedish text
+      // doesn't already carry -- all CONSTRUCTION/MAINTENANCE alerts are
+      // already scored `ignore` from text alone. Don't build scoring rules
+      // on these two for the transit path. See docs/data-sources.md.
       cause: CAUSE[alert.cause] || "Okänd orsak",
       effect: EFFECT[alert.effect] || "Okänd effekt",
       areas,

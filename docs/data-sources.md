@@ -82,6 +82,57 @@ Access matrix for the current `TRAFIKLAB_API_KEY` (verified 2026-09-05):
 **Action needed:** register a GTFS Regional Realtime key at trafiklab.se and
 set it as its own env var. Do not assume one key covers multiple datasets.
 
+### What the ServiceAlerts feed actually contains (measured, 123 live alerts)
+
+Field population, decoded from a real Skåne response:
+
+| Alert field | Populated | Useful? |
+|---|---|---|
+| `headerText`, `descriptionText` | 123/123 | **Yes** — the only real signal; `scoring.js` parses these |
+| `activePeriod` | 123/123 | Yes — but `end` is the alert's *publishing validity*, not the disruption's duration (every cancellation in a batch shares one end time) |
+| `cause` | 123/123 | Marginal — see below |
+| `effect` | 123/123 but **always `UNKNOWN_EFFECT`** | **No** — Skånetrafiken never sets it |
+| `url` | 0/123 | No |
+| `informedEntity.stopId` | 256 refs | Wrong id space (see above) |
+| `informedEntity.routeId` | 59 refs | Same |
+| `informedEntity.trip.tripId` | 62 refs | Same |
+
+**`cause` is not worth adding to scoring.** It looks promising (CONSTRUCTION 81,
+OTHER_CAUSE 35, TECHNICAL_PROBLEM 4, MAINTENANCE 3) but cross-tabbing it
+against our text-derived tiers shows the text already captures it: all 81
+CONSTRUCTION and all 3 MAINTENANCE alerts are already scored `ignore`. And
+`cause` is *not* a reliable planned/unplanned proxy — many `OTHER_CAUSE`
+entries are long-running planned closures (e.g. "Stängd hållplats",
+Aug 17 → Dec 11). Verified 2026-09-05; don't re-litigate without new evidence.
+
+### TripUpdates / VehiclePositions on the Sweden feed — accessible but useless here
+
+The current key **can** fetch these (200 OK, 377 KB / 82 KB):
+
+```
+gtfs-rt-sweden/skane/TripUpdatesSweden.pb       200
+gtfs-rt-sweden/skane/VehiclePositionsSweden.pb  200
+```
+
+TripUpdates carries genuinely valuable data — 395 trips, 6778 stop-time
+updates, 348 of them >5 min late, with real `delay` seconds per stop. That is
+exactly the "is this train actually late / is this the last one" signal the
+scoring engine lacks.
+
+**But the `{operator}` path segment is ignored on this feed family.** Decoding
+the stopIds returned by `/gtfs-rt-sweden/skane/TripUpdates…` gives **100%
+Östergötland** stops (NOPTIS county digits `05`), zero Skåne. Our static feed
+is county `12`. Sampled stopIds had **0/10 overlap** with our 10,703 ingested
+Skåne stops.
+
+So these feeds are accessible but describe the wrong region, and their ids
+can't join our schedule. Same root cause as the ServiceAlerts mismatch: the
+Sweden family is a different dataset, not a regional filter.
+
+**Everything still points to one action:** get a GTFS **Regional** Realtime
+key. That unlocks correctly-scoped ServiceAlerts *and* TripUpdates whose ids
+join our existing Regional static data.
+
 ### Quotas
 
 Static feeds are tightly limited — Bronze **50 calls/month**, Silver 250,
