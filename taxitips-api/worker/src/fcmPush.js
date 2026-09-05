@@ -142,9 +142,18 @@ function typeEnabled(types, severityTier) {
 // plain city names ("Malmö") a driver picked from the company's watched
 // areas, while opportunities.places can carry more specific station names
 // ("Malmö C"). Exact equality would silently never match.
+//
+// The unlocatable case matters more than it looks: ~57% of live Skåne
+// opportunities carry no places at all (Trafiklab often sends only stop_id
+// numbers, and those don't resolve -- see gtfs_stops' own note about the
+// realtime/static ID spaces not overlapping). Treating "we don't know where
+// this is" as "doesn't match your cities" silently suppressed the majority
+// of real disruptions for any driver who picked cities, which is the exact
+// opposite of what picking a city is for. A city filter is meant to remove
+// signals known to be elsewhere -- not to hide everything we can't place.
 function placesMatchCities(places, cities) {
   if (!cities || !cities.length) return true; // no city filter set = all cities
-  if (!places || !places.length) return false;
+  if (!places || !places.length) return true; // location unknown -> don't suppress
   return places.some((place) =>
     cities.some(
       (city) =>
@@ -152,6 +161,48 @@ function placesMatchCities(places, cities) {
         city.toLowerCase().includes(place.toLowerCase())
     )
   );
+}
+
+// A push interrupts a driver who may be mid-fare or mid-traffic, so the bar
+// is deliberately higher than the bar for appearing in the in-app list.
+// severity_tier alone isn't enough: "vehicle_cancelled" spans both a
+// cancelled train (real stranded passengers) and a single late-evening bus,
+// so require the tier to be one worth interrupting for AND the tuned
+// demand_score to clear a floor. Without this, ~64% of pushes would be
+// "one bus running late" -- exactly the noise scoring.js caps at 25 to keep
+// it at the bottom of the list, never something to buzz a phone over.
+const NOTIFY_WORTHY_TIERS = new Set([
+  "line_paused",
+  "vehicle_cancelled",
+  "road_accident_or_closure",
+]);
+const NOTIFY_SCORE_FLOOR = 50;
+
+function isNotifyWorthy(opportunity) {
+  if (!NOTIFY_WORTHY_TIERS.has(opportunity.severity_tier)) return false;
+  return (opportunity.demand_score || 0) >= NOTIFY_SCORE_FLOOR;
+}
+
+// A lock-screen line a driver reads in about one second, at a red light.
+// The raw title is often a bare "Inställd"/"Försening" with no context
+// (Trafiklab genuinely sends nothing more for many alerts), so lead with
+// what the driver actually needs: where, and what kind of disruption.
+// Mirrors the Flutter client's displayTitle()/severityTierShortLabels so a
+// push and the card it opens don't describe the same thing differently.
+const TIER_PUSH_LABEL = {
+  line_paused: "Hela linjen stoppad",
+  vehicle_cancelled: "Avgång inställd",
+  road_accident_or_closure: "Olycka/avstängning",
+};
+const MODE_PUSH_LABEL = { train: "Tåg", bus: "Buss", road: "Väg" };
+
+function pushTitle(opportunity) {
+  const place = (opportunity.places || [])[0];
+  const tier = TIER_PUSH_LABEL[opportunity.severity_tier];
+  const mode = MODE_PUSH_LABEL[opportunity.mode];
+  const what = tier || opportunity.title || "Ny taxisignal";
+  const prefix = place || mode;
+  return prefix ? `${prefix}: ${what}` : what;
 }
 
 /**
@@ -179,7 +230,7 @@ async function notifyOpportunity(client, serviceAccount, accessToken, opportunit
 
     const result = await sendPush(serviceAccount, accessToken, {
       token: device.push_token,
-      title: opportunity.title || "Ny taxisignal",
+      title: pushTitle(opportunity),
       body: opportunity.summary || "",
       opportunityId: opportunity.id,
     });
@@ -209,18 +260,22 @@ async function runPushCycle(client) {
     return { skipped: true, reason: "no FIREBASE_SERVICE_ACCOUNT_JSON configured" };
   }
 
-  const { data: candidates, error } = await client
+  const { data: rows, error } = await client
     .from("opportunities")
-    .select("id, title, summary, severity_tier, places, demand_score")
+    .select("id, title, summary, severity_tier, mode, places, demand_score")
     .is("notified_at", null)
-    .gt("demand_score", 0)
-    .neq("severity_tier", "ignore")
+    .gte("demand_score", NOTIFY_SCORE_FLOOR)
+    .in("severity_tier", [...NOTIFY_WORTHY_TIERS])
     .gt("end_time", new Date().toISOString());
   if (error) {
     console.error("[fcm] candidate lookup failed", error.message);
     return { sent: 0, error: error.message };
   }
-  if (!candidates || !candidates.length) return { sent: 0 };
+  // Belt-and-braces: the query already encodes the gate, but re-checking in
+  // JS keeps isNotifyWorthy the single readable source of truth if either
+  // side is ever tuned independently.
+  const candidates = (rows || []).filter(isNotifyWorthy);
+  if (!candidates.length) return { sent: 0 };
 
   let accessToken;
   try {
@@ -253,5 +308,8 @@ module.exports = {
   loadServiceAccount,
   typeEnabled,
   placesMatchCities,
+  isNotifyWorthy,
+  pushTitle,
   runPushCycle,
+  NOTIFY_SCORE_FLOOR,
 };

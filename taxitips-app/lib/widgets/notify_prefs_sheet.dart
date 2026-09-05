@@ -123,7 +123,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
               ),
               const SizedBox(height: 6),
               Text(
-                'Gäller push till den här telefonen. Listfiltret “Bara hög prio” ändrar bara vad du ser i appen — inte vilka notiser som skickas.',
+                'Gäller push till den här telefonen. Notiser skickas bara för störningar som är värda att avbryta för — svaga signaler (t.ex. en buss några minuter sen) syns i listan men stör dig aldrig. Listfiltret “Bara hög prio” ändrar bara vad du ser i appen.',
                 style: TextStyle(fontSize: 14, height: 1.4, color: Colors.grey.shade700),
               ),
               if (_error != null) ...[
@@ -156,10 +156,14 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                 style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Colors.grey.shade800),
               ),
               const SizedBox(height: 4),
+              // Honest about the actual behaviour: a city filter removes
+              // signals known to be somewhere else, but a signal whose plats
+              // saknas (very common -- Trafiklab often sends no place at all)
+              // is still let through rather than silently dropped.
               Text(
                 _cities.isEmpty
-                    ? 'Inga valda = bolagets bevakade orter (eller hela området).'
-                    : 'Notiser bara när signalen träffar valda orter.',
+                    ? 'Inga valda = notiser från hela området.'
+                    : 'Notiser från valda orter, plus störningar utan angiven ort.',
                 style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
               ),
               const SizedBox(height: 10),

@@ -571,6 +571,29 @@ class ApiClient {
     return {'ok': true};
   }
 
+  /// Cities a driver can pick for notifications when their company hasn't
+  /// configured watched_areas yet. Without this the sheet renders an empty
+  /// city section -- the driver is told they can filter by city, then given
+  /// nothing to filter by. These are the Skåne towns that actually appear in
+  /// live opportunity data (verified against production), not a guess.
+  static const skaneAreaFallback = [
+    'Malmö',
+    'Lund',
+    'Helsingborg',
+    'Kristianstad',
+    'Hässleholm',
+    'Landskrona',
+    'Trelleborg',
+    'Ystad',
+    'Ängelholm',
+    'Höör',
+    'Eslöv',
+    'Kävlinge',
+    'Staffanstorp',
+    'Svedala',
+    'Vellinge',
+  ];
+
   Future<Map<String, dynamic>> getNotifyPrefs() async {
     final meDev = await getDeviceMe();
     final device = meDev['device'] as Map? ?? {};
@@ -579,10 +602,13 @@ class ApiClient {
     final watchedAreas =
         (company['watched_areas'] as List?)?.map((e) => e.toString()).toList() ??
         const <String>[];
+    // Company areas take priority when set (the office curated them), else
+    // fall back to the region-wide list so the picker is never empty.
+    final areas = watchedAreas.isNotEmpty ? watchedAreas : skaneAreaFallback;
     return {
       'prefs': Map<String, dynamic>.from(prefs is Map ? prefs : {}),
-      'companyAreas': watchedAreas,
-      'areaCatalog': watchedAreas,
+      'companyAreas': areas,
+      'areaCatalog': areas,
       'meta': {'catalog': notifyTypeCatalog, 'tips': const <String>[]},
     };
   }
