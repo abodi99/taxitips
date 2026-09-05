@@ -6,14 +6,37 @@
  * Olycka, Vägarbete, Avstängning, Kövarning, Evenemang, Oförutsedda hinder, …
  */
 
+// All 21 Swedish counties (SCB länskoder, which is what Trafikverket's
+// Deviation.CountyNo uses). Only the six southern ones were mapped before,
+// which silently capped road coverage no matter what TRAFIKVERKET_COUNTIES
+// asked for. Verified against the live API: every code below returns real
+// Situation data.
 const COUNTY = {
+  stockholm: "1",
+  uppsala: "3",
+  sodermanland: "4",
+  ostergotland: "5",
   jonkoping: "6",
   kronoberg: "7",
   kalmar: "8",
+  gotland: "9",
   blekinge: "10",
   skane: "12",
   halland: "13",
+  vastragotaland: "14",
+  varmland: "17",
+  orebro: "18",
+  vastmanland: "19",
+  dalarna: "20",
+  gavleborg: "21",
+  vasternorrland: "22",
+  jamtland: "23",
+  vasterbotten: "24",
+  norrbotten: "25",
 };
+
+/** Every county -- convenience for TRAFIKVERKET_COUNTIES=all. */
+const ALL_COUNTIES = Object.keys(COUNTY).join(",");
 
 const TAXI_TYPES = new Set([
   "olycka",
@@ -33,7 +56,8 @@ const TAXI_TYPES = new Set([
 ]);
 
 function configuredCounties() {
-  const raw = process.env.TRAFIKVERKET_COUNTIES || "skane";
+  const configured = process.env.TRAFIKVERKET_COUNTIES || "skane";
+  const raw = configured.trim().toLowerCase() === "all" ? ALL_COUNTIES : configured;
   return [
     ...new Set(
       raw
@@ -238,11 +262,19 @@ async function fetchRoadSituations(apiKey) {
     .map((c) => `<EQ name="Deviation.CountyNo" value="${c}" />`)
     .join("");
 
+  // The county filter is an OR across all configured counties, so `limit`
+  // caps the WHOLE country's results, not per-county -- and which rows
+  // survive is undefined. At limit=100 across 21 counties that silently
+  // returned FEWER national alerts than Skåne alone (measured: 127 vs 176).
+  // Scale the cap with the number of counties so national coverage is
+  // actually national.
+  const limit = Math.min(100 * Math.max(counties.length, 1), 2000);
+
   // Situation ligger under namespace road.trafficinfo (krävs i API v2).
   const body = `
 <REQUEST>
   <LOGIN authenticationkey="${apiKey}" />
-  <QUERY objecttype="Situation" namespace="road.trafficinfo" schemaversion="1.6" limit="100">
+  <QUERY objecttype="Situation" namespace="road.trafficinfo" schemaversion="1.6" limit="${limit}">
     <FILTER>
       <OR>
         ${countyFilter || '<EQ name="Deviation.CountyNo" value="12" />'}

@@ -82,3 +82,39 @@ test("placeLooksSkane still matches station variants", () => {
   assert.equal(placeLooksSkane("Lund"), true);
   assert.equal(placeLooksSkane("Kalmar"), false);
 });
+
+// National rollout: "is this in Skåne?" stops being a meaningful question
+// once the market is the whole country -- every alert is in someone's
+// market, and relevance becomes a distance problem the client already
+// solves per-driver (worth_it_score / "Nära mig"). The ingest-side geofence
+// must therefore get out of the way rather than discarding most of Sweden.
+test("MARKET_SCOPE=national admits every region", () => {
+  const prev = process.env.MARKET_SCOPE;
+  process.env.MARKET_SCOPE = "national";
+  try {
+    assert.equal(
+      alertInSkane({ id: "x", description: "Stopp mellan Kalmar C och Nybro." }),
+      true
+    );
+    assert.equal(
+      alertInSkane({ id: "x", description: "Stopp vid Göteborg C." }),
+      true
+    );
+  } finally {
+    if (prev === undefined) delete process.env.MARKET_SCOPE;
+    else process.env.MARKET_SCOPE = prev;
+  }
+});
+
+test("default scope stays Skane-only (no behaviour change on deploy)", () => {
+  const prev = process.env.MARKET_SCOPE;
+  delete process.env.MARKET_SCOPE;
+  try {
+    assert.equal(
+      alertInSkane({ id: "x", description: "Stopp mellan Kalmar C och Nybro." }),
+      false
+    );
+  } finally {
+    if (prev !== undefined) process.env.MARKET_SCOPE = prev;
+  }
+});

@@ -151,6 +151,64 @@ against re-fetching if a version <20h old exists.
 
 ---
 
+## Going national (MARKET_SCOPE=national)
+
+Measured 2026-09-05. Short answer: **no new API keys are needed.** Both
+existing keys already cover the whole country; the limits were in our code.
+
+### What changes
+
+| Env var | Skåne (default) | National |
+|---|---|---|
+| `MARKET_SCOPE` | unset / `skane` | `national` |
+| `TRAFIKLAB_OPERATORS` | `skane` | `skane,sl,ul,otraf,klt,varm,dt,xt,vastmanland,krono,jlt,orebro` |
+| `TRAFIKVERKET_COUNTIES` | `skane` | `all` |
+
+`MARKET_SCOPE=national` disables the ingest-side region geofence entirely.
+That is correct rather than lazy: once the market is the country, "is this
+in region X" is meaningless — every alert is in *someone's* market — and
+relevance becomes a per-driver distance question the client already answers
+(`worth_it_score` folds in `distance_km`, plus the "Nära mig" filter).
+
+### Measured national volume
+
+- Transit: **464 alerts** across 12 operators (vs 121 Skåne-only)
+- Road: **3,417 alerts** across 21 counties (vs 176 Skåne-only)
+- After scoring: 2,242 non-ignore, of which **7 push-worthy**
+
+The push gate holds at national scale without changes — road tiers are
+score-capped and `vehicle_delayed` noise is filtered, so 3,881 raw alerts
+still yield only 7 notifications.
+
+### Coverage gaps (not fixable with keys)
+
+`ServiceAlerts` **is** correctly region-scoped per operator (verified: the
+`skane` feed returns 115 Skåne mentions, 0 Stockholm/Kalmar). But these
+operator codes 404 on this feed family and simply aren't available:
+
+```
+vt (Västtrafik/Göteborg), sormland, ostgota, halland,
+vasterbotten, norrbotten, jamtland, vasternorrland
+```
+
+**Västtrafik is the significant one** — Gothenburg is Sweden's second city
+(~1.7M in the region) and has no transit alerts here. Road data via
+Trafikverket covers those counties fine; only transit is missing. Getting
+Västtrafik likely needs GTFS Regional Realtime (see above) or a direct
+Västtrafik API — worth checking before promising national transit coverage.
+
+### Known tuning issue at national scale (pre-existing, not caused by rollout)
+
+`worth_it_score = demand_score - distance_km × 2` combined with the
+deliberate road-score cap (~15–27) means **every road signal zeroes out past
+roughly 8 km**. Measured: all 2,186 national non-ignore road signals score 0
+for a Malmö driver — including roadwork in Malmö itself. Nationally this
+"works" (no Norrbotten noise in Malmö) but for the wrong reason, and it also
+suppresses genuinely local road incidents. Revisit the distance coefficient
+for road tiers specifically before leaning on road data as a driver signal.
+
+---
+
 ## Trafikverket (road)
 
 Endpoint: `https://api.trafikinfo.trafikverket.se/v2/data.json`, XML query

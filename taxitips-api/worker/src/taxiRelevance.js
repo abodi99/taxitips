@@ -7,7 +7,7 @@
  */
 
 const { findHubsInText } = require("./hubs");
-const { alertInSkane, placeLooksSkane } = require("./skane");
+const { alertInSkane, placeLooksSkane, isNationalScope } = require("./skane");
 
 /** Station/info utan taxinytta — även om rubriken nämner en station. */
 const NOISE_RE =
@@ -24,8 +24,17 @@ const MEDIUM_RE =
 const CITY_RE =
   /\b(Malmö|Lund|Helsingborg|Kristianstad|Landskrona|Trelleborg|Ystad|Eslöv|Höör|Hässleholm|Ängelholm|Simrishamn|Staffanstorp|Kävlinge|Hyllie|Triangeln|Lomma|Vellinge|Höganäs|Osby|Sjöbo|Svedala|Burlöv|Bromölla|Perstorp|Örkelljunga|Bjuv|Åstorp|Klippan)\b/gi;
 
-const SKANE_ROAD_HINT =
-  /\b(malmö|lund|helsingborg|kristianstad|landskrona|trelleborg|ystad|eslöv|hässleholm|ängelholm|simrishamn|kävlinge|hyllie|vellinge|höganäs|lomma|staffanstorp|bromölla|skåne|e22|e6|e65|väg 11|väg 108)\b/i;
+// Lookarounds instead of \b: JS's \b is ASCII-only, so /\bängelholm\b/ never
+// matches (no word/non-word transition before "ä"). Same trap fixed in
+// skane.js -- it silently killed ängelholm, höganäs and eslöv here.
+const SKANE_ROAD_HINT = new RegExp(
+  "(?<![a-zà-öø-ÿ0-9])(?:" +
+    "malmö|lund|helsingborg|kristianstad|landskrona|trelleborg|ystad|eslöv|" +
+    "hässleholm|ängelholm|simrishamn|kävlinge|hyllie|vellinge|höganäs|lomma|" +
+    "staffanstorp|bromölla|skåne|e22|e6|e65|väg 11|väg 108" +
+    ")(?![a-zà-öø-ÿ0-9])",
+  "i"
+);
 
 function textOf(alert) {
   return `${alert.header || ""}\n${alert.description || ""}\n${alert.cause || ""}\n${alert.effect || ""}`;
@@ -109,7 +118,14 @@ function scoreAlert(alert) {
 
   const hubs = findHubsInText(text);
   const places = placesFrom(alert);
-  const placeStr = places.length ? places.join(", ") : "Skåne";
+  // Naming the region when we don't actually know the place is a lie in
+  // national mode (and was never useful in Skåne either -- see the client's
+  // own _placeName fallback, which now prefers the alert title).
+  const placeStr = places.length
+    ? places.join(", ")
+    : isNationalScope()
+      ? "Okänd plats"
+      : "Skåne";
   const hubName = hubs[0]?.name;
 
   const serious =
@@ -206,7 +222,13 @@ function scoreRoadAlert(alert) {
     }
   }
 
-  const inSkaneSphere = SKANE_ROAD_HINT.test(text) || places.some((p) => SKANE_ROAD_HINT.test(String(p)));
+  // In national mode every road incident is in the market -- relevance is a
+  // distance question the client already answers per-driver, not a
+  // membership question to settle at ingest time.
+  const inSkaneSphere =
+    isNationalScope() ||
+    SKANE_ROAD_HINT.test(text) ||
+    places.some((p) => SKANE_ROAD_HINT.test(String(p)));
   const isAccident = type.includes("olycka") || text.includes("olycka");
   const isFullClosure =
     text.includes("vägen avstäng") ||

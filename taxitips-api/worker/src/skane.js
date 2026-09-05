@@ -60,18 +60,23 @@ const SKANE_TEXT_RE = svWord(
 
 /**
  * Places that positively identify an alert as belonging to a DIFFERENT
- * region. Needed because the /gtfs-rt-sweden/{operator}/ feed ignores the
- * operator path segment and serves national data -- verified by decoding
- * TripUpdates from the "skane" path and finding 100% Östergötland stops
- * (see docs/data-sources.md). Without this, alertInSkane()'s
- * "came from the skane endpoint, so it's Skåne" fallback lets other
- * regions through: measured 3 of 8 top-tier (line_paused) signals in a 24h
- * window were Kalmar/Nybro, i.e. ~200 km outside the market, competing for
- * the limited high-prio slots a driver actually sees.
+ * region, used to reject alerts the operator feed legitimately carries but
+ * a local driver can't act on.
+ *
+ * ServiceAlerts IS correctly region-scoped per operator (measured: the
+ * skane feed gives 115 Skåne mentions and 0 Stockholm/Kalmar). The leakage
+ * comes from Skånetrafiken itself: it operates Öresundståg/Pågatåg services
+ * that run far outside the county, so it publishes alerts about e.g. the
+ * Kalmar C–Nybro stretch. Measured 3 of 8 top-tier (line_paused) signals in
+ * a 24h window were Kalmar/Nybro -- ~200 km outside the market, occupying
+ * the scarce high-prio slots a driver actually sees.
  *
  * Deliberately an exclusion list of other regions' hubs, not an allow-list:
- * it only rejects on positive evidence of elsewhere, so a Skåne alert that
+ * it only rejects on positive evidence of elsewhere, so an alert that
  * happens to name no city still passes.
+ *
+ * NOTE for national rollout: this whole module becomes a *relevance-radius*
+ * problem rather than a region-membership one. See docs/data-sources.md.
  */
 const NON_SKANE_TEXT_RE = svWord(
   "kalmar|nybro|växjö|karlskrona|karlshamn|halmstad|varberg|göteborg|stockholm|uppsala|örebro|västerås|linköping|norrköping|jönköping|borås|umeå|luleå|sundsvall|gävle|falun|karlstad"
@@ -88,10 +93,27 @@ function placeLooksSkane(name) {
 }
 
 /**
- * True om alerten hör till Skåne-marknaden (ort, text eller Skånetrafiken).
+ * National mode: when the market isn't a single region, "is this in Skåne?"
+ * is the wrong question entirely -- every alert is in *someone's* market.
+ * Relevance is then purely a distance problem, which the client already
+ * solves per-driver (worth_it_score folds in distance_km, and the "Nära
+ * mig" filter exists), so the ingest-side geofence must get out of the way
+ * rather than silently discarding 3/4 of the country.
+ *
+ * Set MARKET_SCOPE=national to disable region filtering. Default stays
+ * "skane" so existing deployments don't change behaviour on deploy.
+ */
+function isNationalScope() {
+  return String(process.env.MARKET_SCOPE || "skane").toLowerCase() === "national";
+}
+
+/**
+ * True om alerten hör till marknaden (ort, text eller operatör).
+ * I national-läge är allt inom marknaden -- se isNationalScope().
  */
 function alertInSkane(alert) {
   if (!alert) return false;
+  if (isNationalScope()) return true;
 
   const text = `${alert.header || ""} ${alert.description || ""} ${alert.cause || ""}`;
 
@@ -127,4 +149,5 @@ module.exports = {
   SKANE_PLACES,
   placeLooksSkane,
   alertInSkane,
+  isNationalScope,
 };
