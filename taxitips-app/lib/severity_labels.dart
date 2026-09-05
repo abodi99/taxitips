@@ -74,6 +74,37 @@ const _months = [
   'jul', 'aug', 'sep', 'okt', 'nov', 'dec',
 ];
 
+// Titles this generic carry no place/route info at all -- Trafiklab
+// genuinely sends nothing more specific for these (verified against real
+// payloads: e.g. "Försening" with description "Tåget är försenat. Orsaken
+// är fordonsfel." and no place name anywhere). Prefixing the mode at least
+// tells the driver "this is about a train" instead of a bare, contextless
+// "Försening". Shared between the card and the detail sheet so both read
+// the same title the same way.
+const _genericTitles = {
+  'försening',
+  'förseningar',
+  'inställd',
+  'inställda avgångar',
+  'trafikinformation',
+  'ändrad körväg',
+};
+
+String displayTitle({required String? title, required String? mode}) {
+  final t = title?.trim();
+  if (t == null || t.isEmpty) return 'Tips';
+  if (_genericTitles.contains(t.toLowerCase())) {
+    final modeLabel = switch (mode) {
+      'train' => 'Tåg',
+      'bus' => 'Buss',
+      'road' => 'Väg',
+      _ => null,
+    };
+    if (modeLabel != null) return '$modeLabel: $t';
+  }
+  return t;
+}
+
 /// Local date+time, e.g. "2 sep 22:16" for a different day or just "22:16"
 /// for today. Shared between the list card and the detail sheet so a driver
 /// scanning "Senaste dygnet" can tell today's items from yesterday's at a

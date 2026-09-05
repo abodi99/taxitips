@@ -3,6 +3,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api_client.dart';
@@ -60,9 +61,58 @@ class _DriverScreenState extends State<DriverScreen> {
   double? _userLon;
   static const _nearKm = 25.0;
 
+  // Filter choices persist locally so a driver doesn't have to re-set them
+  // every time they open the app -- "Bara hög prio" is exactly the kind of
+  // thing you turn on once and expect to stay on, not something to
+  // reconfigure at every stoplight. Not synced to the account/device row
+  // (this is a per-phone UI preference, not a server-side setting) --
+  // plain SharedPreferences, same pattern already used elsewhere in this
+  // client (see api_client.dart's saveDevice/saveSession).
+  static const _prefsHighOnlyKey = 'tb_filter_high_only';
+  static const _prefsNearMeKey = 'tb_filter_near_me';
+  static const _prefsSourceKey = 'tb_filter_source';
+
+  Future<void> _loadSavedFilters() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final highOnly = prefs.getBool(_prefsHighOnlyKey);
+      final nearMe = prefs.getBool(_prefsNearMeKey);
+      final source = prefs.getString(_prefsSourceKey);
+      if (!mounted) return;
+      setState(() {
+        if (highOnly != null) _highOnly = highOnly;
+        if (source != null) _sourceFilter = source;
+      });
+      // "Nära mig" needs a real GPS fix to actually filter anything
+      // (_geoFilter no-ops until _userLat/_userLon are set) -- re-run the
+      // real permission+location flow rather than just restoring the flag,
+      // so a saved "on" choice takes effect immediately instead of silently
+      // doing nothing until the driver happens to reopen the filter sheet.
+      if (nearMe == true) {
+        await _toggleNearMe(true);
+      }
+    } catch (_) {
+      // Best-effort -- a driver seeing default filters once is fine, an
+      // exception here should never block the app from loading signals.
+    }
+  }
+
+  Future<void> _saveFilters() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(_prefsHighOnlyKey, _highOnly);
+      await prefs.setBool(_prefsNearMeKey, _nearMe);
+      await prefs.setString(_prefsSourceKey, _sourceFilter);
+    } catch (_) {
+      // Non-fatal -- losing a saved preference isn't worth surfacing an
+      // error over.
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _loadSavedFilters();
     _bootstrap();
   }
 
@@ -287,6 +337,7 @@ class _DriverScreenState extends State<DriverScreen> {
       _sourceFilter = 'all';
       _status = null;
     });
+    _saveFilters();
   }
 
   Future<void> _openFilters() async {
@@ -302,6 +353,7 @@ class _DriverScreenState extends State<DriverScreen> {
             void apply(VoidCallback fn) {
               setState(fn);
               setModal(() {});
+              _saveFilters();
             }
 
             return SafeArea(
@@ -465,6 +517,7 @@ class _DriverScreenState extends State<DriverScreen> {
   Future<void> _toggleNearMe(bool on) async {
     if (!on) {
       setState(() => _nearMe = false);
+      _saveFilters();
       return;
     }
     try {
@@ -478,6 +531,7 @@ class _DriverScreenState extends State<DriverScreen> {
           _nearMe = false;
           _error = 'GPS-tillstånd saknas';
         });
+        _saveFilters();
         return;
       }
       final pos = await Geolocator.getCurrentPosition();
@@ -489,12 +543,14 @@ class _DriverScreenState extends State<DriverScreen> {
         _status = 'Nära dig (25 km)';
         _error = null;
       });
+      _saveFilters();
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _nearMe = false;
         _error = 'Kunde inte hämta position';
       });
+      _saveFilters();
     }
   }
 
@@ -511,8 +567,8 @@ class _DriverScreenState extends State<DriverScreen> {
     // field) -- fall back to the actual title rather than a hardcoded "Skåne"
     // that told the driver nothing about which disruption they'd tapped.
     final title = a['title']?.toString().trim();
-    if (title != null && title.isNotEmpty) return title;
-    return 'Skåne';
+    if (title == null || title.isEmpty) return 'Skåne';
+    return displayTitle(title: title, mode: a['mode']?.toString());
   }
 
   // 'header'/'taxi.driverHint' were legacy events-era fields never populated
@@ -1320,7 +1376,6 @@ class _ExplainSectionState extends State<_ExplainSection> {
         );
       } else {
         final severityTier = opp['severity_tier']?.toString();
-        final confidence = opp['confidence']?.toString();
         body = Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -1329,11 +1384,12 @@ class _ExplainSectionState extends State<_ExplainSection> {
               value:
                   severityTierLabels[severityTier] ?? severityTier ?? 'Okänd',
             ),
-            const SizedBox(height: 10),
-            _ExplainRow(
-              label: 'Säkerhet',
-              value: confidenceLabels[confidence] ?? confidence ?? 'Okänd',
-            ),
+            // Säkerhet/confidence-raden borttagen på användarens begäran --
+            // "tydligt i källdatan"-texten upplevdes som brus, inte som
+            // hjälpsam information. Kortets "osäker"-badge (confidence ==
+            // 'low') finns kvar oförändrad -- det är fortfarande värt att
+            // flagga en gissning inline på kortet, bara inte förklara den
+            // här med en egen rad.
             // Poäng flyttat till header-raden ovan -- ingen anledning att visa
             // samma siffra två gånger i samma blad.
             if (opp['expired_reason'] != null) ...[

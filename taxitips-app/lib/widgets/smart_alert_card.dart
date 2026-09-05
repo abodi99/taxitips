@@ -15,7 +15,10 @@ class SmartAlertCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final title = alert['title'] ?? 'Tips';
+    final title = displayTitle(
+      title: alert['title']?.toString(),
+      mode: alert['mode']?.toString(),
+    );
     final summary = alert['summary']?.toString() ?? '';
     final score = ((alert['worth_it_score'] as num?) ?? 0);
     final likelihood = customerLikelihood(
@@ -166,6 +169,24 @@ class SmartAlertCard extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
+                  // "Pågår i X min till" says how much is left, but not WHEN
+                  // this started -- worth showing plainly since some alerts
+                  // (esp. thin ones like a bare "Försening" with no place
+                  // name) give a driver almost nothing else to go on.
+                  if (alert['start_time'] != null) ...[
+                    Text(
+                      '  ·  ',
+                      style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                    ),
+                    Text(
+                      dateTimeLabel(alert['start_time']?.toString()),
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Colors.grey.shade700,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                 ],
               ),
               if (summary.isNotEmpty) ...[
