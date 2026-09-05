@@ -57,6 +57,41 @@ class _DriverScreenState extends State<DriverScreen> {
   // signals stay one tap away for a driver who deliberately wants them.
   bool _highOnly = true;
   bool _nearMe = false;
+
+  /// Event types the driver has explicitly switched off. Stored as an
+  /// opt-OUT set rather than an opt-in list so a new severity_tier added
+  /// server-side shows up by default instead of being silently invisible
+  /// to everyone who saved a filter before it existed.
+  Set<String> _hiddenTiers = {};
+
+  /// Tiers offered in the filter sheet: whatever actually appears in the
+  /// current data, plus anything already hidden (so a driver can always
+  /// un-hide a type even when none are live right now). Data-driven rather
+  /// than a hardcoded list -- offering a checkbox for a type that never
+  /// occurs is noise, and silently omitting a hidden one would strand the
+  /// driver with a filter they can't undo.
+  List<String> get _filterableTiers {
+    final seen = <String>{
+      for (final a in _rawActive)
+        if (a['severity_tier'] != null) a['severity_tier'].toString(),
+      ..._hiddenTiers,
+    }..removeWhere((t) => !severityTierShortLabels.containsKey(t));
+    final ordered = [
+      'line_paused',
+      'vehicle_cancelled',
+      'line_delayed',
+      'vehicle_delayed',
+      'road_accident_or_closure',
+      'road_work_or_queue',
+      'road_work',
+      'disruption_unclassified',
+    ];
+    return [
+      for (final t in ordered)
+        if (seen.contains(t)) t,
+    ];
+  }
+
   String _sourceFilter = 'all'; // all | transit | road
   bool _mapShowsPerOpportunity =
       false; // false = platsaggregerad karta (default), true = en markör per signal
@@ -75,6 +110,7 @@ class _DriverScreenState extends State<DriverScreen> {
   static const _prefsHighOnlyKey = 'tb_filter_high_only';
   static const _prefsNearMeKey = 'tb_filter_near_me';
   static const _prefsSourceKey = 'tb_filter_source';
+  static const _prefsHiddenTiersKey = 'tb_filter_hidden_tiers';
 
   Future<void> _loadSavedFilters() async {
     try {
@@ -82,10 +118,12 @@ class _DriverScreenState extends State<DriverScreen> {
       final highOnly = prefs.getBool(_prefsHighOnlyKey);
       final nearMe = prefs.getBool(_prefsNearMeKey);
       final source = prefs.getString(_prefsSourceKey);
+      final hiddenTiers = prefs.getStringList(_prefsHiddenTiersKey);
       if (!mounted) return;
       setState(() {
         if (highOnly != null) _highOnly = highOnly;
         if (source != null) _sourceFilter = source;
+        if (hiddenTiers != null) _hiddenTiers = hiddenTiers.toSet();
       });
       // "Nära mig" needs a real GPS fix to actually filter anything
       // (_geoFilter no-ops until _userLat/_userLon are set) -- re-run the
@@ -107,6 +145,7 @@ class _DriverScreenState extends State<DriverScreen> {
       await prefs.setBool(_prefsHighOnlyKey, _highOnly);
       await prefs.setBool(_prefsNearMeKey, _nearMe);
       await prefs.setString(_prefsSourceKey, _sourceFilter);
+      await prefs.setStringList(_prefsHiddenTiersKey, _hiddenTiers.toList());
     } catch (_) {
       // Non-fatal -- losing a saved preference isn't worth surfacing an
       // error over.
@@ -232,8 +271,16 @@ class _DriverScreenState extends State<DriverScreen> {
   List<Map<String, dynamic>> _sourceFilterList(
     List<Map<String, dynamic>> list,
   ) {
-    if (_sourceFilter == 'all') return list;
-    return list.where((a) => a['kind'] == _sourceFilter).toList();
+    var out = list;
+    if (_sourceFilter != 'all') {
+      out = out.where((a) => a['kind'] == _sourceFilter).toList();
+    }
+    if (_hiddenTiers.isNotEmpty) {
+      out = out
+          .where((a) => !_hiddenTiers.contains(a['severity_tier']?.toString()))
+          .toList();
+    }
+    return out;
   }
 
   // "Bara hög prio" means "severe disruption", NOT "reachable from here" --
@@ -290,9 +337,7 @@ class _DriverScreenState extends State<DriverScreen> {
   List<Map<String, dynamic>> get _trafficSignals {
     var list = _sourceFilterList(_geoFilter(_rawActive));
     if (_highOnly) {
-      list = list
-          .where(_isHighSeverity)
-          .toList();
+      list = list.where(_isHighSeverity).toList();
     }
     _sortSignals(list);
     return list;
@@ -329,7 +374,11 @@ class _DriverScreenState extends State<DriverScreen> {
   List<Map<String, dynamic>> get _signals => _trafficSignalsVisible;
 
   bool get _filtersActive =>
-      _highOnly || _nearMe || _place != null || _sourceFilter != 'all';
+      _highOnly ||
+      _nearMe ||
+      _place != null ||
+      _sourceFilter != 'all' ||
+      _hiddenTiers.isNotEmpty;
 
   String get _filterSummary {
     final bits = <String>[];
@@ -338,6 +387,7 @@ class _DriverScreenState extends State<DriverScreen> {
     if (_highOnly) bits.add('Hög prio');
     if (_nearMe) bits.add('Nära dig');
     if (_place != null) bits.add(_place!);
+    if (_hiddenTiers.isNotEmpty) bits.add('${_hiddenTiers.length} typ dold');
     if (bits.isEmpty) return 'Alla signaler';
     return bits.join(' · ');
   }
@@ -351,6 +401,7 @@ class _DriverScreenState extends State<DriverScreen> {
       _highOnly = true;
       _nearMe = false;
       _sourceFilter = 'all';
+      _hiddenTiers = {};
       _status = null;
     });
     _saveFilters();
@@ -360,6 +411,9 @@ class _DriverScreenState extends State<DriverScreen> {
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: TbColors.foam,
+      // Scrollable: the type-of-event list grows with whatever tiers are
+      // live, so a fixed-height sheet overflows on smaller screens.
+      isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
@@ -373,106 +427,153 @@ class _DriverScreenState extends State<DriverScreen> {
             }
 
             return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        width: 40,
-                        height: 4,
-                        margin: const EdgeInsets.only(bottom: 14),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade400,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                    ),
-                    const Text(
-                      'Filter',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'Bara hög prio',
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      subtitle: const Text(
-                        'Bara allvarliga störningar (oavsett avstånd)',
-                      ),
-                      value: _highOnly,
-                      onChanged: (v) => apply(() => _highOnly = v),
-                    ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'Nära mig',
-                        style: TextStyle(fontWeight: FontWeight.w800),
-                      ),
-                      subtitle: const Text('Inom ca 25 km'),
-                      value: _nearMe,
-                      onChanged: (v) async {
-                        if (v) {
-                          Navigator.pop(ctx);
-                          await _toggleNearMe(true);
-                        } else {
-                          apply(() => _nearMe = false);
-                        }
-                      },
-                    ),
-                    const SizedBox(height: 8),
-                    const Text(
-                      'Källa',
-                      style: TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.85,
+                ),
+                child: SingleChildScrollView(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        for (final opt in const [
-                          ('all', 'Alla källor'),
-                          ('transit', 'Kollektivtrafik'),
-                          ('road', 'Vägtrafik'),
-                        ])
-                          ChoiceChip(
-                            label: Text(
-                              opt.$2,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w800,
-                              ),
+                        Center(
+                          child: Container(
+                            width: 40,
+                            height: 4,
+                            margin: const EdgeInsets.only(bottom: 14),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade400,
+                              borderRadius: BorderRadius.circular(4),
                             ),
-                            selected: _sourceFilter == opt.$1,
-                            selectedColor: TbColors.taxi,
-                            onSelected: (_) =>
-                                apply(() => _sourceFilter = opt.$1),
                           ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      children: [
-                        TextButton(
-                          onPressed: () {
-                            _clearFilters();
-                            setModal(() {});
+                        ),
+                        const Text(
+                          'Filter',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text(
+                            'Bara hög prio',
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          subtitle: const Text(
+                            'Bara allvarliga störningar (oavsett avstånd)',
+                          ),
+                          value: _highOnly,
+                          onChanged: (v) => apply(() => _highOnly = v),
+                        ),
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          title: const Text(
+                            'Nära mig',
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          subtitle: const Text('Inom ca 25 km'),
+                          value: _nearMe,
+                          onChanged: (v) async {
+                            if (v) {
+                              Navigator.pop(ctx);
+                              await _toggleNearMe(true);
+                            } else {
+                              apply(() => _nearMe = false);
+                            }
                           },
-                          child: const Text('Nollställ'),
                         ),
-                        const Spacer(),
-                        FilledButton(
-                          onPressed: () => Navigator.pop(ctx),
-                          child: const Text('Klar'),
+                        const SizedBox(height: 8),
+                        const Text(
+                          'Källa',
+                          style: TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            for (final opt in const [
+                              ('all', 'Alla källor'),
+                              ('transit', 'Kollektivtrafik'),
+                              ('road', 'Vägtrafik'),
+                            ])
+                              ChoiceChip(
+                                label: Text(
+                                  opt.$2,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                                selected: _sourceFilter == opt.$1,
+                                selectedColor: TbColors.taxi,
+                                onSelected: (_) =>
+                                    apply(() => _sourceFilter = opt.$1),
+                              ),
+                          ],
+                        ),
+                        // Per-type control only matters once "hög prio" is off --
+                        // with it on, the tier set is already narrowed to the ones
+                        // worth driving to, and offering to hide those too would
+                        // just be a way to end up with an empty screen.
+                        if (!_highOnly) ...[
+                          const SizedBox(height: 16),
+                          const Text(
+                            'Typ av händelse',
+                            style: TextStyle(fontWeight: FontWeight.w800),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Avmarkera det du inte vill se. Sparas till nästa gång.',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          for (final tier in _filterableTiers)
+                            CheckboxListTile(
+                              contentPadding: EdgeInsets.zero,
+                              dense: true,
+                              controlAffinity: ListTileControlAffinity.leading,
+                              title: Text(
+                                severityTierShortLabels[tier] ?? tier,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              value: !_hiddenTiers.contains(tier),
+                              onChanged: (on) => apply(() {
+                                if (on == true) {
+                                  _hiddenTiers.remove(tier);
+                                } else {
+                                  _hiddenTiers.add(tier);
+                                }
+                              }),
+                            ),
+                        ],
+                        const SizedBox(height: 16),
+                        Row(
+                          children: [
+                            TextButton(
+                              onPressed: () {
+                                _clearFilters();
+                                setModal(() {});
+                              },
+                              child: const Text('Nollställ'),
+                            ),
+                            const Spacer(),
+                            FilledButton(
+                              onPressed: () => Navigator.pop(ctx),
+                              child: const Text('Klar'),
+                            ),
+                          ],
                         ),
                       ],
                     ),
-                  ],
+                  ),
                 ),
               ),
             );
@@ -656,7 +757,6 @@ class _DriverScreenState extends State<DriverScreen> {
     return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
   }
 
-
   Future<void> _openAlertDetail(Map<String, dynamic> a) async {
     final url = a['url']?.toString();
     final likelihood = customerLikelihood(
@@ -735,7 +835,8 @@ class _DriverScreenState extends State<DriverScreen> {
                       const SizedBox(width: 8),
                       _DetailStat(
                         icon: Icons.speed,
-                        label: '${(a['demand_score'] as num?)?.round() ?? '—'}/100',
+                        label:
+                            '${(a['demand_score'] as num?)?.round() ?? '—'}/100',
                       ),
                       if (a['is_active'] == false) ...[
                         const SizedBox(width: 8),
@@ -958,8 +1059,8 @@ class _DriverScreenState extends State<DriverScreen> {
                                                 height: 20,
                                                 child:
                                                     CircularProgressIndicator(
-                                                  strokeWidth: 2,
-                                                ),
+                                                      strokeWidth: 2,
+                                                    ),
                                               )
                                             : const Icon(
                                                 Icons.refresh,
@@ -1065,8 +1166,7 @@ class _DriverScreenState extends State<DriverScreen> {
                                 onSelectPlace: (name) => setState(() {
                                   _place = _place == name ? null : name;
                                 }),
-                                onSelectOpportunity: (o) =>
-                                    _openAlertDetail(o),
+                                onSelectOpportunity: (o) => _openAlertDetail(o),
                               ),
                               Positioned(
                                 top: 8,
@@ -1090,8 +1190,9 @@ class _DriverScreenState extends State<DriverScreen> {
                                       color: TbColors.ink,
                                     ),
                                     style: IconButton.styleFrom(
-                                      backgroundColor: Colors.white
-                                          .withValues(alpha: 0.9),
+                                      backgroundColor: Colors.white.withValues(
+                                        alpha: 0.9,
+                                      ),
                                       shape: const CircleBorder(),
                                       elevation: 2,
                                     ),
@@ -1197,8 +1298,14 @@ class _DriverScreenState extends State<DriverScreen> {
                                         onPressed: () {
                                           setState(() => _highOnly = false);
                                           _saveFilters();
+                                          // Land in the sheet so the type
+                                          // controls that just became
+                                          // relevant are right there.
+                                          _openFilters();
                                         },
-                                        child: const Text('Visa svagare signaler'),
+                                        child: const Text(
+                                          'Visa svagare signaler',
+                                        ),
                                       ),
                                     ),
                                   ] else if (_filtersActive) ...[
@@ -1226,7 +1333,8 @@ class _DriverScreenState extends State<DriverScreen> {
                                       _SectionTitle(
                                         'Nu — kör hit (${_trafficSignals.length})',
                                       ),
-                                      for (final a in _activeSignalsVisible) ...[
+                                      for (final a
+                                          in _activeSignalsVisible) ...[
                                         SmartAlertCard(
                                           alert: a,
                                           onTap: () => _openAlertDetail(a),

@@ -37,29 +37,36 @@ class SmartAlertCard extends StatelessWidget {
       endTime = DateTime.tryParse(endTimeStr);
     }
 
-    // "kvar" alone doesn't say remaining until WHAT -- this is the disruption's
-    // own expected end, not a deadline to act by, and a driver reading "46 min
-    // kvar" could easily assume the latter. Say explicitly what's ending.
-    // Ended items (is_active == false, kept around for the last-24h view) show
-    // when they actually ended, WITH the date -- a bare "19:20" on a
-    // yesterday-vs-today list is ambiguous, and dateTimeLabel already only
-    // adds the date when it isn't today.
-    String timeLeft = 'Okänt hur länge det pågår';
-    if (endTime != null) {
-      if (!isActive) {
-        timeLeft = 'Avslutades ${dateTimeLabel(endTimeStr.toString())}';
+    // How LONG a disruption lasts is the wrong question, and end_time can't
+    // answer it anyway: Trafiklab's end_time is the alert's own publishing
+    // validity window, not the disruption's duration. Every cancelled
+    // departure in a batch ends at the same wall-clock time (21:59 on live
+    // data), so "Pågår i 7 tim 50 min till" told a driver a single cancelled
+    // bus would keep being cancelled all evening -- confusing and untrue.
+    //
+    // What actually matters at a glance is how FRESH it is: a cancellation
+    // 4 minutes ago means people are still standing there; one from 3 hours
+    // ago means they've long since found another way.
+    final startTimeStr = alert['start_time'];
+    final startTime = startTimeStr == null
+        ? null
+        : DateTime.tryParse(startTimeStr.toString());
+
+    String timeLeft = 'Tidpunkt okänd';
+    if (!isActive && endTime != null) {
+      timeLeft = 'Avslutades ${dateTimeLabel(endTimeStr.toString())}';
+    } else if (startTime != null) {
+      final age = DateTime.now().difference(startTime);
+      if (age.isNegative) {
+        timeLeft = 'Börjar ${dateTimeLabel(startTimeStr.toString())}';
+      } else if (age.inMinutes < 1) {
+        timeLeft = 'Just nu';
+      } else if (age.inMinutes < 60) {
+        timeLeft = 'För ${age.inMinutes} min sedan';
+      } else if (age.inHours < 24) {
+        timeLeft = 'För ${age.inHours} tim sedan';
       } else {
-        final diff = endTime.difference(DateTime.now());
-        if (diff.isNegative) {
-          timeLeft = 'Störningen bör ha upphört';
-        } else if (diff.inMinutes < 60) {
-          timeLeft = 'Pågår i ${diff.inMinutes} min till';
-        } else if (diff.inHours < 24) {
-          timeLeft =
-              'Pågår i ${diff.inHours} tim ${diff.inMinutes % 60} min till';
-        } else {
-          timeLeft = 'Pågår i ${diff.inDays} dagar till';
-        }
+        timeLeft = dateTimeLabel(startTimeStr.toString());
       }
     }
 
@@ -157,7 +164,7 @@ class SmartAlertCard extends StatelessWidget {
               Row(
                 children: [
                   const Icon(
-                    Icons.timer_outlined,
+                    Icons.schedule,
                     size: 13,
                     color: Colors.grey,
                   ),
