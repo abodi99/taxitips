@@ -147,7 +147,10 @@ class SmartAlertCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  LikelihoodBadge(likelihood: likelihood),
+                  LikelihoodBadge(
+                    likelihood: likelihood,
+                    distanceKm: (alert['distance_km'] as num?)?.toDouble(),
+                  ),
                 ],
               ),
               const SizedBox(height: 6),

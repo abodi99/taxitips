@@ -44,6 +44,8 @@ dependencies:
   geolocator: ^14.0.3
   firebase_analytics: ^12.4.6
   supabase_flutter: ^2.9.1
+  flutter_native_splash: ^2.4.8
+  flutter_svg: ^2.3.0
 
 dev_dependencies:
   flutter_test:

@@ -93,8 +93,13 @@ class _DriverScreenState extends State<DriverScreen> {
   }
 
   String _sourceFilter = 'all'; // all | transit | road
-  bool _mapShowsPerOpportunity =
-      false; // false = platsaggregerad karta (default), true = en markör per signal
+  // Per-signal markers by default. The place-aggregated view depends on
+  // placeStats, which is built from taxi.places -- a legacy field that is
+  // always empty for real opportunities, so the default map rendered
+  // literally nothing while 121 signals had perfectly good coordinates.
+  // Showing where each disruption actually is also answers the driver's
+  // real question ("var kör jag?") better than a count bubble per town.
+  bool _mapShowsPerOpportunity = true;
   String? _place; // null = alla
   double? _userLat;
   double? _userLon;
@@ -808,7 +813,11 @@ class _DriverScreenState extends State<DriverScreen> {
                       // Restates the same likelihood the card already showed
                       // -- the sheet shouldn't require remembering it from
                       // the list.
-                      LikelihoodBadge(likelihood: likelihood, fontSize: 13),
+                      LikelihoodBadge(
+                        likelihood: likelihood,
+                        distanceKm: (a['distance_km'] as num?)?.toDouble(),
+                        fontSize: 13,
+                      ),
                     ],
                   ),
                   const SizedBox(height: 6),
@@ -1160,9 +1169,14 @@ class _DriverScreenState extends State<DriverScreen> {
                                 selectedPlace: _place,
                                 highOnly: _highOnly,
                                 perOpportunity: _mapShowsPerOpportunity,
-                                opportunities: _sourceFilterList(
-                                  _geoFilter(_rawActive),
-                                ),
+                                // Same list the cards below are built from,
+                                // so map and list can never disagree. It
+                                // previously skipped the high-prio filter,
+                                // which meant "Hög prio" showed 5 cards
+                                // while the map plotted ~120 markers, mostly
+                                // low-priority ones the driver had just
+                                // asked not to see.
+                                opportunities: _trafficSignals,
                                 onSelectPlace: (name) => setState(() {
                                   _place = _place == name ? null : name;
                                 }),

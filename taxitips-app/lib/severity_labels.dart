@@ -75,11 +75,12 @@ CustomerLikelihood customerLikelihood({
   return CustomerLikelihood.low;
 }
 
-const customerLikelihoodLabels = {
-  CustomerLikelihood.high: 'Troligt att det finns kunder',
-  CustomerLikelihood.medium: 'Möjligt att det finns kunder',
-  CustomerLikelihood.low: 'Osannolikt just nu',
-};
+// The "Troligt/Möjligt/Osannolikt att det finns kunder" labels lived here.
+// Removed deliberately: they stated a probability the data can't actually
+// support (we know severity, distance and age -- not whether anyone is
+// standing at that stop), and they occupied the badge slot that now carries
+// distance, which a driver can act on. CustomerLikelihood itself is kept and
+// still drives the badge colour and the "Bara hög prio" filter.
 
 const _months = [
   'jan', 'feb', 'mar', 'apr', 'maj', 'jun',
