@@ -74,6 +74,7 @@ class HotspotMap extends StatelessWidget {
         final likelihood = customerLikelihood(
           severityTier: o['severity_tier']?.toString(),
           worthItScore: (o['worth_it_score'] as num?) ?? 0,
+          demandScore: (o['demand_score'] as num?) ?? 0,
         );
         final ringColor = switch (likelihood) {
           CustomerLikelihood.high => TbColors.likelihoodHigh,

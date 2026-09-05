@@ -51,7 +51,11 @@ class _DriverScreenState extends State<DriverScreen> {
   bool _claiming = false;
   bool _refreshing = false;
   bool? _entitled; // null = okänt/inte kollat än, kör inte spärr förrän vi vet.
-  bool _highOnly = false;
+  // On by default: the screen exists to answer "var finns taxibehov just nu",
+  // and the honest answer is a short list of places actually worth driving to
+  // -- not 250 signals dominated by buses running a few minutes late. Weaker
+  // signals stay one tap away for a driver who deliberately wants them.
+  bool _highOnly = true;
   bool _nearMe = false;
   String _sourceFilter = 'all'; // all | transit | road
   bool _mapShowsPerOpportunity =
@@ -244,14 +248,23 @@ class _DriverScreenState extends State<DriverScreen> {
   // Road tiers are deliberately excluded -- an accident/closure delays people
   // already in a car, it doesn't strand pedestrians who'd need a taxi, so it's
   // never "high priority" here regardless of how bad the road situation reads.
+  /// "Hög prio" must mean the same thing the card's badge means, or the
+  /// screen contradicts itself. It used to key off demand_score (raw
+  /// severity), while the badge keys off customerLikelihood() (which folds
+  /// in reachability via worth_it_score) -- so a line_paused 55 km away
+  /// passed the filter while its own badge read "Osannolikt just nu".
+  /// Both now ask one question: is this worth driving to right now?
   bool _isHighSeverity(Map<String, dynamic> a) {
     final severityTier = a['severity_tier']?.toString();
-    if (severityTier != null) {
-      if (severityTier == 'line_paused') return true;
-      if (severityTier.startsWith('road_')) return false;
-      return ((a['demand_score'] as num?) ?? 0) >= 70;
+    if (severityTier == null) {
+      return (a['taxi'] as Map?)?['level'] == 'high';
     }
-    return (a['taxi'] as Map?)?['level'] == 'high';
+    return customerLikelihood(
+          severityTier: severityTier,
+          worthItScore: (a['worth_it_score'] as num?) ?? 0,
+          demandScore: (a['demand_score'] as num?) ?? 0,
+        ) ==
+        CustomerLikelihood.high;
   }
 
   void _sortSignals(List<Map<String, dynamic>> list) {
@@ -329,10 +342,13 @@ class _DriverScreenState extends State<DriverScreen> {
     return bits.join(' · ');
   }
 
+  // Resets to the app's default view (high prio only), not to "show
+  // everything" -- the default IS the intended answer to "var finns
+  // taxibehov just nu", so returning to it is what "nollställ" should mean.
   void _clearFilters() {
     setState(() {
       _place = null;
-      _highOnly = false;
+      _highOnly = true;
       _nearMe = false;
       _sourceFilter = 'all';
       _status = null;
@@ -646,6 +662,7 @@ class _DriverScreenState extends State<DriverScreen> {
     final likelihood = customerLikelihood(
       severityTier: a['severity_tier']?.toString(),
       worthItScore: (a['worth_it_score'] as num?) ?? 0,
+      demandScore: (a['demand_score'] as num?) ?? 0,
     );
     await showModalBottomSheet<void>(
       context: context,
@@ -1156,10 +1173,16 @@ class _DriverScreenState extends State<DriverScreen> {
                                     color: Colors.grey.shade300,
                                   ),
                                   const SizedBox(height: 12),
+                                  // "Nothing high-prio right now" is a real,
+                                  // useful answer -- not an error state. Since
+                                  // high-prio is the default, offer the one
+                                  // action that actually reveals more (turning
+                                  // it off) rather than a reset that would
+                                  // land right back here.
                                   Text(
-                                    _filtersActive
-                                        ? 'Inget i filtret.\nÄndra Alla / typ / nära mig / hög prio.'
-                                        : 'Lugnt läge — inga starka taxisignaler.',
+                                    _highOnly
+                                        ? 'Inga starka taxisignaler just nu.'
+                                        : 'Inget i filtret.\nÄndra typ, nära mig eller ort.',
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                       fontSize: 17,
@@ -1167,12 +1190,23 @@ class _DriverScreenState extends State<DriverScreen> {
                                       color: Colors.grey.shade700,
                                     ),
                                   ),
-                                  if (_filtersActive) ...[
+                                  if (_highOnly) ...[
+                                    const SizedBox(height: 16),
+                                    Center(
+                                      child: FilledButton(
+                                        onPressed: () {
+                                          setState(() => _highOnly = false);
+                                          _saveFilters();
+                                        },
+                                        child: const Text('Visa svagare signaler'),
+                                      ),
+                                    ),
+                                  ] else if (_filtersActive) ...[
                                     const SizedBox(height: 16),
                                     Center(
                                       child: FilledButton(
                                         onPressed: _clearFilters,
-                                        child: const Text('Visa allt'),
+                                        child: const Text('Nollställ filter'),
                                       ),
                                     ),
                                   ],

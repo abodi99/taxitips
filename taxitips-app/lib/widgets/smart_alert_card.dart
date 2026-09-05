@@ -24,6 +24,7 @@ class SmartAlertCard extends StatelessWidget {
     final likelihood = customerLikelihood(
       severityTier: alert['severity_tier']?.toString(),
       worthItScore: score,
+      demandScore: (alert['demand_score'] as num?) ?? 0,
     );
     final endTimeStr = alert['end_time'] ?? alert['ends_at'];
     final kind = alert['kind']?.toString();

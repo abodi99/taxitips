@@ -49,15 +49,27 @@ enum CustomerLikelihood { high, medium, low }
 const _highSeverityTiers = {'line_paused'};
 const _mediumSeverityTiers = {'line_delayed', 'vehicle_cancelled'};
 
+/// A reachable, strongly-scored cancellation is worth driving to, not just
+/// "möjligt" -- vehicle_cancelled spans both a cancelled train that strands
+/// a platform full of people (score ~72) and much weaker single-departure
+/// cases, so let the tier's own score lift it. Matches the worker's push
+/// gate (fcmPush.js NOTIFY_SCORE_FLOOR) so what buzzes the phone and what
+/// reads "Troligt" on the card stay the same judgement.
+const _highScoreFloor = 50;
+
 CustomerLikelihood customerLikelihood({
   required String? severityTier,
   required num worthItScore,
+  num demandScore = 0,
 }) {
   if (worthItScore <= 0) return CustomerLikelihood.low;
   if (_highSeverityTiers.contains(severityTier)) {
     return CustomerLikelihood.high;
   }
   if (_mediumSeverityTiers.contains(severityTier)) {
+    if (severityTier == 'vehicle_cancelled' && demandScore >= _highScoreFloor) {
+      return CustomerLikelihood.high;
+    }
     return CustomerLikelihood.medium;
   }
   return CustomerLikelihood.low;
