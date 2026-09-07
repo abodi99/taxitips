@@ -1,0 +1,5 @@
+-- SQL-funktioner som de faktiskt ser ut i databasen just nu.
+-- Genererad av `manage.py dump_truth`. Redigera inte för hand.
+--
+-- Poängen med filen: migrationsmappen innehåller sju versioner av
+-- get_smart_alerts. Här finns en -- den som gäller.
