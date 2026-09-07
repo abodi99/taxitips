@@ -1,0 +1,65 @@
+// Deklarativ pipeline för taxitips-backend. Kräver en Jenkins-agent med
+// Docker-socket-åtkomst (för db/redis-containrarna) och Python 3.14.
+// Ingen befintlig Jenkins-instans hittades i repot -- det här är helt ny
+// infrastruktur, filen förutsätter att en agent med den kapaciteten redan
+// finns.
+pipeline {
+    agent any
+
+    environment {
+        // Gör att `manage.py test` aldrig behöver en levande Redis/broker --
+        // worker/beat-containrarna startas därför inte alls i den här pipelinen.
+        CELERY_TASK_ALWAYS_EAGER = "1"
+        DATABASE_URL = "postgresql://taxitips:taxitips@127.0.0.1:5432/taxitips"
+        CELERY_BROKER_URL = "redis://127.0.0.1:6379/0"
+    }
+
+    stages {
+        stage('Checkout') {
+            steps {
+                checkout scm
+            }
+        }
+
+        stage('Bygg miljön') {
+            steps {
+                dir('taxitips-backend') {
+                    sh 'docker compose up -d --build db redis'
+                    sh '''
+                        for i in $(seq 1 30); do
+                            docker compose exec -T db pg_isready -U taxitips && exit 0
+                            sleep 2
+                        done
+                        echo "db blev aldrig redo" >&2
+                        exit 1
+                    '''
+                }
+            }
+        }
+
+        stage('Installera beroenden') {
+            steps {
+                dir('taxitips-backend') {
+                    sh 'python3 -m venv .venv'
+                    sh './.venv/bin/pip install -r requirements.txt'
+                }
+            }
+        }
+
+        stage('Kör tester') {
+            steps {
+                dir('taxitips-backend') {
+                    sh './.venv/bin/python manage.py test core billing'
+                }
+            }
+        }
+    }
+
+    post {
+        always {
+            dir('taxitips-backend') {
+                sh 'docker compose down -v'
+            }
+        }
+    }
+}

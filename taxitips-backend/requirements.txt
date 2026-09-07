@@ -1,0 +1,27 @@
+asgiref==3.12.1
+certifi==2026.7.22
+charset-normalizer==3.5.1
+Django==6.1.1
+gtfs-realtime-bindings==2.2.0
+idna==3.19
+protobuf==6.33.6
+psycopg==3.3.5
+psycopg-binary==3.3.5
+requests==2.34.2
+sqlparse==0.6.0
+urllib3==2.7.0
+genkit==0.11.0
+genkit-google-genai==0.11.0
+
+# Celery + Redis: bakgrundstasks (Stripe-webhook -> FCM-push) och Celery Beat
+# (ersätter run_pipeline.pys egen loop, se core/tasks.py).
+celery[redis]==5.5.2
+redis==5.2.1
+
+# Stripe-signaturverifiering för billing/webhooks.py.
+stripe==11.4.1
+
+# OAuth2-tokenutbyte mot FCM v1, samma lätta stil som worker/src/fcmPush.js
+# (ingen firebase-admin -- se billing/fcm.py). Version låst av
+# genkit-google-genais eget beroende (kräver >=2.47.0), inte av FCM-koden.
+google-auth==2.57.1
