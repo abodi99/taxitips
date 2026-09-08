@@ -72,7 +72,11 @@ cd ../taxitips-app && flutter run --dart-define=API_BASE_URL=http://127.0.0.1:80
 I Chrome: lägg till `-d chrome --web-port 5180` plus
 `--dart-define=SUPABASE_URL=http://127.0.0.1:54321` och
 `--dart-define=SUPABASE_ANON_KEY=<PUBLISHABLE_KEY ur supabase status>`.
-Testkonto och exakta kommandon i `DEV.md`.
+Konton, bolag och prenumerationer fylls av
+`manage.py seed_local_demo --service-key <supabase service_role>`: tre bolag
+(trial, betalande, uppsagt), fem konton, sex förartokens. Det uppsagda
+bolaget finns för att "obetalt" och "pipelinen hittade inget" annars ser
+identiska ut på skärmen. Exakta kommandon och inloggningar i `DEV.md`.
 
 Fyll databasen (en källa per kommando):
 

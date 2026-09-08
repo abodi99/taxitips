@@ -90,8 +90,41 @@ Inte port 5000 — macOS AirPlay Receiver sitter där. I DEBUG släpper
 Django in vilken `localhost`-port som helst (se `core/api.py:_cors`), så
 porten spelar ingen roll så länge den är ledig.
 
-**Testkonto (bara lokalt):** `test@taxitips.se` / `taxitips123`, ägare i
-Taxi Tips Demo AB. Skapa om det efter en `supabase db reset`:
+**Konton och bolag (bara lokalt).** Ett kommando fyller allt — tre bolag i
+olika betalningslägen, fem konton, sex förarenheter:
+
+```bash
+cd taxitips-backend
+SERVICE=$(cd ../taxitips-api && supabase status -o json | python3 -c 'import sys,json;print(json.load(sys.stdin)["SERVICE_ROLE_KEY"])')
+./.venv/bin/python manage.py seed_local_demo --service-key "$SERVICE"
+```
+
+Lösenord för samtliga: `taxitips123`.
+
+| Konto | Roll | Bolag | Läge |
+|---|---|---|---|
+| `demo@taxitips.se` | ägare | Taxi Tips Demo AB | trial |
+| `test@taxitips.se` | ägare | Taxi Tips Demo AB | trial |
+| `agare@malmotaxi.se` | ägare | Malmö Taxi AB | **betalande** |
+| `chef@malmotaxi.se` | admin | Malmö Taxi AB | betalande |
+| `agare@norrtaxi.se` | ägare | Norrtaxi AB | **uppsagt** |
+
+Norrtaxi är uppsagt med avsikt. "Obetalt bolag" och "pipelinen hittade
+inget" ser identiska ut på skärmen om man inte har något att jämföra med —
+med kontot får du `entitled=false, reason=company_inactive` i stället för en
+tyst tom lista.
+
+Förartokens (ingen inloggning behövs):
+
+| Token | Bolag |
+|---|---|
+| `9a9bf67c6e8885f44c831232afd314788d86067b7ddfcced` | Demo (trial) |
+| `11111111111111111111111111111111111111111111aaaa` | Malmö Taxi (betalande) |
+| `44444444444444444444444444444444444444444444dddd` | Norrtaxi (uppsagt — ska se noll tips) |
+
+Kommandot vägrar köra mot en databas som inte ligger på `127.0.0.1`.
+
+<details><summary>Skapa ett konto för hand i stället</summary>
 
 ```bash
 cd taxitips-api
@@ -110,8 +143,9 @@ select gen_random_uuid(), '00000000-0000-4000-8000-000000000001', id, 'company_o
 from auth.users where email = 'test@taxitips.se';
 ```
 
-Förarvägen behöver inget konto alls — token
-`9a9bf67c6e8885f44c831232afd314788d86067b7ddfcced` finns i seeden.
+</details>
+
+Förarvägen behöver inget konto alls.
 
 Två fällor som båda gav samma symptom ("inloggad men ser inget"), båda
 åtgärdade men värda att känna igen om de kommer tillbaka:
