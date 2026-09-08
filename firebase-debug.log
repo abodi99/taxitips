@@ -1,0 +1,57 @@
+[debug] [2026-09-08T19:37:08.277Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T19:37:08.280Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T19:37:08.283Z] Checked if tokens are valid: false, expires at: 1788888090596
+[debug] [2026-09-08T19:37:08.283Z] Checked if tokens are valid: false, expires at: 1788888090596
+[debug] [2026-09-08T19:37:08.283Z] > refreshing access token with scopes: []
+[debug] [2026-09-08T19:37:08.284Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-09-08T19:37:08.284Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T19:37:08.286Z] Checked if tokens are valid: false, expires at: 1788888090596
+[debug] [2026-09-08T19:37:08.287Z] Checked if tokens are valid: false, expires at: 1788888090596
+[debug] [2026-09-08T19:37:08.287Z] > refreshing access token with scopes: []
+[debug] [2026-09-08T19:37:08.287Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-09-08T19:37:08.287Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T19:37:08.288Z] Checked if tokens are valid: false, expires at: 1788888090596
+[debug] [2026-09-08T19:37:08.289Z] Checked if tokens are valid: false, expires at: 1788888090596
+[debug] [2026-09-08T19:37:08.289Z] > refreshing access token with scopes: []
+[debug] [2026-09-08T19:37:08.289Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-09-08T19:37:08.289Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T19:37:08.295Z] Checked if tokens are valid: false, expires at: 1788888090596
+[debug] [2026-09-08T19:37:08.295Z] Checked if tokens are valid: false, expires at: 1788888090596
+[debug] [2026-09-08T19:37:08.295Z] > refreshing access token with scopes: []
+[debug] [2026-09-08T19:37:08.295Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-09-08T19:37:08.295Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T19:37:08.296Z] Checked if tokens are valid: false, expires at: 1788888090596
+[debug] [2026-09-08T19:37:08.296Z] Checked if tokens are valid: false, expires at: 1788888090596
+[debug] [2026-09-08T19:37:08.296Z] > refreshing access token with scopes: []
+[debug] [2026-09-08T19:37:08.296Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-09-08T19:37:08.296Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T19:37:08.458Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-09-08T19:37:08.458Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T19:37:08.472Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebasedataconnect.googleapis.com [none]
+[debug] [2026-09-08T19:37:08.472Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebasedataconnect.googleapis.com x-goog-quota-user=projects/taxibehov
+[debug] [2026-09-08T19:37:08.474Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-09-08T19:37:08.474Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T19:37:08.485Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseio.com [none]
+[debug] [2026-09-08T19:37:08.485Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseio.com x-goog-quota-user=projects/taxibehov
+[debug] [2026-09-08T19:37:08.486Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-09-08T19:37:08.486Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T19:37:08.494Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/cloudfunctions.googleapis.com [none]
+[debug] [2026-09-08T19:37:08.494Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/cloudfunctions.googleapis.com x-goog-quota-user=projects/taxibehov
+[debug] [2026-09-08T19:37:08.496Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-09-08T19:37:08.496Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T19:37:08.505Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseapphosting.googleapis.com [none]
+[debug] [2026-09-08T19:37:08.505Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseapphosting.googleapis.com x-goog-quota-user=projects/taxibehov
+[debug] [2026-09-08T19:37:08.506Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-09-08T19:37:08.506Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T19:37:08.514Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firestore.googleapis.com [none]
+[debug] [2026-09-08T19:37:08.514Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firestore.googleapis.com x-goog-quota-user=projects/taxibehov
+[debug] [2026-09-08T19:37:08.826Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseio.com 403
+[debug] [2026-09-08T19:37:08.827Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseio.com [omitted]
+[debug] [2026-09-08T19:37:09.516Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebasedataconnect.googleapis.com 200
+[debug] [2026-09-08T19:37:09.516Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebasedataconnect.googleapis.com [omitted]
+[debug] [2026-09-08T19:37:09.519Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseapphosting.googleapis.com 200
+[debug] [2026-09-08T19:37:09.519Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseapphosting.googleapis.com [omitted]
+[debug] [2026-09-08T19:37:09.524Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/cloudfunctions.googleapis.com 200
+[debug] [2026-09-08T19:37:09.524Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/cloudfunctions.googleapis.com [omitted]
+[debug] [2026-09-08T19:37:09.564Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firestore.googleapis.com 200
+[debug] [2026-09-08T19:37:09.564Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firestore.googleapis.com [omitted]

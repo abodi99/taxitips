@@ -17,7 +17,7 @@ from datetime import datetime, timezone as dt_timezone
 
 import stripe
 from django.conf import settings
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
@@ -44,12 +44,19 @@ def stripe_webhook(request):
     # en unik-krock på stripe_event_id betyder att Stripe levererat samma
     # event igen, och behandlas som redan klart.
     try:
-        ProcessedWebhookEvent.objects.create(
-            stripe_event_id=event.id,
-            event_type=event.type,
-            processed_at=datetime.fromtimestamp(event.created, tz=dt_timezone.utc),
-            status="processing",
-        )
+        # atomic runt insert: en unik-krock markerar annars hela den
+        # omgivande transaktionen som trasig, och nästa fråga i samma
+        # request dör i stället för att omleveransen hanteras som det den
+        # är. Osynligt i produktion idag (autocommit per request) men
+        # verkligt i varje sammanhang som lägger en transaktion runt vyn --
+        # ATOMIC_REQUESTS, ett test, en framtida wrapper.
+        with transaction.atomic():
+            ProcessedWebhookEvent.objects.create(
+                stripe_event_id=event.id,
+                event_type=event.type,
+                processed_at=datetime.fromtimestamp(event.created, tz=dt_timezone.utc),
+                status="processing",
+            )
     except IntegrityError:
         return JsonResponse({"received": True, "duplicate": True})
 

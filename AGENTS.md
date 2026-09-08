@@ -92,6 +92,13 @@ cd taxitips-backend
 Alla stöder `--dry-run`. Utan `--skip-sites` uppdateras hållplatsregistret
 (~18 000 rader, tar en stund). Kör det efter `supabase db reset`.
 
+Prenumerationer testas utan Stripe-konto:
+`manage.py simulate_stripe_event --company "Malmö Taxi AB" --type
+customer.subscription.updated --status past_due` bygger och signerar en
+riktig event-payload mot den lokala webhooken. `.mcp.json` registrerar
+dessutom Supabase CLI:s egen MCP-server (`supabase-local`) mot den lokala
+instansen — inte att förväxla med `taxitips-selfhosted`, som är produktion.
+
 Tester — båda ska vara gröna innan något deployas:
 
 ```bash

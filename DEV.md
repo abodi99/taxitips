@@ -160,6 +160,36 @@ Två fällor som båda gav samma symptom ("inloggad men ser inget"), båda
   appen visade "Inget bolag". Löst av migration
   `20260908000002_domain_foreign_keys.sql`.
 
+### Prenumerationer och webhooks, lokalt
+
+Hela faktureringsvägen — signaturkontroll, idempotens, statusuppdatering,
+push — går att prova utan Stripe-konto:
+
+```bash
+cd taxitips-backend
+./.venv/bin/python manage.py simulate_stripe_event --company "Malmö Taxi AB" --type customer.subscription.updated --status past_due
+./.venv/bin/python manage.py simulate_stripe_event --company "Malmö Taxi AB" --type customer.subscription.deleted
+./.venv/bin/python manage.py simulate_stripe_event --company "Malmö Taxi AB" --type customer.subscription.updated --status active --quantity 30
+```
+
+Kommandot bygger en riktig event-payload och signerar den som Stripe gör.
+Verifierat: `active → past_due` låser ute förarens token
+(`entitled=false, reason=company_past_due`), och `→ active` släpper in den
+igen. `STRIPE_WEBHOOK_SECRET` i `.env` kan vara vilken sträng som helst
+lokalt — den delas bara mellan kommandot och vyn. `CELERY_TASK_ALWAYS_EAGER=1`
+krävs, annars läggs tasken bara på en kö ingen lyssnar på.
+
+### MCP mot lokala Supabase
+
+`.mcp.json` registrerar `supabase-local` mot `http://127.0.0.1:54321/mcp` —
+Supabase CLI:s egen MCP-server, som följer med `supabase start`. Elva
+verktyg: `list_tables`, `execute_sql`, `apply_migration`, `get_advisors`,
+`list_migrations` m.fl.
+
+Servern finns bara medan `supabase start` kör, och verktygen dyker upp först
+efter en omstart av kodagenten. Förväxla den inte med `taxitips-selfhosted`,
+som pekar på **produktionen**.
+
 ### Appen mot Django (Spår B)
 
 `--dart-define=API_BASE_URL=...` styr var appen hämtar tips. Utan den går
