@@ -10,7 +10,10 @@ import json
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from django.utils import timezone
 
+from core.health import polling
+from core.models import Station
 from core.repository import upsert_opportunities, upsert_source_events
 from core.scoring import classify
 from core.sources.trafikverket_rail import TrafikverketRail
@@ -23,12 +26,38 @@ class Command(BaseCommand):
         parser.add_argument("--dry-run", action="store_true")
 
     def handle(self, *args, **options):
+        # Bokför utfallet oavsett hur det går -- en källa som slutat
+        # svara ska synas som trasig, inte som lugn trafik. Se
+        # core/health.py.
+        with polling("trafikverket_rail") as status:
+            self._poll(options, status)
+
+    def _poll(self, options, status):
         key = settings.TRAFIKVERKET_API_KEY
         if not key:
             self.stderr.write("TRAFIKVERKET_API_KEY saknas")
             return
 
-        alerts = TrafikverketRail(key).fetch()
+        client = TrafikverketRail(key)
+        alerts = client.fetch()
+        status.events = len(alerts)
+
+        # Stationsregistret sparas i stället för att bara leva i processens
+        # minne. rail_station-tabellen fanns men inget skrev till den, så
+        # den stod på noll rader medan varje pollcykel hämtade samma ~1000
+        # stationer på nytt -- och ingen annan del av systemet kunde slå upp
+        # en stationskoordinat.
+        stations = client.stations()
+        if stations:
+            now = timezone.now()
+            Station.objects.bulk_create(
+                [
+                    Station(signature=s.signature, name=s.name, lat=s.lat, lon=s.lon, fetched_at=now)
+                    for s in stations.values()
+                ],
+                update_conflicts=True, unique_fields=["signature"],
+                update_fields=["name", "lat", "lon", "fetched_at"],
+            )
         if not alerts:
             self.stdout.write("inga störningar just nu")
             return
@@ -56,7 +85,9 @@ class Command(BaseCommand):
                     "cancelled": a.cancelled,
                     "departure_at": a.departure_at.isoformat() if a.departure_at else None,
                     "next_departure_minutes": a.next_departure_minutes,
+                    "next_departure_is_bus": a.next_departure_is_bus,
                     "is_last_departure": a.is_last_departure,
+                    "track": a.track, "product": a.product,
                     "operator": a.operator, "information_owner": a.information_owner,
                     "destination": a.destination, "cause": a.cause,
                     "web_link": a.web_link or None, "web_link_name": a.web_link_name or None,
@@ -91,10 +122,35 @@ class Command(BaseCommand):
                 "source_event_ids": json.dumps(
                     [source_ids[a.external_id]] if a.external_id in source_ids else []
                 ),
+                # Lagstadgad förseningsersättning är medvetet inte byggd för
+                # Trafikverkets järnvägsdata än -- se core/compensation.py:s
+                # docstring (inget regionfält, blandar regionala korttåg med
+                # fjärrtåg under andra EU-regler).
+                "compensation_eligible": False,
+                "compensation_amount_kr": None,
+                # Signalerna som gav tiern, sparade som tal -- se
+                # Opportunity.next_departure_minutes.
+                "next_departure_minutes": a.next_departure_minutes,
+                "next_departure_at": a.next_departure_at,
+                "is_last_departure": a.is_last_departure,
+                # Trafikverkets ReplacementTraffic säger rakt ut när
+                # ersättningstrafik är insatt -- den starkaste signalen vi
+                # har för "resenären står inte kvar", och den nådde
+                # tidigare aldrig längre än till poängformeln.
+                # En bussavgång från samma station är också ett alternativ,
+                # även när Trafikverket inte kopplat den som
+                # ersättningstrafik: 16 av 82 inställda avgångar hade en
+                # bussavgång inom en timme (docs/api-field-inventory.md).
+                "has_alternative": a.has_replacement or a.next_departure_is_bus,
+                "alternative_note": (
+                    a.replacement_note
+                    or ("Nästa avgång härifrån är en buss" if a.next_departure_is_bus else "")
+                ),
             }
             for a, r in assessed
         ])
 
+        status.written = written
         spread = sorted({r.score for _, r in assessed}, reverse=True)
         self.stdout.write(self.style.SUCCESS(
             f"skrev {written} tips | poängnivåer: {spread}"

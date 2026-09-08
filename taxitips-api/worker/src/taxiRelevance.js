@@ -6,7 +6,7 @@
  * Ignorera stationsservice (hiss, toalett, cykel, …).
  */
 
-const { findHubsInText } = require("./hubs");
+const { findHubsInText, resolvePlaceCoords } = require("./hubs");
 const { alertInSkane, placeLooksSkane, isNationalScope } = require("./skane");
 
 /** Station/info utan taxinytta — även om rubriken nämner en station. */
@@ -15,14 +15,14 @@ const NOISE_RE =
 
 /** Allvarliga kollektivstörningar som brukar ge taxibehov. */
 const SERIOUS_RE =
-  /\b(inställd|inställda|ställs in|inga avgångar|ingen trafik|trafikstopp|stopp i (trafiken|tågtrafiken|busstrafiken)|totalt stopp|stora störningar|stora förseningar|ersättningsbuss|ersättningstrafik|strejk|nedrivning|strömavbrott|växelfel|signalproblem|tågtrafik (står|stoppad|inställd)|alla (pågatåg|öresundståg|tåg) (är )?inställda|avgång(ar)? inställd|inställd avgång|tåg(en)? (går|kör) inte|banan (är )?avstängd)\b/i;
+  /(?<![a-zà-öø-ÿ0-9])(inställd|inställt|inställda|ställs in|inga avgångar|ingen trafik|trafikstopp|stopp i (trafiken|tågtrafiken|busstrafiken)|totalt stopp|stora störningar|stora förseningar|ersättningsbuss|ersättningstrafik|strejk|nedrivning|strömavbrott|växelfel|signalproblem|tågtrafik (står|stoppad|inställd)|alla (pågatåg|öresundståg|tåg) (är )?inställda|avgång(ar)? inställd|inställd avgång|tåg(en)? (går|kör) inte|banan (är )?avstängd)(?![a-zà-öø-ÿ0-9])/i;
 
 /** Medel — kan ge efterfrågan men inte alltid “kör hit nu”. */
 const MEDIUM_RE =
   /\b(försening|förseningar|minskad (service|trafik)|tågbyte|enkelspårsdrift|hastighetsnedsättning|banarbete som påverkar|förväntas bli (sen|försenad))\b/i;
 
 const CITY_RE =
-  /\b(Malmö|Lund|Helsingborg|Kristianstad|Landskrona|Trelleborg|Ystad|Eslöv|Höör|Hässleholm|Ängelholm|Simrishamn|Staffanstorp|Kävlinge|Hyllie|Triangeln|Lomma|Vellinge|Höganäs|Osby|Sjöbo|Svedala|Burlöv|Bromölla|Perstorp|Örkelljunga|Bjuv|Åstorp|Klippan)\b/gi;
+  /(?<![a-zà-öø-ÿ0-9])(Malmö|Lund|Helsingborg|Kristianstad|Landskrona|Trelleborg|Ystad|Eslöv|Höör|Hässleholm|Ängelholm|Simrishamn|Staffanstorp|Kävlinge|Hyllie|Triangeln|Lomma|Vellinge|Höganäs|Osby|Sjöbo|Svedala|Burlöv|Bromölla|Perstorp|Örkelljunga|Bjuv|Åstorp|Klippan|Stockholm|Solna|Södertälje|Nacka|Sundbyberg|Täby|Norrtälje|Uppsala|Enköping|Göteborg|Mölndal|Kungsbacka|Borås|Trollhättan|Uddevalla|Skövde|Linköping|Norrköping|Motala|Jönköping|Nässjö|Värnamo|Kalmar|Oskarshamn|Västervik|Nybro|Karlstad|Kristinehamn|Arvika|Örebro|Karlskoga|Västerås|Köping|Eskilstuna|Nyköping|Falun|Borlänge|Mora|Gävle|Sandviken|Hudiksvall|Sundsvall|Härnösand|Örnsköldsvik|Östersund|Umeå|Skellefteå|Luleå|Piteå|Kiruna|Visby|Karlskrona|Karlshamn|Varberg|Halmstad|Växjö|Älmhult)(?![a-zà-öø-ÿ0-9])/gi;
 
 // Lookarounds instead of \b: JS's \b is ASCII-only, so /\bängelholm\b/ never
 // matches (no word/non-word transition before "ä"). Same trap fixed in
@@ -57,7 +57,18 @@ function placesFrom(alert) {
     if (coveredByHub && hubs.length) continue;
     if (!places.some((x) => x.toLowerCase() === p.toLowerCase())) places.push(p);
   }
-  return places.filter((p) => placeLooksSkane(p) || /köpenhamn|cph|kastrup/i.test(String(p)));
+  // Market scoping belongs to alertInSkane (skane.js), which already runs on
+  // every alert and knows about MARKET_SCOPE. Filtering here as well meant a
+  // place name outside Skåne was thrown away BEFORE it could be geocoded --
+  // so in national scope an Uppsala or Umeå alert kept its severity but lost
+  // its coordinate, landing invisible on the map. Keep every place we can
+  // actually resolve; let the geofence decide what reaches a driver.
+  return places.filter(
+    (p) =>
+      resolvePlaceCoords(p) != null ||
+      placeLooksSkane(p) ||
+      /köpenhamn|cph|kastrup/i.test(String(p))
+  );
 }
 
 function ignoreResult(why, alert) {

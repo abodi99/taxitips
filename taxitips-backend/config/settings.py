@@ -105,29 +105,22 @@ def database_from_url(url: str) -> dict:
     }
 
 
-# "default": Djangos egen dedikerade Postgres+TimescaleDB-container (se
-# docker-compose.yml), frikopplad från Supabase.
+# En databas: den Postgres `supabase start` kör. Django äger pipeline-tabellerna
+# (source_events, opportunities, scoring_rule, ...) via sina egna migrationer;
+# Supabases SQL-migrationer äger domäntabellerna (companies, devices, profiles,
+# ...), som billing-appen når via managed=False-modeller. Ingen tabell beskrivs
+# på två ställen.
 #
-# "supabase": companies/devices/processed_webhook_events -- ägs av Supabases
-# egna migrationer, aldrig Djangos (se billing/db_router.py, allow_migrate
-# returnerar False för billing-appen). Ansluter med den skopade
-# django_billing-rollen (schema/django_billing_role.sql), aldrig
-# SUPABASE_SERVICE_ROLE_KEY -- den rollen har bara GRANT på exakt de tre
-# tabeller billing-appen faktiskt rör.
+# Tidigare fanns ett andra alias mot en egen Django-container. Det behövs inte
+# längre -- och det var det som gjorde att allt pipelinen räknade ut hamnade i
+# en databas ingen förare läste från.
 DATABASES = {
     "default": database_from_url(
         os.environ.get(
-            "DATABASE_URL", "postgresql://taxitips:taxitips@127.0.0.1:5432/taxitips"
-        )
-    ),
-    "supabase": database_from_url(
-        os.environ.get(
-            "SUPABASE_DATABASE_URL",
-            "postgresql://django_billing:django_billing@127.0.0.1:54322/postgres",
+            "DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
         )
     ),
 }
-DATABASE_ROUTERS = ["billing.db_router.DatabaseRouter"]
 
 LANGUAGE_CODE = "sv"
 TIME_ZONE = "Europe/Stockholm"
@@ -151,6 +144,9 @@ VASTTRAFIK_CLIENT_SECRET = os.environ.get("VASTTRAFIK_CLIENT_SECRET", "")
 # "hemma" -- läses av core/market.py och core/sources/trafiklab.py. Samma
 # namn och default som Node-workern, så en befintlig .env fungerar oförändrat.
 TRAFIKLAB_OPERATORS = os.environ.get("TRAFIKLAB_OPERATORS", "skane")
+# Vilka län Trafikverkets vägdata hämtas för. "all" = alla 21. Samma namn
+# och default som Node-workern.
+TRAFIKVERKET_COUNTIES = os.environ.get("TRAFIKVERKET_COUNTIES", "skane")
 MARKET_SCOPE = os.environ.get("MARKET_SCOPE", "skane")
 
 # --- Celery -----------------------------------------------------------
@@ -173,6 +169,24 @@ CELERY_BEAT_SCHEDULE = {
     "refresh-sites": {"task": "core.tasks.refresh_sites_task", "schedule": 24 * 60 * 60},
     "review-uncertain": {"task": "core.tasks.review_uncertain_task", "schedule": 5 * 60},
 }
+
+# --- Förar-API (Spår B, core/api.py) -----------------------------------
+# Supabases JWT-hemlighet: används BARA för att verifiera en inloggad
+# ägares access token (core/entitlement.py). Utan den fungerar förarens
+# token-väg som vanligt, men en inloggad ägare utan parad enhet får tomt
+# flöde -- samma bugg som 20260902000005 rättade i SQL-versionen.
+SUPABASE_JWT_SECRET = os.environ.get(
+    "SUPABASE_JWT_SECRET", "super-secret-jwt-token-with-at-least-32-characters-long"
+) if DEBUG else os.environ.get("SUPABASE_JWT_SECRET", "")
+# Inget "*": svaren är entitlement-gated data. Flutter web och
+# visualiseraren listas explicit.
+APP_API_ALLOWED_ORIGINS = [
+    o.strip()
+    for o in os.environ.get(
+        "APP_API_ALLOWED_ORIGINS", "http://localhost:4000,http://127.0.0.1:4000"
+    ).split(",")
+    if o.strip()
+]
 
 # --- Stripe / FCM (billing-appen) --------------------------------------
 STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY", "")

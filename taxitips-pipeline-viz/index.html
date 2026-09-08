@@ -1,0 +1,817 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TaxiTips — datapipeline</title>
+<style>
+  :root {
+    --navy:#08254C; --foam:#F8F7F2; --sand:#EFEEE8; --yellow:#FFC400;
+    --cyan:#19C2D1; --green:#1F8A5B; --amber:#E0AC00; --brown:#6B6358;
+    --muted:#3D4F6A; --line:#C9D0DA; --danger:#C0392B;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+       background:var(--foam);color:var(--navy)}
+  header{background:var(--navy);color:var(--foam);padding:26px 32px}
+  header h1{margin:0 0 4px;font-size:26px;font-weight:900;letter-spacing:-.3px}
+  header p{margin:0;opacity:.75;font-size:14px}
+  main{max-width:1180px;margin:0 auto;padding:28px 32px 80px}
+  h2{font-size:19px;font-weight:900;margin:38px 0 6px}
+  h2:first-child{margin-top:0}
+  .sub{color:var(--muted);font-size:14px;margin:0 0 16px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:14px}
+
+  /* pipeline flow */
+  .flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;align-items:stretch}
+  .stage{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;position:relative}
+  .stage h3{margin:0 0 3px;font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+  .stage .big{font-size:30px;font-weight:900;line-height:1.1;margin:6px 0 2px}
+  .stage .note{font-size:12.5px;color:var(--muted);line-height:1.45}
+  .stage.accent{border-left:5px solid var(--cyan)}
+  .stage.accent-g{border-left:5px solid var(--green)}
+  .stage.accent-y{border-left:5px solid var(--yellow)}
+
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--sand);vertical-align:top}
+  th{font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:800}
+  td.num{text-align:right;font-variant-numeric:tabular-nums}
+  tr:last-child td{border-bottom:none}
+
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:800;white-space:nowrap}
+  .p-high{background:var(--green);color:#fff}
+  .p-med{background:var(--amber);color:#fff}
+  .p-low{background:transparent;color:var(--brown);border:1.5px solid var(--brown)}
+  .p-ign{background:var(--sand);color:var(--muted)}
+
+  .bar{height:8px;border-radius:4px;background:var(--sand);overflow:hidden;min-width:60px}
+  .bar>i{display:block;height:100%;background:var(--cyan)}
+
+  .kv{display:grid;grid-template-columns:170px 1fr;gap:6px 14px;font-size:14px}
+  .kv dt{color:var(--muted);font-weight:700}
+  .kv dd{margin:0}
+  code{background:var(--sand);padding:1px 6px;border-radius:5px;font-size:13px}
+  pre{background:var(--navy);color:#dfe8f5;padding:14px 16px;border-radius:10px;overflow:auto;font-size:12.5px;line-height:1.5}
+  .warn{background:#FFF6E0;border:1px solid var(--amber);border-radius:12px;padding:14px 16px;font-size:14px}
+  .err{background:#FDEDEC;border:1px solid var(--danger);color:#7d2820;border-radius:12px;padding:16px}
+  .arrow{text-align:center;color:var(--muted);font-size:20px;margin:2px 0}
+  .foot{color:var(--muted);font-size:12.5px;margin-top:6px}
+  details{margin:0}
+  details summary{cursor:pointer;list-style:none;display:flex;align-items:baseline;gap:8px}
+  details summary::-webkit-details-marker{display:none}
+  details summary h2{margin:38px 0 6px}
+  details:first-of-type summary h2{margin-top:0}
+  details summary::before{content:'▸';color:var(--cyan);font-size:14px;position:relative;top:-2px}
+  details[open] summary::before{content:'▾'}
+  details summary:hover h2{color:var(--muted)}
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  @media(max-width:780px){.split{grid-template-columns:1fr}.kv{grid-template-columns:1fr}}
+  #map{height:460px;border-radius:14px;border:1px solid var(--line);z-index:0}
+  /* Kartorna: större som standard, och utfällbara till helskärm. 320 px med
+     1200 punkter går inte att läsa detaljer i, hur mycket man än zoomar. */
+  .mapwrap{position:relative}
+  .mapwrap .lmap{height:440px;width:100%;z-index:0}
+  .mapwrap.full{position:fixed;inset:10px;z-index:9999;background:var(--bg,#fff);
+    border-radius:14px;box-shadow:0 10px 40px rgba(0,0,0,.35);overflow:hidden}
+  .mapwrap.full .lmap{height:100%}
+  .mapbtn{position:absolute;top:10px;right:10px;z-index:500;border:1px solid var(--line);
+    background:#fff;color:var(--ink);font:700 12px/1 system-ui,sans-serif;
+    padding:7px 10px;border-radius:8px;cursor:pointer;box-shadow:0 1px 4px rgba(0,0,0,.15)}
+  .mapbtn:hover{background:var(--sand)}
+  .maphint{position:absolute;left:10px;bottom:10px;z-index:500;background:rgba(255,255,255,.92);
+    border:1px solid var(--line);border-radius:8px;padding:5px 9px;font-size:11.5px;color:var(--muted)}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 0;font-size:13px;align-items:center}
+  .legend b{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+  .lg-h{background:#1F8A5B}.lg-m{background:#E0AC00}.lg-l{background:#6B6358}
+  .raw{background:#08254C;color:#dfe8f5;padding:12px 14px;border-radius:10px;font-size:12px;
+       line-height:1.5;overflow:auto;max-height:280px;white-space:pre-wrap;word-break:break-word}
+</style>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+</head>
+<body>
+<header>
+  <h1>TaxiTips — datapipeline</h1>
+  <p>Vad som hämtas, hur det bearbetas, och vad en förare till slut ser. Live-data från produktion.</p>
+</header>
+<main id="root"><p class="sub">Hämtar…</p></main>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+
+<script>
+const TIER_SV = {
+  line_paused:'Hela linjen stoppad', vehicle_cancelled:'Enstaka avgång inställd',
+  line_delayed:'Försening på linjen', vehicle_delayed:'Enstaka avgång försenad',
+  road_accident_or_closure:'Olycka/avstängning', road_work_or_queue:'Vägarbete/kö',
+  road_work:'Vägarbete', disruption_unclassified:'Osäker bedömning', ignore:'Ignoreras'
+};
+// Mirrors severity_labels.dart customerLikelihood() + fcmPush.js gates.
+const SOURCE_SV = {
+  trafiklab: 'Trafiklab (GTFS-RT)', trafikverket: 'Trafikverket (väg)',
+  trafikverket_rail: 'Trafikverket (järnväg)', smhi: 'SMHI', sl: 'SL',
+  // Nyckeln i databasen är 'vt', inte 'vasttrafik' -- kartans popup visade
+  // därför den råa koden i stället för operatörens namn.
+  vt: 'Västtrafik', vasttrafik: 'Västtrafik'
+};
+const HIGH=['line_paused'], MED=['line_delayed','vehicle_cancelled'];
+const NOTIFY_TIERS=['line_paused','vehicle_cancelled','road_accident_or_closure'];
+// Sätts från backendens /api/config (via /api/pipeline) så snart datan är
+// hämtad. 50 är bara vad som gäller innan svaret kommit -- inte en andra
+// sanning. Se taxitips-backend/core/thresholds.py.
+let NOTIFY_FLOOR=50;
+
+function likelihood(tier, worthIt, demand){
+  if (worthIt<=0) return 'low';
+  if (HIGH.includes(tier)) return 'high';
+  if (MED.includes(tier)) return (tier==='vehicle_cancelled'&&demand>=50)?'high':'medium';
+  return 'low';
+}
+function esc(s){return String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]))}
+function pill(k,txt){const c={high:'p-high',medium:'p-med',low:'p-low',ignore:'p-ign'}[k]||'p-ign';
+  return `<span class="pill ${c}">${esc(txt)}</span>`}
+
+Promise.all([
+  fetch('/api/pipeline').then(r=>r.json()),
+  fetch('/api/operative-events').then(r=>r.json()).catch(e=>({error:String(e.message||e)}))
+]).then(([d,ops])=>render(d,ops)).catch(e=>{
+  document.getElementById('root').innerHTML='<div class="err">Kunde inte hämta data: '+esc(e.message)+'</div>';
+});
+
+function fmtDateTime(iso){
+  if(!iso) return null;
+  const d=new Date(iso);
+  if(isNaN(d)) return null;
+  return d.toLocaleString('sv-SE',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'});
+}
+
+// Källoberoende infoblock: operatör, linje/riktning, avgång, orsak,
+// ersättning/nästa avgång, läs-mer-länk -- vilka av dessa som finns
+// varierar per källa (rail har operatör+ersättning, SL/VT har
+// linje+riktning), men fälten heter samma sak överallt så en och samma
+// funktion räcker i stället för en variant per källa.
+function infoBlockHtml(raw){
+  const rows=[];
+  const brand=raw.information_owner||raw.operator;
+  if(brand) rows.push(['Operatör',esc(brand)]);
+  const routeLabel=raw.route_label||(Array.isArray(raw.routes)&&raw.routes.length?raw.routes.join(', '):null);
+  if(routeLabel) rows.push(['Linje',esc(routeLabel)]);
+  if(raw.direction) rows.push(['Riktning',esc(raw.direction)]);
+  const dt=fmtDateTime(raw.departure_at||raw.journey_departure_at);
+  if(dt) rows.push(['Avgång',esc(dt)]);
+  if(raw.destination) rows.push(['Mot',esc(raw.destination)]);
+  if(raw.cause) rows.push(['Orsak',esc(raw.cause)]);
+  if(raw.has_replacement){
+    const label=raw.replacement_mode==='taxi'?'Ersättningstaxi':raw.replacement_mode==='bus'?'Ersättningsbuss':'Ersättningstrafik';
+    rows.push(['Ersättning',esc(label)+(raw.replacement_note?' — '+esc(raw.replacement_note):'')]);
+  } else if(raw.next_departure_minutes!=null){
+    rows.push(['Nästa avgång','om '+raw.next_departure_minutes+' min']);
+  } else if(raw.is_last_departure){
+    rows.push(['Nästa avgång','ingen — sista avgången härifrån']);
+  }
+  if(raw.web_link){
+    rows.push(['Läs mer','<a href="'+esc(raw.web_link)+'" target="_blank" rel="noopener">'+esc(raw.web_link_name||raw.web_link)+'</a>']);
+  }
+  if(!rows.length) return '';
+  return '<div class="kv" style="grid-template-columns:88px 1fr;font-size:13px;margin:8px 0">'+
+    rows.map(([k,v])=>'<dt>'+k+'</dt><dd>'+v+'</dd>').join('')+
+    '</div>';
+}
+
+function popupHtml(o){
+  const se=o.sourceEvent||null;
+  const srcCode=se?.source||o.source||null;
+  const srcName=SOURCE_SV[srcCode]||srcCode||'okänd källa';
+  let html=
+    '<b>'+esc(o.title||'—')+'</b><br>'+
+    esc(TIER_SV[o.severity_tier]||o.severity_tier)+' · '+esc(o.mode||'—')+'<br>'+
+    'Poäng <b>'+(o.demand_score||0)+'</b> · säkerhet '+esc(o.confidence||'—')+'<br>'+
+    '<code>'+esc(o.rule_id||'')+'</code><br>'+
+    '<small>'+(o.reasons||[]).map(esc).join(' · ')+'</small>';
+  // Vad resenären gör i stället -- samma fält som appens kort visar, från
+  // tipset självt och inte från källans råtext. Att det står här också gör
+  // att kartan och telefonen går att jämföra rad för rad.
+  const nextAt=o.next_departure_at?new Date(o.next_departure_at):null;
+  if(o.is_last_departure||nextAt||o.has_alternative){
+    const bits=[];
+    if(o.is_last_departure) bits.push('<b>Sista avgången härifrån</b>');
+    else if(nextAt) bits.push('Nästa avgång '+nextAt.toLocaleTimeString('sv-SE',{hour:'2-digit',minute:'2-digit'}));
+    else if(o.next_departure_minutes!=null) bits.push('Nästa avgång om '+o.next_departure_minutes+' min');
+    if(o.has_alternative) bits.push(esc(o.alternative_note||'Ersättningstrafik finns'));
+    html+='<div class="foot" style="margin:6px 0;font-weight:700">'+bits.join(' · ')+'</div>';
+  }
+  if(o.compensation_eligible){
+    html+='<div class="foot" style="margin:6px 0;color:var(--green);font-weight:800">'+
+      'Rätt till taxiersättning upp till '+o.compensation_amount_kr+' kr (Lag 2015:953)</div>';
+  }
+  if(se?.raw){
+    html+=infoBlockHtml(se.raw);
+  }
+  html+=
+    '<hr style="margin:8px 0;border:none;border-top:1px solid var(--line)">'+
+    '<div class="foot" style="margin-bottom:4px"><b>Källa:</b> '+esc(srcName)+
+      (se?.external_id?' · <code>'+esc(se.external_id)+'</code>':'')+'</div>';
+  if(se?.raw){
+    html+='<div class="raw" style="max-height:200px;font-size:11px">'+esc(JSON.stringify(se.raw,null,2))+'</div>';
+  }else{
+    html+='<div class="foot">Ingen rå källdata sparad för denna punkt.</div>';
+  }
+  return html;
+}
+
+// Delad kartritare för alla fyra pipelinestegs-kartorna: samma
+// samlokaliserings-spridning och popup-mekanik, olika elementid/färg/urval
+// per steg. opts: {radius(o), color(o), popup(o)}.
+const MAPS={};
+function toggleMapFull(elId){
+  const wrap=document.getElementById(elId).closest('.mapwrap');
+  wrap.classList.toggle('full');
+  const btn=wrap.querySelector('.mapbtn');
+  if(btn) btn.textContent=wrap.classList.contains('full')?'✕ Stäng':'⛶ Helskärm';
+  // Leaflet mäter containern en gång; utan det här ritas den utfällda kartan
+  // i den gamla, lilla storleken och halva ytan blir grå.
+  const m=MAPS[elId];
+  if(m) setTimeout(()=>m.invalidateSize(),60);
+}
+
+function drawMapGeneric(elId,points,opts){
+  const el=document.getElementById(elId);
+  if(!el||typeof L==='undefined'||!points.length) return;
+  if(MAPS[elId]){MAPS[elId].remove();delete MAPS[elId]}
+  // scrollWheelZoom av från början så sidan inte kapas när man scrollar
+  // förbi -- men på så fort man klickat i kartan, för då är avsikten att
+  // titta på den. Hinten nere till vänster säger det.
+  const map=L.map(elId,{scrollWheelZoom:false,maxZoom:19});
+  MAPS[elId]=map;
+  map.once('click',()=>{map.scrollWheelZoom.enable();const h=el.parentElement.querySelector('.maphint');if(h)h.remove()});
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+    {attribution:'&copy; OpenStreetMap',maxZoom:19,maxNativeZoom:19}).addTo(map);
+  L.control.scale({imperial:false}).addTo(map);
+
+  const latlngs=[];
+  // Flera störningar landar på exakt samma stationskoordinat. Sprid dem --
+  // annars är bara den sist ritade klickbar, och kartan underdriver hur
+  // mycket som händer där. Spiral, inte ring: en ring med åtta platser
+  // lade den nionde punkten ovanpå den första igen, och stora stationer
+  // har fler än åtta.
+  const seen=new Map();
+  const markers=[];
+  for(const o of points){
+    const key=o.lat.toFixed(4)+','+o.lon.toFixed(4);
+    const n=seen.get(key)||0; seen.set(key,n+1);
+    const ang=n*2.399963, r=n?0.0009*Math.sqrt(n):0;  // gyllene vinkeln
+    const lat=o.lat+Math.sin(ang)*r, lon=o.lon+Math.cos(ang)*r;
+    latlngs.push([lat,lon]);
+    const base=opts.radius(o);
+    const m=L.circleMarker([lat,lon],{
+      radius:base,
+      color:'#fff',weight:2,fillColor:opts.color(o),fillOpacity:.9
+    }).addTo(map).bindPopup(opts.popup(o),{maxWidth:420,minWidth:280,maxHeight:420});
+    markers.push([m,base]);
+  }
+  // Punkterna växer när man zoomar in: vid landsöversikt ska de vara små
+  // nog att inte klumpa ihop sig, inzoomade stora nog att träffa med
+  // fingret.
+  const rescale=()=>{
+    const z=map.getZoom(), f=z<=6?0.7:(z>=12?1.6:1);
+    for(const [m,base] of markers) m.setRadius(Math.max(3,base*f));
+  };
+  map.on('zoomend',rescale);
+  map.fitBounds(L.latLngBounds(latlngs).pad(0.15));
+  rescale();
+}
+
+function drawMap(points){
+  drawMapGeneric('map',points,{
+    radius:o=>6+Math.round((o.demand_score||0)/14),
+    color:o=>({high:'#1F8A5B',medium:'#E0AC00',low:'#6B6358'})[likelihood(o.severity_tier,o.demand_score,o.demand_score)],
+    popup:popupHtml,
+  });
+}
+
+// Karta 8a: rådata, en färg per källa -- innan något är sammanslaget eller
+// klassificerat, så bara källa+rå JSON finns att visa.
+const SOURCE_COLOR={trafiklab:'#19C2D1',sl:'#E0AC00',vt:'#6B4FA0',trafikverket_rail:'#1F8A5B',trafikverket:'#C0392B',smhi:'#3D4F6A'};
+function sourcePopupHtml(se){
+  const srcName=SOURCE_SV[se.source]||se.source||'okänd källa';
+  let html='<b>'+esc(srcName)+'</b><br><code>'+esc(se.external_id||'')+'</code>'+
+    '<div class="foot" style="margin-top:6px">Ännu inte sammanslaget eller klassificerat.</div>';
+  if(se.raw){
+    html+='<div class="raw" style="max-height:220px;font-size:11px;margin-top:6px">'+esc(JSON.stringify(se.raw,null,2))+'</div>';
+  }
+  return html;
+}
+function drawSourceMap(rows){
+  drawMapGeneric('map-sources',rows,{
+    radius:()=>6,
+    color:se=>SOURCE_COLOR[se.source]||'#6B6358',
+    popup:sourcePopupHtml,
+  });
+}
+
+// Karta 8c: Genkit-granskningens spår -- sänkt, granskad men oförändrad,
+// eller fortfarande väntande (confidence=low, ännu ingen granskning).
+function aiStatus(o){
+  if(o.aiReview){
+    return o.aiReview.final_score<o.aiReview.rule_score?'lowered':'unchanged';
+  }
+  return 'pending';
+}
+const AI_COLOR={lowered:'#1F8A5B',unchanged:'#3D4F6A',pending:'#E0AC00'};
+const AI_LABEL={lowered:'Sänkt av Genkit',unchanged:'Granskad, oförändrad',pending:'Väntar på granskning'};
+function aiPopupHtml(o){
+  let html=popupHtml(o);
+  const status=aiStatus(o);
+  let aiBlock='<div class="foot" style="margin:8px 0 4px"><b>'+esc(AI_LABEL[status])+'</b></div>';
+  if(o.aiReview){
+    aiBlock+='<div class="kv" style="grid-template-columns:88px 1fr;font-size:13px">'+
+      '<dt>Regelpoäng</dt><dd>'+o.aiReview.rule_score+'</dd>'+
+      '<dt>Modellpoäng</dt><dd>'+o.aiReview.model_score+'</dd>'+
+      '<dt>Slutpoäng</dt><dd>'+o.aiReview.final_score+'</dd>'+
+      (o.aiReview.verdict?'<dt>Motivering</dt><dd>'+esc(o.aiReview.verdict)+'</dd>':'')+
+      '</div>';
+  }
+  return html.replace('<hr','' + aiBlock + '<hr');
+}
+function drawAiMap(rows){
+  drawMapGeneric('map-ai',rows,{
+    radius:o=>6+Math.round((o.demand_score||0)/14),
+    color:o=>AI_COLOR[aiStatus(o)],
+    popup:aiPopupHtml,
+  });
+}
+
+// Karta 8d: vad föraren faktiskt ser -- samma NOTIFY_TIERS/NOTIFY_FLOOR som
+// redan används för "pushable" i avsnitt 1, inte en ny tröskel.
+function drawDriverMap(rows){
+  drawMapGeneric('map-driver',rows,{
+    radius:o=>6+Math.round((o.demand_score||0)/14),
+    color:o=>({high:'#1F8A5B',medium:'#E0AC00',low:'#6B6358'})[likelihood(o.severity_tier,o.demand_score,o.demand_score)],
+    popup:popupHtml,
+  });
+}
+
+function renderOperativeEvents(ops){
+  if(!ops) return '';
+  if(ops.error){
+    return `<details><summary><h2>13 · Ny källa (kandidat): Trafikverkets tågstörningsorsaker</h2></summary>
+    <p class="sub">Inte ansluten till pipelinen — <code>OperativeEvent</code>, namespace <code>ols.open</code> v1.0. Hämtas live direkt från Trafikverket, förbi <code>source_events</code>.</p>
+    <div class="warn"><b>Kunde inte hämta:</b> ${esc(ops.error)}</div></details>`;
+  }
+  const rows=(ops.byType||[]).map(t=>`<tr><td><code>${esc(t.code)}</code></td><td>${esc(t.desc)}</td><td class="num">${t.n}</td></tr>`).join('');
+  const s=ops.sample;
+  return `<details><summary><h2>13 · Ny källa (kandidat): Trafikverkets tågstörningsorsaker</h2></summary>
+  <p class="sub"><code>OperativeEvent</code>, namespace <code>ols.open</code> v1.0 — hämtas live direkt från Trafikverket, förbi <code>source_events</code>. Visar bara vad källan innehåller; inget här går in i poängsättningen än.</p>
+  <div class="card">
+    <p style="margin:0 0 12px"><b>Detta är en annan nivå än det som redan används.</b> <code>TrainAnnouncement</code> (redan i pipelinen) är SYMPTOMET — en enskild inställd avgång. <code>OperativeEvent</code> är ORSAKEN — banarbete, tågfel, anläggningsfel — på en bansträcka, inte per avgång.</p>
+    <table>
+      <tr><th>Kod</th><th>Orsak</th><th class="num">Aktiva just nu</th></tr>
+      ${rows}
+    </table>
+    <p class="foot" style="margin-top:10px"><b>${ops.total} aktiva nationellt</b> när detta hämtades — mycket mindre volym än de tusentals avgångarna i <code>TrainAnnouncement</code>-fönstret, eftersom det här är en händelse per bansträcka, inte per tåg.</p>
+  </div>
+  <div class="warn">
+    <p style="margin:0 0 10px"><b><code>EventState=1</code> ("aktiv") är inte pålitligt som "pågår nu"</b> — samma publiceringsfälla som SL:s <code>publish</code>-fönster (avsnitt 6). Uppmätt: <b>${ops.startInPast}/${ops.total}</b> har ett <code>StartDateTime</code> som redan passerat (ett över ett år gammalt, fortfarande "aktivt"), och <b>${ops.impactWindowClosed}/${ops.total}</b> har ett nästlat <code>TrafficImpact</code>-fönster som redan stängt trots att eventet fortfarande flaggas aktivt. Det nästlade fönstret är den pålitliga signalen, inte toppnivåns status.</p>
+    <p style="margin:0"><b>Bron till väg är i praktiken tom.</b> Fälten <code>RoadDegreeOfImpact</code> och <code>RailRoadTimeForServiceResumption</code> — tänkta att koppla ett plankorsnings-event till dess vägpåverkan — var <b>${ops.withResumption}/${ops.total}</b> respektive populerade, inklusive på en verklig plankorsningsolycka i urvalet. Samma mönster som GTFS <code>cause</code>/<code>effect</code>: ser lovande ut i dokumentationen, tomt i praktiken.</p>
+  </div>
+  ${s?`<div class="card"><b>Rått exempel</b><div class="raw" style="margin-top:10px">${esc(JSON.stringify(s,null,2))}</div></div>`:''}
+  <p class="foot" style="margin-top:10px"><b>Om det är värt att koppla in:</b> <code>EventSection</code> ger en bansträcka (två stationssignaturer, samma register som <code>fetchStations()</code> redan slår upp) och <code>EventType.Description</code> ger en namngiven orsak — något dagens <code>trafikverketRail.js</code> saknar helt. Det skulle kunna svara "varför" på ett tips ("Banarbete Mjölby–Motala, sedan igår") i stället för att bara härleda inställt/försenat. Kräver ingen ny nyckel, bara en ny normaliserare och en migration för att lägga till orsak-fältet på <code>opportunities</code>.</p></details>`;
+}
+
+function render(d,ops){
+  if(d.error){document.getElementById('root').innerHTML='<div class="err"><b>Fel:</b> '+esc(d.error)+'</div>';return}
+  const t=d.totals, active=d.active;
+  // Backendens tröskel vinner över den lokala startgissningen.
+  if(d.config&&Number.isFinite(d.config.notifyScoreFloor)) NOTIFY_FLOOR=d.config.notifyScoreFloor;
+  const sources=d.sources||[];
+  const liveSources=sources.filter(x=>x.state!=='fel'&&x.state!=='saknas');
+
+  // Tier breakdown of currently-active opportunities.
+  const byTier={};
+  for(const o of active){
+    const k=o.severity_tier||'unknown';
+    byTier[k] ??= {n:0,scores:[],withCoords:0,modes:new Set()};
+    byTier[k].n++; byTier[k].scores.push(o.demand_score||0);
+    if(o.lat!=null) byTier[k].withCoords++;
+    if(o.mode) byTier[k].modes.add(o.mode);
+  }
+  const tierRows=Object.entries(byTier).sort((a,b)=>b[1].n-a[1].n);
+  const maxN=Math.max(...tierRows.map(([,v])=>v.n),1);
+
+  const shown=active.filter(o=>o.severity_tier!=='ignore');
+  const pushable=active.filter(o=>NOTIFY_TIERS.includes(o.severity_tier)&&(o.demand_score||0)>=NOTIFY_FLOOR);
+
+  let html='';
+
+  /* ---------- 1. flow ---------- */
+  html+=`<details open><summary><h2>1 · Flödet i stort</h2></summary>
+  <p class="sub">Fyra steg. Siffrorna är verkliga och hämtade nyss.</p>
+  <div class="flow">
+    <div class="stage accent"><h3>Källor</h3>
+      <div class="big">${liveSources.length}${liveSources.length<sources.length?`<span style="font-size:15px;color:var(--muted)"> av ${sources.length}</span>`:''}</div>
+      <div class="note">${sources.map(x=>`${esc(x.label)}${x.state==='fel'||x.state==='saknas'?' <span style="color:var(--danger)">✕</span>':''}`).join('<br>')}<br><br>Alla gratis, offentliga API:er. Status per källa i avsnitt 2.</div></div>
+    <div class="stage accent"><h3>Råa fakta</h3>
+      <div class="big">${t.sourceEvents.toLocaleString('sv')}</div>
+      <div class="note"><code>source_events</code><br>Oförändrad payload från källan, sparad som den kom.</div></div>
+    <div class="stage accent-y"><h3>Bearbetning</h3>
+      <div class="big">6 steg</div>
+      <div class="note">Läge → allvarlighet → poäng → väder → plats → avstånd. Se avsnitt 3.</div></div>
+    <div class="stage accent-g"><h3>Resultat</h3>
+      <div class="big">${t.opportunities.toLocaleString('sv')}</div>
+      <div class="note"><code>opportunities</code><br>${active.length} aktiva just nu, varav <b>${shown.length}</b> visas och <b>${pushable.length}</b> är notisvärda.</div></div>
+  </div></details>`;
+
+  /* ---------- 2. sources ---------- */
+  const STATE_SV={
+    'färsk':['p-high','svarade nyss'], 'gammal':['p-med','svarade för en stund sedan'],
+    'inaktuell':['p-low','inte hämtad på länge'], 'fel':['p-ign','svarade med fel'],
+    'saknas':['p-ign','har aldrig körts'], 'okänd':['p-low','kördes före mätningen']
+  };
+  const broken=sources.filter(x=>x.state==='fel'||x.state==='saknas');
+  html+=`<details open><summary><h2>2 · Datakällor — vad de gav senast</h2></summary>
+  <p class="sub">Sex källor. Raden visar den senaste hämtningen, inte vad källan brukar ge.</p>`;
+  if(broken.length){
+    html+=`<div class="err" style="margin-bottom:12px"><b>${broken.length} av ${sources.length} källor levererar inte just nu.</b>
+    En källa som slutat svara ser i databasen ut precis som en lugn trafikdag — samma tomma tabell. Det är därför den här raden finns.</div>`;
+  }
+  html+=`<div class="card"><table>
+    <tr><th>Källa</th><th>Vad den ger</th><th>Status</th><th class="num">Larm</th><th class="num">Tips</th><th class="num">Lagrade</th><th>Senast</th></tr>`;
+  for(const x of sources){
+    const [cls,txt]=STATE_SV[x.state]||['p-ign',x.state];
+    const age=x.ageMinutes==null?'—':(x.ageMinutes<1?'nyss':(x.ageMinutes<60?x.ageMinutes+' min sedan':Math.round(x.ageMinutes/60)+' tim sedan'));
+    html+=`<tr>
+      <td><b>${esc(x.label)}</b><br><span class="foot">${esc(x.key)}</span></td>
+      <td class="foot">${esc(x.what)}</td>
+      <td><span class="pill ${cls}">${esc(x.state)}</span><br><span class="foot">${esc(txt)}</span></td>
+      <td class="num">${x.events||0}</td>
+      <td class="num">${x.written||0}</td>
+      <td class="num">${(x.storedEvents||0).toLocaleString('sv')}</td>
+      <td class="foot">${esc(age)}${x.durationMs?` · ${(x.durationMs/1000).toFixed(1)} s`:''}</td></tr>`;
+    if(x.message){
+      html+=`<tr><td colspan="7" class="foot" style="color:var(--danger);padding-top:0">${esc(x.message.slice(0,220))}</td></tr>`;
+    }
+  }
+  html+=`</table>
+  <p class="foot" style="margin-top:10px"><b>Register bakom platsupplösningen:</b>
+    ${(t.stopAreas||0).toLocaleString('sv')} hållplatser (${(t.stopAreasSl||0).toLocaleString('sv')} SL, ${(t.stopAreasVt||0).toLocaleString('sv')} Västtrafik)
+    och ${(t.railStations||0).toLocaleString('sv')} järnvägsstationer. Utan dem faller tips vars text namnger en lokal hållplats tillbaka på ortens centrum.</p>
+  <p class="foot"><b>GTFS statisk tidtabell:</b> ${(t.gtfsStops||0).toLocaleString('sv')} hållplatser, ${(t.gtfsDepartures||0).toLocaleString('sv')} avgångar — ${t.gtfsDepartures?'ansluten':'<b>inte hämtad än</b>, vilket är varför Nästa avgång bara finns för tåg (se 5b)'}.</p>
+  </div></details>`;
+
+  /* ---------- 3. processing ---------- */
+  html+=`<details open><summary><h2>3 · Bearbetningen, steg för steg</h2></summary>
+  <p class="sub">Varje störning passerar dessa sex steg. Det är här all logik sitter.</p>
+  <div class="card">
+  <div class="kv">
+    <dt>1. Färdsätt</dt><dd>Nyckelord i svensk text avgör tåg / buss / väg. <span class="foot">GTFS <code>route_type</code> vore korrektare men finns inte i realtidsflödet.</span></dd>
+    <dt>2. Taxirelevans</dt><dd>Regelverk sållar bort brus (hiss ur funktion, stängd toalett, cykelplatser) → <code>ignore</code>. <b>${(byTier.ignore?.n||0)} av ${active.length}</b> aktiva sållas bort här.</dd>
+    <dt>3. Allvarlighet</dt><dd>Textmönster avgör om hela linjen står still eller bara en avgång är inställd. Sätter tak/golv på poängen — se tabellen nedan.</dd>
+    <dt>4. Väder</dt><dd>Om dåligt väder <i>och</i> störningen redan är relevant: <b>+12</b>, max 100.</dd>
+    <dt>5. Plats</dt><dd>Koordinat från larmet, annars uppslag av stationsnamn. <b>${active.filter(o=>o.lat!=null).length} av ${active.length}</b> aktiva har koordinat.</dd>
+    <dt>6. Avstånd</dt><dd>Räknas ut per förare men <b>påverkar inte poängen</b>. Avståndet visas på kortet — om resan är värd att göra avgör föraren själv, utifrån sitt pass, trafiken och var han vill hamna. Enda gränsen är en marknadsradie på 150 km, så att ett Göteborgstips inte dyker upp i Stockholm.</dd>
+  </div></div>
+
+  <div class="card"><b>Poängtak per allvarlighetsgrad</b>
+  <p class="foot" style="margin:4px 0 10px">Taken är själva kärnan: en inställd avgång med ersättning får aldrig samma vikt som en död linje.</p>
+  <table>
+    <tr><th>Grad</th><th>Regel</th><th class="num">Poäng</th><th>Säkerhet</th></tr>
+    <tr><td>${pill('high','Hela linjen stoppad')}</td><td>"stopp i tågtrafiken" utan nämnt alternativ</td><td class="num">golv <b>85</b></td><td>hög</td></tr>
+    <tr><td>${pill('high','Hela linjen stoppad')}</td><td>allvarligt ordval, men otydligt</td><td class="num">golv <b>70</b></td><td>låg</td></tr>
+    <tr><td>${pill('medium','Avgång inställd (buss)')}</td><td>allvarlig bussstörning</td><td class="num">tak <b>60</b></td><td>hög</td></tr>
+    <tr><td>${pill('medium','Avgång inställd (tåg)')}</td><td>alternativ nämns i texten</td><td class="num">tak <b>55</b></td><td>medel</td></tr>
+    <tr><td>${pill('medium','Försening på linjen')}</td><td>tåg, medelallvarligt</td><td class="num">tak <b>45</b></td><td>hög</td></tr>
+    <tr><td>${pill('low','Avgång försenad')}</td><td>buss några minuter sen</td><td class="num">tak <b>25</b></td><td>hög</td></tr>
+    <tr><td>${pill('low','Vägstörning')}</td><td>olycka, avstängning, kö</td><td class="num">redan lågt</td><td>medel</td></tr>
+  </table>
+  <p class="foot" style="margin-top:10px"><b>Varför väg alltid är lågt:</b> en olycka försenar folk som redan sitter i bil. Den strandsätter inte fotgängare som behöver taxi. Därför når vägstörningar aldrig hög prioritet, oavsett hur allvarliga de låter.</p>
+  </div></details>`;
+
+  /* ---------- 3.9 poängreglerna som data (Django) ---------- */
+  if ((d.scoringRules || []).length) {
+    const spread = d.scoreSpread || {};
+    const levels = Object.keys(spread).length;
+    html += `<details open><summary><h2>4 · Bedömningen — reglerna som data</h2></summary>
+    <p class="sub">Poängtaken ligger nu som rader i databasen, inte som hårdkodade tal i kod. Går att ändra i Djangos admin utan att deploya.</p>
+    <div class="card"><table>
+      <tr><th>Grad</th><th>Färdsätt</th><th>Gren</th><th class="num">Gräns</th><th>Säkerhet</th><th>Varför</th></tr>`;
+    for (const r of d.scoringRules) {
+      const bound = r.floor != null ? `golv ${r.floor}` : (r.cap != null ? `tak ${r.cap}` : '—');
+      html += `<tr><td>${esc(TIER_SV[r.tier] || r.tier)}</td>
+        <td class="foot">${esc(r.mode)}</td>
+        <td class="foot"><code>${esc(r.condition)}</code></td>
+        <td class="num"><b>${esc(bound)}</b></td>
+        <td class="foot">${esc(r.confidence)}</td>
+        <td class="foot">${esc((r.note || '').slice(0, 90))}</td></tr>`;
+    }
+    html += `</table></div></details>
+
+    <details open><summary><h2>5 · Vad bearbetningen faktiskt gav</h2></summary>
+    <p class="sub">Poängen för aktiva tips, fördelade. Fler nivåer betyder att en förare kan välja.</p>
+    <div class="card"><table>
+      <tr><th>Poäng</th><th style="width:220px">Andel</th><th class="num">Antal</th></tr>`;
+    const maxCount = Math.max(...Object.values(spread), 1);
+    for (const [score, n] of Object.entries(spread).sort((a, b) => b[0] - a[0])) {
+      const lk = score >= 70 ? 'high' : (score >= 50 ? 'medium' : 'low');
+      html += `<tr><td>${pill(lk, score)}</td>
+        <td><div class="bar"><i style="width:${Math.round(n / maxCount * 100)}%"></i></div></td>
+        <td class="num">${n}</td></tr>`;
+    }
+    html += `</table>
+    <p class="foot" style="margin-top:10px"><b>Före:</b> alla inställda tåg fick samma poäng — 27 av 27 låg på 97, med <code>confidence: low</code>. Ett verkligt strandsatt tåg och ett där nästa avgår om 10 minuter såg identiska ut för föraren.</p>
+    <p class="foot"><b>Nu:</b> ${levels} nivåer. Skillnaden kommer inte från mer data utan från data som tidigare kastades bort — Trafikverket svarar med <i>varje</i> annonserad avgång, men bara de störda lästes. Utan de övriga går det inte att veta om ett inställt tåg har en ersättare.</p>
+    </div></details>`;
+  }
+
+  /* ---------- 5b next departure / transport gap ---------- */
+  const nd=d.nextDeparture;
+  if(nd){
+    const covered=nd.total?Math.round(nd.known/nd.total*100):0;
+    const maxB=Math.max(...Object.values(nd.buckets||{}),1);
+    html+=`<details open><summary><h2>5b · Nästa avgång och transportglappet</h2></summary>
+    <p class="sub">Den enda frågan som avgör om någon står kvar: <i>när går nästa?</i> Ett inställt tåg där nästa avgår om fem minuter strandar ingen. Ett där nästa går om fem timmar strandar alla.</p>
+    <div class="split">
+      <div class="card">
+        <h3 style="margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Glappet, fördelat</h3>
+        <table>`;
+    for(const [label,n] of Object.entries(nd.buckets||{})){
+      const lk=label==='0-30 min'?'low':(label==='31-60 min'?'medium':'high');
+      html+=`<tr><td>${pill(lk,label)}</td>
+        <td><div class="bar"><i style="width:${Math.round(n/maxB*100)}%"></i></div></td>
+        <td class="num">${n}</td></tr>`;
+    }
+    html+=`</table>
+        <p class="foot" style="margin-top:10px">Färgen är avsiktligt omvänd mot poängskalan: ett <b>långt</b> glapp är det som skapar taxibehov.</p>
+        <div class="kv" style="margin-top:10px">
+          <div><b>${nd.lastDeparture}</b><span class="foot"> dagens sista avgång härifrån</span></div>
+          <div><b>${nd.known}</b> av ${nd.total}<span class="foot"> aktiva tips vet när nästa går (${covered}&nbsp;%)</span></div>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Största glappen just nu</h3>
+        <table>`;
+    for(const x of (nd.top||[])){
+      // Sista avgången HAR inget nästa -- glappet är oändligt, inte okänt.
+      const gap=x.minutes==null?(x.isLast?'ingen fler idag':'okänt'):(x.minutes>=60?`${Math.floor(x.minutes/60)} tim ${x.minutes%60} min`:`${x.minutes} min`);
+      html+=`<tr><td>${esc((x.title||'').slice(0,60))}${x.isLast?' <span class="pill p-high">sista</span>':''}</td>
+        <td class="num">${esc(gap)}</td>
+        <td class="num foot">${x.score}</td></tr>`;
+    }
+    if(!(nd.top||[]).length) html+=`<tr><td class="foot">Inget tips har tidtabellsdata just nu.</td></tr>`;
+    html+=`</table></div>
+    </div>
+    <p class="foot" style="margin-top:10px"><b>Varför täckningen är ${covered}&nbsp;%:</b> bara källor med tidtabell kan svara. Trafikverkets järnvägsdata levererar varje annonserad avgång, så för tåg går glappet att räkna ut. SL:s och Västtrafiks avvikelsetexter innehåller ingen tidtabell alls — "Linje 4 är inställd" säger inget om när nästa går. Det är därför GTFS statisk står som nästa steg i avsnitt 2, inte en detalj som råkar saknas.</p>
+    <p class="foot"><b>Det här är vad tågpoängen faktiskt bygger på.</b> Nästa avgång inom 30 minuter ger tak 55 (ingen strandas). Sista avgången ger golv 85. Ett glapp på flera timmar ger 78. Innan signalen fanns fick alla inställda tåg samma poäng — 27 av 27 låg på 97.</p>
+    </details>`;
+  }
+
+  /* ---------- 3.5 regions: what combining the sources actually buys ---------- */
+  const REGION_SV={skane:'Skåne (Skånetrafiken)',sl:'Stockholm (SL)',vt:'Göteborg (Västtrafik)',
+  ul:'Uppsala (UL)',otraf:'Östergötland (Östgötatrafiken)',klt:'Kalmar (KLT)',varm:'Värmland',
+  dt:'Dalarna (Dalatrafik)',xt:'Gävleborg (X-trafik)',vastmanland:'Västmanland (VL)',
+  krono:'Kronoberg',jlt:'Jönköping (JLT)',orebro:'Örebro',blekinge:'Blekinge',gotland:'Gotland',
+  dintur:'Västernorrland (Din Tur)',rail:'Järnväg, hela landet (Trafikverket)',trafikverket:'Vägnätet (Trafikverket)'};
+  const regions=Object.entries(d.byRegion||{}).sort((a,b)=>b[1].total-a[1].total);
+  if(regions.length){
+    const totAll=regions.reduce((s,[,v])=>s+v.total,0);
+    html+=`<details><summary><h2>6 · Vad kombinationen ger — hela Sverige</h2></summary>
+    <p class="sub">Samma pipeline, femton marknader. Varje källa har sin egen form — men de landar i samma tabell, med samma poängskala, och föraren märker inte skillnaden.</p>
+    <div class="card"><table>
+      <tr><th>Marknad</th><th style="width:130px">Andel</th><th class="num">Aktiva</th><th class="num">Poängsatta</th><th class="num">Pushvärda</th><th class="num">Med koordinat</th><th>Färdsätt</th></tr>`;
+    for(const [reg,v] of regions){
+      html+=`<tr><td><b>${esc(REGION_SV[reg]||reg)}</b></td>
+        <td><div class="bar"><i style="width:${Math.round(v.total/totAll*100)}%"></i></div></td>
+        <td class="num">${v.total}</td><td class="num">${v.scorable}</td>
+        <td class="num">${v.pushWorthy}</td>
+        <td class="num">${v.withCoords}/${v.total}</td>
+        <td class="foot">${Object.keys(v.modes).join(', ')||'—'}</td></tr>`;
+    }
+    html+=`</table>
+    <p class="foot" style="margin-top:10px"><b>Vad detta är värt:</b> Sveriges tre största städer täcks nu. Stockholm kostade ingen API-nyckel alls (SL publicerar öppet); Göteborg krävde en prenumeration hos Västtrafik. Poängen är att en ny marknad numera är en adapter på ~200 rader, inte en ombyggnad: alla källor normaliseras till samma form innan de poängsätts.</p>
+    <p class="foot"><b>Järnvägen täcker landet, inte bara storstäderna.</b> Trafiklab publicerar realtid per regional huvudman, och <i>ingen</i> av fjärrtågsoperatörerna (SJ, Öresundståg, Mälartåg, Norrtåg, MTR, VR) finns där — alla ger 404. Därför syntes inställda tåg bara i de tre regioner som kör egna tåg. Trafikverket äger banan och täcker hela Sverige i en enda fråga: Mjölby, Falkenberg, Halmstad, Motala, Katrineholm, Strängnäs, Vingåker — stationer som inget regionalt flöde når.</p>
+    <p class="foot"><b>Varje källa har sin egen fälla.</b> SL:s <code>publish</code>-fönster är publiceringstid, inte störningens längd (en notis från 2024 löpte till 2026). Västtrafik publicerar planerade spårarbeten upp till tre veckor i förväg — 10 av 19 hade inte ens börjat. Och Västtrafiks koordinater är SWEREF99TM i meter, inte grader; oprojicerade hamnar Göteborg i Guineabukten. Alla tre är filtrerade eller omräknade i adaptern.</p>
+    </div></details>`;
+  }
+
+  /* ---------- 6b coverage per county ---------- */
+  const cov=d.coverage||[];
+  if(cov.length){
+    const noSource=cov.filter(c=>c.transit.state==='saknas');
+    const quiet=cov.filter(c=>c.transit.state==='ok'&&c.transit.alerts===0);
+    html+=`<details open><summary><h2>6b · Täckning län för län</h2></summary>
+    <p class="sub">Tre olika saker ser likadana ut i en tom tabell: att källan inte finns, att den svarade tomt, och att nätet helt enkelt är litet. Här står vilket det är.</p>
+    <div class="card"><table>
+      <tr><th>Län</th><th>Kollektivtrafik</th><th class="num">Larm nu</th><th>Väg</th><th class="num">Aktiva tips</th></tr>`;
+    for(const c of cov){
+      const st=c.transit.state;
+      const badge=st==='ok'?pill('high','hämtas'):(st==='saknas'?pill('ignore','finns inte'):(st==='fel'?pill('low','fel'):pill('medium','okörd')));
+      html+=`<tr>
+        <td><b>${esc(c.county)}</b></td>
+        <td>${badge} <span class="foot">${esc(c.transit.source)}</span>${c.transit.error?`<br><span class="foot" style="color:var(--danger)">${esc(c.transit.error.slice(0,90))}</span>`:''}</td>
+        <td class="num">${c.transit.alerts||0}</td>
+        <td class="foot">${c.road.polled?'hämtas':'<span style="color:var(--muted)">ej vald</span>'}</td>
+        <td class="num">${c.activeTips||0}</td></tr>`;
+    }
+    html+=`</table>
+    <p class="foot" style="margin-top:10px"><b>Varför Halland, Sörmland, Jämtland, Västerbotten och Norrbotten står på "finns inte":</b> Trafiklabs ServiceAlerts-produkt har ingen feed för dem — operatörskoderna svarar <code>404</code>, inte tomt. Ingen nyckel ändrar det. Verifierat mot både live-API:t och Trafiklabs egen OpenAPI-spec; se <code>docs/data-sources.md</code>.</p>
+    <p class="foot"><b>Västra Götaland hämtas ändå</b>, trots att <code>vt</code> 404:ar hos Trafiklab — via en egen Västtrafik-adapter. Sveriges andra stad hade annars saknat kollektivtrafikdata helt.</p>
+    <p class="foot"><b>${noSource.length} län saknar kollektivtrafikkälla, ${quiet.length} svarade tomt just nu.</b> Ett tomt svar är en lugn stund i ett litet nät, inte ett fel — Kalmar och Jönköping ligger normalt på 10–20 larm mot Stockholms 200. Skillnaden är antalet linjer och resenärer, inte täckningen.</p>
+    <p class="foot"><b>Järnvägen täcker alla län oavsett.</b> Trafikverket äger banan och svarar för hela landet i en enda fråga, så inställda tåg syns även där ingen regional kollektivtrafikfeed finns. Vägdata likaså — 21 län i samma anrop.</p>
+    </div></details>`;
+  }
+
+  /* ---------- 3.6 what the driver actually sees, per city ---------- */
+  const views=Object.entries(d.driverViews||{});
+  if(views.length){
+    html+=`<details><summary><h2>7 · Vad föraren faktiskt ser</h2></summary>
+    <p class="sub">Samma funktion som appens API kallar (<code>core.api.feed_for</code>) — inte en efterlikning. Tre marknader, samma pipeline.</p>
+    <div class="split">`;
+    for(const [city,v] of views){
+      if(v.error){ html+=`<div class="card"><h3 style="margin:0 0 8px">${esc(city)}</h3><p class="foot">Fel: ${esc(v.error)}</p></div>`; continue; }
+      html+=`<div class="card"><h3 style="margin:0 0 4px;font-size:15px">${esc(city)}</h3>
+        <p class="foot" style="margin:0 0 10px">${v.total} tips synliga · ${v.pushWorthy} pushvärda · ${v.foreignModes} spårvagn/tunnelbana${v.roadContext?` · ${v.roadContext} väghändelser som kontext`:''}</p>
+        <table>`;
+      for(const t of v.top){
+        const lk=likelihood(t.tier,t.worthIt,t.score);
+        html+=`<tr><td>${pill(lk,esc(t.title||'—'))}</td>
+          <td class="foot">${esc(t.mode||'—')}</td>
+          <td class="num">${t.worthIt==null?'—':Math.round(t.worthIt)}</td>
+          <td class="foot num">${t.km==null?'plats okänd':t.km+' km'}</td></tr>`;
+      }
+      html+=`</table></div>`;
+    }
+    html+=`</div>
+    <p class="foot" style="margin-top:10px"><b>Väghändelserna ligger utanför listan, inte utanför svaret.</b> En olycka eller kö försenar dem som redan sitter i bil — ingen lämnar sin bil i en kö för att ta taxi. Mätt i Skåne: 129 vägrader mot 5 kollektivtrafiktips. I samma lista hade de begravt det enda som var värt att köra till, så API:t skickar dem i ett eget fält.</p>
+    <p class="foot"><b>Buggen detta avslöjade:</b> innan regionfiltret fanns hamnade Stockholms spårvagnstips på fjärde plats hos en förare i <i>Malmö</i> — 500 km bort. Orsaken: tips utan koordinater fick full poäng, eftersom "avstånd okänt" räknades som "avstånd noll". Det var ofarligt när all data kom från Skåne, och blev fel i samma sekund som en andra marknad tillkom. 76&nbsp;% av alla tips saknar koordinater, så felet gällde inte bara Stockholm.</p></details>`;
+  }
+
+  /* ---------- 5.5 four pipeline-stage maps ---------- */
+  const rawGeo=(d.rawSourceEvents||[]).filter(se=>se.lat!=null&&se.lon!=null);
+  const geo=active.filter(o=>o.lat!=null&&o.lon!=null&&o.severity_tier!=='ignore'&&(o.demand_score||0)>0);
+  const aiGeo=active.filter(o=>o.lat!=null&&o.lon!=null&&(o.confidence==='low'||o.aiReview));
+  const driverGeo=active.filter(o=>o.lat!=null&&o.lon!=null&&NOTIFY_TIERS.includes(o.severity_tier)&&(o.demand_score||0)>=NOTIFY_FLOOR);
+
+  html+=`<h2>8 · Fyra kartor, fyra steg i pipelinen</h2>
+  <p class="sub">Samma data, sedd vid varje steg i bearbetningen — från rå källdata till det en förare faktiskt ser. Klicka på en punkt på vilken karta som helst för källan och den rå API-responsen bakom den.</p>
+
+  <h3 style="margin:20px 0 4px;font-size:15px">8a · Rådata, en färg per källa</h3>
+  <p class="sub">${rawGeo.length} källhändelser med koordinat, innan något är sammanslaget eller klassificerat.</p>
+  <div class="card mapwrap" style="padding:0;overflow:hidden"><button class="mapbtn" onclick="toggleMapFull('map-sources')">⛶ Helskärm</button><div class="maphint">Klicka i kartan för att zooma med scroll</div><div id="map-sources" class="lmap"></div></div>
+  <div class="legend">
+    <span><b style="background:${SOURCE_COLOR.trafiklab}"></b>Trafiklab</span>
+    <span><b style="background:${SOURCE_COLOR.sl}"></b>SL</span>
+    <span><b style="background:${SOURCE_COLOR.vt}"></b>Västtrafik</span>
+    <span><b style="background:${SOURCE_COLOR.trafikverket_rail}"></b>Trafikverket (järnväg)</span>
+  </div>
+
+  <h3 style="margin:20px 0 4px;font-size:15px">8b · Efter sammanslagning och klassificering</h3>
+  <p class="sub">${geo.length} klassade störningar med koordinat, från Skåne i söder till Västernorrland i norr. Färgen är samma skala som i appen: grön = troligt att det finns kunder, gul = möjligt, grå = osannolikt.</p>
+  <div class="card mapwrap" style="padding:0;overflow:hidden"><button class="mapbtn" onclick="toggleMapFull('map')">⛶ Helskärm</button><div class="maphint">Klicka i kartan för att zooma med scroll</div><div id="map" class="lmap"></div></div>
+  <div class="legend">
+    <span><b class="lg-h"></b>Troligt (hela linjen stoppad, eller stark inställning)</span>
+    <span><b class="lg-m"></b>Möjligt (försening, enstaka inställd)</span>
+    <span><b class="lg-l"></b>Osannolikt (vägstörning, svag signal)</span>
+    <span class="foot">Ringens storlek = poäng</span>
+  </div>
+  <div class="warn" style="margin-top:12px"><b>Titta på den gröna punkten vid Malmö C med poäng 100 — den heter "Vi kör igen".</b>
+  Det är trafiken som <i>återupptagits</i>, alltså raka motsatsen till en störning. Textregeln såg orden
+  "inställd" och "stopp" i beskrivningen och satte golv 85, utan att förstå att meningen var att problemet är över.
+  Det är det starkaste enskilda argumentet för att låta en språkmodell läsa texten — se avsnitt 12.</div>
+
+  <h3 style="margin:20px 0 4px;font-size:15px">8c · Efter Genkit-granskning</h3>
+  <p class="sub">${aiGeo.length} tips som antingen redan granskats eller fortfarande väntar på granskning (confidence=low). Grön = Genkit sänkte poängen, blå = granskad men oförändrad, gul = väntar fortfarande.</p>
+  <div class="card mapwrap" style="padding:0;overflow:hidden"><button class="mapbtn" onclick="toggleMapFull('map-ai')">⛶ Helskärm</button><div class="maphint">Klicka i kartan för att zooma med scroll</div><div id="map-ai" class="lmap"></div></div>
+  <div class="legend">
+    <span><b style="background:${AI_COLOR.lowered}"></b>Sänkt av Genkit</span>
+    <span><b style="background:${AI_COLOR.unchanged}"></b>Granskad, oförändrad</span>
+    <span><b style="background:${AI_COLOR.pending}"></b>Väntar på granskning</span>
+  </div>
+
+  <h3 style="margin:20px 0 4px;font-size:15px">8d · Vad föraren faktiskt ser</h3>
+  <p class="sub">${driverGeo.length} av ${geo.length} klassade tips klarar den faktiska tröskeln för att visas/pusha (${NOTIFY_TIERS.map(t=>TIER_SV[t]||t).join(', ')}, poäng ≥ ${NOTIFY_FLOOR}) — resten finns i systemet men syns aldrig för en förare.</p>
+  <div class="card mapwrap" style="padding:0;overflow:hidden"><button class="mapbtn" onclick="toggleMapFull('map-driver')">⛶ Helskärm</button><div class="maphint">Klicka i kartan för att zooma med scroll</div><div id="map-driver" class="lmap"></div></div>
+  <p class="foot"><b>Att läsa av:</b> punkterna klumpar ihop sig kring stationerna (Malmö C, Lund C, Helsingborg C, Kristianstad C) eftersom platsen oftast härleds från stationsnamnet i texten, inte från en exakt koordinat i larmet. Därför ligger flera störningar på exakt samma punkt.</p>`;
+
+  /* ---------- 5.6 before / after ---------- */
+  if(d.traced){
+    const o=d.traced.opportunity, se=d.traced.sourceEvent;
+    html+=`<details><summary><h2>9 · Före och efter bearbetning</h2></summary>
+    <p class="sub">Samma händelse till vänster som den kom in, till höger som pipelinen lämnade den.</p>
+    <div class="split">
+      <div class="card">
+        <h3 style="margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Före — rått från Trafiklab</h3>
+        <div class="raw">${esc(JSON.stringify({
+          source:se?.source, external_id:se?.external_id,
+          header:se?.raw?.header, description:se?.raw?.description,
+          cause:se?.raw?.cause, effect:se?.raw?.effect,
+          lat:se?.lat, lon:se?.lon
+        },null,2))}</div>
+        <p class="foot"><b>Vad som saknas:</b> ingen allvarlighetsgrad, ingen poäng, inget färdsätt. <code>cause</code> och <code>effect</code> är "Okänd" — de är oanvändbara i praktiken (se avsnitt 9).</p>
+      </div>
+      <div class="card">
+        <h3 style="margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Efter — vad föraren får</h3>
+        <div class="kv">
+          <dt>Färdsätt</dt><dd><b>${esc(o.mode||'—')}</b> <span class="foot">← ordet "bussen" i texten</span></dd>
+          <dt>Bedömning</dt><dd>${pill(likelihood(o.severity_tier,o.demand_score,o.demand_score),TIER_SV[o.severity_tier]||o.severity_tier)}</dd>
+          <dt>Poäng</dt><dd><b style="font-size:17px">${o.demand_score}</b> <span class="foot">av 100 (tak ${o.severity_tier==='vehicle_cancelled'?'60 + 12 väder':'—'})</span></dd>
+          <dt>Säkerhet</dt><dd>${esc(o.confidence||'—')}</dd>
+          <dt>Plats</dt><dd>${esc((o.places||[]).join(', ')||'—')} <span class="foot">← uppslag på stationsnamn</span></dd>
+          <dt>Regel</dt><dd><code>${esc(o.rule_id||'—')}</code></dd>
+          <dt>Motivering</dt><dd>${(o.reasons||[]).map(r=>`<span class="pill p-ign" style="margin:2px 3px 2px 0">${esc(r)}</span>`).join('')||'—'}</dd>
+        </div>
+        <p class="foot"><b>Det här är hela värdet:</b> varje siffra går att spåra till en regel och en källa. Föraren ser inte JSON — han ser "Buss inställd, Lund C, troligt att det finns kunder".</p>
+      </div>
+    </div></details>`;
+  }
+
+  /* ---------- 4. live distribution ---------- */
+  html+=`<details><summary><h2>10 · Vad som finns just nu</h2></summary>
+  <p class="sub">${active.length} aktiva störningar, fördelade på allvarlighetsgrad.</p>
+  <div class="card"><table>
+    <tr><th>Grad</th><th style="width:150px">Andel</th><th class="num">Antal</th><th class="num">Snittpoäng</th><th class="num">Med koordinat</th><th>Färdsätt</th></tr>`;
+  for(const [tier,v] of tierRows){
+    const avg=Math.round(v.scores.reduce((a,b)=>a+b,0)/v.n);
+    const lk=tier==='ignore'?'ignore':likelihood(tier,avg,avg);
+    html+=`<tr><td>${pill(lk,TIER_SV[tier]||tier)}</td>
+      <td><div class="bar"><i style="width:${Math.round(v.n/maxN*100)}%"></i></div></td>
+      <td class="num">${v.n}</td><td class="num">${avg}</td>
+      <td class="num">${v.withCoords}/${v.n}</td>
+      <td class="foot">${[...v.modes].join(', ')||'—'}</td></tr>`;
+  }
+  html+=`</table></div></details>`;
+
+  /* ---------- 5. traced example ---------- */
+  if(d.traced){
+    const o=d.traced.opportunity, se=d.traced.sourceEvent;
+    const lk=likelihood(o.severity_tier,o.demand_score,o.demand_score);
+    html+=`<details><summary><h2>11 · Ett verkligt exempel, hela vägen</h2></summary>
+    <p class="sub">Samma störning från rå källa till det föraren ser.</p>
+    <div class="split">
+      <div class="card"><h3 style="margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Steg 1 — rått från källan</h3>
+        <div class="kv">
+          <dt>Källa</dt><dd><code>${esc(se?.source||'—')}</code></dd>
+          <dt>ID</dt><dd><code>${esc(se?.external_id||'—')}</code></dd>
+          <dt>Rubrik</dt><dd>${esc(se?.raw?.header||'—')}</dd>
+          <dt>Orsak (GTFS)</dt><dd>${esc(se?.raw?.cause||'—')} <span class="foot">← används inte, se avsnitt 6</span></dd>
+        </div>
+        <p class="foot" style="margin-top:10px">Beskrivning:</p>
+        <div style="font-size:13.5px">${esc(se?.raw?.description||'—')}</div>
+      </div>
+      <div class="card"><h3 style="margin:0 0 10px;font-size:13px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)">Steg 2 — efter bearbetning</h3>
+        <div class="kv">
+          <dt>Allvarlighet</dt><dd>${pill(lk,TIER_SV[o.severity_tier]||o.severity_tier)}</dd>
+          <dt>Färdsätt</dt><dd>${esc(o.mode||'—')}</dd>
+          <dt>Poäng</dt><dd><b>${o.demand_score}</b> / 100</dd>
+          <dt>Säkerhet</dt><dd>${esc(o.confidence||'—')}</dd>
+          <dt>Regel</dt><dd><code>${esc(o.rule_id||'—')}</code></dd>
+          <dt>Koordinat</dt><dd>${o.lat!=null?`${o.lat.toFixed(4)}, ${o.lon.toFixed(4)}`:'saknas'}</dd>
+        </div>
+        <p class="foot" style="margin-top:10px">Motivering (sparas för spårbarhet):</p>
+        <div>${(o.reasons||[]).map(r=>`<span class="pill p-ign" style="margin:2px 3px 0 0">${esc(r)}</span>`).join('')||'—'}</div>
+      </div>
+    </div>
+    <div class="card"><b>Vad föraren ser</b>
+      <div style="margin-top:10px;border:1px solid var(--line);border-radius:12px;padding:14px;max-width:430px">
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:10px">
+          <span class="foot" style="font-weight:800">${esc(TIER_SV[o.severity_tier]||'')}</span>
+          ${pill(lk, o.lat!=null?'avstånd i km':'Plats okänd')}
+        </div>
+        <div style="font-size:18px;font-weight:800;margin:6px 0 3px">${esc(o.title||'')}</div>
+        <div class="foot">${esc(o.summary||'')}</div>
+      </div>
+      <p class="foot" style="margin-top:10px">Poängen visas aldrig som siffra för föraren — den blir färg (prioritet) plus avstånd.</p>
+    </div></details>`;
+  }
+
+  /* ---------- 6. honest gaps ---------- */
+  html+=`<details><summary><h2>12 · Vad som <i>inte</i> fungerar än</h2></summary>
+  <p class="sub">Verifierat mot riktig data, inte antaganden.</p>
+  <div class="card" style="border-left:5px solid var(--yellow)">
+    <h3 style="margin:0 0 8px;font-size:15px">Skulle en språkmodell göra bedömningen bättre?</h3>
+    <p style="margin:0 0 10px">Kortsvar: <b>ja, och det är billigt</b> — men bara som ett extra steg ovanpå reglerna, aldrig i stället för dem.</p>
+    <table>
+      <tr><th>Mätt på verklig data (24 h)</th><th class="num">Antal</th></tr>
+      <tr><td>Klassade störningar</td><td class="num">352</td></tr>
+      <tr><td>Högvärdiga (poäng ≥ 50) — de enda som är värda att analysera</td><td class="num">76</td></tr>
+      <tr><td>Unika rubriker totalt</td><td class="num">17</td></tr>
+      <tr><td>Sannolika feltolkningar ("Vi kör igen", "Återinsatt tåg", "Invänta tid", "Extra uppehåll")</td><td class="num">39</td></tr>
+    </table>
+    <p class="foot" style="margin-top:10px"><b>Kostnaden är försumbar.</b> 76 texter per dygn à ~150 tokens ≈ 2 300 anrop/månad. Med en liten modell (Gemini Flash / Haiku) landar det på under 1 kr per månad. Det är inte kostnaden som avgör — det är om det gör bedömningen <i>sannare</i>.</p>
+    <p class="foot"><b>Och det gör det, för en specifik sak:</b> reglerna kan inte skilja "inställd" från "inte längre inställd". Bara 17 unika rubriker återkommer, så en modell behöver inte vara stor — den ska svara på en fråga: <i>står folk kvar på perrongen, eller är problemet över?</i></p>
+    <p class="foot"><b>Villkoren:</b> (1) kör den bara på de ~76 högvärdiga, inte på alla 352. (2) Låt den <i>sänka</i> poäng och flagga motsägelser, aldrig höja — ett falskt högt tips kostar en förare en bomresa. (3) Cachea per rubrik, de upprepas. (4) Faller anropet, behåll regelsvaret. Reglerna är fortfarande grunden; modellen är ett filter mot uppenbara feltolkningar.</p>
+  </div>
+  <div class="warn">
+    <p style="margin:0 0 10px"><b>"Är detta sista turen ikväll?" — besvarad för tåg, inte för buss.</b> Trafikverkets järnvägsdata levererar varje annonserad avgång, så för tåg räknas glappet ut och sista avgången flaggas (se 5b): ${nd?nd.known:0} av ${nd?nd.total:0} aktiva tips vet när nästa går. För buss, tunnelbana och spårvagn saknas svaret helt — SL:s och Västtrafiks avvikelsetexter innehåller ingen tidtabell. GTFS statisk skulle täcka dem, men realtidslarmens hållplats-ID:n tillhör ett annat ID-rum än tidtabellens (Skånetrafikens korta nummer vs NOPTIS-format) och ingen publik översättningstabell finns. Låses upp av en <b>GTFS Regional Realtime</b>-nyckel.</p>
+    <p style="margin:0 0 10px"><b>GTFS <code>cause</code> och <code>effect</code> används inte.</b> Uppmätt på 123 larm: <code>effect</code> är alltid <code>UNKNOWN_EFFECT</code>, och <code>cause</code> tillför inget som den svenska texten inte redan bär.</p>
+    <p style="margin:0 0 10px"><b>Återkopplingen är byggd men tom.</b> 🚕/👍/👎 skriver numera till <code>opportunity_feedback</code> med främmande nyckel mot <code>opportunities</code>. Den gamla vägen skrev mot <code>alerts</code>, vars id-rymd inte överlappar tipsens i en enda rad — varje svar avvisades tyst av databasen, och tabellen står på noll rader. Tills riktiga svar samlats in är all viktning fortfarande handjusterad, inte inlärd.</p>
+    <p style="margin:0"><b>Väghändelser är kontext, inte tips.</b> De ligger i ett eget fält i API-svaret i stället för i förarens lista (mätt: 129 vägrader mot 5 kollektivtrafiktips i Skåne). Kvar att göra: visa dem på appens karta, som är där de faktiskt gör nytta — vet man att vägen dit är avstängd ändras beslutet.</p>
+  </div>
+  <p class="foot" style="margin-top:20px">Hämtat ${new Date(d.generatedAt).toLocaleString('sv-SE')} från <code>${esc(d.supabaseUrl)}</code> · endast läsning</p></details>`;
+
+  html+=renderOperativeEvents(ops);
+
+  document.getElementById('root').innerHTML=html;
+  drawSourceMap(rawGeo);
+  drawMap(geo);
+  drawAiMap(aiGeo);
+  drawDriverMap(driverGeo);
+}
+</script>
+</body>
+</html>

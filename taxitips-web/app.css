@@ -150,13 +150,17 @@ a {
 
 .mode-switch {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: 1fr;
   gap: 0.25rem;
   padding: 0.22rem;
   background: rgba(0, 0, 0, 0.35);
   border-radius: 999px;
   width: 100%;
   max-width: 28rem;
+}
+
+.mode-switch .mode-btn {
+  width: 100%;
 }
 
 .mode-btn {

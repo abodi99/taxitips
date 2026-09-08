@@ -266,3 +266,62 @@ class ReplacementTrafficJoin(TestCase):
     def test_a_train_with_no_replacement_anywhere_is_unaffected(self):
         alerts = build_alerts(self._departures(), {"Mot": Station("Mot", "Motala C")}, NOW, replacement_index={})
         self.assertFalse(alerts[0].has_replacement)
+
+
+class NewFieldsTests(TestCase):
+    """Fälten som API-inventeringen (docs/api-field-inventory.md) pekade ut."""
+
+    def normalize(self, dep, others=None):
+        from datetime import datetime, timezone as dt_tz
+
+        from core.sources.trafikverket_rail import _normalize
+
+        when = datetime(2026, 9, 8, 18, 0, tzinfo=dt_tz.utc)
+        base = {
+            "LocationSignature": "Mlm", "AdvertisedTrainIdent": "1612",
+            "AdvertisedTimeAtLocation": "2026-09-08T20:00:00.000+02:00",
+            "Canceled": True,
+        }
+        base.update(dep)
+        return _normalize(base, None, [base, *(others or [])], when)
+
+    def test_the_product_name_beats_the_information_owner(self):
+        # InformationOwner tillskrev en Kalmar-avgång "Jönköpings
+        # Länstrafik"; produktnamnet är det som står på tavlan.
+        alert = self.normalize({
+            "InformationOwner": "Jönköpings Länstrafik",
+            "ProductInformation": [{"Code": "PNA025", "Description": "Pågatågen"}],
+        })
+        self.assertTrue(alert.header.startswith("Pågatågen 1612"))
+        self.assertEqual(alert.product, "Pågatågen")
+
+    def test_the_track_placeholder_is_not_shown(self):
+        # 132 av 4 000 avgångar har "x", som betyder att stationen saknar
+        # spårnumrering -- inte att spåret heter x.
+        self.assertEqual(self.normalize({"TrackAtLocation": "x"}).track, "")
+        self.assertNotIn("Spår", self.normalize({"TrackAtLocation": "x"}).description)
+        self.assertIn("Spår 3", self.normalize({"TrackAtLocation": "3"}).description)
+
+    def test_the_replacement_code_is_read_before_the_words(self):
+        alert = self.normalize({"Deviation": [{"Code": "ANA007", "Description": "Buss ersätter"}]})
+        self.assertTrue(alert.has_replacement)
+        self.assertEqual(alert.replacement_mode, "bus")
+
+    def test_other_information_carries_replacements_too(self):
+        alert = self.normalize({
+            "OtherInformation": [{"Code": "ONA151", "Description": "Buss ersätter Floda - Alingsås."}]
+        })
+        self.assertTrue(alert.has_replacement)
+        self.assertIn("Floda", alert.replacement_note)
+
+    def test_a_bus_as_the_next_departure_is_said_out_loud(self):
+        # Att kalla ersättningsbussen "nästa avgång" utan att säga att det
+        # är en buss gör beskedet fel på ett sätt som spelar roll.
+        bus = {
+            "LocationSignature": "Mlm", "AdvertisedTrainIdent": "9999",
+            "AdvertisedTimeAtLocation": "2026-09-08T20:20:00.000+02:00",
+            "TypeOfTraffic": [{"Code": "YNA002", "Description": "Buss"}],
+        }
+        alert = self.normalize({}, others=[bus])
+        self.assertTrue(alert.next_departure_is_bus)
+        self.assertIn("Nästa avgång är en buss", alert.description)

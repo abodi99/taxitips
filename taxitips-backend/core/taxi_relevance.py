@@ -23,7 +23,12 @@ from __future__ import annotations
 import re
 
 from core.geo import find_hubs_in_text, resolve_place_coords
-from core.market import alert_in_market, is_national_scope, place_looks_skane
+from core.market import (
+    alert_in_market,
+    is_national_scope,
+    place_looks_skane,
+    road_text_looks_skane,
+)
 
 # Station/info utan taxinytta -- även om rubriken nämner en station.
 NOISE_RE = re.compile(
@@ -75,13 +80,16 @@ CITY_RE = re.compile(
 
 _COPENHAGEN_RE = re.compile(r"köpenhamn|cph|kastrup", re.IGNORECASE)
 _TILLFALLIG_RE = re.compile(r"tillfällig (körväg|hållplats)|hänvisas till", re.IGNORECASE)
-_INSTALLD_STOPP_RE = re.compile(r"inställd|ställs in|inga avgångar|ingen trafik", re.IGNORECASE)
+# inställ[dt]: "inställd" (en-ord: buss, avgång) och "inställt" (ett-ord:
+# tåg -- "tåget är inställt"). Bara "inställd" missade alla ett-ords-former,
+# upptäckt via compensation.py:s tester ("Tåg ... inställt").
+_INSTALLD_STOPP_RE = re.compile(r"inställ[dt]|ställs in|inga avgångar|ingen trafik", re.IGNORECASE)
 _ERSATTNING_RE = re.compile(r"ersättningsbuss|ersättningstrafik", re.IGNORECASE)
 _TEKNISKT_FEL_RE = re.compile(r"tekniskt fel", re.IGNORECASE)
 _STANGD_HALLPLATS_RE = re.compile(r"^stängd hållplats$", re.IGNORECASE)
 _HALLPLATS_RE = re.compile(r"^hållplats ", re.IGNORECASE)
 _TRAFIKINFO_RE = re.compile(r"^trafikinformation$", re.IGNORECASE)
-_INSTALLD_RE = re.compile(r"inställd", re.IGNORECASE)
+_INSTALLD_RE = re.compile(r"inställ[dt]", re.IGNORECASE)
 
 
 def _text_of(alert: dict) -> str:
@@ -244,6 +252,92 @@ def is_road_alert(alert: dict | None) -> bool:
     )
 
 
+
+def score_road_alert(alert: dict) -> dict:
+    """
+    Port av taxiRelevance.js:s scoreRoadAlert.
+
+    Taket är 15 poäng, med avsikt. En olycka, avstängning eller kö försenar
+    dem som REDAN sitter i bil -- den strandar ingen fotgängare så som ett
+    inställt tåg gör, och ingen lämnar sin bil mitt i en kö för att ta taxi.
+    Det enda verkliga taxifallet är en avstängning så allvarlig att en
+    busslinje ställs in, och den störningen kommer som ett eget
+    kollektivtrafiklarm -- alltså skulle en högre vägpoäng dubbelräkna den.
+
+    Väginformation är därför sammanhang för en förare som redan är på väg
+    ("räkna med omväg"), aldrig ett skäl att köra någonstans.
+    """
+    type_text = str(alert.get("cause") or alert.get("header") or "").lower()
+    text = " ".join(
+        str(alert.get(k) or "") for k in ("header", "description", "effect")
+    ).lower()
+
+    places = [
+        p
+        for p in (alert.get("areas") or [])
+        if p and not str(p).startswith("Linjer") and not str(p).startswith("Hållplatser")
+    ]
+    hubs = find_hubs_in_text(text)
+    for hub in hubs:
+        if not any(str(x).lower() == hub["name"].lower() for x in places):
+            places = [hub["name"], *places]
+
+    in_market = road_text_looks_skane(text, places)
+    is_accident = "olycka" in type_text or "olycka" in text
+    is_full_closure = (
+        "vägen avstäng" in text
+        or "helt avstäng" in text
+        or "avstängning" in type_text
+        or "avstangning" in type_text
+    )
+    is_roadwork = (
+        "vägarbete" in type_text or "beläggningsarbete" in text or "vägarbete" in text
+    )
+    is_queue = "kö" in type_text or "kövarning" in text or "köbildning" in text
+
+    def ignored(why: str) -> dict:
+        return {
+            "score": 0, "level": "ignore", "why": why, "places": places,
+            "hubs": [h["name"] for h in hubs], "driver_hint": None,
+            "serious": False, "mediumish": False,
+        }
+
+    # Planerat nattarbete eller beläggning långt bort ger ingen taxisignal.
+    if is_roadwork and not is_accident and not in_market:
+        return ignored("Vägarbete utanför relevant område")
+    if is_roadwork and not is_accident and "kl 19" in text and "05:00" in text:
+        return ignored("Nattligt vägarbete — låg taxinytta")
+
+    if is_accident and in_market:
+        score, level = 15, "low"
+    elif is_accident:
+        score, level = 8, "low"
+    elif is_full_closure and in_market and not is_roadwork:
+        score, level = 15, "low"
+    elif is_queue and in_market:
+        score, level = 10, "low"
+    elif is_full_closure and in_market and is_roadwork:
+        score, level = 8, "low"
+    elif is_roadwork and in_market:
+        score, level = 5, "low"
+    else:
+        return ignored("Väginfo utan taxirelevans")
+
+    place = places[0] if places else (hubs[0]["name"] if hubs else "vägen")
+    return {
+        "score": score,
+        "level": level,
+        "why": "olycka" if is_accident else "vägarbete" if is_roadwork else "väg",
+        "places": places,
+        "hubs": [h["name"] for h in hubs],
+        "driver_hint": (
+            f"{alert.get('cause') or 'Väginfo'} i {place} — bra att känna till, "
+            "men skapar inte taxibehov i sig."
+        ),
+        "serious": False,
+        "mediumish": False,
+    }
+
 def enrich_alert(alert: dict) -> dict:
     """
     Port of taxiRelevance.js's enrichAlert: scores the alert, then re-checks
@@ -256,10 +350,7 @@ def enrich_alert(alert: dict) -> dict:
     have `alert` and pass both to classify_transit_alert().
     """
     if is_road_alert(alert):
-        # scoreRoadAlert isn't ported (Phase 1 is Trafiklab-only, no road
-        # source exists to feed this branch) -- see core/text_scoring.py's
-        # matching stub for the tier-classification side.
-        raise NotImplementedError("scoreRoadAlert not ported yet (no road source in Django)")
+        return score_road_alert(alert)
 
     taxi = score_alert(alert)
     if not alert_in_market(alert, taxi) and taxi["level"] != "ignore":

@@ -55,6 +55,18 @@ function extractAreas(header, description, entities) {
     /\b(Karlskrona|Karlshamn|Ronneby|Sölvesborg|Olofström)\b/gi,
     /\b(Växjö|Ljungby|Älmhult|Alvesta|Markaryd|Värnamo|Nässjö|Jönköping|Eksjö)\b/gi,
     /\b(Pågatåg|Öresundståg|Krösatåg|Kustpilen|Pendeln|Citybuss|Regionbuss)\b/gi,
+    // National rollout: with 15 operators polled instead of one, an alert
+    // from Umeå or Örebro carried no recognisable place name at all and so
+    // reached the map with lat/lon = null. These are the towns CITY_COORDS
+    // can actually resolve -- adding a name here without a coordinate there
+    // buys nothing.
+    //
+    // Lookarounds instead of \b: JS's \b is ASCII-only, so /\bÖrebro\b/
+    // never matches at a string or space start. That trap has already been
+    // fixed twice in this codebase (skane.js, taxiRelevance.js); the four
+    // patterns above still carry it, which is why Ängelholm and Östra
+    // Göinge only match mid-sentence today.
+    /(?<![a-zà-öø-ÿ0-9])(Stockholm|Solna|Södertälje|Nacka|Sundbyberg|Täby|Norrtälje|Uppsala|Enköping|Göteborg|Mölndal|Borås|Trollhättan|Uddevalla|Skövde|Linköping|Norrköping|Motala|Kalmar|Oskarshamn|Västervik|Nybro|Karlstad|Kristinehamn|Arvika|Örebro|Karlskoga|Västerås|Köping|Eskilstuna|Nyköping|Falun|Borlänge|Mora|Gävle|Sandviken|Hudiksvall|Sundsvall|Härnösand|Örnsköldsvik|Östersund|Umeå|Skellefteå|Luleå|Piteå|Kiruna|Visby)(?![a-zà-öø-ÿ0-9])/gi,
   ];
   for (const pattern of placePatterns) {
     for (const match of text.matchAll(pattern)) {
@@ -170,6 +182,7 @@ async function fetchOperatorAlerts(apiKey, operator) {
     ...a,
     id: `${operator}:${a.id}`,
     region: operator,
+    source: "trafiklab",
   }));
 }
 

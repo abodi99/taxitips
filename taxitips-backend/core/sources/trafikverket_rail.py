@@ -51,8 +51,10 @@ SERIOUS_DELAY_MIN = 30
 PLATFORM_LIFETIME = timedelta(hours=1)
 
 # En ersättande avgång inom det här fönstret betyder att ingen är
-# strandsatt -- de väntar en kvart, de tar inte taxi.
-ALTERNATIVE_WITHIN = timedelta(minutes=30)
+# strandsatt -- de väntar en kvart, de tar inte taxi. Tröskeln tillämpas i
+# core/scoring.py (ALTERNATIVE_SOON_MIN), som äger poängsättningen; här
+# hämtas bara glappet fram. Konstanten låg kvar i en gren som räknade ut
+# samma sak två gånger och alltid returnerade samma värde.
 
 
 @dataclass
@@ -82,12 +84,29 @@ class RailAlert:
     # Signalerna som gör poängsättningen möjlig. Utan dem får varje
     # inställt tåg identiska 97 poäng -- se scoring.py.
     next_departure_minutes: int | None = None
+    # Den absoluta tidpunkten, inte bara avståndet i minuter. Minuterna
+    # räknas vid pollning och åldras: ett tips som skrevs för 20 minuter
+    # sedan påstår fortfarande "om 45 min" när det i själva verket är 25.
+    # Klockslaget åldras aldrig, och är dessutom det en förare kan agera på
+    # ("tåget går 14:35") utan att räkna i huvudet.
+    next_departure_at: datetime | None = None
+    # Är nästa avgång från stationen en BUSS? 50 av 4 000 avgångar i
+    # flödet har TypeOfTraffic "Buss" -- det är ersättningstrafiken själv,
+    # inte ett tåg. Att kalla den "nästa avgång" utan att säga det gör
+    # beskedet fel på ett sätt som spelar roll: en resenär som ser en buss
+    # där tåget skulle gå vet att tåget inte kommer.
+    next_departure_is_bus: bool = False
     is_last_departure: bool = False
     station_departures_in_window: int = 0
     # Trafikverket anger själv när ersättningstrafik är insatt. Mätt: 35 av
     # 59 inställda avgångar har "Buss ersätter" -- de resenärerna är inte
     # strandsatta, de går på en buss. Att visa dem som toppnotering är
     # exakt den sortens falska tips som kostar en förare en bomresa.
+    # Spår och produktnamn, båda 100% ifyllda även på inställda avgångar.
+    # "Pågatåg 1612 från Helsingborg C, spår 3" säger en förare var på
+    # stationen folk står; "Skånetrafiken 1612" gör det inte.
+    track: str = ""
+    product: str = ""
     has_replacement: bool = False
     replacement_note: str = ""
     # Populerade bara när has_replacement kom från en riktig ReplacementTraffic-
@@ -254,6 +273,17 @@ class TrafikverketRail:
             "<INCLUDE>Canceled</INCLUDE>"
             "<INCLUDE>ToLocation</INCLUDE>"
             "<INCLUDE>Deviation</INCLUDE>"
+            # OtherInformation bär "Buss ers. Floda - Alingsås." på 11% av
+            # avgångarna och lästes inte alls. TrackAtLocation och
+            # ProductInformation är 100% ifyllda även på inställda avgångar
+            # -- "Pågatåg 1612 från Helsingborg C, spår 3" är mer värt för
+            # en förare än "Skånetrafiken 1612". TypeOfTraffic skiljer
+            # bussavgångar från tågavgångar i samma flöde. Se
+            # docs/api-field-inventory.md, förslag 6, 8 och 9.
+            "<INCLUDE>OtherInformation</INCLUDE>"
+            "<INCLUDE>TrackAtLocation</INCLUDE>"
+            "<INCLUDE>ProductInformation</INCLUDE>"
+            "<INCLUDE>TypeOfTraffic</INCLUDE>"
             "<INCLUDE>Operator</INCLUDE>"
             "<INCLUDE>InformationOwner</INCLUDE>"
             "<INCLUDE>WebLink</INCLUDE>"
@@ -361,7 +391,9 @@ def _normalize(
         to = dest.name if dest else to_sig
 
     # De tre signalerna som gör rangordning möjlig.
-    next_minutes, is_last = _next_departure(dep, station_departures, when)
+    next_minutes, is_last, next_at, next_is_bus = _next_departure(
+        dep, station_departures, when
+    )
 
     # Fjärde signalen, och den starkaste: operatören säger rakt ut om
     # ersättningstrafik är insatt.
@@ -372,7 +404,17 @@ def _normalize(
     # operatörer betyder olika resenärsprofil och olika stationsvana.
     operator = str(dep.get("Operator") or "")
     information_owner = str(dep.get("InformationOwner") or "")
-    brand = information_owner or operator
+    # Produktnamnet först: det är vad som står på tavlan resenären läser,
+    # och InformationOwner kan tillskriva en Kalmar-avgång "Jönköpings
+    # Länstrafik". Se docs/api-field-inventory.md, förslag 8.
+    product = _product(dep)
+    track = str(dep.get("TrackAtLocation") or "").strip()
+    # "x" är Trafikverkets platshållare för stationer utan spårnumrering
+    # (132 av 4 000 avgångar). "Spår x" är inte en anvisning, det är brus
+    # på ett kort en förare läser i farten.
+    if track.lower() in ("x", "-", "0"):
+        track = ""
+    brand = product or information_owner or operator
     train_label = f"{brand} {train}" if brand else f"Tåg {train}"
 
     time_text = when.astimezone().strftime("%H:%M")
@@ -382,10 +424,13 @@ def _normalize(
             f"Avgången {time_text} från {name}"
             f"{f' mot {to}' if to else ''} är inställd."
         )
+        if track:
+            description += f" Spår {track}."
         if replacement:
             description += f" {note}."
         elif next_minutes is not None:
-            description += f" Nästa avgång går om {_human_gap(next_minutes)}."
+            what = "Nästa avgång är en buss och går" if next_is_bus else "Nästa avgång går"
+            description += f" {what} om {_human_gap(next_minutes)}."
         elif is_last:
             description += " Det var sista avgången härifrån."
     else:
@@ -421,7 +466,11 @@ def _normalize(
         lat=lat,
         lon=lon,
         next_departure_minutes=next_minutes,
+        next_departure_at=next_at,
+        next_departure_is_bus=next_is_bus,
         is_last_departure=is_last,
+        track=track,
+        product=product,
         has_replacement=replacement,
         replacement_note=note,
         replacement_mode=replacement_mode,
@@ -491,31 +540,78 @@ def _replacement(
     Har avgången ersättningstrafik? Returnerar (har_ersättning, motivering,
     fordonsläge, koordinat).
 
-    Kollar ReplacementTraffic-registret (JBS v1.0) först -- en riktig
-    koppling till tåget, med verkligt fordonsläge (buss/taxi/...) och en
-    GPS-spårad hållplats, inte en gissning. Trafikverkets täckning är dock
-    ännu partiell ("All ersättningstrafik finns inte med men det kommer
-    att utökas löpande"), så textmatchningen mot Deviation kvarstår som
-    reservlösning -- mätt på live-data: 35 av 59 inställda avgångar bär
-    "Buss ersätter" i sitt Deviation-fält, och utan den kontrollen rankas
-    de som strandsatta perronger, den vanligaste falska högnoteringen i
-    hela flödet.
+Tre källor, i fallande ordning efter hur ofta de svarar (mätt
+    2026-09-08 på 82 inställda avgångar, se docs/api-field-inventory.md):
+
+    1. **`Deviation.Code == ANA007`** ("Buss ersätter") -- 34 av 82. En kod
+       är stabilare än en formulering: Trafikverket kan skriva om texten
+       utan att koden ändras.
+    2. **`OtherInformation`** -- 11% av alla avgångar, bär "Buss ers. Floda
+       - Alingsås." Lästes inte alls tidigare.
+    3. **`ReplacementTraffic`-registret** (JBS v1.0) -- teoretiskt bäst:
+       verkligt fordonsläge och en GPS-spårad hållplats. Praktiskt **0
+       träffar** på de 82 inställda avgångarna. Registret är ännu partiellt
+       ("All ersättningstrafik finns inte med men det kommer att utökas
+       löpande"). Det står kvar först i koden eftersom det ger mest när det
+       väl träffar -- men kommentaren som kallade det "den starkaste
+       signalen" var fel om verkligheten och är borttagen.
+
+    Textmatchningen är sist, som reserv.
     """
     train = str(dep.get("AdvertisedTrainIdent") or "")
     date_key = _parse_date_local(dep.get("AdvertisedTimeAtLocation"))
     record = (replacement_index or {}).get((train, date_key)) if train and date_key else None
     if record:
         mode = record.get("VehicleMode")
+        # Description finns inte i svaret (0 av 1000 poster i stickprovet).
+        # Läsningen står kvar med .get() -- fältet är dokumenterat och kan
+        # fyllas -- men koden ska inte antyda att den brukar ge något.
         detail = record.get("Description") or ""
         label = {"taxi": "Ersättningstaxi", "bus": "Ersättningsbuss"}.get(mode, "Ersättningstrafik")
         note = f"{label} redan insatt" + (f" ({detail})" if detail else "")
         return True, note, mode, _first_stop_coords(record)
 
+    # Koden före orden. ANA007 = "Buss ersätter".
+    for d in dep.get("Deviation") or []:
+        if str(d.get("Code") or "").upper() == "ANA007":
+            desc = str(d.get("Description") or "").strip() or "Buss ersätter"
+            return True, desc, "bus", None
+
     for d in dep.get("Deviation") or []:
         desc = str(d.get("Description") or "")
         if any(w in desc.lower() for w in _REPLACEMENT_WORDS):
             return True, desc, None, None
+
+    # "Buss ers. Floda - Alingsås." står här, inte i Deviation.
+    for info in dep.get("OtherInformation") or []:
+        desc = str(info.get("Description") or "")
+        if any(w in desc.lower() for w in _REPLACEMENT_WORDS):
+            return True, desc, None, None
+
     return False, "", None, None
+
+
+def _is_bus(dep: dict) -> bool:
+    """TypeOfTraffic YNA002 = "Buss". 50 av 4 000 avgångar i flödet."""
+    return any(
+        str(t.get("Code") or "").upper() == "YNA002"
+        or str(t.get("Description") or "").lower() == "buss"
+        for t in (dep.get("TypeOfTraffic") or [])
+    )
+
+
+def _product(dep: dict) -> str:
+    """
+    Produktnamnet resenären ser på tavlan -- "SJ Regional", "Pågatåg".
+
+    Mer tillförlitligt än InformationOwner, som kan tillskriva en
+    Kalmar-avgång "Jönköpings Länstrafik". 100% ifyllt.
+    """
+    for item in dep.get("ProductInformation") or []:
+        name = str(item.get("Description") or "").strip()
+        if name:
+            return name
+    return ""
 
 
 def _primary_cause(dep: dict) -> str:
@@ -545,7 +641,7 @@ def _human_gap(minutes: int) -> str:
 
 def _next_departure(
     dep: dict, station_departures: list[dict], when: datetime
-) -> tuple[int | None, bool]:
+) -> tuple[int | None, bool, datetime | None, bool]:
     """
     Finns en ersättande avgång, och hur snart?
 
@@ -553,8 +649,9 @@ def _next_departure(
     skilja ett verkligt strandsatt tåg från ett där nästa går om tio
     minuter -- båda fick 85 poäng.
 
-    Returnerar (minuter till nästa avgång, är detta sista avgången).
-    Nästa avgång räknas bara om den inte själv är inställd.
+    Returnerar (minuter till nästa avgång, är detta sista avgången,
+    tidpunkten för nästa avgång, är nästa avgång en buss). Nästa avgång
+    räknas bara om den inte själv är inställd.
     """
     later = []
     for other in station_departures:
@@ -562,15 +659,14 @@ def _next_departure(
             continue
         t = _parse_time(other.get("AdvertisedTimeAtLocation"))
         if t and t > when:
-            later.append(t)
+            later.append((t, other))
 
     if not later:
         # Inget senare tåg i fönstret. Med 8h framförhållning är det ett
         # rimligt "sista avgången", men bara om vi faktiskt såg avgångar
         # på stationen -- annars vet vi ingenting.
-        return None, len(station_departures) > 1
+        return None, len(station_departures) > 1, None, False
 
-    gap = round((min(later) - when).total_seconds() / 60)
-    if gap <= ALTERNATIVE_WITHIN.total_seconds() / 60:
-        return gap, False
-    return gap, False
+    nxt, record = min(later, key=lambda pair: pair[0])
+    gap = round((nxt - when).total_seconds() / 60)
+    return gap, False, nxt, _is_bus(record)

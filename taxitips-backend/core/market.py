@@ -136,3 +136,27 @@ def alert_in_market(alert: dict, taxi: dict | None = None) -> bool:
         return True
 
     return False
+
+
+# Vägvarianten av SKANE_TEXT_RE. Egen lista med avsikt (port av
+# taxiRelevance.js:s SKANE_ROAD_HINT): vägtexter namnger sällan operatören
+# och ofta vägnumret, så E6/E22/E65 och de två länsvägar som går genom
+# Skåne bär geografin här -- "Pågatåg" gör det aldrig i en vägtext.
+SKANE_ROAD_HINT_RE = _sv_word(
+    "malmö|lund|helsingborg|kristianstad|landskrona|trelleborg|ystad|eslöv|"
+    "hässleholm|ängelholm|simrishamn|kävlinge|hyllie|vellinge|höganäs|lomma|"
+    "staffanstorp|bromölla|skåne|e22|e6|e65|väg 11|väg 108"
+)
+
+
+def road_text_looks_skane(text: str, places: list[str] | None = None) -> bool:
+    """
+    Ligger väghändelsen i marknaden? I MARKET_SCOPE=national är svaret
+    alltid ja -- varje väghändelse ligger i NÅGONS marknad, och relevansen
+    är en avståndsfråga klienten redan svarar på per förare.
+    """
+    if is_national_scope():
+        return True
+    if SKANE_ROAD_HINT_RE.search(text or ""):
+        return True
+    return any(SKANE_ROAD_HINT_RE.search(str(p)) for p in (places or []))

@@ -106,6 +106,60 @@ test("MARKET_SCOPE=national admits every region", () => {
   }
 });
 
+// The placeless-alert fallback above is what keeps contextless Trafiklab
+// alerts ("Försening", no city named). It used to admit ANY non-road alert,
+// which was invisible while Trafiklab was the only transit source -- and
+// becomes a real leak the moment a second one exists: an SL deviation about
+// Slussen names no Skåne place and isn't road, so it would have been shown
+// to a Malmö driver as a local opportunity.
+test("placeless fallback does not admit an unconfigured region (SL leak)", () => {
+  const prevScope = process.env.MARKET_SCOPE;
+  const prevOps = process.env.TRAFIKLAB_OPERATORS;
+  delete process.env.MARKET_SCOPE;
+  delete process.env.TRAFIKLAB_OPERATORS; // defaults to "skane"
+  try {
+    assert.equal(
+      alertInSkane({
+        id: "sl:93075231",
+        region: "sl",
+        header: "Indragna hållplatser",
+        description: "Hållplats Södergården trafikeras inte.",
+      }),
+      false
+    );
+    // ...while a Skåne-feed alert with no place name is still kept.
+    assert.equal(
+      alertInSkane({
+        id: "skane:9",
+        region: "skane",
+        header: "Försening",
+        description: "Tåget är försenat. Orsaken är växelfel.",
+      }),
+      true
+    );
+  } finally {
+    if (prevScope !== undefined) process.env.MARKET_SCOPE = prevScope;
+    if (prevOps !== undefined) process.env.TRAFIKLAB_OPERATORS = prevOps;
+  }
+});
+
+test("a configured operator's placeless alert is admitted", () => {
+  const prevScope = process.env.MARKET_SCOPE;
+  const prevOps = process.env.TRAFIKLAB_OPERATORS;
+  delete process.env.MARKET_SCOPE;
+  process.env.TRAFIKLAB_OPERATORS = "skane,sl";
+  try {
+    assert.equal(
+      alertInSkane({ id: "sl:1", region: "sl", header: "Försening", description: "" }),
+      true
+    );
+  } finally {
+    if (prevScope !== undefined) process.env.MARKET_SCOPE = prevScope;
+    if (prevOps === undefined) delete process.env.TRAFIKLAB_OPERATORS;
+    else process.env.TRAFIKLAB_OPERATORS = prevOps;
+  }
+});
+
 test("default scope stays Skane-only (no behaviour change on deploy)", () => {
   const prev = process.env.MARKET_SCOPE;
   delete process.env.MARKET_SCOPE;

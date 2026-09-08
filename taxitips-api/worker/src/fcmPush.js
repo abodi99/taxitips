@@ -194,7 +194,13 @@ const TIER_PUSH_LABEL = {
   vehicle_cancelled: "Avgång inställd",
   road_accident_or_closure: "Olycka/avstängning",
 };
-const MODE_PUSH_LABEL = { train: "Tåg", bus: "Buss", road: "Väg" };
+const MODE_PUSH_LABEL = {
+  train: "Tåg",
+  metro: "Tunnelbana",
+  tram: "Spårvagn",
+  bus: "Buss",
+  road: "Väg",
+};
 
 function pushTitle(opportunity) {
   const place = (opportunity.places || [])[0];

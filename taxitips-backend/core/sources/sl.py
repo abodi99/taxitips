@@ -12,6 +12,7 @@ Docs ber om högst ett anrop per minut; relevant först när ett schema för
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone as dt_timezone
+from zoneinfo import ZoneInfo
 
 import requests
 
@@ -31,6 +32,15 @@ SITES_URL = "https://transport.integration.sl.se/v1/sites?expand=true"
 MAX_AGE = timedelta(hours=24)
 MAX_WINDOW = timedelta(days=7)
 
+# Kategorier som aldrig skapar taxibehov. En trasig hiss är ett verkligt
+# tillgänglighetsproblem, men den strandar ingen -- resenären tar trappan
+# eller nästa station. Mätt: 9 av 179 deviations är FACILITY/LIFT.
+#
+# De föll tidigare bort på åldersfiltret, alltså av tur snarare än av
+# förståelse: ett FÄRSKT hissfel passerade rakt igenom och blev ett tips
+# (verifierat -- "Avstängd hiss vid Skanstull" nådde flödet 2026-09-08).
+IGNORED_CATEGORY_GROUPS = {"FACILITY"}
+
 
 def _parse(value: str | None) -> datetime | None:
     if not value:
@@ -43,6 +53,10 @@ def _parse(value: str | None) -> datetime | None:
 
 def is_actionable(deviation: dict, now: datetime | None = None) -> bool:
     now = now or datetime.now(dt_timezone.utc)
+    for category in deviation.get("categories") or []:
+        group = str((category or {}).get("group") or "").upper()
+        if group in IGNORED_CATEGORY_GROUPS:
+            return False
     publish = deviation.get("publish") or {}
     start = _parse(publish.get("from"))
     upto = _parse(publish.get("upto"))
@@ -135,6 +149,10 @@ def normalize_deviation(deviation: dict, site_index: dict | None) -> dict | None
         "cause": None,
         "effect": None,
         "areas": areas, "routes": routes, "stops": stops,
+        # weblink finns inte i SL:s svar (0 av 159 i mätningen 2026-09-08,
+        # fältet saknas helt i schemat). Läsningen står kvar för att den är
+        # ofarlig och fältet är dokumenterat -- men den ger aldrig något
+        # idag, och det ska inte se ut som om den gör det.
         "url": variant.get("weblink") or None,
         "active_from": start or datetime.now(dt_timezone.utc),
         "active_to": upto,
@@ -190,13 +208,85 @@ def fetch_sl_sites() -> list[dict]:
                 "name": site.get("name"),
                 "lat": float(site["lat"]),
                 "lon": float(site["lon"]),
+                # Site-id:t, inte stop_area-id:t: departures-endpointen
+                # nycklas på det förra, och de två id-rymderna kolliderar
+                # bara i 14 av 104 fall (se SITES_URL-kommentaren).
+                "site_id": str(site.get("id") or ""),
             })
     return rows
 
 
 def build_site_index(rows: list[dict] | None) -> dict[str, dict]:
-    """stop_area id -> {lat, lon, name}, formen normalize_deviation förväntar sig."""
+    """stop_area id -> {lat, lon, name, site_id}, formen normalize_deviation förväntar sig."""
     return {str(r["gid"]): r for r in (rows or [])}
+
+
+DEPARTURES_URL = "https://transport.integration.sl.se/v1/sites/{site_id}/departures"
+
+# Hur långt fram departures-endpointen tillfrågas. Två timmar räcker för
+# frågan "går det något härifrån snart?" och håller svaret litet.
+DEPARTURE_FORECAST_MINUTES = 120
+
+# Stockholm är CET/CEST och SL:s departures-endpoint svarar med NAKNA
+# tidsstämplar ("2026-09-08T18:42:00") medan deviations-endpointen svarar
+# med tidszon. Jämförs de rakt av blir felet en eller två timmar -- alltid
+# åt hållet som får en avgång att se närmare ut än den är.
+STOCKHOLM = ZoneInfo("Europe/Stockholm")
+
+
+def _parse_naive_local(value: str | None) -> datetime | None:
+    dt = _parse(value)
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=STOCKHOLM) if dt.tzinfo is None else dt
+
+
+def fetch_site_departures(site_id: str, forecast_minutes: int | None = None) -> list[dict]:
+    """Kommande avgångar från en hållplats. Ingen nyckel, ingen kvot."""
+    res = requests.get(
+        DEPARTURES_URL.format(site_id=site_id),
+        params={"forecast": forecast_minutes or DEPARTURE_FORECAST_MINUTES},
+        headers={"Accept-Encoding": "gzip"},
+        timeout=20,
+    )
+    if not res.ok:
+        raise RuntimeError(f"sl-departures {res.status_code}: {res.text[:120]}")
+    payload = res.json()
+    return payload.get("departures") or []
+
+
+def next_departure(
+    departures: list[dict],
+    *,
+    stop_area_id: str | None = None,
+    line: str | None = None,
+    now: datetime | None = None,
+) -> datetime | None:
+    """
+    Nästa avgång som faktiskt går, på samma linje och hållplats.
+
+    Inställda avgångar räknas inte -- det är hela poängen: en resenär vars
+    buss ställts in hjälps inte av att nästa också är inställd.
+
+    Returnerar bara tidpunkten. `is_last_departure` sätts medvetet ALDRIG
+    härifrån: endpointen svarar bara för ett fönster framåt, så "inga fler
+    avgångar" betyder "inga inom två timmar", inte "sista turen idag". Att
+    blanda ihop dem hade gett det starkaste beskedet vi har på svagast
+    grund.
+    """
+    now = now or datetime.now(dt_timezone.utc)
+    best: datetime | None = None
+    for d in departures:
+        if str(d.get("state") or "").upper() == "CANCELLED":
+            continue
+        if stop_area_id and str((d.get("stop_area") or {}).get("id")) != str(stop_area_id):
+            continue
+        if line and str((d.get("line") or {}).get("designation") or "") != str(line):
+            continue
+        when = _parse_naive_local(d.get("expected") or d.get("scheduled"))
+        if when and when > now and (best is None or when < best):
+            best = when
+    return best
 
 
 def fetch_sl_deviations(site_index: dict | None = None, now: datetime | None = None) -> dict:
@@ -216,3 +306,64 @@ def fetch_sl_deviations(site_index: dict | None = None, now: datetime | None = N
             alerts.append(alert)
 
     return {"alerts": alerts, "source": "sl", "received": len(all_deviations), "actionable": len(alerts)}
+
+
+# Hur många hållplatser som frågas per cykel. SL:s dokumentation ber om
+# högst ett anrop per minut mot deviations; departures är en annan
+# endpoint, men måtta är ändå rätt: de agerbara larmen är sällan fler än
+# ett tjugotal, och ett tak gör att en dålig dag inte blir en skur av anrop.
+MAX_DEPARTURE_LOOKUPS = 20
+
+
+def enrich_next_departures(
+    alerts: list[dict],
+    site_index: dict | None,
+    now: datetime | None = None,
+    fetch=fetch_site_departures,
+) -> int:
+    """
+    Fyller `next_departure_at` på de SL-larm där frågan går att besvara.
+
+    Stockholm hade tidigare inget svar alls på "när går nästa?" -- SL:s
+    avvikelsetext bär ingen tidtabell. Det gör däremot
+    /v1/sites/{id}/departures, utan nyckel och utan kvot, och kombinationen
+    "larmet säger att linje 4 är inställd vid Slussen" + "endpointen säger
+    när nästa 4:a går därifrån" ger exakt den signal järnvägen redan har.
+
+    Kräver BÅDE hållplats och linje. Utan linjen vore svaret "något går
+    härifrån om 3 minuter", vilket är sant och oanvändbart: det kan vara en
+    buss åt fel håll. Returnerar antalet larm som fick ett svar.
+    """
+    now = now or datetime.now(dt_timezone.utc)
+    filled = 0
+    cache: dict[str, list[dict]] = {}
+
+    for alert in alerts:
+        stops = alert.get("stops") or []
+        routes = alert.get("routes") or []
+        if not stops or not routes:
+            continue
+
+        for stop_area_id in stops:
+            site = (site_index or {}).get(str(stop_area_id)) or {}
+            site_id = str(site.get("site_id") or "")
+            if not site_id:
+                continue
+            if site_id not in cache:
+                if len(cache) >= MAX_DEPARTURE_LOOKUPS:
+                    return filled
+                try:
+                    cache[site_id] = fetch(site_id)
+                except Exception:
+                    # En hållplats som inte svarar får inte stoppa cykeln --
+                    # tipset skrivs ändå, bara utan avgångsbesked.
+                    cache[site_id] = []
+            when = next_departure(
+                cache[site_id], stop_area_id=stop_area_id, line=routes[0], now=now
+            )
+            if when:
+                alert["next_departure_at"] = when
+                alert["next_departure_minutes"] = round((when - now).total_seconds() / 60)
+                filled += 1
+                break
+    return filled

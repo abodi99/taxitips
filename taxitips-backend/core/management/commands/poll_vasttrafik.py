@@ -15,7 +15,9 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
+from core.health import polling
 from core.ingest import assess, dry_run_lines, write
+from core.sources.smhi import cached_region_weather
 from core.models import StopArea
 from core.sources.vasttrafik import (
     build_stop_area_index, fetch_vasttrafik_situations, fetch_vasttrafik_stop_areas,
@@ -33,6 +35,13 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        # Bokför utfallet oavsett hur det går -- en källa som slutat
+        # svara ska synas som trasig, inte som lugn trafik. Se
+        # core/health.py.
+        with polling("vt") as status:
+            self._poll(options, status)
+
+    def _poll(self, options, status):
         client_id = settings.VASTTRAFIK_CLIENT_ID
         client_secret = settings.VASTTRAFIK_CLIENT_SECRET
         if not client_id or not client_secret:
@@ -62,6 +71,7 @@ class Command(BaseCommand):
             return
 
         alerts = fetched["alerts"]
+        status.events = len(alerts)
         if not alerts:
             self.stdout.write("inga störningar just nu")
             return
@@ -74,5 +84,6 @@ class Command(BaseCommand):
             self.stdout.write(f"\n{len(alerts)} störningar (inget skrevs)")
             return
 
-        written, spread = write("vt", assessed)
+        written, spread = write("vt", assessed, cached_region_weather())
+        status.written = written
         self.stdout.write(self.style.SUCCESS(f"skrev {written} tips | poängnivåer: {spread}"))

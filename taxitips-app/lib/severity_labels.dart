@@ -33,12 +33,15 @@ const confidenceLabels = {
 };
 
 /// Driver-facing "how likely are there customers here" read, replacing the
-/// raw Worth-It number on the list card. worth_it_score is 0 both when a
-/// disruption is genuinely weak AND when it's too far/too close to ending to
-/// reach in time -- as a bare number those two cases are indistinguishable
-/// and a legitimate 0 reads as "the app is broken". Splitting on severity_tier
-/// (how strong the underlying signal is) crossed with whether worth_it_score
-/// actually reached 0 (not reachable in time) says which case it is.
+/// raw Worth-It number on the list card.
+///
+/// worth_it_score used to fold in reachability -- it subtracted distance and
+/// zeroed out anything judged unreachable "in time" -- which meant a strong
+/// disruption 90 km away scored the same 0 as a genuinely weak one. That
+/// conflation is gone: the backend no longer scores distance at all, because
+/// whether a drive is worth making is the driver's call, not a formula's.
+/// Distance is shown separately on the card; this read is now purely about
+/// how strong the underlying signal is.
 enum CustomerLikelihood { high, medium, low }
 
 // Road tiers are deliberately excluded from both sets -- an accident or
@@ -49,19 +52,43 @@ enum CustomerLikelihood { high, medium, low }
 const _highSeverityTiers = {'line_paused'};
 const _mediumSeverityTiers = {'line_delayed', 'vehicle_cancelled'};
 
-/// A reachable, strongly-scored cancellation is worth driving to, not just
-/// "möjligt" -- vehicle_cancelled spans both a cancelled train that strands
-/// a platform full of people (score ~72) and much weaker single-departure
-/// cases, so let the tier's own score lift it. Matches the worker's push
-/// gate (fcmPush.js NOTIFY_SCORE_FLOOR) so what buzzes the phone and what
-/// reads "Troligt" on the card stay the same judgement.
+/// Fallback-golvet, inte källan.
+///
+/// Bedömningen görs numera i backend (core/thresholds.py, som serverar den
+/// som `level` på varje tips och som `notifyScoreFloor` på /api/config).
+/// Talet 50 stod tidigare i fyra kopior över tre språk utan att något höll
+/// ihop dem -- se taxitips-backend/schema/constants.md. Kopian här lever
+/// kvar av ett skäl: appen ska kunna rendera en cachead eller
+/// Supabase-hämtad lista som saknar `level` utan att visa fel färg. Den
+/// speglar backend och får aldrig avvika på egen hand.
 const _highScoreFloor = 50;
+
+/// Bedömningen som backend redan gjort, när den finns med.
+///
+/// `level` kommer från Django-API:t (core/api.py). Saknas fältet -- äldre
+/// Supabase-RPC-svar, cachead data -- räknas det ut lokalt av reglerna
+/// nedan, som är en spegling av samma Python-kod.
+CustomerLikelihood likelihoodForAlert(Map alert) => customerLikelihood(
+  severityTier: alert['severity_tier']?.toString(),
+  worthItScore: (alert['worth_it_score'] as num?) ?? 0,
+  demandScore: (alert['demand_score'] as num?) ?? 0,
+  backendLevel: alert['level']?.toString(),
+);
 
 CustomerLikelihood customerLikelihood({
   required String? severityTier,
   required num worthItScore,
   num demandScore = 0,
+  String? backendLevel,
 }) {
+  switch (backendLevel) {
+    case 'high':
+      return CustomerLikelihood.high;
+    case 'medium':
+      return CustomerLikelihood.medium;
+    case 'low':
+      return CustomerLikelihood.low;
+  }
   if (worthItScore <= 0) return CustomerLikelihood.low;
   if (_highSeverityTiers.contains(severityTier)) {
     return CustomerLikelihood.high;
@@ -109,6 +136,13 @@ String displayTitle({required String? title, required String? mode}) {
   if (_genericTitles.contains(t.toLowerCase())) {
     final modeLabel = switch (mode) {
       'train' => 'Tåg',
+      // SL reports metro and tram distinctly, and the backend keeps them
+      // distinct rather than flattening both into "Tåg" -- a Stockholm driver
+      // reads "Tunnelbana" and knows immediately which kind of stop to head
+      // for. They are scored on the same tiers as train (a stopped metro
+      // line strands people identically); only the label differs.
+      'metro' => 'Tunnelbana',
+      'tram' => 'Spårvagn',
       'bus' => 'Buss',
       'road' => 'Väg',
       _ => null,
@@ -133,4 +167,66 @@ String dateTimeLabel(String? iso) {
     return time;
   }
   return '${dt.day} ${_months[dt.month - 1]} $time';
+}
+
+/// Etiketten för lagstadgad förseningsersättning, delad mellan kortet och
+/// detaljvyn så att de aldrig säger olika saker om samma tips.
+///
+/// Beloppet kommer från backendens RegionCompensationRule (en rad per
+/// län/operatör, källbelagd i docs/transit-compensation-rules.md) -- appen
+/// räknar inte ut det och ska inte gissa när det saknas.
+/// [perPerson] är avsiktligt trelägad: null betyder att huvudmannen inte
+/// skriver ut om taket gäller per resenär eller per resa, och då påstår
+/// kortet inget. Skillnaden är stor — Skånetrafikens 2 960 kr gäller per
+/// betalande resenär, medan SL skriver att beloppet inte blir högre vid
+/// samåkning. Fyra strandsatta resenärer är två olika affärer.
+String compensationLabel(num? amountKr, {bool? perPerson}) {
+  if (amountKr == null) return 'Taxi kan ersättas';
+  final per = switch (perPerson) {
+    true => ' per resenär',
+    false => ' per resa',
+    null => '',
+  };
+  return 'Taxi ersätts · upp till ${amountKr.round()} kr$per';
+}
+
+
+/// "Vad gör resenären i stället?" — nästa avgång och ersättningstrafik.
+///
+/// Meningen kommer färdigformulerad från backend (core/alternatives.py);
+/// appen väljer bara hur den ska se ut. Att formulera om den här hade
+/// betytt att kortet och detaljvyn förr eller senare sa olika saker om
+/// samma tips.
+class TravelOptions {
+  const TravelOptions({
+    required this.summary,
+    required this.isLastDeparture,
+    required this.hasAlternative,
+    required this.minutes,
+  });
+
+  final String? summary;
+  final bool isLastDeparture;
+  final bool hasAlternative;
+  final int? minutes;
+
+  static TravelOptions? of(Map alert) {
+    final raw = alert['travel_options'];
+    if (raw is! Map) return null;
+    final summary = raw['summary']?.toString();
+    if (summary == null || summary.isEmpty) return null;
+    return TravelOptions(
+      summary: summary,
+      isLastDeparture: raw['is_last_departure'] == true,
+      hasAlternative: raw['has_alternative'] == true,
+      minutes: (raw['next_departure_minutes'] as num?)?.toInt(),
+    );
+  }
+
+  /// Sista avgången betyder att ingen tar sig hem själv — det är den
+  /// starkaste signalen ett tips kan bära. En angiven ersättningsbuss
+  /// betyder tvärtom att resenären sannolikt inte behöver taxi. Samma rad,
+  /// motsatt innebörd, så de får inte se likadana ut.
+  bool get isStrong => isLastDeparture || (minutes != null && minutes! >= 60);
+  bool get isWeak => hasAlternative && !isLastDeparture;
 }

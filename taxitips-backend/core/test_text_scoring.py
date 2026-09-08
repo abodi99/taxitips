@@ -118,13 +118,29 @@ class IgnorePassthrough(TestCase):
         self.assertIn("Stationsservice — ingen taxinytta", result.reasons)
 
 
-class RoadStub(TestCase):
-    def test_road_mode_is_a_marked_stub_not_a_crash(self):
-        # No road source is ported in Django yet (Phase 1 is Trafiklab
-        # only) -- this documents the placeholder rather than implementing
-        # scoreRoadAlert's real tiering.
+class RoadTier(TestCase):
+    """
+    Väggrenen är inte längre en stub (se core/sources/trafikverket_road.py).
+    Tierindelningen i sig testas i core/test_road.py; det som vaktas här är
+    att den bara ETIKETTERAR -- score_road_alert har redan kapat poängen
+    lågt med avsikt, och tiern får inte smyga tillbaka in den.
+    """
+
+    def test_road_tier_labels_without_re_scoring(self):
         alert = {"header": "Vägarbete", "description": "", "source_kind": "road"}
-        result = classify_transit_alert(alert, _taxi(score=20, level="low"))
+        result = classify_transit_alert(alert, _taxi(score=5, level="low"))
         self.assertEqual(result.mode, "road")
-        self.assertEqual(result.rule_id, "road.not_ported")
-        self.assertEqual(result.tier, SeverityTier.DISRUPTION_UNCLASSIFIED)
+        self.assertEqual(result.tier, SeverityTier.ROAD_WORK)
+        self.assertEqual(result.score, 5)
+
+    def test_accident_and_queue_get_their_own_tiers(self):
+        accident = classify_transit_alert(
+            {"header": "Olycka", "description": "", "source_kind": "road"},
+            _taxi(score=15, level="low"),
+        )
+        queue = classify_transit_alert(
+            {"header": "Kövarning", "description": "", "source_kind": "road"},
+            _taxi(score=10, level="low"),
+        )
+        self.assertEqual(accident.tier, SeverityTier.ROAD_ACCIDENT_OR_CLOSURE)
+        self.assertEqual(queue.tier, SeverityTier.ROAD_WORK_OR_QUEUE)

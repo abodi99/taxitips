@@ -38,6 +38,8 @@ def opportunity_row(external_id="tvr:Mot:8780:x", **overrides):
         "reasons": '["allvarlig störning"]',
         "rule_id": "train.line_paused",
         "source_event_ids": "[]",
+        "compensation_eligible": False,
+        "compensation_amount_kr": None,
     }
     row.update(overrides)
     return row

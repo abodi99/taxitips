@@ -204,6 +204,16 @@ class Command(BaseCommand):
                 join pg_namespace n on n.oid = p.pronamespace
                 where n.nspname = 'public'
                   and p.prokind = 'f'
+                  -- Utelämna det som ett tillägg äger. timescaledb
+                  -- installerar 75 funktioner i public, och filen vars hela
+                  -- syfte är "vilken version av get_smart_alerts gäller?"
+                  -- blir oläsbar om time_bucket-varianterna trycker undan
+                  -- projektets åtta.
+                  and not exists (
+                      select 1 from pg_depend d
+                      where d.objid = p.oid
+                        and d.deptype = 'e'
+                  )
                 order by p.proname
                 """
             )

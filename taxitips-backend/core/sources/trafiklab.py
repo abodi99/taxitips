@@ -94,6 +94,9 @@ def extract_areas(header: str, description: str, entities) -> dict:
             add(routes, str(entity.route_id))
         if entity.stop_id:
             add(stops, str(entity.stop_id))
+        # agency_id är tomt i hela det svenska flödet (0 av 538 mätt
+        # 2026-09-08). Behållet därför att GTFS-RT-specen har fältet och
+        # andra operatörer fyller det -- men det bidrar med noll här.
         if entity.agency_id:
             add(areas, f"Operatör {entity.agency_id}")
         if entity.trip and entity.trip.route_id:
@@ -123,6 +126,7 @@ def parse_feed(buffer: bytes) -> list[dict]:
         alert = entity.alert
         header = pick_translation(alert.header_text) or "Störning"
         description = pick_translation(alert.description_text)
+        # Även url är genomgående tom i det svenska flödet (0 av 538).
         url = pick_translation(alert.url)
         shaped = extract_areas(header, description, alert.informed_entity)
 

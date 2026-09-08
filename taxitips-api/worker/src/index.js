@@ -2,6 +2,7 @@ const express = require("express");
 const { createClient } = require("@supabase/supabase-js");
 const { pollOnce } = require("./poller");
 const { ingestGtfsStatic } = require("./gtfsStatic");
+const { fetchSlSites } = require("./sl");
 
 const PORT = Number(process.env.PORT || 8787);
 const INTERVAL = Number(process.env.POLL_INTERVAL_MS || 60_000);
@@ -78,10 +79,40 @@ async function gtfsRefreshLoop({ skipIfFresh } = {}) {
   }
 }
 
+/**
+ * SL's site register: ~7200 stop_area -> coordinate rows, no API key, no
+ * quota. Refreshed on the same daily cadence as GTFS rather than on a timer
+ * of its own -- one more interval for a table that changes about as often as
+ * a bus stop moves would be noise.
+ */
+async function slSitesRefreshLoop() {
+  if (process.env.SL_ENABLED !== "1") return;
+  const client = sb();
+  try {
+    const rows = await fetchSlSites();
+    if (!rows.length) {
+      console.warn("[sl-sites] fetch returned no rows, keeping existing table");
+      return;
+    }
+    const { error } = await client
+      .from("sl_sites")
+      .upsert(
+        rows.map((r) => ({ ...r, fetched_at: new Date().toISOString() })),
+        { onConflict: "stop_area_id" }
+      );
+    if (error) throw new Error(error.message);
+    console.log(`[sl-sites] refreshed ${rows.length} stop areas`);
+  } catch (err) {
+    console.error("[sl-sites] failed", err.message || err);
+  }
+}
+
 app.listen(PORT, () => {
   console.log(`[taxitips-worker] listening on :${PORT}`);
   loop();
   setInterval(loop, INTERVAL);
   gtfsRefreshLoop({ skipIfFresh: true });
   setInterval(() => gtfsRefreshLoop({ skipIfFresh: false }), GTFS_REFRESH_INTERVAL);
+  slSitesRefreshLoop();
+  setInterval(slSitesRefreshLoop, GTFS_REFRESH_INTERVAL);
 });

@@ -20,12 +20,16 @@ class SmartAlertCard extends StatelessWidget {
       mode: alert['mode']?.toString(),
     );
     final summary = alert['summary']?.toString() ?? '';
-    final score = ((alert['worth_it_score'] as num?) ?? 0);
-    final likelihood = customerLikelihood(
-      severityTier: alert['severity_tier']?.toString(),
-      worthItScore: score,
-      demandScore: (alert['demand_score'] as num?) ?? 0,
-    );
+    final likelihood = likelihoodForAlert(alert);
+    final travel = TravelOptions.of(alert);
+    // Sista avgången = ingen tar sig hem själv. Angiven ersättningsbuss =
+    // resenären behöver sannolikt inte taxi. Motsatt innebörd, alltså inte
+    // samma färg.
+    final travelColor = travel == null
+        ? TbColors.muted
+        : (travel.isStrong
+              ? TbColors.live
+              : (travel.isWeak ? TbColors.muted : TbColors.ink));
     final endTimeStr = alert['end_time'] ?? alert['ends_at'];
     final kind = alert['kind']?.toString();
     final severityTier = alert['severity_tier']?.toString();
@@ -104,11 +108,21 @@ class SmartAlertCard extends StatelessWidget {
                       runSpacing: 4,
                       crossAxisAlignment: WrapCrossAlignment.center,
                       children: [
+                        // Mode is more specific than kind when the source
+                        // states it (SL reports metro/tram/bus outright), so
+                        // prefer it and fall back to the coarse transit/road
+                        // split for sources that don't.
                         if (kind == 'transit' || kind == 'road')
                           Icon(
-                            kind == 'transit'
-                                ? Icons.train
-                                : Icons.directions_car,
+                            switch (alert['mode']?.toString()) {
+                              'train' => Icons.train,
+                              'metro' => Icons.subway,
+                              'tram' => Icons.tram,
+                              'bus' => Icons.directions_bus,
+                              _ => kind == 'transit'
+                                  ? Icons.train
+                                  : Icons.directions_car,
+                            },
                             size: 15,
                             color: TbColors.muted,
                           ),
@@ -119,6 +133,37 @@ class SmartAlertCard extends StatelessWidget {
                               fontSize: 12,
                               fontWeight: FontWeight.w800,
                               color: TbColors.muted,
+                            ),
+                          ),
+                        // Lagstadgad förseningsersättning (lag 2015:953):
+                        // resenären kan få sin taxiresa ersatt upp till
+                        // beloppet. Det säger inget om hur allvarlig
+                        // störningen är -- det är ett separat fält i
+                        // backend av just det skälet -- men det är det
+                        // starkaste enskilda skälet för någon på perrongen
+                        // att faktiskt ta taxi i stället för att vänta.
+                        if (alert['compensation_eligible'] == true)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 1,
+                            ),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFE7F4EC),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(color: TbColors.live),
+                            ),
+                            child: Text(
+                              compensationLabel(
+                                alert['compensation_amount_kr'] as num?,
+                                perPerson:
+                                    alert['compensation_per_person'] as bool?,
+                              ),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: TbColors.live,
+                              ),
                             ),
                           ),
                         if (isLowConfidence)
@@ -200,6 +245,40 @@ class SmartAlertCard extends StatelessWidget {
                   ],
                 ],
               ),
+              // Nästa avgång / ersättningstrafik. Placerad före den fria
+              // texten: det är det som avgör om resan dit är värd något,
+              // och en förare som bara hinner läsa en rad ska läsa den här.
+              if (travel != null) ...[
+                const SizedBox(height: 6),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      travel.isLastDeparture
+                          ? Icons.last_page
+                          : (travel.hasAlternative
+                                ? Icons.directions_bus
+                                : Icons.schedule_send),
+                      size: 15,
+                      color: travelColor,
+                    ),
+                    const SizedBox(width: 5),
+                    Expanded(
+                      child: Text(
+                        travel.summary!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 13,
+                          height: 1.25,
+                          fontWeight: FontWeight.w700,
+                          color: travelColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
               if (summary.isNotEmpty) ...[
                 const SizedBox(height: 6),
                 Text(

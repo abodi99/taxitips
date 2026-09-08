@@ -12,6 +12,40 @@
 from django.db import models
 
 
+class AlertFeedback(models.Model):
+    id = models.UUIDField(primary_key=True)
+    alert = models.ForeignKey('Alerts', models.DB_CASCADE, blank=True, null=True)
+    device_token = models.TextField(blank=True, null=True)
+    result = models.BooleanField(blank=True, null=True)
+    created_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'alert_feedback'
+
+
+class Alerts(models.Model):
+    id = models.UUIDField(primary_key=True)
+    kind = models.TextField(blank=True, null=True)
+    level = models.TextField(blank=True, null=True)
+    title = models.TextField(blank=True, null=True)
+    summary = models.TextField(blank=True, null=True)
+    lat = models.FloatField(blank=True, null=True)
+    lon = models.FloatField(blank=True, null=True)
+    places = models.JSONField(blank=True, null=True)
+    payload = models.JSONField(blank=True, null=True)
+    updated_at = models.DateTimeField()
+    h3_index = models.TextField(blank=True, null=True)
+    start_time = models.DateTimeField(blank=True, null=True)
+    end_time = models.DateTimeField(blank=True, null=True)
+    demand_score = models.IntegerField(blank=True, null=True)
+    reasons = models.TextField(blank=True, null=True)  # This field type is a guess.
+
+    class Meta:
+        managed = False
+        db_table = 'alerts'
+
+
 class AuthGroup(models.Model):
     name = models.CharField(unique=True, max_length=150)
 
@@ -81,6 +115,64 @@ class AuthUserUserPermissions(models.Model):
         unique_together = (('user', 'permission'),)
 
 
+class Companies(models.Model):
+    id = models.UUIDField(primary_key=True)
+    name = models.TextField()
+    email = models.TextField(blank=True, null=True)
+    org_number = models.TextField(blank=True, null=True)
+    join_code = models.TextField(unique=True)
+    seats = models.IntegerField()
+    status = models.TextField()
+    watched_areas = models.TextField()  # This field type is a guess.
+    created_at = models.DateTimeField()
+    stripe_customer_id = models.TextField(blank=True, null=True)
+    stripe_subscription_id = models.TextField(blank=True, null=True)
+    subscription_status = models.TextField()
+
+    class Meta:
+        managed = False
+        db_table = 'companies'
+
+
+class CompanyMembers(models.Model):
+    id = models.UUIDField(primary_key=True)
+    company_id = models.UUIDField()
+    user_id = models.UUIDField()
+    role = models.TextField(blank=True, null=True)
+    status = models.TextField(blank=True, null=True)
+    created_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'company_members'
+        unique_together = (('company_id', 'user_id'),)
+
+
+class DeviceTransferCodes(models.Model):
+    code = models.TextField(primary_key=True)
+    device_id = models.UUIDField()
+    expires_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'device_transfer_codes'
+
+
+class Devices(models.Model):
+    id = models.UUIDField(primary_key=True)
+    company_id = models.UUIDField()
+    token = models.TextField(unique=True)
+    label = models.TextField()
+    kind = models.TextField()
+    push_token = models.TextField(blank=True, null=True)
+    notify_prefs = models.JSONField()
+    created_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'devices'
+
+
 class DjangoAdminLog(models.Model):
     action_time = models.DateTimeField()
     object_id = models.TextField(blank=True, null=True)
@@ -126,6 +218,68 @@ class DjangoSession(models.Model):
         db_table = 'django_session'
 
 
+class GtfsFeedVersions(models.Model):
+    id = models.UUIDField(primary_key=True)
+    operator = models.TextField(unique=True)
+    fetched_at = models.DateTimeField()
+    is_current = models.BooleanField()
+    stop_count = models.IntegerField(blank=True, null=True)
+    trip_count = models.IntegerField(blank=True, null=True)
+    stop_time_count = models.IntegerField(blank=True, null=True)
+    created_at = models.DateTimeField()
+    source_etag = models.TextField(blank=True, null=True)
+    source_last_modified = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'gtfs_feed_versions'
+
+
+class GtfsServiceExceptions(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    feed_version = models.ForeignKey(GtfsFeedVersions, models.DB_CASCADE)
+    service_id = models.TextField()
+    exception_date = models.DateField()
+    exception_type = models.SmallIntegerField()
+
+    class Meta:
+        managed = False
+        db_table = 'gtfs_service_exceptions'
+
+
+class GtfsStopDepartures(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    feed_version = models.ForeignKey(GtfsFeedVersions, models.DB_CASCADE)
+    operator = models.TextField()
+    stop_id = models.TextField()
+    trip_id = models.TextField()
+    route_id = models.TextField(blank=True, null=True)
+    route_type = models.IntegerField(blank=True, null=True)
+    service_id = models.TextField()
+    departure_seconds = models.IntegerField()
+    stop_sequence = models.IntegerField(blank=True, null=True)
+    days_of_week = models.SmallIntegerField()
+    start_date = models.DateField(blank=True, null=True)
+    end_date = models.DateField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'gtfs_stop_departures'
+
+
+class GtfsStops(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    feed_version = models.ForeignKey(GtfsFeedVersions, models.DB_CASCADE)
+    stop_id = models.TextField()
+    stop_code = models.TextField(blank=True, null=True)
+    stop_name = models.TextField(blank=True, null=True)
+    parent_station = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'gtfs_stops'
+
+
 class Opportunities(models.Model):
     id = models.UUIDField(primary_key=True)
     external_id = models.TextField(unique=True)
@@ -139,7 +293,7 @@ class Opportunities(models.Model):
     lon = models.FloatField(blank=True, null=True)
     h3_index = models.CharField(max_length=20)
     places = models.JSONField()
-    region = models.CharField(max_length=30)
+    region = models.CharField(max_length=30, blank=True, null=True)
     start_time = models.DateTimeField(blank=True, null=True)
     end_time = models.DateTimeField(blank=True, null=True)
     demand_score = models.IntegerField()
@@ -151,10 +305,54 @@ class Opportunities(models.Model):
     updated_at = models.DateTimeField()
     expired_reason = models.CharField(max_length=60, blank=True, null=True)
     notified_at = models.DateTimeField(blank=True, null=True)
+    compensation_amount_kr = models.IntegerField(blank=True, null=True)
+    compensation_eligible = models.BooleanField()
+    is_last_departure = models.BooleanField()
+    next_departure_minutes = models.IntegerField(blank=True, null=True)
+    alternative_note = models.TextField()
+    has_alternative = models.BooleanField()
+    next_departure_at = models.DateTimeField(blank=True, null=True)
+    compensation_per_person = models.BooleanField(blank=True, null=True)
 
     class Meta:
         managed = False
         db_table = 'opportunities'
+
+
+class OpportunityFeedback(models.Model):
+    id = models.UUIDField(primary_key=True)
+    device_token = models.TextField()
+    verdict = models.CharField(max_length=10)
+    created_at = models.DateTimeField()
+    opportunity = models.ForeignKey(Opportunities, models.DO_NOTHING)
+
+    class Meta:
+        managed = False
+        db_table = 'opportunity_feedback'
+        unique_together = (('opportunity', 'device_token', 'verdict'),)
+
+
+class ProcessedWebhookEvents(models.Model):
+    stripe_event_id = models.TextField(primary_key=True)
+    event_type = models.TextField()
+    processed_at = models.DateTimeField()
+    status = models.TextField()
+    error = models.TextField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'processed_webhook_events'
+
+
+class Profiles(models.Model):
+    id = models.UUIDField(primary_key=True)
+    name = models.TextField(blank=True, null=True)
+    is_platform_owner = models.BooleanField(blank=True, null=True)
+    created_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'profiles'
 
 
 class RailAssessment(models.Model):
@@ -185,6 +383,23 @@ class RailStation(models.Model):
         db_table = 'rail_station'
 
 
+class RegionCompensationRule(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    region = models.CharField(unique=True, max_length=30)
+    threshold_minutes = models.IntegerField()
+    taxi_cap_kr = models.IntegerField()
+    excluded_modes = models.JSONField()
+    filing_deadline_days = models.IntegerField()
+    source_url = models.TextField()
+    note = models.TextField()
+    updated_at = models.DateTimeField()
+    cap_per_person = models.BooleanField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'region_compensation_rule'
+
+
 class ScoringRule(models.Model):
     id = models.BigAutoField(primary_key=True)
     tier = models.CharField(max_length=40)
@@ -200,6 +415,19 @@ class ScoringRule(models.Model):
         managed = False
         db_table = 'scoring_rule'
         unique_together = (('tier', 'mode', 'condition'),)
+
+
+class SlSites(models.Model):
+    stop_area_id = models.TextField(primary_key=True)
+    site_id = models.TextField()
+    name = models.TextField(blank=True, null=True)
+    lat = models.FloatField()
+    lon = models.FloatField()
+    fetched_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'sl_sites'
 
 
 class SourceEvents(models.Model):
@@ -220,6 +448,21 @@ class SourceEvents(models.Model):
         db_table = 'source_events'
 
 
+class SourceStatus(models.Model):
+    source = models.CharField(primary_key=True, max_length=40)
+    ok = models.BooleanField()
+    message = models.TextField()
+    events = models.IntegerField()
+    written = models.IntegerField()
+    duration_ms = models.IntegerField()
+    checked_at = models.DateTimeField()
+    detail = models.JSONField()
+
+    class Meta:
+        managed = False
+        db_table = 'source_status'
+
+
 class StopArea(models.Model):
     gid = models.CharField(primary_key=True, max_length=40)
     operator = models.CharField(max_length=4)
@@ -227,7 +470,20 @@ class StopArea(models.Model):
     lat = models.FloatField()
     lon = models.FloatField()
     fetched_at = models.DateTimeField()
+    site_id = models.CharField(max_length=20)
 
     class Meta:
         managed = False
         db_table = 'stop_area'
+
+
+class VtStopAreas(models.Model):
+    gid = models.TextField(primary_key=True)
+    name = models.TextField(blank=True, null=True)
+    lat = models.FloatField()
+    lon = models.FloatField()
+    fetched_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'vt_stop_areas'

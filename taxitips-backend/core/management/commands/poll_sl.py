@@ -14,9 +14,16 @@ Kör så här:
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
+from core.health import polling
 from core.ingest import assess, dry_run_lines, write
+from core.sources.smhi import cached_region_weather
 from core.models import StopArea
-from core.sources.sl import build_site_index, fetch_sl_deviations, fetch_sl_sites
+from core.sources.sl import (
+    build_site_index,
+    enrich_next_departures,
+    fetch_sl_deviations,
+    fetch_sl_sites,
+)
 
 
 class Command(BaseCommand):
@@ -30,28 +37,46 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        # Bokför utfallet oavsett hur det går -- en källa som slutat
+        # svara ska synas som trasig, inte som lugn trafik. Se
+        # core/health.py.
+        with polling("sl") as status:
+            self._poll(options, status)
+
+    def _poll(self, options, status):
         if not options["skip_sites"]:
             self.stdout.write("uppdaterar hållplatsregister...")
             rows = fetch_sl_sites()
             now = timezone.now()
             StopArea.objects.bulk_create(
                 [
-                    StopArea(gid=r["gid"], operator="sl", name=r["name"], lat=r["lat"], lon=r["lon"], fetched_at=now)
+                    StopArea(gid=r["gid"], operator="sl", name=r["name"], lat=r["lat"],
+                             lon=r["lon"], site_id=r.get("site_id", ""), fetched_at=now)
                     for r in rows
                 ],
                 update_conflicts=True, unique_fields=["gid"],
-                update_fields=["operator", "name", "lat", "lon", "fetched_at"],
+                update_fields=["operator", "name", "lat", "lon", "site_id", "fetched_at"],
             )
             self.stdout.write(f"  {len(rows)} hållplatser")
 
-        site_rows = list(StopArea.objects.filter(operator="sl").values("gid", "lat", "lon"))
+        site_rows = list(
+            StopArea.objects.filter(operator="sl").values("gid", "lat", "lon", "site_id")
+        )
         site_index = build_site_index(site_rows)
 
         fetched = fetch_sl_deviations(site_index=site_index)
         alerts = fetched["alerts"]
+        status.events = len(alerts)
         if not alerts:
             self.stdout.write("inga störningar just nu")
             return
+
+        # "När går nästa?" -- det enda som skiljer en strandsatt perrong
+        # från en irriterad väntan. Görs före assess() så att svaret följer
+        # med hela vägen till tipset.
+        filled = enrich_next_departures(alerts, site_index)
+        if filled:
+            self.stdout.write(f"  nästa avgång hittad för {filled} av {len(alerts)} larm")
 
         assessed = assess(alerts)
 
@@ -61,5 +86,6 @@ class Command(BaseCommand):
             self.stdout.write(f"\n{len(alerts)} störningar (inget skrevs)")
             return
 
-        written, spread = write("sl", assessed)
+        written, spread = write("sl", assessed, cached_region_weather())
+        status.written = written
         self.stdout.write(self.style.SUCCESS(f"skrev {written} tips | poängnivåer: {spread}"))

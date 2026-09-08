@@ -108,6 +108,20 @@ function isNationalScope() {
 }
 
 /**
+ * The regions that count as "this market" in the default (non-national)
+ * scope. Mirrors trafiklab.js's configuredOperators() -- the operators we
+ * actually poll -- because an alert's `region` is set to the operator code it
+ * was fetched from. Kept in sync by reading the same env var rather than
+ * importing, so skane.js stays free of a dependency on the fetcher.
+ */
+function configuredRegions() {
+  return String(process.env.TRAFIKLAB_OPERATORS || "skane")
+    .split(",")
+    .map((s) => s.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/**
  * True om alerten hör till marknaden (ort, text eller operatör).
  * I national-läge är allt inom marknaden -- se isNationalScope().
  */
@@ -135,12 +149,26 @@ function alertInSkane(alert) {
 
   if (SKANE_TEXT_RE.test(text)) return true;
 
-  // Trafiklab Skåne-operator utan ortnamn — behåll (regionen är Skåne)
-  if (String(alert.id || "").match(/^\d/) && !alert.sourceKind) return true;
-  if (alert.sourceKind !== "road" && !String(alert.id || "").startsWith("tv:")) {
-    // Kollektiv från skane-operator: default true om operators scoped to skane
-    return true;
-  }
+  // Placeless transit alerts are kept rather than guessed away: with no city
+  // named anywhere we have no evidence it's elsewhere, and Trafiklab genuinely
+  // publishes contextless alerts ("Försening", cause "växelfel").
+  //
+  // But "keep what we can't place" must not become "keep everything". This
+  // fallback used to return true for ANY non-road alert, which was harmless
+  // while Trafiklab was the only transit source and every alert really did
+  // arrive on a Skåne-scoped endpoint. It stops being harmless the moment a
+  // second transit source exists: an SL deviation about Slussen names no
+  // Skåne place, isn't road, has no "tv:" prefix -- and would be shown to a
+  // Malmö driver as a local opportunity.
+  //
+  // So the fallback is scoped to sources that are actually part of this
+  // market: alerts whose region is one of the configured Trafiklab operators
+  // (or that carry no region at all, i.e. pre-existing Skåne-feed alerts).
+  // A source that declares a region we didn't configure falls through to
+  // false and needs MARKET_SCOPE=national to be admitted.
+  const isRoad =
+    alert.sourceKind === "road" || String(alert.id || "").startsWith("tv:");
+  if (!isRoad && (!region || configuredRegions().includes(region))) return true;
 
   return false;
 }

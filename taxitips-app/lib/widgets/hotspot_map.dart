@@ -66,16 +66,14 @@ class HotspotMap extends StatelessWidget {
         // place-aggregated map below -- the same hue meaning two unrelated
         // things depending on which map mode was active. Likelihood (when
         // known) gets its own ring, decoupled from the mode icon entirely.
-        final icon = mode == 'train'
-            ? Icons.train
-            : mode == 'bus'
-                ? Icons.directions_bus
-                : Icons.directions_car;
-        final likelihood = customerLikelihood(
-          severityTier: o['severity_tier']?.toString(),
-          worthItScore: (o['worth_it_score'] as num?) ?? 0,
-          demandScore: (o['demand_score'] as num?) ?? 0,
-        );
+        final icon = switch (mode) {
+          'train' => Icons.train,
+          'metro' => Icons.subway,
+          'tram' => Icons.tram,
+          'bus' => Icons.directions_bus,
+          _ => Icons.directions_car,
+        };
+        final likelihood = likelihoodForAlert(o);
         final ringColor = switch (likelihood) {
           CustomerLikelihood.high => TbColors.likelihoodHigh,
           CustomerLikelihood.medium => TbColors.likelihoodMedium,

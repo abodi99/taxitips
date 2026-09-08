@@ -1,40 +1,22 @@
-# Lokal utveckling för taxitips-backend. VIKTIGT: `supabase start` måste
-# köra separat (i ett eget terminalfönster, från taxitips-api/) -- den är
-# INTE en del av den här filen. companies/devices/processed_webhook_events
-# ägs av Supabases egna migrationer och nås via SUPABASE_DATABASE_URL (se
-# .env.example och billing/db_router.py), medan `db` här bara äger Djangos
-# egen taxitips-databas (Station/StopArea/ScoringRule/SourceEvent/
-# Opportunity/RailAssessment). Två Postgres-instanser samtidigt, med andra
-# ord -- det här ersätter inte supabase start, det kompletterar den.
+# Lokal utveckling för taxitips-backend.
+#
+# EN databas, och den ligger inte här: `supabase start` (från taxitips-api/)
+# måste köra separat. Django ansluter dit via DATABASE_URL och äger
+# pipeline-tabellerna (source_events, opportunities, scoring_rule, ...) genom
+# sina egna migrationer; Supabases SQL-migrationer äger domäntabellerna
+# (companies, devices, profiles, ...). Ingen tabell beskrivs på två ställen.
+#
+# Här fanns tidigare en egen Postgres+TimescaleDB-container. Den är borta med
+# avsikt: den gjorde att allt pipelinen räknade ut hamnade i en databas som
+# ingen förare läste från.
 
 services:
-  db:
-    image: timescale/timescaledb:2.17.2-pg16
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-taxitips}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-taxitips}
-      POSTGRES_DB: ${POSTGRES_DB:-taxitips}
-    ports:
-      # Bunden till localhost, inte 0.0.0.0 -- porten är öppen för lokal
-      # MCP-åtkomst (samma maskin), inte för nätverket. Exponera aldrig
-      # 5432 så här på en Coolify-driftsatt instans.
-      - "127.0.0.1:5432:5432"
-    volumes:
-      - taxitips_db_data:/var/lib/postgresql/data
-      - ./docker/timescaledb-init.sql:/docker-entrypoint-initdb.d/timescaledb-init.sql:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-taxitips}"]
-      interval: 5s
-      timeout: 5s
-      retries: 10
-
   redis:
     image: redis:7-alpine
     command: ["redis-server", "--save", ""]
     ports:
-      # Samma resonemang som db-tjänstens port ovan: lokal, host-sidig
-      # utveckling (manage.py runserver/celery direkt på värden, inte bara
-      # via web/worker/beat-tjänsterna) behöver nå redis på 127.0.0.1 också.
+      # Bunden till localhost, inte 0.0.0.0 -- öppen för host-sidig utveckling
+      # (manage.py/celery direkt på värden), inte för nätverket.
       - "127.0.0.1:6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
@@ -48,8 +30,6 @@ services:
       - "8000:8000"
     env_file: .env
     depends_on:
-      db:
-        condition: service_healthy
       redis:
         condition: service_healthy
 
@@ -58,8 +38,6 @@ services:
     command: ["celery", "-A", "config", "worker", "-l", "info"]
     env_file: .env
     depends_on:
-      db:
-        condition: service_healthy
       redis:
         condition: service_healthy
 
@@ -68,10 +46,5 @@ services:
     command: ["celery", "-A", "config", "beat", "-l", "info"]
     env_file: .env
     depends_on:
-      db:
-        condition: service_healthy
       redis:
         condition: service_healthy
-
-volumes:
-  taxitips_db_data:

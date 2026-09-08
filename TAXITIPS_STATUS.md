@@ -6,6 +6,106 @@ Note on naming: the briefing refers to `/api`, `/app`, `/web`. The actual repo u
 
 ---
 
+## 0. Update 2026-09-08 — Spår B: the app now reads from Django
+
+Verified by running it, not by reading it: the Flutter app can now take its
+tips from `taxitips-backend` instead of the Supabase RPCs, and the numbers
+match the RPC row-for-row on live data (same id set, same ordering inputs).
+
+**What moved.** `get_smart_alerts`, `get_opportunity_detail` and
+`current_entitlement` have Python ports in
+[core/api.py](taxitips-backend/core/api.py),
+[core/thresholds.py](taxitips-backend/core/thresholds.py) and
+[core/entitlement.py](taxitips-backend/core/entitlement.py). The SQL
+functions still exist and still work — the app falls back to them when
+`API_BASE_URL` is unset or the backend doesn't answer — but the judgement
+is made in one place now instead of three (Python score, plpgsql selection,
+Dart thresholds).
+
+**Three things the move exposed, all now fixed:**
+
+1. **Feedback has never been recorded.** `alert_feedback.alert_id` is a
+   correctly-typed `uuid` FK — but it references `alerts(id)`, while the app
+   has been sending *opportunity* ids since the `opportunities` split. The
+   two id spaces overlap in 0 of 4345 rows, so every 👍/👎 was rejected by
+   the database and swallowed by the client's `catch`. `alert_feedback` has
+   zero rows. This corrects §3.4 above: the type mismatch it describes is
+   not what's wrong; the target table is. New `opportunity_feedback` table
+   (Django-owned) points at `opportunities`.
+2. **Coordinate-less tips only reached three regions.** The RPC had three
+   hardcoded lat/lon boxes (Skåne, Stockholm, Göteborg), so a driver in
+   Falun or Umeå never saw a tip without coordinates regardless of
+   `MARKET_SCOPE=national`. `thresholds.market_region()` derives the market
+   from `REGION_ANCHOR` — all fifteen regions.
+3. **Compensation never reached a driver.** `compensation_eligible` /
+   `compensation_amount_kr` were computed by `core/compensation.py` but the
+   RPC predates the fields and never selected them. Now on the card and in
+   the detail sheet.
+
+**Threshold duplication** (the `50` in schema/constants.md) is down from four
+copies to three: `api_client.dart`'s is gone, `pipeline_view.py` reads the
+constant. `severity_labels.dart` keeps one deliberately, as the fallback for
+cached rows with no `level`. Remaining: the Node worker (being retired) and
+viz `server.js`, which can read `/api/config`.
+
+**Same day, second pass — the sixth source and the visible pipeline:**
+
+* **Road was never ported to Django.** Both `taxi_relevance.py` and
+  `text_scoring.py` carried a branch raising
+  `NotImplementedError("no road source in Django")`, so the Django pipeline
+  had five of the six sources. `core/sources/trafikverket_road.py` is the
+  port (176 events for Skåne alone; 462 across the three market counties).
+  Road stays capped at 15 points and now travels in its own `context` field
+  rather than the driver's list — measured 129 road rows against 5 transit
+  tips in Skåne, which would have buried the only thing worth driving to.
+* **A dead source looked exactly like a quiet day.** Trafiklab's key answers
+  `429 has exceeded its quota` on all fourteen regions, and nothing in the
+  system said so — `source_events` simply had no rows for it, which is what a
+  calm traffic day looks like too. `SourceStatus` (core/health.py) now records
+  every poll's outcome, and the pipeline view shows the source red with its
+  error.
+* **Next Departure was prose, not data.** The rail pipeline has computed
+  "next departure in N minutes" and "last departure today" since Fas 2, but
+  they only survived as a sentence inside `reasons` — nothing could filter,
+  sort or calibrate on them. Now columns on `opportunities`, with coverage
+  (21 of 293 active tips) shown as its own section, since that ratio *is* the
+  measure of how far Transport Gap (P1) has got.
+* **`rail_station` had zero rows** while every poll cycle re-fetched the same
+  ~1000 stations into process memory. Now persisted (718 rows).
+
+**Third pass — API-inventering, ersättningsregler och "vad gör resenären i stället?":**
+
+* **Ersättningsreglerna är researchade per län och seedade.** 16 regioner med
+  tröskel, tak, undantagna färdsätt och frist, varje rad med ordagrant citat
+  och källänk (`docs/transit-compensation-rules.md`). Tre rättelser mot
+  tidigare underlag: EU 1371/2007 är upphävd (ersatt av 2021/782 den
+  2023-06-07), och under den nya förordningen ersätts **taxi inte alls** för
+  fjärrtåg. Prisbasbeloppet 2026 (59 200 kr) verifierat mot regeringen.se;
+  Skånetrafikens avvikande 1/20-regel verifierad mot deras egen sida.
+  `cap_per_person` är trelägad — fem huvudmän skriver ut "per resenär", två
+  "per resa", nio säger inget, och då säger appen inget heller.
+* **API-inventering av alla sex källor** (`docs/api-field-inventory.md`, 784
+  rader): fält för fält, med mätt ifyllnadsgrad och 19 konkreta förslag.
+  Tio är genomförda. De två som ändrade mest verklighet: väghändelser använde
+  `PublicationTime` som starttid (medianfel 862 timmar — ett vägarbete från
+  2024 såg nyskapat ut varje cykel), och `MessageType` kallar en helt avstängd
+  väg "Vägarbete" medan `MessageCode` säger "Vägen avstängd" (25 av 33
+  felklassade som `low`).
+* **Nästa avgång och ersättningstrafik når föraren.** Signalerna fanns i
+  pipelinen men stannade i poängformeln. Nu: absolut avgångstid (minuter
+  åldras, klockslag gör det inte), ersättningstrafik via `Deviation.Code`
+  före textmatchning, bussavgångar i tågflödet utpekade som bussar, och
+  Stockholm har för första gången ett svar på "när går nästa?" via SL:s
+  departures-endpoint.
+* **Ett färskt hissfel kunde bli ett tips.** `FACILITY/LIFT` föll tidigare
+  bort på åldersfiltret, alltså av tur; verifierat att "Avstängd hiss vid
+  Skanstull" nådde flödet innan filtret skrevs.
+
+**Still open from the P0 list:** service-role key, verified backups, push
+send pipeline, duplicate Stripe handlers.
+
+---
+
 ## 1. Confirmed current behavior
 
 **Backend**: self-hosted Supabase (Postgres/Auth/PostgREST) on Coolify, service `supabase-taxitips`. Schema covers profiles, companies, company_members (roles: company_owner/company_admin/driver), billing_accounts, subscriptions, devices (driver units, joined via company `join_code`), device_transfer_codes, tickets, app_config, and `alerts` (the disturbance/opportunity table).
@@ -93,7 +193,7 @@ Registration-only. Token capture, storage, and refresh work. There is no code pa
 10. GTFS static context + Next Departure.
 11. Last Departure Risk + Transport Gap (some of this logic already exists ad hoc inside `calculateDemandSignal`'s "Last Train Risk" — formalize it as its own rule under the new model).
 12. Stranded Score v1, Personal Worth-It v1 (partially exists as `worth_it_score` in the RPC — needs to move from ad-hoc SQL expression to the centrally-configured rule engine), driver action cards.
-13. 🚕/👍/👎 feedback capture (schema exists as `alert_feedback`, blocked on item 1 above).
+13. ~~🚕/👍/👎 feedback capture~~ — done via `opportunity_feedback` (see §0). What's left is the UI for 🚕 "kör dit": the client method takes a `verdict`, but only 👍/👎 are wired to buttons.
 
 **P2**: as specified in the briefing, no changes.
 

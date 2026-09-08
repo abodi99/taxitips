@@ -64,6 +64,90 @@ a { color: inherit; text-decoration: none; }
   color: var(--ink-soft);
 }
 
+.stepper {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1.35rem;
+}
+
+.step-item {
+  position: relative;
+  padding-top: 0.35rem;
+  color: var(--ink-soft);
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.step-item::before {
+  content: "";
+  display: block;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  margin: 0 auto 0.45rem;
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+  line-height: 24px;
+  font-size: 0.76rem;
+  font-weight: 700;
+}
+
+.step-item:nth-child(1)::before { content: "1"; }
+.step-item:nth-child(2)::before { content: "2"; }
+.step-item:nth-child(3)::before { content: "3"; }
+
+.step-item.active {
+  color: var(--ink);
+}
+
+.step-item.active::before {
+  border-color: var(--amber);
+  background: rgba(255, 196, 0, 0.18);
+}
+
+.step-item.done::before {
+  border-color: var(--petrol);
+  background: rgba(16, 152, 166, 0.14);
+  color: var(--petrol);
+}
+
+.step-panel {
+  display: none;
+}
+
+.step-panel.active {
+  display: block;
+}
+
+.wizard-nav {
+  display: flex;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.wizard-nav .btn {
+  flex: 1;
+}
+
+.wizard-nav .btn-secondary {
+  border: 1px solid var(--line);
+  background: #fff;
+  color: var(--ink);
+}
+
+.benefits-list {
+  margin: 0.25rem 0 0.85rem;
+  padding-left: 1.1rem;
+  color: var(--ink-soft);
+}
+
+.benefits-list li + li {
+  margin-top: 0.35rem;
+}
+
 label {
   display: grid;
   gap: 0.35rem;

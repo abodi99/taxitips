@@ -45,6 +45,14 @@ _OPPORTUNITY_COLUMNS: Sequence[str] = (
     "reasons",
     "rule_id",
     "source_event_ids",
+    "compensation_eligible",
+    "compensation_amount_kr",
+    "compensation_per_person",
+    "next_departure_minutes",
+    "next_departure_at",
+    "is_last_departure",
+    "has_alternative",
+    "alternative_note",
     "computed_at",
     "updated_at",
 )
@@ -65,6 +73,12 @@ def upsert_opportunities(rows: Iterable[dict]) -> int:
     values = []
     for row in rows:
         row.setdefault("computed_at", now)
+        # NOT NULL med default i modellen -- men den här skrivningen är rå
+        # SQL som namnger varje kolumn, så en rad utan nyckeln skickar NULL
+        # och avvisas av databasen. Samma mönster som computed_at ovan.
+        row.setdefault("is_last_departure", False)
+        row.setdefault("has_alternative", False)
+        row.setdefault("alternative_note", "")
         row["updated_at"] = now
         values.append([row.get(col) for col in _OPPORTUNITY_COLUMNS])
 

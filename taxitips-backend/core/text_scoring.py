@@ -108,14 +108,21 @@ def classify_transit_alert(alert: dict, taxi: dict | None) -> Assessment:
         return Assessment(SeverityTier.IGNORE, 0, Confidence.MEDIUM, reasons, f"{mode}.ignore", mode)
 
     if mode == "road":
-        # Ingen vägkälla portad än i Django (Fas 1 omfattar bara Trafiklab).
-        # Inget matar den här grenen idag -- håll den ofarlig hellre än att
-        # krascha om den någon gång nås, men implementera inte på riktigt
-        # förrän Trafikverket väg finns att verifiera mot.
-        reasons = _reasons_from(taxi)
+        # Bara etikett, ingen ompoängsättning: score_road_alert har redan
+        # kapat vägpoängen lågt (max 15) av skäl som står i dess docstring,
+        # och tiern får inte smyga tillbaka in poäng som medvetet togs bort.
+        text = " ".join(
+            str(alert.get(k) or "") for k in ("header", "description", "cause")
+        ).lower()
+        if "olycka" in text or "avstäng" in text or "avstangning" in text:
+            tier = SeverityTier.ROAD_ACCIDENT_OR_CLOSURE
+        elif "kö" in text or "köbildning" in text or "kövarning" in text:
+            tier = SeverityTier.ROAD_WORK_OR_QUEUE
+        else:
+            tier = SeverityTier.ROAD_WORK
         return Assessment(
-            SeverityTier.DISRUPTION_UNCLASSIFIED, taxi.get("score", 0), Confidence.LOW,
-            reasons, "road.not_ported", mode,
+            tier, taxi.get("score", 0), Confidence.MEDIUM,
+            _reasons_from(taxi), f"road.{tier}", mode,
         )
 
     score = taxi.get("score", 0)

@@ -1,21 +1,4 @@
-// Soft entrance + sticky jump feedback for stressed scanners
-const phone = document.querySelector(".phone-frame");
-if (phone && "IntersectionObserver" in window) {
-  phone.style.animationPlayState = "paused";
-  const io = new IntersectionObserver(
-    (entries) => {
-      for (const entry of entries) {
-        if (entry.isIntersecting) {
-          phone.style.animationPlayState = "running";
-          io.disconnect();
-        }
-      }
-    },
-    { threshold: 0.2 }
-  );
-  io.observe(phone);
-}
-
+// Sticky jump feedback for stressed scanners
 const jumps = document.querySelectorAll(".jump");
 const sections = ["forare", "kontor", "pris"]
   .map((id) => document.getElementById(id))

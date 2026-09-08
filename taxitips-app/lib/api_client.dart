@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'backend_api.dart';
 import 'config.dart';
+import 'severity_labels.dart';
 
 const _taxiAreaCatalog = [
   'Malmö',
@@ -60,6 +62,22 @@ class ApiClient {
   final String supabaseAnonKey;
 
   String get baseUrl => supabaseUrl;
+
+  /// Django-backenden, när API_BASE_URL är satt. Null = allt går via
+  /// Supabase som förut. Se TaxiTipsConfig.apiBaseUrl.
+  final BackendApi? _backend = TaxiTipsConfig.usesDjangoApi
+      ? BackendApi()
+      : null;
+
+  /// Åtkomsttoken för en inloggad ägare/administratör. Föraren har ingen --
+  /// den vägen bär `deviceToken` i stället, och backend godtar båda.
+  String? get _accessToken {
+    try {
+      return _sb.auth.currentSession?.accessToken;
+    } catch (_) {
+      return null;
+    }
+  }
 
   String? sessionToken;
   String? deviceToken;
@@ -741,10 +759,35 @@ class ApiClient {
     return {'label': label};
   }
 
+  /// 🚕 / 👍 / 👎 -- `verdict` är heading, fare eller empty.
+  ///
+  /// Django-vägen skriver till `opportunity_feedback`, vars främmande nyckel
+  /// pekar på `opportunities`. Supabases `alert_feedback` pekar fortfarande
+  /// på `alerts`, och de två id-rymderna överlappar inte i en enda rad --
+  /// varje tumme upp sedan flytten till opportunities har därför avvisats av
+  /// databasen och landat i catch-blocket nedan, tyst. Tabellen har noll
+  /// rader. Utan API_BASE_URL är beteendet oförändrat: det är samma tysta
+  /// väg som förut, men den syns nu i loggen.
   Future<Map<String, dynamic>> submitAlertFeedback(
     String alertId,
-    bool result,
-  ) async {
+    bool result, {
+    String? verdict,
+  }) async {
+    final backend = _backend;
+    if (backend != null) {
+      try {
+        await backend.submitFeedback(
+          opportunityId: alertId,
+          verdict: verdict ?? (result ? 'fare' : 'empty'),
+          deviceToken: deviceToken,
+          accessToken: _accessToken,
+        );
+        return {'success': true};
+      } catch (e) {
+        debugPrint('ApiClient[feedback] backend: $e');
+        return {'error': e.toString()};
+      }
+    }
     try {
       await ensureInitialized();
       await _sb.from('alert_feedback').insert({
@@ -754,8 +797,64 @@ class ApiClient {
       });
       return {'success': true};
     } catch (e) {
+      debugPrint('ApiClient[feedback] supabase: $e');
       return {'error': e.toString()};
     }
+  }
+
+  Future<List> _smartAlertsViaRpc(double lat, double lon) async {
+    final rows = await _sb.rpc(
+      'get_smart_alerts',
+      params: {'p_lat': lat, 'p_lon': lon, 'p_device_token': deviceToken},
+    );
+    return (rows as List?) ?? const [];
+  }
+
+  /// Ett tips i den form korten, kartan och sorteringen läser.
+  ///
+  /// Samma fältnamn oavsett väg -- Django-API:t svarar med RPC:ns namn med
+  /// avsikt. Skillnaden är att Django också skickar `level` (bedömningen
+  /// redan gjord, se core/thresholds.py) och ersättningsfälten, som RPC:n
+  /// aldrig exponerade. Saknas `level` räknar severity_labels.dart ut det
+  /// lokalt, så Supabase-vägen ser likadan ut som förut.
+  Map<String, dynamic> _alertFromRow(Map<String, dynamic> m) {
+    final alert = <String, dynamic>{
+      'id': m['id'],
+      'title': m['title'],
+      'summary': m['summary'],
+      'lat': m['lat'],
+      'lon': m['lon'],
+      'start_time': m['start_time'],
+      'end_time': m['end_time'],
+      'demand_score': m['demand_score'],
+      'reasons': m['reasons'] ?? const [],
+      'distance_km': m['distance_km'],
+      'worth_it_score': m['worth_it_score'],
+      'is_active': m['is_active'] ?? true,
+      'kind': m['kind'],
+      'mode': m['mode'],
+      'severity_tier': m['severity_tier'],
+      'confidence': m['confidence'],
+      'level': m['level'],
+      'notify_worthy': m['notify_worthy'],
+      'compensation_eligible': m['compensation_eligible'] == true,
+      'compensation_amount_kr': m['compensation_amount_kr'],
+      // true/false/null -- null betyder att huvudmannen inte skriver ut
+      // det, och då säger kortet inget heller.
+      'compensation_per_person': m['compensation_per_person'],
+      // "Vad gör resenären i stället?" -- formulerad av backend
+      // (core/alternatives.py) så att kort, detaljvy och push säger samma
+      // sak. Saknas den (Supabase-vägen) visas ingen rad alls.
+      'travel_options': m['travel_options'],
+    };
+    // `taxi.level` hade en egen kopia av gränserna (>50 hög, >20 medel) --
+    // en femte kopia av tröskeln som backend redan äger. Nu är det samma
+    // bedömning som badgen och pushen använder.
+    alert['taxi'] = {
+      'level': likelihoodForAlert(alert).name,
+      'places': (m['places'] as List?) ?? const [],
+    };
+    return alert;
   }
 
   Future<Map<String, dynamic>> taxi({
@@ -765,65 +864,48 @@ class ApiClient {
   }) async {
     try {
       await ensureInitialized();
-      final rows = await _sb.rpc(
-        'get_smart_alerts',
-        params: {
-          'p_lat': userLat ?? 55.604981, // Default Malmö if no location
-          'p_lon': userLon ?? 13.003822,
-          'p_device_token': deviceToken,
-        },
-      );
+      final lat = userLat ?? 55.604981; // Default Malmö if no location
+      final lon = userLon ?? 13.003822;
+
+      List rows;
+      var source = 'trafiklab';
+      final backend = _backend;
+      if (backend != null) {
+        // Django-vägen (Spår B). Faller tillbaka på RPC:n om backenden inte
+        // svarar -- en förare mitt i ett pass ska inte förlora listan för
+        // att en tjänst startar om.
+        try {
+          final body = await backend.alerts(
+            lat: lat,
+            lon: lon,
+            deviceToken: deviceToken,
+            accessToken: _accessToken,
+          );
+          rows = (body['alerts'] as List?) ?? const [];
+          source = 'django';
+        } catch (e) {
+          debugPrint('ApiClient[taxi] backend nere, faller tillbaka: $e');
+          rows = await _smartAlertsViaRpc(lat, lon);
+        }
+      } else {
+        rows = await _smartAlertsViaRpc(lat, lon);
+      }
 
       final now = DateTime.now().toUtc();
-      final active = <Map<String, dynamic>>[];
-      final week = <Map<String, dynamic>>[];
-      final all = <Map<String, dynamic>>[];
-      for (final r in (rows as List)) {
-        final m = Map<String, dynamic>.from(r as Map);
-        // Map the RPC output back to the format the UI expects, plus the new fields
-        final alert = <String, dynamic>{
-          'id': m['id'],
-          'title': m['title'],
-          'summary': m['summary'],
-          'lat': m['lat'],
-          'lon': m['lon'],
-          'start_time': m['start_time'],
-          'end_time': m['end_time'],
-          'demand_score': m['demand_score'],
-          'reasons': m['reasons'] ?? [],
-          'distance_km': m['distance_km'],
-          'worth_it_score': m['worth_it_score'],
-          'is_active': m['is_active'] ?? true,
-          'kind': m['kind'],
-          'mode': m['mode'],
-          'severity_tier': m['severity_tier'],
-          'confidence': m['confidence'],
-          'taxi': {
-            'level': m['worth_it_score'] > 50
-                ? 'high'
-                : (m['worth_it_score'] > 20 ? 'medium' : 'low'),
-            'places': [],
-          }, // Mock place/level for compatibility
-        };
-        alert['id'] ??= m['id'];
-
-        // The RPC now includes the last 24h, not just currently-active
-        // disruptions (is_active tells the two apart), so a driver can still
-        // see "what happened last night" after the fact.
-        active.add(alert);
-        week.add(alert);
-        all.add(alert);
-      }
+      final all = [for (final r in rows) _alertFromRow(Map<String, dynamic>.from(r as Map))];
 
       return {
         'alerts': all,
-        'active': active,
-        'week': week,
+        // Flödet innehåller det senaste dygnet, inte bara det som pågår just
+        // nu (`is_active` skiljer dem åt) -- en förare som börjar sitt pass
+        // ska kunna se vad som hände i natt.
+        'active': all,
+        'week': all,
         'events': const [],
         'placeStats': _buildPlaceStats(all),
         'demo': demo,
         'updatedAt': now.millisecondsSinceEpoch,
-        'source': 'trafiklab',
+        'source': source,
       };
     } on PostgrestException catch (e) {
       // Some environments are not provisioned with the alerts table yet.
@@ -854,6 +936,14 @@ class ApiClient {
   /// avoid hitting the backend for detail nobody asked to see.
   Future<Map<String, dynamic>> opportunityDetail(String opportunityId) async {
     try {
+      final backend = _backend;
+      if (backend != null) {
+        return await backend.opportunityDetail(
+          opportunityId,
+          deviceToken: deviceToken,
+          accessToken: _accessToken,
+        );
+      }
       await ensureInitialized();
       final data = await _sb.rpc(
         'get_opportunity_detail',
@@ -894,7 +984,7 @@ class ApiClient {
 
   Future<Map<String, dynamic>> health() async => {
     'ok': true,
-    'backend': 'supabase',
+    'backend': _backend == null ? 'supabase' : 'django',
   };
 
   Future<Map<String, dynamic>> _invokeFunction(

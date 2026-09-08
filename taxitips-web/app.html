@@ -40,7 +40,6 @@
     <div class="controls-row">
       <div class="mode-switch" role="tablist" aria-label="Visa">
         <button type="button" class="mode-btn on" data-mode="now" id="modeNow" role="tab" aria-selected="true">Kör nu</button>
-        <button type="button" class="mode-btn" data-mode="events" id="modeEvents" role="tab" aria-selected="false">Evenemang</button>
       </div>
     </div>
     <p class="status-meta" id="statusMeta" hidden>—</p>
@@ -70,7 +69,7 @@
         <button type="button" class="menu-item" id="menuRefresh">Uppdatera tips</button>
         <button type="button" class="menu-item" id="menuLegend">Så läser du appen</button>
         <button type="button" class="menu-item" id="menuNotify" hidden>Notiser</button>
-        <a class="menu-item" href="/dashboard.html">Konto &amp; bolag</a>
+        <a class="menu-item" href="/dashboard.html">Webbportal för bolag</a>
         <a class="menu-item" href="/">Till startsidan</a>
       </nav>
     </form>
@@ -130,14 +129,11 @@
       <div class="legend-body">
         <h3>Kör nu</h3>
         <p>Tips från tåg- och vägstörningar i Skåne. Du får notis vid starka tips.</p>
-        <h3>Evenemang</h3>
-        <p>Separat flöde för arenor — planera körningar före/efter.</p>
         <h3>Kartan</h3>
         <ul>
           <li><strong>Röd prick</strong> — starkt tips</li>
           <li><strong>Gul prick</strong> — bevaka</li>
           <li><strong>Orange linje</strong> — påverkad väg</li>
-          <li><strong>Blå E</strong> — evenemang</li>
         </ul>
       </div>
     </form>
@@ -149,7 +145,7 @@
         <h2>Notiser</h2>
         <button type="submit" class="text-btn" value="cancel">Stäng</button>
       </header>
-      <p class="sheet-lead">Välj orter och vilka händelser som får störa dig.</p>
+      <p class="sheet-lead">Välj orter och vilka trafikstörningar du vill få notis om.</p>
       <p class="notify-error" id="notifyError" hidden></p>
       <label class="notify-master">
         <input type="checkbox" id="notifyEnabled" checked />

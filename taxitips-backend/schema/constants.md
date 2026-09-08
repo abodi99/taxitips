@@ -9,8 +9,7 @@ Listan ska krympa när reglerna flyttas till `ScoringRule`.
 
 | betydelse | var | fil |
 |---|---|---|
-| hög-prio-gräns (app) | Flutter-app | `severity_labels.dart:61` |
-| nivågräns (app) | Flutter-app | `api_client.dart:802` |
+| hög-prio-gräns (app) | Flutter-app | `severity_labels.dart:64` |
 | pushgräns | Node-worker | `fcmPush.js:179` |
 | pushvärd (viz) | Pipeline-viz | `server.js:104` |
 
@@ -25,12 +24,6 @@ Listan ska krympa när reglerna flyttas till `ScoringRule`.
 | betydelse | var | fil |
 |---|---|---|
 | väderbonus | Node-worker | `poller.js:199` |
-
-## 20
-
-| betydelse | var | fil |
-|---|---|---|
-| nivågräns (app) | Flutter-app | `api_client.dart:804` |
 
 ## 25
 

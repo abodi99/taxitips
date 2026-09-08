@@ -10,6 +10,7 @@ import '../api_client.dart';
 import '../push_service.dart';
 import '../severity_labels.dart';
 import '../theme.dart';
+import '../widgets/alert_feedback_bar.dart';
 import '../widgets/hotspot_map.dart';
 import '../widgets/likelihood_badge.dart';
 import '../widgets/smart_alert_card.dart';
@@ -194,10 +195,12 @@ class _DriverScreenState extends State<DriverScreen> {
 
   String _friendly(Object e) {
     final s = e.toString();
-    if (s.contains('Ogiltig'))
+    if (s.contains('Ogiltig')) {
       return 'Koden funkar inte — be kontoret om rätt bolags-/byteskod.';
-    if (s.contains('401') || s.contains('licens'))
+    }
+    if (s.contains('401') || s.contains('licens')) {
       return 'Ingen access. Registrera telefonen med bolagskod eller logga in.';
+    }
     return s.replaceFirst(RegExp(r'^(ApiException|Exception):\s*'), '');
   }
 
@@ -289,34 +292,23 @@ class _DriverScreenState extends State<DriverScreen> {
   }
 
   // "Bara hög prio" means "severe disruption", NOT "reachable from here" --
-  // those are different questions. taxi.level is worth_it_score-derived (it
-  // folds in distance/time-to-reach), so a genuinely severe but far-away
-  // line_paused event was silently disappearing under this filter even at a
-  // demand_score of 90, which is backwards: severity is what "priority" should
-  // mean here, reachability is what worth_it_score/sorting already handles
-  // separately. Falls back to taxi.level for events, which don't carry
-  // severity_tier/demand_score at all.
+  // those are different questions, and the backend now keeps them apart:
+  // worth_it_score no longer subtracts distance, so it answers only "how
+  // strong is this signal". Distance is shown on the card and left to the
+  // driver, who knows their own shift, traffic and willingness to drive
+  // better than any formula does.
   //
   // Road tiers are deliberately excluded -- an accident/closure delays people
   // already in a car, it doesn't strand pedestrians who'd need a taxi, so it's
   // never "high priority" here regardless of how bad the road situation reads.
   /// "Hög prio" must mean the same thing the card's badge means, or the
-  /// screen contradicts itself. It used to key off demand_score (raw
-  /// severity), while the badge keys off customerLikelihood() (which folds
-  /// in reachability via worth_it_score) -- so a line_paused 55 km away
-  /// passed the filter while its own badge read "Osannolikt just nu".
-  /// Both now ask one question: is this worth driving to right now?
+  /// screen contradicts itself -- both ask: how strong is this signal?
   bool _isHighSeverity(Map<String, dynamic> a) {
     final severityTier = a['severity_tier']?.toString();
     if (severityTier == null) {
       return (a['taxi'] as Map?)?['level'] == 'high';
     }
-    return customerLikelihood(
-          severityTier: severityTier,
-          worthItScore: (a['worth_it_score'] as num?) ?? 0,
-          demandScore: (a['demand_score'] as num?) ?? 0,
-        ) ==
-        CustomerLikelihood.high;
+    return likelihoodForAlert(a) == CustomerLikelihood.high;
   }
 
   void _sortSignals(List<Map<String, dynamic>> list) {
@@ -764,11 +756,7 @@ class _DriverScreenState extends State<DriverScreen> {
 
   Future<void> _openAlertDetail(Map<String, dynamic> a) async {
     final url = a['url']?.toString();
-    final likelihood = customerLikelihood(
-      severityTier: a['severity_tier']?.toString(),
-      worthItScore: (a['worth_it_score'] as num?) ?? 0,
-      demandScore: (a['demand_score'] as num?) ?? 0,
-    );
+    final likelihood = likelihoodForAlert(a);
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -871,6 +859,69 @@ class _DriverScreenState extends State<DriverScreen> {
                       color: TbColors.ink,
                     ),
                   ),
+                  // Nästa avgång och ersättningstrafik, utskrivet. Samma
+                  // mening som kortet visar -- backend formulerar den en
+                  // gång (core/alternatives.py).
+                  if (TravelOptions.of(a) case final travel?) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Icon(
+                          travel.isLastDeparture
+                              ? Icons.last_page
+                              : (travel.hasAlternative
+                                    ? Icons.directions_bus
+                                    : Icons.schedule_send),
+                          size: 17,
+                          color: travel.isStrong ? TbColors.live : TbColors.muted,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            travel.summary!,
+                            style: TextStyle(
+                              fontSize: 15,
+                              height: 1.35,
+                              fontWeight: FontWeight.w700,
+                              color: travel.isStrong
+                                  ? TbColors.live
+                                  : TbColors.ink,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  // Ersättningsrätten, utskriven. Kortets chip säger att den
+                  // finns; här står vad den betyder för den som står kvar på
+                  // perrongen -- och därmed varför just det här tipset kan
+                  // vara värt att köra till.
+                  if (a['compensation_eligible'] == true) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.receipt_long,
+                          size: 17,
+                          color: TbColors.live,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            '${compensationLabel(a['compensation_amount_kr'] as num?, perPerson: a['compensation_per_person'] as bool?)} — resenären har rätt till ersättning för taxi enligt lag 2015:953.',
+                            style: const TextStyle(
+                              fontSize: 14,
+                              height: 1.35,
+                              fontWeight: FontWeight.w600,
+                              color: TbColors.live,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
                   if (url != null && url.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     SizedBox(
@@ -891,6 +942,10 @@ class _DriverScreenState extends State<DriverScreen> {
                     ),
                   ],
                   if (a['id'] != null) ...[
+                    AlertFeedbackBar(
+                      api: widget.api,
+                      opportunityId: a['id'].toString(),
+                    ),
                     const SizedBox(height: 16),
                     _ExplainSection(
                       opportunityId: a['id'].toString(),
@@ -925,9 +980,11 @@ class _DriverScreenState extends State<DriverScreen> {
         }
       });
     }
-    final live =
-        _data?['source'] == 'trafiklab' ||
-        (_data?['source']?.toString().contains('trafik') ?? false);
+    // Vilken väg datan kom (`django` eller `trafiklab`) säger inget om
+    // huruvida den är färsk -- båda läser samma pipeline. Utan `django` här
+    // slocknade live-indikatorn så fort appen bytte till Spår B.
+    final source = _data?['source']?.toString() ?? '';
+    final live = source == 'django' || source.contains('trafik');
 
     return Scaffold(
       backgroundColor: TbColors.foam,

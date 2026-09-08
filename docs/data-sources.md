@@ -129,9 +129,60 @@ So these feeds are accessible but describe the wrong region, and their ids
 can't join our schedule. Same root cause as the ServiceAlerts mismatch: the
 Sweden family is a different dataset, not a regional filter.
 
+**Re-verified independently 2026-09-05 (second pass), and this section is
+correct — do not "fix" it.** A later investigation measured a 50/148 stopId
+overlap between ServiceAlerts and TripUpdates on the Sweden family and read
+that as evidence the ids join. They do join *each other* — both feeds are the
+same dataset — but that says nothing about which region they describe.
+Decoding county digits settles it: `skane`, `otraf` and `sl` operator paths
+all return **county 05 (Östergötland)** and nothing else, while the ingested
+static feed is county 12. The DB confirms the join failure directly:
+
+```sql
+select count(*) from gtfs_stops
+where stop_id in ('9022050028160001','9022050026651001','9022050026650001');
+-- 0, against 10,703 ingested Skåne stops (prefixes 90220120 / 90210120)
+```
+
+Note also that the static feed is **not** stale: `gtfs_feed_versions` shows a
+successful daily ingest (990,876 stop_times). A 403 when testing by hand means
+the *local* `TRAFIKLAB_API_KEY` lacks static access — production uses a
+separate `GTFS_STATIC_API_KEY`, which works. Don't infer "access lapsed" from
+a local 403.
+
 **Everything still points to one action:** get a GTFS **Regional** Realtime
 key. That unlocks correctly-scoped ServiceAlerts *and* TripUpdates whose ids
 join our existing Regional static data.
+
+### SL (Stockholm) — open, no key, and already integrated
+
+SL publishes its own realtime data with **no API key and no quota tier**:
+
+```
+deviations.integration.sl.se/v1/messages          200   158 deviations
+transport.integration.sl.se/v1/sites?expand=true  200   6512 sites / 7214 stop areas
+transport.integration.sl.se/v1/sites/{id}/departures  200
+```
+
+Two measured facts that shape `sl.js`:
+
+1. **`publish` is a publication window, not a disruption duration.** 102 of
+   158 run longer than 30 days; one live example was published 2024-01-03 and
+   runs to 2026-12-31. Only ~19 of 152 are recent *and* bounded. `isActionable()`
+   filters on that, because showing a two-year-old roadworks notice as a live
+   opportunity is exactly the false tip that destroys driver trust.
+2. **Stop-area ids and site ids are different id spaces** (only 14/104 collide,
+   coincidentally). `?expand=true` carries each site's `stop_areas[]`, which
+   bridges them for **104/104** referenced ids — hence `sl_sites` is keyed by
+   stop_area, not site.
+
+Known limit: the *actionable* deviations reference **lines, not stop areas**
+(19/19 in a live sample named zero stop areas), so most Stockholm alerts carry
+`lat/lon = null`. SL's open API exposes no line → stops mapping (`/lines`
+returns no stop list; `/stop-points` carries no line reference). Inventing a
+coordinate from a line would put drivers on a specific wrong corner of
+Stockholm with false precision. GTFS Sweden 3 static's `stop_times` would
+close this — one more reason it is the top subscription request.
 
 ### Quotas
 
@@ -197,6 +248,72 @@ Trafikverket covers those counties fine; only transit is missing. Getting
 Västtrafik likely needs GTFS Regional Realtime (see above) or a direct
 Västtrafik API — worth checking before promising national transit coverage.
 
+**`blekinge` and `gotland` are NOT in the above 404 list — verified live
+2026-09-06 on the Sweden-family endpoint (`gtfs-rt-sweden/{op}/
+ServiceAlertsSweden.pb`): both return `200 OK`.** They were simply omitted
+from the operator list that had been in use; added. Both currently return a
+near-empty feed (~15 bytes, i.e. a header with zero entities) — that's
+real-time sparseness at the moment of testing, not evidence the feed is
+broken. Re-test if a Blekinge/Gotland driver reports the map never
+populating there even during a known disruption.
+
+### Correction 2026-09-08: Västernorrland IS available — as `dintur`
+
+Re-probed all 25 candidate operator codes with the new GTFS Sweden 3
+Realtime (Gold) key. `vasternorrland` 404s, as previously recorded — but the
+operator code for that county is **`dintur`**, which returns `200 OK` with
+14 alerts. It had never been tried: the earlier probe used the county name,
+not the operator's own name, and the 404 was read as "the county isn't
+covered" rather than "that string isn't the code". Added to
+`TRAFIKLAB_OPERATORS`.
+
+Fifteen codes verified working on `gtfs-rt-sweden/{op}/ServiceAlertsSweden.pb`:
+
+```
+sl 201   skane 159   varm 45   dt 21   otraf 19   ul 19   vastmanland 17
+jlt 16   dintur 14   orebro 13   klt 11   xt 9   krono 3   gotland 1
+blekinge 0 (200 OK, tom feed)
+```
+
+Still 404, i.e. genuinely not in the product: `halland, sormland, ostgota,
+vt, vasterbotten, norrbotten, jamtland, vasternorrland, sj`. Västra
+Götaland is covered anyway through its own Västtrafik adapter.
+
+### Halland/far-north confirmed against the official spec, not just live probing (2026-09-06)
+
+Cross-checked the 404 list above against Trafiklab's actual OpenAPI spec
+([`gtfsSwedenRealtime.yaml`](https://github.com/trafiklab/openApi-docs/blob/master/gtfsSwedenRealtime.yaml)),
+not just cached notes:
+
+- **The documented operator enum for ServiceAlerts/TripUpdates is exactly**
+  `dt, jlt, krono, orebro, skane, sl, ul, vastmanland, varm, xt, otraf`
+  (11 operators). VehiclePositions has a *different* enum:
+  `ul, otraf, klt, skane, varm, dt, xt, vastmanland`.
+- **The spec's enum is not authoritative in practice** — `klt` (Kalmar) is
+  absent from the ServiceAlerts enum yet returns real, working data (11
+  opportunities in one poll); `blekinge`/`gotland` are absent entirely yet
+  return `200`. Same conclusion this file already reaches elsewhere: measure
+  against the live API, the docs undersell what actually works.
+- **Halland, Västerbotten, Norrbotten, Jämtland are absent from the enum AND
+  confirmed 404 live (re-tested 2026-09-08 with the new Gold key).** This is a
+  genuine, structural gap in Trafiklab's realtime *ServiceAlerts* product
+  specifically — not fixable by trying more operator codes, and not a gap
+  in this project's polling logic.
+- **GTFS Sweden 3's own product page claims broader *static* coverage**
+  (Hallandstrafiken, Blekingetrafiken, Gotland, Din Tur/Västernorrland all
+  listed as having schedule data; Västerbotten/Norrbotten/Jämtland "static
+  only"). That's schedule data, not disruption alerts — it doesn't close
+  this gap on its own.
+- **A separate, newer product exists** — "Trafiklab Realtime APIs" (Stop
+  Lookup / Timetables / Trips, launched 2025, built on GTFS Sweden 3),
+  which does claim whole-of-Sweden coverage. It's a *timetable/departure*
+  API, not a disruption-alerts API — using it here would mean inferring
+  disruptions from scheduled-vs-actual departure deltas, the same
+  technique `trafikverket_rail.py` already uses for rail. That is a real,
+  buildable path to closing the Halland/north gap, but it is new
+  engineering work (a new source module), not a config fix. Flagged as a
+  candidate for a future phase, not attempted here.
+
 ### Known tuning issue at national scale (pre-existing, not caused by rollout)
 
 `worth_it_score = demand_score - distance_km × 2` combined with the
@@ -218,6 +335,61 @@ POSTed with an auth key. Used for road `Situation` records. Mockable via
 Road incidents are deliberately scored low for taxi demand — an accident
 delays people already in a car, it doesn't strand pedestrians who need a
 taxi. See `worker/src/scoring.js`.
+
+### Trafikverket rail — `TrainAnnouncement` vs `OperativeEvent` (candidate, not integrated)
+
+Two different objecttypes exist on the same API, at two different levels.
+Only the first is used today:
+
+| Objecttype | Namespace | What it is | Used by |
+|---|---|---|---|
+| `TrainAnnouncement` | `rail.trafficinfo` v1.9 | The **symptom** — one departure, cancelled or delayed | `worker/src/trafikverketRail.js`, `taxitips-backend/core/sources/trafikverket_rail.py` |
+| `OperativeEvent` | `ols.open` v1.0 | The **cause** — banarbete/tågfel/anläggningsfel on a rail section | Not wired in anywhere — verified live 2026-09-06 as a candidate, see below |
+
+**Object type name is not obvious from Trafikverket's docs page** — the
+field table (CountyNo, EventType, OperativeEventId, etc.) doesn't state the
+`objecttype` attribute anywhere on the page. Verified by probing the live
+API with `TRAFIKVERKET_API_KEY`; `OperativeEvent` is correct, `TrainMessage` /
+`RailOperativeEvent` / `TrafficMessage` / `Event` all 400.
+
+Measured live (2026-09-06, `EventState=1`, 59 events nationally):
+
+- **`EventSection`** populated 100% — a from/to pair of `LocationSignature`
+  codes, the same station-code register `fetchStations()` already builds.
+  This is the join key if this source is ever ingested.
+- **`EventType.Description`** gives a real named cause, embedded per-record
+  (no separate lookup call needed): 42/59 "Banarbete/transport", the rest
+  spread across track/switch/signal/catenary faults, one level-crossing
+  accident, one police/medical stop.
+- **`RoadDegreeOfImpact` and `RailRoadTimeForServiceResumption` are dead
+  fields in practice** — 0/59 populated, including on the one
+  level-crossing-accident record in the sample where road impact would be
+  expected. Same shape as GTFS `cause`/`effect`: documented, not populated.
+  `EventTrafficType` was 100% `0` (rail-only); the docs' `2` (rail+road)
+  value was not observed live.
+- **`EventState=1` ("active") is not "happening now"** — same publish-window
+  trap already documented for SL above. 35/59 had a `StartDateTime` already
+  in the past (one over a year old, still flagged active); one had a
+  `StartDateTime` a month in the *future*. Worse: 7/59 had a nested
+  `TrafficImpact[].EndDateTime` already passed while `EventState` stayed
+  `1` — `TrafficImpact`'s own window, not the top-level state, is the
+  trustworthy "is this still active" check.
+- Volume is much smaller than `TrainAnnouncement`: 59 nationally active vs.
+  thousands of departures per 8h window — this is one record per disrupted
+  rail *section*, not per train.
+
+**Why it might be worth adding:** it's the only source that would let a tip
+say *why* — "Banarbete Mjölby–Motala, sedan igår" — instead of only
+inferring cancelled/delayed from `TrainAnnouncement`. Needs a new
+normalizer plus an expand-migrate-contract column addition on
+`opportunities` for the cause text; no new API key required, same
+`TRAFIKVERKET_API_KEY`.
+
+A live read-only preview of this candidate source (counts, cause
+breakdown, the `EventState` caveat above) is rendered in
+`taxitips-pipeline-viz` — it calls Trafikverket directly, bypassing
+`source_events`, so it proves nothing about production, only about what
+the source contains.
 
 ---
 

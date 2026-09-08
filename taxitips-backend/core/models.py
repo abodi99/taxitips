@@ -111,6 +111,60 @@ class ScoringRule(models.Model):
         return max(0, min(100, score))
 
 
+class RegionCompensationRule(models.Model):
+    """
+    Lagstadgad förseningsersättning (lag 2015:953 om kollektivtrafik-
+    resenärers rättigheter), en rad per län/operatör -- källbelagd research,
+    se docs/transit-compensation-rules.md för alla källor.
+
+    Gäller bara textkällorna (SL/Västtrafik/Trafiklab) -- se
+    core/compensation.py:s docstring för varför Trafikverkets järnvägsdata
+    medvetet är utanför scope (inget regionfält, och blandar regionala
+    korttåg med fjärrtåg som lyder under andra EU-regler).
+    """
+
+    region = models.CharField(
+        max_length=30, unique=True,
+        help_text="Samma nyckel som core.geo.REGION_ANCHOR: skane, sl, vt, ul, ...",
+    )
+    threshold_minutes = models.IntegerField(
+        default=20, help_text="Minuter försening som ger rätt till ersättning."
+    )
+    taxi_cap_kr = models.IntegerField(
+        help_text="Högsta ersättning för taxi/alternativ transport, i kronor."
+    )
+    excluded_modes = models.JSONField(
+        default=list, blank=True,
+        help_text="Färdsätt där taxi INTE ersätts (t.ex. X-trafik: [\"train\"]).",
+    )
+    filing_deadline_days = models.IntegerField(
+        default=60, help_text="Frist för att ansöka, i dagar."
+    )
+    cap_per_person = models.BooleanField(
+        null=True, blank=True,
+        help_text=(
+            "Gäller taket per resenär (True) eller per resa/bil (False)? "
+            "NULL = källan säger inget, och då påstår vi inget heller. "
+            "Skillnaden är stor för en förare: Skånetrafikens 2 960 kr "
+            "gäller PER betalande resenär, medan SL uttryckligen skriver "
+            "att beloppet inte blir högre om man samåker -- fyra strandsatta "
+            "resenärer är två helt olika affärer i de två fallen."
+        ),
+    )
+    source_url = models.TextField(blank=True)
+    note = models.TextField(
+        blank=True, help_text="Flaggar osäkra/obekräftade siffror -- se docs/.",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "region_compensation_rule"
+        ordering = ["region"]
+
+    def __str__(self) -> str:
+        return f"{self.region}: {self.threshold_minutes} min → {self.taxi_cap_kr} kr"
+
+
 class SourceEvent(models.Model):
     """
     Den råa händelsen från källan, orörd.
@@ -184,10 +238,14 @@ class Opportunity(models.Model):
     region = models.CharField(
         max_length=30,
         blank=True,
+        null=True,
         db_index=True,
         help_text=(
             "Marknad: skane, sl, vt, rail... Bär geofencet för tips UTAN "
-            "koordinat -- utan det nådde ett Stockholmstips en Malmöförare."
+            "koordinat -- utan det nådde ett Stockholmstips en Malmöförare. "
+            "NULL, aldrig tom sträng, när marknaden är okänd: get_smart_alerts "
+            "gör coalesce(region,'skane') för platslösa tips, och '' hade "
+            "matchat ingen marknad alls -- tipset hade försvunnit tyst."
         ),
     )
 
@@ -205,6 +263,57 @@ class Opportunity(models.Model):
         max_length=80, blank=True, help_text="mode.tier, för spårbarhet."
     )
     source_event_ids = models.JSONField(default=list, blank=True)
+
+    # Lagstadgad förseningsersättning -- se core/compensation.py. Rör bara
+    # aldrig demand_score/severity_tier, samma princip som SL/VT:s
+    # redaktionella signal i text_scoring.py: mäter något annat än hur
+    # allvarlig störningen är.
+    compensation_eligible = models.BooleanField(default=False)
+    compensation_amount_kr = models.IntegerField(null=True, blank=True)
+    compensation_per_person = models.BooleanField(
+        null=True, blank=True,
+        help_text="Gäller taket per resenär? NULL = huvudmannen skriver inte ut det.",
+    )
+
+    # Transport Gap, som data i stället för prosa. Järnvägspipelinen har
+    # räknat fram båda sedan Fas 2, men de överlevde bara som en mening i
+    # `reasons` ("nästa avgång först om 322 min") -- omöjlig att filtrera,
+    # sortera eller mäta på. Det är skillnaden mellan att en signal FINNS
+    # och att den går att använda: Last Departure Risk och Transport Gap
+    # (P1) kan inte kalibreras mot en textrad.
+    #
+    # NULL betyder "vet inte", inte "ingen lucka": bara källor med
+    # tidtabell (Trafikverkets järnväg idag) kan svara på frågan. En
+    # textkälla som SL vet aldrig när nästa buss går.
+    next_departure_minutes = models.IntegerField(
+        null=True, blank=True, db_index=True,
+        help_text="Minuter till nästa avgång, mätt när tipset skrevs. NULL = okänt.",
+    )
+    next_departure_at = models.DateTimeField(
+        null=True, blank=True,
+        help_text=(
+            "Absolut tidpunkt för nästa avgång. Den som visas för föraren: "
+            "minuterna ovan mättes vid pollningen och åldras med tipset, "
+            "klockslaget gör inte det."
+        ),
+    )
+    is_last_departure = models.BooleanField(
+        default=False,
+        help_text="Sista avgången härifrån idag -- ingen kommer efter.",
+    )
+    has_alternative = models.BooleanField(
+        default=False,
+        help_text="Källan anger ersättningstrafik eller annan väg vidare.",
+    )
+    alternative_note = models.TextField(
+        blank=True,
+        help_text=(
+            "Vad källan säger om alternativet, i källans egna ord. Tomt när "
+            "inget angetts -- vi hittar aldrig på ett alternativ: en förare "
+            "som kör till en perrong där ersättningsbussen redan står gör "
+            "en bomresa."
+        ),
+    )
 
     computed_at = models.DateTimeField(db_default=models.functions.Now())
     updated_at = models.DateTimeField(db_default=models.functions.Now())
@@ -283,6 +392,14 @@ class StopArea(models.Model):
 
     gid = models.CharField(max_length=40, primary_key=True)
     operator = models.CharField(max_length=4, choices=OPERATOR_CHOICES, db_index=True)
+    site_id = models.CharField(
+        max_length=20, blank=True, db_index=True,
+        help_text=(
+            "SL:s site-id, ett ANNAT id-rum än gid (som är stop_area-id). "
+            "Behövs för /v1/sites/{site_id}/departures, som är enda vägen "
+            "till 'när går nästa buss' i Stockholm. Tomt för Västtrafik."
+        ),
+    )
     name = models.CharField(max_length=160, db_index=True)
     lat = models.FloatField()
     lon = models.FloatField()
@@ -337,3 +454,95 @@ class RailAssessment(models.Model):
         # vill höja poängen ignoreras.
         self.final_score = min(self.rule_score, self.model_score)
         super().save(*args, **kwargs)
+
+
+class OpportunityFeedback(models.Model):
+    """
+    Förarens svar på ett tips: 🚕 "kör dit", 👍 "fick körning", 👎 "dött".
+
+    Egen tabell i stället för Supabases `alert_feedback`, och det är en
+    rättning, inte en dubblering: `alert_feedback.alert_id` har en
+    främmande nyckel mot `alerts(id)`, medan appen sedan flytten till
+    `opportunities` skickar ett opportunity-id. De två id-rymderna
+    överlappar inte i en enda rad (mätt: 0 av 4345), så VARJE tumme upp
+    sedan dess har avvisats av databasen -- tyst, i en try/catch som
+    returnerar `{'error': ...}` och inget mer. Tabellen har noll rader.
+
+    Den här nyckeln pekar på det tipset faktiskt är. Utan verklig feedback
+    finns inget att kalibrera poängen mot, och hela P1-raden "🚕 / 👍 / 👎
+    feedback capture" är en tom tabell.
+    """
+
+    class Verdict(models.TextChoices):
+        HEADING = "heading", "Kör dit"
+        FARE = "fare", "Fick körning"
+        EMPTY = "empty", "Ingen kund"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    opportunity = models.ForeignKey(
+        Opportunity, on_delete=models.CASCADE, related_name="feedback"
+    )
+    device_token = models.TextField(db_index=True)
+    verdict = models.CharField(max_length=10, choices=Verdict.choices)
+    created_at = models.DateTimeField(db_default=models.functions.Now())
+
+    class Meta:
+        db_table = "opportunity_feedback"
+        ordering = ["-created_at"]
+        constraints = [
+            # En förare kan mena både "kör dit" och senare "fick körning"
+            # om samma tips -- men samma omdöme två gånger är en
+            # dubbeltryckning, inte två observationer.
+            models.UniqueConstraint(
+                fields=["opportunity", "device_token", "verdict"],
+                name="uniq_feedback_per_device_verdict",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.verdict} · {self.opportunity_id}"
+
+
+class SourceStatus(models.Model):
+    """
+    Senaste hämtningen per källa -- se core/health.py för varför.
+
+    `ok=False` med ett meddelande är det enda som skiljer "källan svarade
+    att allt är lugnt" från "källan svarade inte alls". Utan raden är de
+    två tillstånden identiska i databasen.
+    """
+
+    source = models.CharField(
+        max_length=40, primary_key=True,
+        help_text="trafikverket_rail, trafiklab, sl, vt, trafikverket, smhi",
+    )
+    ok = models.BooleanField(default=True)
+    message = models.TextField(blank=True)
+    events = models.IntegerField(default=0, help_text="Antal larm källan gav.")
+    written = models.IntegerField(default=0, help_text="Antal tips som skrevs.")
+    duration_ms = models.IntegerField(default=0)
+    detail = models.JSONField(
+        default=dict, blank=True,
+        help_text=(
+            "Utfall per delkälla, när källan har flera. Trafiklab pollar "
+            "femton regionala operatörer och en av dem kan 404:a utan att "
+            "hämtningen som helhet misslyckas -- utan det här fältet syns "
+            "bara summan, och en region som tyst försvunnit ser ut som en "
+            "region utan störningar."
+        ),
+    )
+    checked_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "source_status"
+        verbose_name_plural = "source statuses"
+        ordering = ["source"]
+
+    def __str__(self) -> str:
+        return f"{self.source}: {'ok' if self.ok else 'FEL'} ({self.checked_at:%H:%M})"
+
+    @property
+    def age_minutes(self) -> int:
+        from django.utils import timezone
+
+        return int((timezone.now() - self.checked_at).total_seconds() // 60)

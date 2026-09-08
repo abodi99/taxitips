@@ -18,28 +18,62 @@
   </nav>
 
   <main class="shell">
-    <h1>Rulla in ert taxibolag</h1>
-    <p class="lead">Skapa konto, välj orter, koppla förartelefoner. Förarna öppnar en länk — klart.</p>
+    <div class="stepper" aria-label="Skapa konto steg">
+      <div class="step-item active" data-step="1">Bolag</div>
+      <div class="step-item" data-step="2">Priser</div>
+      <div class="step-item" data-step="3">Konto</div>
+    </div>
+
+    <h1>Kom igång med Taxi Tips</h1>
+    <p class="lead">Skapa ett bolagskonto. Därefter kopplar du varje förartelefon med en enkel kod.</p>
 
     <form id="signupForm">
-      <label>Organisationsnummer / personnummer
-        <input name="orgNumber" id="orgNumber" inputmode="numeric" placeholder="XXXXXX-XXXX eller personnummer" autocomplete="off" />
-      </label>
-      <p class="muted" id="lookupHint" style="margin:-0.4rem 0 0.85rem">AB/HB: org.nr. Enskild firma: ditt personnummer (10 eller 12 siffror). Vi hämtar namn automatiskt om det finns hos Bolagsverket.</p>
-      <label>Företagsnamn
-        <input name="name" id="companyName" required placeholder="t.ex. Malmö Taxi AB" />
-      </label>
-      <label>E-post
-        <input name="email" type="email" required autocomplete="email" />
-      </label>
-      <label>Lösenord
-        <input name="password" type="password" required minlength="6" autocomplete="new-password" />
-      </label>
-      <label>Antal enheter
-        <input name="seats" type="number" min="1" value="1" required />
-      </label>
-      <div class="price-box" id="priceBox">—</div>
-      <button class="btn btn-primary" type="submit">Starta gratisprov</button>
+      <div class="step-panel active" data-panel="1">
+        <label>Organisationsnummer / personnummer
+          <input name="orgNumber" id="orgNumber" inputmode="numeric" placeholder="XXXXXX-XXXX eller personnummer" autocomplete="off" />
+        </label>
+        <p class="muted" id="lookupHint" style="margin:-0.4rem 0 0.85rem">AB/HB: org.nr. Enskild firma: ditt personnummer (10 eller 12 siffror). Vi hämtar namn automatiskt om det finns hos Bolagsverket.</p>
+        <label>Företagsnamn
+          <input name="name" id="companyName" required placeholder="t.ex. Malmö Taxi AB" />
+        </label>
+        <div class="wizard-nav">
+          <button class="btn btn-primary" type="button" data-next>Fortsätt</button>
+        </div>
+      </div>
+
+      <div class="step-panel" data-panel="2">
+        <label>Antal förartelefoner
+          <input name="seats" type="number" min="1" value="1" required />
+        </label>
+        <div class="price-box" id="priceBox">—</div>
+        <ul class="benefits-list">
+          <li>Betala bara för de telefoner du använder.</li>
+          <li>Fler enheter ger lägre pris per telefon.</li>
+          <li>Du kan lägga till eller ta bort enheter senare.</li>
+        </ul>
+        <div class="wizard-nav">
+          <button class="btn btn-secondary" type="button" data-back>Tillbaka</button>
+          <button class="btn btn-primary" type="button" data-next>Fortsätt</button>
+        </div>
+      </div>
+
+      <div class="step-panel" data-panel="3">
+        <label>E-post
+          <input name="email" type="email" required autocomplete="email" />
+        </label>
+        <label>Lösenord
+          <input name="password" type="password" required minlength="6" autocomplete="new-password" />
+        </label>
+        <div class="card" style="margin-bottom:1rem;">
+          <h3 style="margin:0 0 0.35rem;">Så fungerar det</h3>
+          <p class="muted" style="margin:0;">Du får 14 dagar gratis. Därefter konverteras kontot automatiskt till en betald prenumeration för de telefoner du valt. Sedan delar du en kod med varje förare som ska koppla sin telefon.</p>
+        </div>
+        <div class="wizard-nav">
+          <button class="btn btn-secondary" type="button" data-back>Tillbaka</button>
+          <button class="btn btn-primary" type="submit">Starta gratis</button>
+        </div>
+      </div>
+
       <p class="error" id="error" hidden></p>
     </form>
     <p class="muted" style="margin-top:1rem">Har ni redan konto? <a href="/login.html"><u>Logga in</u></a></p>
@@ -51,8 +85,64 @@
     const orgInput = document.getElementById("orgNumber");
     const nameInput = document.getElementById("companyName");
     const lookupHint = document.getElementById("lookupHint");
+    const stepPanels = Array.from(document.querySelectorAll(".step-panel"));
+    const stepItems = Array.from(document.querySelectorAll(".step-item"));
+    const nextButtons = Array.from(document.querySelectorAll("[data-next]"));
+    const backButtons = Array.from(document.querySelectorAll("[data-back]"));
     let pricing = null;
     let lookupTimer = null;
+    let currentStep = 1;
+
+    function setStep(step) {
+      currentStep = Math.max(1, Math.min(3, step));
+      stepPanels.forEach((panel) => {
+        panel.classList.toggle("active", Number(panel.dataset.panel) === currentStep);
+      });
+      stepItems.forEach((item) => {
+        const itemStep = Number(item.dataset.step);
+        item.classList.toggle("active", itemStep === currentStep);
+        item.classList.toggle("done", itemStep < currentStep);
+      });
+      const activePanel = stepPanels.find((panel) => Number(panel.dataset.panel) === currentStep);
+      if (activePanel) {
+        const firstInput = activePanel.querySelector("input, select, textarea, button");
+        if (firstInput && firstInput.tagName !== "BUTTON") {
+          firstInput.focus();
+        }
+      }
+    }
+
+    function validateStep(step) {
+      if (step === 1) {
+        if (!nameInput.value.trim()) {
+          nameInput.focus();
+          nameInput.reportValidity();
+          return false;
+        }
+      }
+      if (step === 2) {
+        const seats = Math.max(1, Number(seatsInput.value) || 1);
+        if (seats < 1) {
+          seatsInput.focus();
+          seatsInput.reportValidity();
+          return false;
+        }
+      }
+      return true;
+    }
+
+    nextButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        if (!validateStep(currentStep)) return;
+        setStep(currentStep + 1);
+      });
+    });
+
+    backButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        setStep(currentStep - 1);
+      });
+    });
 
     async function loadPricing() {
       const res = await fetch("/api/pricing");
@@ -63,9 +153,15 @@
     function renderPrice() {
       if (!pricing) return;
       const seats = Math.max(1, Number(seatsInput.value) || 1);
-      const unit = seats >= pricing.fleetMin ? pricing.fleetPerDevice : pricing.perDevice;
-      const total = unit * seats;
-      priceBox.innerHTML = `<strong>${seats} enhet${seats > 1 ? "er" : ""}</strong> · ${unit} kr/enhet/mån · <strong>${total} kr/mån</strong><br><span class="muted">${pricing.trialDays} dagar gratis först. Ägaren av Taxi Tips betalar aldrig.</span>`;
+      const threshold = Number(pricing.fleetMin) || 1;
+      const regularUnit = Number(pricing.perDevice) || 199;
+      const fleetUnit = Number(pricing.fleetPerDevice) || regularUnit;
+      const effectiveUnit = seats >= threshold ? fleetUnit : regularUnit;
+      const total = effectiveUnit * seats;
+      const lowerRateText = threshold > 1
+        ? `Vid ${threshold} eller fler telefoner blir priset ${fleetUnit} kr/telefon/mån.`
+        : "Fler enheter ger billigare pris per telefon.";
+      priceBox.innerHTML = `<strong>${seats} förartelefon${seats > 1 ? "er" : ""}</strong> · <strong>${total} kr/mån</strong><br><span class="muted">${pricing.trialDays || 14} dagar gratis. Därefter blir prenumerationen betald och kostnaden blir ${effectiveUnit} kr per telefon och månad. ${lowerRateText}</span>`;
     }
 
     async function lookupOrg() {
@@ -102,6 +198,7 @@
       lookupTimer = setTimeout(lookupOrg, 450);
     });
     seatsInput.addEventListener("input", renderPrice);
+    setStep(1);
     loadPricing();
 
     document.getElementById("signupForm").addEventListener("submit", async (e) => {

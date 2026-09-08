@@ -1,6 +1,14 @@
 const { classifyMode } = require("./mode");
 
 /**
+ * Modes that strand passengers the way a train does: no vehicle, no way home
+ * on foot. SL reports metro and tram distinctly (mode.js keeps them, rather
+ * than flattening to "train", so the driver-facing label stays accurate) but
+ * they earn the same severity tiers.
+ */
+const RAIL_LIKE_MODES = new Set(["train", "metro", "tram"]);
+
+/**
  * A single cancelled train departure is NOT the same thing as a whole line being
  * down -- if another train runs a few minutes later, nobody is actually stranded.
  * Trafiklab's real alert text distinguishes these cases explicitly:
@@ -65,7 +73,11 @@ function classifySeverity(alert, taxi) {
   const mediumish = taxi.mediumish === true;
   const text = `${alert.header || ""} ${alert.description || ""}`;
 
-  if (mode === "train") {
+  // metro and tram tier exactly like train: what matters for taxi demand is
+  // whether people are left without a way home, and a stopped underground or
+  // tram line strands them identically. They stay distinct in
+  // opportunities.mode so the driver still reads "Tunnelbana" not "Tåg".
+  if (RAIL_LIKE_MODES.has(mode)) {
     if (serious) {
       if (isWholeLineStop(text) && !hasStatedAlternative(text)) {
         // Genuinely no service on the line -- the real stranded-passenger case.
@@ -81,7 +93,22 @@ function classifySeverity(alert, taxi) {
       // confidently tell whether this is a full stop or a single cancellation.
       // Score conservatively and flag the uncertainty rather than assuming the
       // worse (and more score-inflating) case.
-      return { mode, severityTier: "line_paused", score: Math.max(taxi.score, 70), confidence: "low" };
+      //
+      // A source that publishes its own priority can resolve part of that
+      // uncertainty. SL's importance_level (measured spread 2/5/7) is an
+      // editorial ranking by the operator's own staff: a 7 means they judged
+      // this worth showing first. That corroborates "this is a real, serious
+      // disruption" -- it says nothing about whether the whole LINE stopped,
+      // which is what the tier claims. So it lifts confidence and leaves the
+      // score alone. Mapping it into demand_score would import a scale that
+      // measures something else entirely (see sl.js).
+      const importance = Number(alert.sl?.importanceLevel) || 0;
+      return {
+        mode,
+        severityTier: "line_paused",
+        score: Math.max(taxi.score, 70),
+        confidence: importance >= 7 ? "medium" : "low",
+      };
     }
     if (mediumish) {
       return { mode, severityTier: "line_delayed", score: Math.min(taxi.score, 45), confidence: "high" };
