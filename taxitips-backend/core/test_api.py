@@ -294,6 +294,55 @@ class MarketHorizonTests(ApiTestCase):
         self.assertEqual(self.get_alerts()["alerts"], [])
 
 
+class CorsTests(ApiTestCase):
+    """
+    Preflight. Appen skickar alltid X-Device-Token eller Authorization,
+    vilket gör anropet icke-enkelt: webbläsaren frågar med OPTIONS först.
+    Vyerna är @require_GET och svarade 405, så Flutter web fick "Failed to
+    fetch" på varje hämtning -- osynligt i loggen, eftersom 405 är ett
+    normalt svar, och osynligt för mobilappen, som aldrig gör en preflight.
+    """
+
+    ORIGIN = "http://localhost:5180"
+
+    def options(self, path="/api/alerts", origin=None):
+        return self.client.options(
+            path,
+            headers={
+                "Origin": origin or self.ORIGIN,
+                "Access-Control-Request-Method": "GET",
+                "Access-Control-Request-Headers": "x-device-token",
+            },
+        )
+
+    @override_settings(DEBUG=True)
+    def test_preflight_is_answered_not_rejected(self):
+        res = self.options()
+        self.assertEqual(res.status_code, 204)
+        self.assertEqual(res["Access-Control-Allow-Origin"], self.ORIGIN)
+        self.assertIn("X-Device-Token", res["Access-Control-Allow-Headers"])
+
+    @override_settings(DEBUG=True)
+    def test_the_actual_request_also_carries_the_header(self):
+        opportunity()
+        res = self.client.get(
+            "/api/alerts", MALMO,
+            headers={"Origin": self.ORIGIN, "x-device-token": DEVICE_TOKEN},
+        )
+        self.assertEqual(res["Access-Control-Allow-Origin"], self.ORIGIN)
+
+    @override_settings(DEBUG=False, APP_API_ALLOWED_ORIGINS=["http://localhost:4000"])
+    def test_an_unlisted_origin_gets_no_headers_in_production(self):
+        res = self.options(origin="https://någon-annan.example")
+        self.assertNotIn("Access-Control-Allow-Origin", res)
+
+    @override_settings(DEBUG=False, APP_API_ALLOWED_ORIGINS=["http://localhost:4000"])
+    def test_localhost_is_not_waved_through_outside_debug(self):
+        # localhost-undantaget i _cors() gäller BARA i DEBUG. I produktion
+        # är svaren entitlement-gated data och listan är listan.
+        self.assertNotIn("Access-Control-Allow-Origin", self.options())
+
+
 class RoadContextTests(ApiTestCase):
     def test_road_events_are_context_not_list_items(self):
         # 129 vägrader mot 5 kollektivtrafiktips var det uppmätta

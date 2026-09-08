@@ -113,6 +113,19 @@ from auth.users where email = 'test@taxitips.se';
 Förarvägen behöver inget konto alls — token
 `9a9bf67c6e8885f44c831232afd314788d86067b7ddfcced` finns i seeden.
 
+Två fällor som båda gav samma symptom ("inloggad men ser inget"), båda
+åtgärdade men värda att känna igen om de kommer tillbaka:
+
+* **Preflight.** Appen skickar `X-Device-Token`/`Authorization`, vilket gör
+  anropet icke-enkelt: webbläsaren frågar med OPTIONS först. Vyerna är
+  `@require_GET` och svarade 405 → "Failed to fetch" på varje hämtning, utan
+  spår i Djangos logg. Mobilappen märkte inget, den gör aldrig en preflight.
+  Löst av `core/middleware.CorsPreflightMiddleware`.
+* **Saknade främmande nycklar.** `company_members` hade ingen FK till
+  `companies`, så PostgREST vägrade bädda in bolaget i `me()` (PGRST200) och
+  appen visade "Inget bolag". Löst av migration
+  `20260908000002_domain_foreign_keys.sql`.
+
 ### Appen mot Django (Spår B)
 
 `--dart-define=API_BASE_URL=...` styr var appen hämtar tips. Utan den går

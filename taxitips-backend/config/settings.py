@@ -56,6 +56,9 @@ INSTALLED_APPS = [
 
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
+    # Före allt annat: en preflight ska besvaras, inte autentiseras eller
+    # ruttas. Se core/middleware.py.
+    "core.middleware.CorsPreflightMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
