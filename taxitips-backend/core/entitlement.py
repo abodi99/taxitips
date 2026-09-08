@@ -15,11 +15,24 @@ all data -- vilket såg ut precis som "inga störningar just nu". Se
 20260902000005_entitlement_for_authenticated_owners.sql. En port som bara
 tog med väg 1 hade återinfört buggen.
 
-JWT:n verifieras för hand mot Supabases HS256-hemlighet. Ett bibliotek
-till hade betytt ett beroende för trettio rader, och de trettio raderna är
-lättare att granska än biblioteksberoendets uppgraderingskedja. Bara HS256
-accepteras -- `alg: none` och asymmetriska algoritmer avvisas innan
-signaturen ens beräknas.
+JWT:n verifieras för hand. Två signeringsformer stöds, för att Supabase
+bytte under fötterna på oss:
+
+* **ES256/RS256 via JWKS** -- moderna Supabase-projekt (och en lokal
+  `supabase start` idag) signerar asymmetriskt med en roterande nyckel som
+  publiceras på `/auth/v1/.well-known/jwks.json`. Det här är normalfallet.
+* **HS256 mot den delade hemligheten** -- äldre projekt och den legacy-
+  hemlighet `SUPABASE_JWT_SECRET` bär.
+
+`alg: none` avvisas alltid, och algoritmen läses aldrig från token för att
+välja *om* signaturen ska kontrolleras -- bara vilken kontroll som gäller.
+
+Skälet att det står här och inte i ett bibliotek: koden är trettio rader
+och lättare att granska än ett beroendes uppgraderingskedja. Skälet att
+BÅDA formerna finns: en implementation som bara tog HS256 (den ursprungliga
+här) släppte igenom exakt noll inloggade ägare mot ett modernt Supabase --
+och felet syntes som "inga störningar just nu", precis som buggen
+20260902000005 en gång rättade.
 """
 
 from __future__ import annotations
@@ -29,9 +42,11 @@ import hashlib
 import hmac
 import json
 import logging
+import threading
 import time
 from dataclasses import dataclass
 
+import requests
 from django.conf import settings
 
 from billing.models import Company, CompanyMember, Device
@@ -65,23 +80,101 @@ def _b64url_decode(segment: str) -> bytes:
     return base64.urlsafe_b64decode(segment + "=" * (-len(segment) % 4))
 
 
+def _b64url_int(segment: str) -> int:
+    return int.from_bytes(_b64url_decode(segment), "big")
+
+
+# JWKS hämtas en gång och cachas per kid. Nyckeln roterar, så en okänd kid
+# tvingar en ny hämtning -- men bara en, och aldrig oftare än
+# _JWKS_MIN_REFRESH, så en trasig token inte kan användas för att hamra
+# Supabase.
+_JWKS_MIN_REFRESH = 60
+_jwks_cache: dict[str, dict] = {}
+_jwks_fetched_at = 0.0
+_jwks_lock = threading.Lock()
+
+
+def _jwks_key(kid: str) -> dict | None:
+    global _jwks_fetched_at
+    key = _jwks_cache.get(kid)
+    if key:
+        return key
+    with _jwks_lock:
+        if kid in _jwks_cache:
+            return _jwks_cache[kid]
+        if time.monotonic() - _jwks_fetched_at < _JWKS_MIN_REFRESH:
+            return None
+        url = str(getattr(settings, "SUPABASE_URL", "")).rstrip("/")
+        if not url:
+            return None
+        try:
+            res = requests.get(f"{url}/auth/v1/.well-known/jwks.json", timeout=5)
+            res.raise_for_status()
+            for k in res.json().get("keys") or []:
+                if k.get("kid"):
+                    _jwks_cache[k["kid"]] = k
+        except Exception as exc:
+            log.warning("entitlement: kunde inte hämta JWKS: %s", exc)
+        _jwks_fetched_at = time.monotonic()
+    return _jwks_cache.get(kid)
+
+
+def _verify_asymmetric(key: dict, alg: str, signing_input: bytes, signature: bytes) -> bool:
+    """ES256 (EC P-256) och RS256, med `cryptography`. Kastar aldrig."""
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.hazmat.primitives.asymmetric import ec, padding, rsa, utils
+
+    try:
+        if alg == "ES256" and key.get("kty") == "EC":
+            public = ec.EllipticCurvePublicNumbers(
+                _b64url_int(key["x"]), _b64url_int(key["y"]), ec.SECP256R1()
+            ).public_key()
+            # JWS bär signaturen som råa r||s; cryptography vill ha DER.
+            half = len(signature) // 2
+            der = utils.encode_dss_signature(
+                int.from_bytes(signature[:half], "big"),
+                int.from_bytes(signature[half:], "big"),
+            )
+            public.verify(der, signing_input, ec.ECDSA(hashes.SHA256()))
+            return True
+        if alg == "RS256" and key.get("kty") == "RSA":
+            public = rsa.RSAPublicNumbers(
+                _b64url_int(key["e"]), _b64url_int(key["n"])
+            ).public_key()
+            public.verify(signature, signing_input, padding.PKCS1v15(), hashes.SHA256())
+            return True
+    except Exception:
+        return False
+    return False
+
+
 def verify_supabase_jwt(token: str) -> dict | None:
     """Verifierad payload, eller None. Kastar aldrig."""
-    secret = getattr(settings, "SUPABASE_JWT_SECRET", "")
-    if not secret or not token:
+    if not token:
         return None
     try:
         header_b64, payload_b64, signature_b64 = token.split(".")
         header = json.loads(_b64url_decode(header_b64))
-        if header.get("alg") != "HS256":
+        alg = str(header.get("alg") or "")
+        signing_input = f"{header_b64}.{payload_b64}".encode()
+        signature = _b64url_decode(signature_b64)
+
+        if alg == "HS256":
+            secret = getattr(settings, "SUPABASE_JWT_SECRET", "")
+            if not secret:
+                return None
+            expected = hmac.new(secret.encode(), signing_input, hashlib.sha256).digest()
+            if not hmac.compare_digest(expected, signature):
+                return None
+        elif alg in ("ES256", "RS256"):
+            key = _jwks_key(str(header.get("kid") or ""))
+            if not key or not _verify_asymmetric(key, alg, signing_input, signature):
+                return None
+        else:
+            # Inklusive "none". En okänd algoritm är inte ett skäl att
+            # hoppa över kontrollen.
             return None
-        expected = hmac.new(
-            secret.encode(),
-            f"{header_b64}.{payload_b64}".encode(),
-            hashlib.sha256,
-        ).digest()
-        if not hmac.compare_digest(expected, _b64url_decode(signature_b64)):
-            return None
+
         payload = json.loads(_b64url_decode(payload_b64))
     except Exception:
         return None

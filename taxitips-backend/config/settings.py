@@ -175,6 +175,9 @@ CELERY_BEAT_SCHEDULE = {
 # ägares access token (core/entitlement.py). Utan den fungerar förarens
 # token-väg som vanligt, men en inloggad ägare utan parad enhet får tomt
 # flöde -- samma bugg som 20260902000005 rättade i SQL-versionen.
+# Varifrån JWKS hämtas när Supabase signerar asymmetriskt (ES256), vilket
+# moderna projekt och en lokal `supabase start` gör som standard.
+SUPABASE_URL = os.environ.get("SUPABASE_URL", "http://127.0.0.1:54321")
 SUPABASE_JWT_SECRET = os.environ.get(
     "SUPABASE_JWT_SECRET", "super-secret-jwt-token-with-at-least-32-characters-long"
 ) if DEBUG else os.environ.get("SUPABASE_JWT_SECRET", "")
@@ -183,7 +186,13 @@ SUPABASE_JWT_SECRET = os.environ.get(
 APP_API_ALLOWED_ORIGINS = [
     o.strip()
     for o in os.environ.get(
-        "APP_API_ALLOWED_ORIGINS", "http://localhost:4000,http://127.0.0.1:4000"
+        "APP_API_ALLOWED_ORIGINS",
+        # 4000 = pipeline-visualiseraren, 5173 = `flutter run -d chrome
+        # --web-port 5173`. Inte 5000: macOS AirPlay Receiver sitter där.
+        # Flutter web är den enda klienten som omfattas av CORS alls --
+        # mobilappen skickar ingen Origin.
+        "http://localhost:4000,http://127.0.0.1:4000,"
+        "http://localhost:5173,http://127.0.0.1:5173"
     ).split(",")
     if o.strip()
 ]

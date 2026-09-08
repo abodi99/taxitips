@@ -69,6 +69,11 @@ cd ../taxitips-pipeline-viz && node server.js           # http://localhost:4000
 cd ../taxitips-app && flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8000
 ```
 
+I Chrome: lägg till `-d chrome --web-port 5180` plus
+`--dart-define=SUPABASE_URL=http://127.0.0.1:54321` och
+`--dart-define=SUPABASE_ANON_KEY=<PUBLISHABLE_KEY ur supabase status>`.
+Testkonto och exakta kommandon i `DEV.md`.
+
 Fyll databasen (en källa per kommando):
 
 ```bash
@@ -135,7 +140,10 @@ Var och en av dem är skriven efter att ha gått sönder på riktigt.
    tom sträng hade matchat ingen marknad och tipset försvunnit tyst.
 6. **Entitlement har TVÅ vägar**: förartoken och inloggad ägare via
    Supabase-JWT. Att bara ta med den första låser ute varje ägare utan parad
-   enhet, och det ser ut precis som "inga störningar just nu".
+   enhet, och det ser ut precis som "inga störningar just nu". JWT:n kan vara
+   **ES256** (moderna Supabase-projekt signerar asymmetriskt med en roterande
+   nyckel från JWKS) eller HS256 mot den delade hemligheten -- stödet för
+   bara det senare släppte igenom noll inloggade ägare.
 7. **Tröskelvärden bor i `thresholds.py`.** Talet 50 fanns i fyra kopior i
    tre språk. `severity_labels.dart` har en kvar, som dokumenterad fallback
    för cachead data utan `level`. Lägg inte till en femte.

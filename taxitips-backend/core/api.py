@@ -49,7 +49,15 @@ def _cors(response, request):
 
     allowed = [o for o in getattr(settings, "APP_API_ALLOWED_ORIGINS", []) if o]
     origin = request.headers.get("Origin", "")
-    if origin and origin in allowed:
+    # I DEBUG släpps vilken localhost-port som helst in: `flutter run -d
+    # chrome` väljer port själv, och att jaga porten i en lista är en
+    # felkälla utan säkerhetsvärde på en maskin där allt ändå kör lokalt.
+    # I produktion gäller bara den explicita listan -- svaren är
+    # entitlement-gated data, och "*" hör inte hemma framför sådan.
+    local = settings.DEBUG and (
+        origin.startswith("http://localhost:") or origin.startswith("http://127.0.0.1:")
+    )
+    if origin and (origin in allowed or local):
         response["Access-Control-Allow-Origin"] = origin
         response["Vary"] = "Origin"
         response["Access-Control-Allow-Headers"] = "X-Device-Token, Authorization, Content-Type"

@@ -76,6 +76,43 @@ Visualiseraren läser från Django (`VIZ_BACKEND` i `.env`). Tas den raden
 bort faller den tillbaka på Supabase — alltså Node-workerns data, med den
 gamla poängsättningen. Bra för att jämföra före/efter.
 
+### Appen i Chrome
+
+```bash
+cd taxitips-app
+flutter run -d chrome --web-port 5180 \
+  --dart-define=API_BASE_URL=http://127.0.0.1:8000 \
+  --dart-define=SUPABASE_URL=http://127.0.0.1:54321 \
+  --dart-define=SUPABASE_ANON_KEY=$(cd ../taxitips-api && supabase status -o json | python3 -c 'import sys,json;print(json.load(sys.stdin)["PUBLISHABLE_KEY"])')
+```
+
+Inte port 5000 — macOS AirPlay Receiver sitter där. I DEBUG släpper
+Django in vilken `localhost`-port som helst (se `core/api.py:_cors`), så
+porten spelar ingen roll så länge den är ledig.
+
+**Testkonto (bara lokalt):** `test@taxitips.se` / `taxitips123`, ägare i
+Taxi Tips Demo AB. Skapa om det efter en `supabase db reset`:
+
+```bash
+cd taxitips-api
+SERVICE=$(supabase status -o json | python3 -c 'import sys,json;print(json.load(sys.stdin)["SERVICE_ROLE_KEY"])')
+curl -s -X POST http://127.0.0.1:54321/auth/v1/admin/users \
+  -H "apikey: $SERVICE" -H "Authorization: Bearer $SERVICE" -H "Content-Type: application/json" \
+  -d '{"email":"test@taxitips.se","password":"taxitips123","email_confirm":true,"user_metadata":{"name":"Testkonto"}}'
+```
+
+Koppla sedan kontot till demobolaget, annars är det inloggat men utan
+behörighet — vilket ser ut som "inga störningar just nu":
+
+```sql
+insert into company_members (id, company_id, user_id, role, status, created_at)
+select gen_random_uuid(), '00000000-0000-4000-8000-000000000001', id, 'company_owner', 'active', now()
+from auth.users where email = 'test@taxitips.se';
+```
+
+Förarvägen behöver inget konto alls — token
+`9a9bf67c6e8885f44c831232afd314788d86067b7ddfcced` finns i seeden.
+
 ### Appen mot Django (Spår B)
 
 `--dart-define=API_BASE_URL=...` styr var appen hämtar tips. Utan den går

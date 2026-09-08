@@ -176,6 +176,87 @@ class EntitlementTests(ApiTestCase):
                 self.assertFalse(body["entitled"], label)
 
 
+class AsymmetricJwtTests(ApiTestCase):
+    """
+    Supabase signerar numera med ES256 och en roterande nyckel, inte med
+    den delade HS256-hemligheten. En verifiering som bara tog HS256 släppte
+    igenom exakt NOLL inloggade ägare -- och felet syntes som "inga
+    störningar just nu", precis som buggen 20260902000005 rättade en gång.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from cryptography.hazmat.primitives.asymmetric import ec
+
+        import core.entitlement as ent
+
+        self.key = ec.generate_private_key(ec.SECP256R1())
+        numbers = self.key.public_key().public_numbers()
+
+        def b64(n):
+            return base64.urlsafe_b64encode(n.to_bytes(32, "big")).decode().rstrip("=")
+
+        ent._jwks_cache.clear()
+        ent._jwks_cache["test-kid"] = {
+            "kty": "EC", "crv": "P-256", "alg": "ES256", "kid": "test-kid",
+            "x": b64(numbers.x), "y": b64(numbers.y),
+        }
+        self.addCleanup(ent._jwks_cache.clear)
+
+        self.user_id = uuid.uuid4()
+        CompanyMember.objects.create(
+            id=uuid.uuid4(), company_id=self.company.id, user_id=self.user_id,
+            role="owner", status="active", created_at=timezone.now(),
+        )
+
+    def es256(self, sub=None, exp_offset=3600, kid="test-kid"):
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import ec, utils
+
+        def seg(data):
+            return base64.urlsafe_b64encode(json.dumps(data).encode()).decode().rstrip("=")
+
+        head = seg({"alg": "ES256", "typ": "JWT", "kid": kid})
+        body = seg({"sub": str(sub or self.user_id), "exp": int(time.time()) + exp_offset})
+        der = self.key.sign(f"{head}.{body}".encode(), ec.ECDSA(hashes.SHA256()))
+        r, s_ = utils.decode_dss_signature(der)
+        raw = r.to_bytes(32, "big") + s_.to_bytes(32, "big")
+        return f"{head}.{body}.{base64.urlsafe_b64encode(raw).decode().rstrip('=')}"
+
+    def get(self, token):
+        return self.client.get(
+            "/api/alerts", MALMO, headers={"Authorization": f"Bearer {token}"}
+        ).json()
+
+    def test_an_es256_token_signed_by_the_published_key_is_accepted(self):
+        opportunity()
+        body = self.get(self.es256())
+        self.assertTrue(body["entitled"])
+        self.assertEqual(len(body["alerts"]), 1)
+
+    def test_a_token_signed_by_another_key_is_rejected(self):
+        from cryptography.hazmat.primitives.asymmetric import ec
+
+        opportunity()
+        self.key = ec.generate_private_key(ec.SECP256R1())  # fel nyckel
+        self.assertFalse(self.get(self.es256())["entitled"])
+
+    # SUPABASE_URL tomt: en okänd kid får annars testet att gå ut på
+    # nätet efter JWKS. Testet handlar om avvisningen, inte om hämtningen.
+    @override_settings(SUPABASE_URL="")
+    def test_an_unknown_kid_is_rejected(self):
+        opportunity()
+        self.assertFalse(self.get(self.es256(kid="fabricerad"))["entitled"])
+
+    def test_an_expired_es256_token_is_rejected(self):
+        opportunity()
+        self.assertFalse(self.get(self.es256(exp_offset=-60))["entitled"])
+
+    def test_alg_none_is_still_refused(self):
+        opportunity()
+        self.assertFalse(self.get(make_jwt(str(self.user_id), alg="none"))["entitled"])
+
+
 class MarketHorizonTests(ApiTestCase):
     def test_distant_opportunity_is_outside_the_market(self):
         opportunity(title="Göteborgståg", lat=57.7089, lon=11.9746)  # ~230 km
