@@ -18,6 +18,10 @@ taxitips-app/   — Flutter app: iOS + Android, primary product, includes an adm
 taxitips-web/   — marketing site AND a real admin/company dashboard portal (admin.html, dashboard.html, portal.css) — not marketing-only
 ```
 
+**Läs [AGENTS.md](AGENTS.md) först** — den är verktygsneutral och beskriver
+dagsläget: arkitektur, körkommandon, invarianter och vad som står näst på
+tur. Den här filen är den ursprungliga briefingen och prioritetsordningen.
+
 Read the actual code before making changes — see [TAXITIPS_STATUS.md](TAXITIPS_STATUS.md) for a verified inventory of what currently exists, what's stubbed, and known bugs. Re-read it before trusting any specific claim about current state; it reflects a point-in-time inspection and will drift as fixes land.
 
 ---

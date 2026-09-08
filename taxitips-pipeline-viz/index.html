@@ -111,6 +111,7 @@ const SOURCE_SV = {
   // därför den råa koden i stället för operatörens namn.
   vt: 'Västtrafik', vasttrafik: 'Västtrafik'
 };
+const TIER_MODE_SV={train:'tåg',metro:'tunnelbana',tram:'spårvagn',bus:'buss',boat:'båt',road:'väg'};
 const HIGH=['line_paused'], MED=['line_delayed','vehicle_cancelled'];
 const NOTIFY_TIERS=['line_paused','vehicle_cancelled','road_accident_or_closure'];
 // Sätts från backendens /api/config (via /api/pipeline) så snart datan är
@@ -375,6 +376,92 @@ function renderOperativeEvents(ops){
   <p class="foot" style="margin-top:10px"><b>Om det är värt att koppla in:</b> <code>EventSection</code> ger en bansträcka (två stationssignaturer, samma register som <code>fetchStations()</code> redan slår upp) och <code>EventType.Description</code> ger en namngiven orsak — något dagens <code>trafikverketRail.js</code> saknar helt. Det skulle kunna svara "varför" på ett tips ("Banarbete Mjölby–Motala, sedan igår") i stället för att bara härleda inställt/försenat. Kräver ingen ny nyckel, bara en ny normaliserare och en migration för att lägga till orsak-fältet på <code>opportunities</code>.</p></details>`;
 }
 
+
+/* ---------- markdown -> html, precis den delmängd dokumenten använder ----
+   Ingen extern renderare: sidan har noll beroenden idag och de här
+   dokumenten är genererade av oss själva, så delmängden är känd. Allt
+   escapas FÖRST och formateras sedan -- ordningen är det som gör att en
+   rubrik i ett dokument inte kan bli en tagg i den här vyn. */
+function mdInline(t){
+  return esc(t)
+    .replace(/`([^`]+)`/g,'<code>$1</code>')
+    .replace(/\*\*([^*]+)\*\*/g,'<b>$1</b>')
+    .replace(/(^|[\s(])\*([^*\n]+)\*/g,'$1<i>$2</i>')
+    .replace(/\[([^\]]+)\]\((https?:[^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+function mdToHtml(md){
+  const out=[]; const lines=md.split('\n');
+  let i=0, inList=false, inCode=false;
+  const closeList=()=>{ if(inList){out.push('</ul>');inList=false} };
+  while(i<lines.length){
+    const line=lines[i];
+    if(/^```/.test(line)){
+      closeList();
+      if(inCode){out.push('</pre>');inCode=false}
+      else{out.push('<pre>');inCode=true}
+      i++; continue;
+    }
+    if(inCode){ out.push(esc(line)); i++; continue; }
+
+    // Tabell: rubrikrad + separatorrad + rader
+    if(/^\s*\|/.test(line) && /^\s*\|[\s:|-]+\|\s*$/.test(lines[i+1]||'')){
+      closeList();
+      const cells=r=>r.trim().replace(/^\||\|$/g,'').split('|').map(c=>c.trim());
+      out.push('<div style="overflow-x:auto"><table>');
+      out.push('<tr>'+cells(line).map(c=>'<th>'+mdInline(c)+'</th>').join('')+'</tr>');
+      i+=2;
+      while(i<lines.length && /^\s*\|/.test(lines[i])){
+        out.push('<tr>'+cells(lines[i]).map(c=>'<td>'+mdInline(c)+'</td>').join('')+'</tr>');
+        i++;
+      }
+      out.push('</table></div>');
+      continue;
+    }
+    const h=line.match(/^(#{1,4})\s+(.*)$/);
+    if(h){
+      closeList();
+      const lvl=Math.min(h[1].length+1,4);
+      out.push(`<h${lvl} style="margin:${lvl<=2?'22px':'16px'} 0 6px">${mdInline(h[2])}</h${lvl}>`);
+      i++; continue;
+    }
+    if(/^\s*[-*]\s+/.test(line)){
+      if(!inList){out.push('<ul style="margin:6px 0 6px 18px">');inList=true}
+      out.push('<li>'+mdInline(line.replace(/^\s*[-*]\s+/,''))+'</li>');
+      i++; continue;
+    }
+    if(/^\s*\d+\.\s+/.test(line)){
+      if(!inList){out.push('<ul style="margin:6px 0 6px 18px">');inList=true}
+      out.push('<li>'+mdInline(line.replace(/^\s*/,''))+'</li>');
+      i++; continue;
+    }
+    if(/^---+$/.test(line.trim())){ closeList(); out.push('<hr style="border:0;border-top:1px solid var(--line);margin:18px 0">'); i++; continue; }
+    if(!line.trim()){ closeList(); i++; continue; }
+    closeList();
+    out.push('<p style="margin:6px 0;line-height:1.5">'+mdInline(line)+'</p>');
+    i++;
+  }
+  closeList();
+  if(inCode) out.push('</pre>');
+  return out.join('\n');
+}
+
+const DOC_LOADED={};
+async function loadDoc(details,name,elId){
+  if(!details.open||DOC_LOADED[elId]) return;
+  DOC_LOADED[elId]=true;
+  const el=document.getElementById(elId);
+  el.innerHTML='<p class="foot">Hämtar…</p>';
+  try{
+    const res=await fetch('/api/doc/'+name);
+    const text=await res.text();
+    if(!res.ok){ el.innerHTML='<div class="err">'+esc(text)+'</div>'; return; }
+    el.innerHTML=mdToHtml(text);
+  }catch(err){
+    DOC_LOADED[elId]=false;
+    el.innerHTML='<div class="err">Kunde inte hämta dokumentet: '+esc(err.message)+'</div>';
+  }
+}
+
 function render(d,ops){
   if(d.error){document.getElementById('root').innerHTML='<div class="err"><b>Fel:</b> '+esc(d.error)+'</div>';return}
   const t=d.totals, active=d.active;
@@ -616,6 +703,39 @@ function render(d,ops){
     </div></details>`;
   }
 
+  /* ---------- 6c compensation rules ---------- */
+  const comp=d.compensation||[];
+  if(comp.length){
+    const perPersonN=comp.filter(c=>c.perPerson===true).length;
+    const unknownN=comp.filter(c=>c.perPerson==null).length;
+    html+=`<details><summary><h2>6c · Ersättningsregler län för län</h2></summary>
+    <p class="sub">Lagstadgad förseningsersättning (lag 2015:953) som den ligger i databasen — alltså exakt det pipelinen använder när den sätter <code>compensation_amount_kr</code> på ett tips. En felaktig siffra syns här i stället för att bara stå fel i en motivering en förare läser upp för en resenär.</p>
+    <div class="card"><table>
+      <tr><th>Län</th><th class="num">Tröskel</th><th class="num">Tak</th><th>Gäller</th><th>Undantag</th><th class="num">Frist</th><th>Källa</th></tr>`;
+    for(const c of comp){
+      const per=c.perPerson===true?pill('high','per resenär')
+        :(c.perPerson===false?pill('low','per resa'):pill('ignore','oskrivet'));
+      const flag=/OBEKRÄFTAD|AVVIKANDE/i.test(c.note||'');
+      html+=`<tr>
+        <td><b>${esc(c.label)}</b> <span class="foot">${esc(c.region)}</span></td>
+        <td class="num">${c.thresholdMinutes} min</td>
+        <td class="num"><b>${c.capKr.toLocaleString('sv')} kr</b></td>
+        <td>${per}</td>
+        <td class="foot">${(c.excludedModes||[]).map(m=>esc(TIER_MODE_SV[m]||m)).join(', ')||'—'}</td>
+        <td class="num foot">${c.filingDeadlineDays} d</td>
+        <td class="foot">${c.sourceUrl?`<a href="${esc(c.sourceUrl)}" target="_blank" rel="noopener">villkoren</a>`:'—'}</td></tr>`;
+      if(flag){
+        const bit=(c.note.match(/(OBEKRÄFTAD[^.]*\.|AVVIKANDE[^.]*\.)/i)||[])[0]||'';
+        html+=`<tr><td colspan="7" class="foot" style="padding-top:0;color:var(--danger)">${esc(bit.slice(0,200))}</td></tr>`;
+      }
+    }
+    html+=`</table>
+    <p class="foot" style="margin-top:10px"><b>Skånetrafiken är ensam om 1/20 av prisbasbeloppet</b> — dubbelt mot alla andra, och per betalande resenär. Fyra strandsatta resenärer i Malmö är 11 840 kr i taxiersättning; samma fyra i Stockholm är 1 480 kr, eftersom SL uttryckligen skriver att beloppet inte blir högre vid samåkning. Det är därför kolumnen "Gäller" finns.</p>
+    <p class="foot"><b>${perPersonN} huvudmän skriver ut att taket gäller per resenär, ${unknownN} skriver inget alls.</b> De oskrivna lämnas oskrivna: appen påstår inget den inte kan belägga. Västtrafik säger dessutom emot sig själv på samma sida ("1 500 kr per person" och "1 500 kr per bil oavsett antal resenärer").</p>
+    <p class="foot"><b>Fjärrtåg lyder under andra regler.</b> EU 1371/2007 är upphävd sedan 2023-06-07 och ersatt av 2021/782 — och under den ersätts taxi <i>inte alls</i>. Därför rör den här tabellen bara textkällorna (SL/Västtrafik/Trafiklab), aldrig Trafikverkets järnvägsdata, som blandar regionala korttåg med fjärrtåg. Se <code>docs/transit-compensation-rules.md</code>.</p>
+    </div></details>`;
+  }
+
   /* ---------- 3.6 what the driver actually sees, per city ---------- */
   const views=Object.entries(d.driverViews||{});
   if(views.length){
@@ -803,6 +923,17 @@ function render(d,ops){
     <p style="margin:0"><b>Väghändelser är kontext, inte tips.</b> De ligger i ett eget fält i API-svaret i stället för i förarens lista (mätt: 129 vägrader mot 5 kollektivtrafiktips i Skåne). Kvar att göra: visa dem på appens karta, som är där de faktiskt gör nytta — vet man att vägen dit är avstängd ändras beslutet.</p>
   </div>
   <p class="foot" style="margin-top:20px">Hämtat ${new Date(d.generatedAt).toLocaleString('sv-SE')} från <code>${esc(d.supabaseUrl)}</code> · endast läsning</p></details>`;
+
+  /* ---------- 14/15: analysdokumenten, renderade ---------- */
+  html+=`<details ontoggle="loadDoc(this,'api-field-inventory','doc-api')">
+    <summary><h2>14 · API-inventeringen — vad källorna faktiskt innehåller</h2></summary>
+    <p class="sub">Fält för fält, med mätt ifyllnadsgrad och 19 förslag. Underlaget för det som byggts de senaste dagarna: väghändelsernas starttid, avstängningarnas allvarlighet, ersättningskoden ANA007, SL:s avgångar. Läses direkt från <code>docs/api-field-inventory.md</code> — filen är sanningen, inte den här sidan.</p>
+    <div class="card" id="doc-api"><p class="foot">Fäll ut för att läsa.</p></div></details>`;
+
+  html+=`<details ontoggle="loadDoc(this,'transit-compensation-rules','doc-comp')">
+    <summary><h2>15 · Ersättningsreglerna — researchen bakom siffrorna</h2></summary>
+    <p class="sub">Källbelagd research per huvudman, buss och tåg var för sig, med ordagranna citat och hämtdatum. Tabellen i avsnitt 6c visar vad databasen faktiskt använder; det här visar var siffrorna kommer ifrån och vad som fortfarande är obekräftat.</p>
+    <div class="card" id="doc-comp"><p class="foot">Fäll ut för att läsa.</p></div></details>`;
 
   html+=renderOperativeEvents(ops);
 

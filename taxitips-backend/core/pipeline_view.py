@@ -17,8 +17,10 @@ from django.utils import timezone
 from core import thresholds
 from core.api import feed_for
 from core.coverage import coverage_rows
+from core.geo import REGION_ANCHOR
 from core.models import (
     Opportunity,
+    RegionCompensationRule,
     RailAssessment,
     ScoringRule,
     SourceEvent,
@@ -152,6 +154,31 @@ def _next_departure(active: list[Opportunity]) -> dict:
             for o in top
         ],
     }
+
+
+def _compensation_rules() -> list[dict]:
+    """
+    Lagstadgad förseningsersättning som den ligger i databasen, inte som
+    den ligger i ett dokument. Skillnaden är hela poängen: sidan visar det
+    pipelinen FAKTISKT använder när den sätter compensation_amount_kr på
+    ett tips, så en felaktig siffra syns här i stället för att bara stå
+    fel i en motivering en förare läser upp för en resenär.
+    """
+    return [
+        {
+            "region": r.region,
+            "label": REGION_ANCHOR.get(r.region, r.region),
+            "thresholdMinutes": r.threshold_minutes,
+            "capKr": r.taxi_cap_kr,
+            "perPerson": r.cap_per_person,
+            "excludedModes": r.excluded_modes or [],
+            "filingDeadlineDays": r.filing_deadline_days,
+            "sourceUrl": r.source_url,
+            "note": r.note,
+            "updatedAt": _iso(r.updated_at),
+        }
+        for r in RegionCompensationRule.objects.all()
+    ]
 
 
 def _driver_views(now) -> dict:
@@ -345,6 +372,7 @@ def pipeline(request):
         # Län för län: hämtas det något där, och om inte -- är det för att
         # källan saknas eller för att det är lugnt? Se core/coverage.py.
         "coverage": coverage_rows(now),
+        "compensation": _compensation_rules(),
         "nextDeparture": _next_departure(active),
         "totals": {
             "sourceEvents": SourceEvent.objects.count(),

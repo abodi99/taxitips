@@ -292,6 +292,31 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // Analysdokumenten, serverade som de ligger på disk. Vitlistade med
+  // avsikt: det här är en läsvy utan auth, och en fri sökväg hade gjort
+  // den till en filbläddrare över hela repot.
+  const DOCS = {
+    "api-field-inventory": "api-field-inventory.md",
+    "transit-compensation-rules": "transit-compensation-rules.md",
+    "data-sources": "data-sources.md",
+  };
+  const docMatch = req.url.match(/^\/api\/doc\/([a-z0-9-]+)$/);
+  if (docMatch) {
+    const file = DOCS[docMatch[1]];
+    if (!file) {
+      res.writeHead(404, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ error: `Okänt dokument: ${docMatch[1]}` }));
+    }
+    try {
+      const md = fs.readFileSync(path.join(__dirname, "..", "docs", file), "utf8");
+      res.writeHead(200, { "Content-Type": "text/plain; charset=utf-8" });
+      return res.end(md);
+    } catch (err) {
+      res.writeHead(404, { "Content-Type": "application/json" });
+      return res.end(JSON.stringify({ error: `Kunde inte läsa docs/${file}: ${err.message}` }));
+    }
+  }
+
   if (req.url === "/api/operative-events") {
     try {
       const data = await fetchOperativeEvents();
