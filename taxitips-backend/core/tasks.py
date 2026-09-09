@@ -19,10 +19,12 @@ Flower/Djangos admin istället -- värt att ändra till den dagen den
 synligheten efterfrågas, men det är en beteendeändring från dagens
 "logga och fortsätt", inte en självklar default.
 
-Explicit UTANFÖR scope: portning av fcmPush.js:s förar-opportunity-larm
-(NOTIFY_SCORE_FLOOR, notify_prefs-matchning, isNotifyWorthy, pollningen av
-opportunities) hit. Det är en separat, större uppgift -- se
-billing/tasks.pys docstring för samma avgränsning ur push-sidans perspektiv.
+push_cycle_task nedan ÄR den portning som den här docstringen tidigare
+förklarade var utanför scope (fcmPush.js:s förar-opportunity-larm:
+NOTIFY_SCORE_FLOOR, notify_prefs-matchning, isNotifyWorthy, pollningen av
+opportunities). Logiken bor i core/notify.py; tasken är bara kadensen.
+Den är därmed inte längre en avgränsning -- billing/tasks.pys motsvarande
+mening gäller fortfarande sin egen, separata notiskategori (fakturering).
 """
 
 from __future__ import annotations
@@ -38,6 +40,11 @@ log = logging.getLogger(__name__)
 @shared_task(name="core.tasks.poll_rail_task")
 def poll_rail_task() -> None:
     _run("poll_rail")
+
+
+@shared_task(name="core.tasks.poll_road_task")
+def poll_road_task() -> None:
+    _run("poll_road")
 
 
 @shared_task(name="core.tasks.poll_trafiklab_task")
@@ -73,3 +80,29 @@ def _run(name: str, **kwargs) -> None:
         call_command(name, **kwargs)
     except Exception:
         log.exception("core.tasks: %s misslyckades, fortsätter", name)
+
+
+@shared_task(name="core.tasks.push_cycle_task")
+def push_cycle_task() -> dict:
+    """
+    Skickar notiser för tips som just blivit värda att avbryta någon för.
+
+    Egen kadens, tätare än pollningen (se CELERY_BEAT_SCHEDULE): ett tips
+    ska nå telefonen medan störningen fortfarande pågår, och ett varv som
+    väntar in nästa pollcykel lägger upp till 90 sekunder till den fördröjning
+    källan redan har.
+
+    Fångar sitt eget fel som de andra taskarna -- en trasig FCM-nyckel får
+    inte se ut som att hela pipelinen ligger nere. core/notify.py kastar
+    dessutom aldrig av sig självt; det här är andra bältet.
+    """
+    from core.notify import run_push_cycle
+
+    try:
+        result = run_push_cycle()
+    except Exception:
+        log.exception("core.tasks: push_cycle misslyckades")
+        return {"sent": 0, "error": "exception"}
+    if result.get("sent"):
+        log.info("core.tasks: push_cycle skickade %s notiser", result["sent"])
+    return result

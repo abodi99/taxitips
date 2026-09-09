@@ -546,3 +546,119 @@ class SourceStatus(models.Model):
         from django.utils import timezone
 
         return int((timezone.now() - self.checked_at).total_seconds() // 60)
+
+
+class PushDelivery(models.Model):
+    """
+    En skickad notis, per enhet -- notishistoriken appen visar, och pushens
+    egen dubblettspärr.
+
+    Varför en rad per enhet och inte bara `opportunities.notified_at`:
+    `notified_at` svarar på "har det här tipset pushats alls?" och är det
+    enda push-steget får skriva på tipsraden (se Opportunity-docstringen).
+    Den kan däremot inte svara på förarens fråga -- "vilka notiser har JAG
+    fått?" -- och utan det svaret finns ingen lista att markera favoriter i.
+
+    `snapshot` är hela tipset som det såg ut när notisen gick. Utan den
+    tömmer `purge_old` (sju dagar) notishistoriken bakvägen: raden finns
+    kvar men pekar på ett borttaget tips, och listan visar tomma kort.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    opportunity = models.ForeignKey(
+        Opportunity,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="deliveries",
+        help_text="NULL efter att tipset gallrats -- snapshot bär innehållet.",
+    )
+    # Egen kolumn, inte bara FK:n: identiteten måste överleva gallringen,
+    # och det är den nyckel dubblettspärren nedan jämför på.
+    opportunity_external_id = models.TextField(db_index=True)
+
+    # devices ägs av Supabase (billing/models.py, managed=False) -- ingen FK
+    # över den gränsen, samma linje som core/entitlement.py håller.
+    device_id = models.UUIDField(db_index=True)
+    device_token = models.TextField(blank=True, db_index=True)
+
+    title = models.TextField(blank=True)
+    body = models.TextField(blank=True)
+    snapshot = models.JSONField(
+        default=dict, blank=True, help_text="Tipset som det såg ut när notisen gick."
+    )
+
+    ok = models.BooleanField(default=True)
+    error = models.TextField(blank=True)
+    created_at = models.DateTimeField(db_default=models.functions.Now())
+
+    class Meta:
+        db_table = "push_delivery"
+        verbose_name_plural = "push deliveries"
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["device_token", "-created_at"])]
+        constraints = [
+            # Samma tips, samma enhet, en gång. Skyddar mot en cykel som
+            # hinner skicka men dör innan notified_at hunnit skrivas --
+            # utan den får föraren notisen igen vid nästa varv.
+            models.UniqueConstraint(
+                fields=["device_id", "opportunity_external_id"],
+                name="uniq_push_per_device_opportunity",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.title[:40]} → {self.device_id}"
+
+
+class OpportunityFavorite(models.Model):
+    """
+    Ett tips föraren sparat. Visas ALLTID, oavsett vad filtren säger.
+
+    Hela poängen är att överleva de tre saker som annars tar bort ett tips ur
+    vyn: filtren i appen, marknadsradien, och att störningen tar slut. Ett
+    sparat tips är ett aktivt val -- "jag vill kunna gå tillbaka till det
+    här" -- och ett filter som föraren råkar ha kvar sedan förra passet ska
+    inte kunna gömma det.
+
+    `owner_key` i stället för `device_token`: entitlement har TVÅ vägar
+    (invariant 6 i AGENTS.md). En ägare som loggat in med e-post har ingen
+    förartoken alls, och en favoritlista nycklad enbart på device_token hade
+    varit tyst tom för varje sådan inloggning -- inklusive i webbläsaren,
+    som är där det här först provas. Se `owner_key_for()` i core/api.py.
+
+    `snapshot` av samma skäl som i PushDelivery: `purge_old` tar bort tipset
+    efter sju dagar, och en favoritlista som tömmer sig själv är värre än
+    ingen favoritlista.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    owner_key = models.TextField(
+        db_index=True,
+        help_text="Förarens device-token, eller 'user:<uuid>' för inloggad ägare.",
+    )
+    opportunity = models.ForeignKey(
+        Opportunity,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="favorites",
+    )
+    opportunity_external_id = models.TextField(db_index=True)
+    snapshot = models.JSONField(default=dict, blank=True)
+    note = models.TextField(blank=True, help_text="Förarens egen anteckning.")
+    created_at = models.DateTimeField(db_default=models.functions.Now())
+
+    class Meta:
+        db_table = "opportunity_favorite"
+        ordering = ["-created_at"]
+        indexes = [models.Index(fields=["owner_key", "-created_at"])]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["owner_key", "opportunity_external_id"],
+                name="uniq_favorite_per_owner",
+            )
+        ]
+
+    def __str__(self) -> str:
+        return f"★ {self.opportunity_external_id}"

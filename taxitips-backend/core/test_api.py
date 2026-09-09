@@ -262,6 +262,12 @@ class MarketHorizonTests(ApiTestCase):
         opportunity(title="Göteborgståg", lat=57.7089, lon=11.9746)  # ~230 km
         self.assertEqual(self.get_alerts()["alerts"], [])
 
+    def test_national_feed_keeps_distant_opportunity_and_distance(self):
+        opportunity(title="Göteborgståg", lat=57.7089, lon=11.9746)
+        body = self.get_alerts(all="1")
+        self.assertEqual(len(body["alerts"]), 1)
+        self.assertGreater(body["alerts"][0]["distance_km"], 200)
+
     def test_opportunity_without_coordinates_falls_back_to_region(self):
         opportunity(title="Skånetips utan koordinat", lat=None, lon=None, region="skane")
         opportunity(title="Stockholmstips utan koordinat", lat=None, lon=None, region="sl")
@@ -358,11 +364,22 @@ class RoadContextTests(ApiTestCase):
 
 class LevelTests(ApiTestCase):
     def test_level_and_push_gate_come_from_one_threshold(self):
+        # `notify_worthy` svarar numera på samma fråga som push-steget
+        # faktiskt ställer (thresholds.is_notify_worthy), inte bara på
+        # poänggolvet. Två rader ändrade utfall när den kopplades ihop:
+        #
+        #   LINE_DELAYED/60 -- över golvet, men försening är inte en tier
+        #   som får väcka någon. Kortet lovade en notis som aldrig kom.
+        #   ROAD_ACCIDENT/90 -- fortfarande True: vägolyckor ÄR notisvärda,
+        #   de får bara ligga i `context` i stället för i tipslistan.
+        #
+        # `level` är oförändrad -- den beskriver hur troligt det är att det
+        # står folk där, vilket är en annan fråga än om telefonen ska ringa.
         cases = [
             (SeverityTier.LINE_PAUSED, 85, "high", True),
             (SeverityTier.VEHICLE_CANCELLED, 72, "high", True),
             (SeverityTier.VEHICLE_CANCELLED, 45, "medium", False),
-            (SeverityTier.LINE_DELAYED, 60, "medium", True),
+            (SeverityTier.LINE_DELAYED, 60, "medium", False),
             (SeverityTier.ROAD_ACCIDENT_OR_CLOSURE, 90, "low", True),
         ]
         for tier, score, level, notify in cases:

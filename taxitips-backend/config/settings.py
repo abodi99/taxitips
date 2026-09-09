@@ -117,13 +117,15 @@ def database_from_url(url: str) -> dict:
 # Tidigare fanns ett andra alias mot en egen Django-container. Det behövs inte
 # längre -- och det var det som gjorde att allt pipelinen räknade ut hamnade i
 # en databas ingen förare läste från.
-DATABASES = {
-    "default": database_from_url(
-        os.environ.get(
-            "DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
-        )
-    ),
-}
+_database = database_from_url(
+    os.environ.get(
+        "DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
+    )
+)
+if Path("/.dockerenv").exists() and _database["HOST"] in ("127.0.0.1", "localhost"):
+    _database["HOST"] = "host.docker.internal"
+
+DATABASES = {"default": _database}
 
 LANGUAGE_CODE = "sv"
 TIME_ZONE = "Europe/Stockholm"
@@ -166,11 +168,18 @@ CELERY_TASK_EAGER_PROPAGATES = CELERY_TASK_ALWAYS_EAGER
 # för att matcha time.monotonic()s "N sekunder sedan senaste körning" exakt.
 CELERY_BEAT_SCHEDULE = {
     "poll-rail": {"task": "core.tasks.poll_rail_task", "schedule": 90},
+    "poll-road": {"task": "core.tasks.poll_road_task", "schedule": 90},
     "poll-trafiklab": {"task": "core.tasks.poll_trafiklab_task", "schedule": 90},
     "poll-sl": {"task": "core.tasks.poll_sl_task", "schedule": 90},
     "poll-vasttrafik": {"task": "core.tasks.poll_vasttrafik_task", "schedule": 90},
     "refresh-sites": {"task": "core.tasks.refresh_sites_task", "schedule": 24 * 60 * 60},
     "review-uncertain": {"task": "core.tasks.review_uncertain_task", "schedule": 5 * 60},
+    # Tätare än pollningen med avsikt: en notis som väntar in nästa pollvarv
+    # lägger upp till 90 sekunder till den fördröjning källan redan har, och
+    # en störning är som mest värd att köra till i sin första kvart.
+    # Cykeln är billig när det inte finns något att skicka -- en indexerad
+    # fråga på notified_at is null som normalt ger noll rader.
+    "push-cycle": {"task": "core.tasks.push_cycle_task", "schedule": 30},
 }
 
 # --- Förar-API (Spår B, core/api.py) -----------------------------------
@@ -181,6 +190,10 @@ CELERY_BEAT_SCHEDULE = {
 # Varifrån JWKS hämtas när Supabase signerar asymmetriskt (ES256), vilket
 # moderna projekt och en lokal `supabase start` gör som standard.
 SUPABASE_URL = os.environ.get("SUPABASE_URL", "http://127.0.0.1:54321")
+if Path("/.dockerenv").exists():
+    SUPABASE_URL = SUPABASE_URL.replace(
+        "127.0.0.1", "host.docker.internal"
+    ).replace("localhost", "host.docker.internal")
 SUPABASE_JWT_SECRET = os.environ.get(
     "SUPABASE_JWT_SECRET", "super-secret-jwt-token-with-at-least-32-characters-long"
 ) if DEBUG else os.environ.get("SUPABASE_JWT_SECRET", "")

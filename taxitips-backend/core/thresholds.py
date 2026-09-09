@@ -39,6 +39,57 @@ FEED_LOOKBACK_HOURS = 24
 HIGH_SEVERITY_TIERS = frozenset({"line_paused"})
 MEDIUM_SEVERITY_TIERS = frozenset({"line_delayed", "vehicle_cancelled"})
 
+# Vilka tiers som ÖVER HUVUD TAGET får väcka en telefon. Strängare än vad
+# som får synas i listan, med avsikt: en push avbryter en förare som kan
+# sitta mitt i en körning eller i trafiken, medan listan bara ligger där
+# tills någon tittar.
+#
+# `severity_tier` ensam räcker inte som grind -- "vehicle_cancelled" spänner
+# från ett inställt tåg med en perrong full av folk till en enstaka svag
+# kvällsbuss -- därför gäller BÅDE den här mängden OCH NOTIFY_SCORE_FLOOR.
+# Mätt i Node-versionen: utan poänggolvet hade ~64% av notiserna varit "en
+# buss är sen", precis den signal poängsättningen kapar vid 25 för att
+# hålla den i listans botten.
+#
+# Flyttad hit från fcmPush.js NOTIFY_WORTHY_TIERS: talet 50 hade fyra hem
+# innan den här filen fanns, och den här mängden hade två (fcmPush.js och
+# api_client.darts notifyTypeCatalog). Lägg inte till ett tredje.
+NOTIFY_WORTHY_TIERS = frozenset(
+    {"line_paused", "vehicle_cancelled", "road_accident_or_closure"}
+)
+
+
+def is_notify_worthy(
+    severity_tier: str | None,
+    demand_score: int | None,
+    has_alternative: bool = False,
+) -> bool:
+    """
+    Får det här tipset väcka en telefon alls? (Före förarens egna val.)
+
+    `has_alternative` stänger notisen men INTE tipset. Skillnaden är
+    avsiktlig: kortet ligger kvar i listan med sin poäng och sin
+    ersättningstrafik utskriven, så en förare som ändå tittar får se det och
+    döma själv -- men ingen väcks för det.
+
+    Mätt på de fjorton kandidaterna i den lokala databasen: **sex av dem bar
+    `has_alternative=True`**, alltså återkommande ersättningsbusstrafik som
+    källan själv skrivit ut ("Bussar ersätter spårvagnarna mellan Käppala och
+    Gåshaga brygga på vardagar under rusningstid"). Ingen står strandsatt
+    där. En förare som kör dit gör en bomresa -- exakt det invariant 2 i
+    AGENTS.md är skriven för att förhindra.
+
+    Signalen är stated data, inte en tolkning: den kommer från Trafikverkets
+    ReplacementTraffic eller ur källans egen text (core/alternatives.py), och
+    är tom när källan inte sagt något. Vi hittar aldrig på ett alternativ,
+    och tystnad räknas därför aldrig som "det finns ersättning".
+    """
+    if severity_tier not in NOTIFY_WORTHY_TIERS:
+        return False
+    if has_alternative:
+        return False
+    return (demand_score or 0) >= NOTIFY_SCORE_FLOOR
+
 
 def customer_likelihood(
     severity_tier: str | None, demand_score: int, worth_it_score: int
@@ -99,4 +150,5 @@ def as_config() -> dict:
         "feedLookbackHours": FEED_LOOKBACK_HOURS,
         "highSeverityTiers": sorted(HIGH_SEVERITY_TIERS),
         "mediumSeverityTiers": sorted(MEDIUM_SEVERITY_TIERS),
+        "notifyWorthyTiers": sorted(NOTIFY_WORTHY_TIERS),
     }

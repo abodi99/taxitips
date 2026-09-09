@@ -117,3 +117,67 @@ def coverage_rows(now) -> list[dict]:
             "activeTips": tips.get(region_key, 0) if region_key else 0,
         })
     return rows
+
+
+# --- Länskatalogen som förarens notisinställningar väljer ur -------------
+#
+# Härleds ur COUNTIES ovan i stället för att skrivas en gång till. Skälet är
+# hela poängen med den här filen: listan över svenska län fanns redan här,
+# och en andra kopia i notisinställningarna hade kunnat säga "Halland" långt
+# efter att tabellen ovan slutat påstå att vi hämtar något där.
+#
+# Nyckeln är `region` som pipelinen faktiskt SKRIVER på ett tips -- inte
+# länsnamnet. Trafiklabs operatörskod ÄR regionnyckeln (skane, sl, ul, ...),
+# Västtrafik skriver "vt", och järnvägen skriver "rail". Ett filter som
+# matchat på länsnamn hade matchat noll rader.
+#
+# Mätt på 506 aktiva tips: 100% bär en `region`, medan 61% saknar `places`
+# helt. Därför är länet det filter som går att lita på, och orten en
+# förfining ovanpå det -- inte tvärtom.
+
+# Järnvägen har ingen länsindelning i Trafikverkets data: tipsen skrivs med
+# region "rail" oavsett var i landet stationen ligger. Den är alltså inte
+# ett län att välja bland de andra, utan ett eget val -- att tyst filtrera
+# bort den för alla som valt ett län hade tagit bort tågtipsen, vilket är
+# den starkaste signalen i hela flödet.
+RAIL_REGION_KEY = "rail"
+
+
+def notify_region_catalog() -> list[dict]:
+    """
+    Vad förarens "vilka län vill du ha notiser i?" får välja bland.
+
+    Bara län där en kollektivtrafikkälla faktiskt finns kommer med. Att
+    erbjuda Halland hade varit ett löfte vi inte kan hålla: källan 404:ar,
+    och en förare som kryssat i länet hade tolkat tystnaden som "lugnt", inte
+    som "vi hämtar inte här". `covered: False`-raderna listas separat av
+    coverage_rows() ovan, med sitt skäl.
+    """
+    from core.geo import REGION_ANCHOR
+
+    out = [
+        {
+            "key": RAIL_REGION_KEY,
+            "label": "Järnväg (hela landet)",
+            "city": "",
+            "note": "Tåg saknar länsindelning i Trafikverkets data.",
+        }
+    ]
+    for label, operator, _county in COUNTIES:
+        if operator is None:
+            continue
+        key = "vt" if operator == "vt-adapter" else operator
+        out.append(
+            {
+                "key": key,
+                "label": label,
+                "city": REGION_ANCHOR.get(key, ""),
+                "note": "",
+            }
+        )
+    return out
+
+
+def uncovered_counties() -> list[str]:
+    """Län utan kollektivtrafikkälla -- visas som en förklaring, inte som val."""
+    return [label for label, operator, _ in COUNTIES if operator is None]
