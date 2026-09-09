@@ -178,6 +178,15 @@ Registration-only. Token capture, storage, and refresh work. There is no code pa
 
 ## 7. Proposed order of fixes (against the P0/P1 list)
 
+> **STALE per 2026-09-09.** Allt nedanför är skrivet mot den gamla
+> Supabase/Node-arkitekturen: `alerts`-tabellen, RPC:n `get_smart_alerts`
+> och edge functions. Pipelinen bor sedan dess i Django
+> (`taxitips-backend/`, grenen `fas2-django-pipeline`), och punkt 1–4 och 7
+> är lösta eller obsoleta där. **Läs `AGENTS.md` §8 för det verifierade
+> läget** — den tabellen är kollad mot koden, inte mot minnet. Behåller
+> listan här för historiken och för P1-punkterna 9–13, som fortfarande
+> gäller.
+
 **P0 — do these first, in this order:**
 1. Fix the `alerts.id` / `alert_feedback.alert_id` type mismatch (blocks everything else touching that table cleanly).
 2. Split `alerts` conceptually enough to add a real entitlement gate *without* waiting for the full `source_events`/`opportunities` rework — i.e., lock down RLS + rewrite `get_smart_alerts` to check company entitlement before returning scored rows. This is the single highest-leverage fix: it closes the "premium data is public" hole immediately.

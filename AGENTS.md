@@ -92,6 +92,37 @@ cd taxitips-backend
 Alla stöder `--dry-run`. Utan `--skip-sites` uppdateras hållplatsregistret
 (~18 000 rader, tar en stund). Kör det efter `supabase db reset`.
 
+Notiser testas utan Firebase-nyckel:
+
+```bash
+./.venv/bin/python manage.py push_cycle --dry-run    # visar besluten, rör inget
+./.venv/bin/python manage.py push_cycle --simulate   # skriver push_delivery, skickar inget
+```
+
+`--dry-run` skriver ut varje kandidat med skälet den föll på
+(`region_not_chosen:sl`, `too_far`, `has_alternative`, `type_muted`) och är
+det snabbaste svaret på "varför fick föraren ingen notis?". `--simulate` kör
+samma beslut men skriver `push_delivery` och `notified_at` på riktigt, så
+appens notishistorik går att fylla utan att någon telefon väcks. Riktig
+sändning kräver `FIREBASE_SERVICE_ACCOUNT_JSON` i `.env`; utan den svarar
+sändsteget `skipped: no_service_account` i stället för att kasta.
+
+**På en riktig telefon** måste Django lyssna utåt och appen peka på LAN-IP:n
+— `127.0.0.1` är telefonen själv:
+
+```bash
+./.venv/bin/python manage.py runserver 0.0.0.0:8001      # inte bara 127.0.0.1
+cd ../taxitips-app && flutter run -d <enhet> \
+  --dart-define=API_BASE_URL=http://<macens-ip>:8001 \
+  --dart-define=SUPABASE_URL=http://<macens-ip>:54321 \
+  --dart-define=SUPABASE_ANON_KEY=<PUBLISHABLE_KEY>
+```
+
+Android blockerar okrypterad HTTP sedan API 28. `src/debug/AndroidManifest.xml`
+tillåter den för debugbyggen — utan det dör anropen i plattformslagret innan
+appens egna felmeddelanden hinner formuleras, och symptomet blir "inga
+störningar just nu" i stället för ett nätverksfel.
+
 Prenumerationer testas utan Stripe-konto:
 `manage.py simulate_stripe_event --company "Malmö Taxi AB" --type
 customer.subscription.updated --status past_due` bygger och signerar en
@@ -102,9 +133,14 @@ instansen — inte att förväxla med `taxitips-selfhosted`, som är produktion.
 Tester — båda ska vara gröna innan något deployas:
 
 ```bash
-cd taxitips-backend && CELERY_TASK_ALWAYS_EAGER=1 ./.venv/bin/python manage.py test   # 217
-cd taxitips-app && flutter test && flutter analyze                                     # 23, rent
+cd taxitips-backend && CELERY_TASK_ALWAYS_EAGER=1 ./.venv/bin/python manage.py test   # 265
+cd taxitips-app && flutter test && flutter analyze                                     # 30
 ```
+
+`flutter analyze` har tre kvarvarande `curly_braces_in_flow_control_structures`
+i `driver_screen.dart` och `hotspot_map.dart` — stilvarningar, inga buggar,
+men de kom in med varumärkespasset och bör städas så att "rent" betyder rent
+igen.
 
 API-nycklar ligger i `taxitips-backend/.env` (ogitad). `.env.example`
 listar alla och vad de gör.
@@ -119,7 +155,8 @@ Läs dessa innan du gissar om en datakälla. De är mätta, inte antagna.
 | `docs/transit-compensation-rules.md` | Ersättningsregler per län, ordagranna citat, källänkar, hämtdatum. |
 | `docs/data-sources.md` | Endpoints, auth, kvoter, vilka operatörskoder som finns. |
 | `taxitips-backend/schema/` | **Genererad** av `manage.py dump_truth`. Redigera aldrig för hand. |
-| `TAXITIPS_STATUS.md` | Vad som faktiskt fungerar, med datum. §0 är nyast. |
+| `TAXITIPS_STATUS.md` | Vad som faktiskt fungerar, med datum. §0 är nyast. **§7 är stale** — skriven mot den gamla Supabase/Node-arkitekturen; se §8 här i stället. |
+| `taxitips-backend/core/notify.py` | Vem som väcks och varför. Grindarna i ordning, med mätningen bakom varje. |
 
 Kör `manage.py dump_truth` efter varje migration och checka in resultatet.
 `schema/functions.sql` finns för att `get_smart_alerts` är omdefinierad sju
@@ -165,6 +202,28 @@ Var och en av dem är skriven efter att ha gått sönder på riktigt.
    både i `genkit.py` och i `RailAssessment.save()`.
 10. **Ett tips ska alltid gå att förklara**: vilka `source_event_ids`,
     vilken regel, vilken konfidens.
+11. **`notify_worthy` är den riktiga notisgrinden, inte en poänggräns.**
+    Fältet sa tidigare bara "över 50", så ett kort kunde lova en notis som
+    aldrig kom. Det speglar nu hela beslutet i `core/notify.py` — typ,
+    poäng och `has_alternative`. Ändrar du grindarna, ändra fältet i samma
+    commit, annars ljuger appen igen.
+12. **Notiser tystas när källan själv skrivit ut ersättningstrafik.**
+    `has_alternative=True` betyder att bussen redan går. Mätt: 6 av 14
+    push-kandidater. Kortet ligger kvar i listan — det är bara väckningen
+    som uteblir, eftersom en bomresa mitt i natten kostar mer än en missad
+    notis. Samma resonemang som invariant 2.
+13. **Favoriter filtreras aldrig.** De skickas i en egen lista vid sidan av
+    flödet och passerar varken marknadsradie, filter eller sluttid. Ett
+    tips föraren aktivt sparat ska inte kunna gömmas av ett filter som
+    ligger kvar sedan förra passet. `PushDelivery` bär dessutom en
+    ögonblicksbild, så notishistoriken överlever `purge_old` efter sju
+    dygn.
+14. **Länsfiltret kan aldrig avgränsa tågtips.** Trafikverkets tågdata
+    saknar länsfält, så de skrivs som `region="rail"` oavsett var
+    stationen ligger. Utan avståndsgrinden i `within_reach()` väcktes en
+    Malmöförare med "Skåne + järnväg" om Örnsköldsvik, 1 400 km bort, som
+    appens egen lista aldrig visat. Notisvägen och listvägen måste hålla
+    samma 150 km.
 
 ## 7. Fällor i datan (de dyraste)
 
@@ -187,7 +246,10 @@ Fullständig lista i `docs/api-field-inventory.md` §9.
 
 **Klart:** pipelinen (sex källor, nationellt), förar-API:t, appen läser från
 Django, feedback (🚕/👍/👎), källhälsa, täckningsvy, nästa avgång +
-ersättningstrafik, ersättningsregler för 16 län, API-inventering.
+ersättningstrafik, ersättningsregler för 16 län, API-inventering,
+**push-pipelinen** (`core/notify.py` — fyra grindar, skäl vid varje nej),
+**favoriter** och **notishistorik** (`OpportunityFavorite`, `PushDelivery`),
+länsval i notisinställningarna.
 
 **Näst på tur** — ur `docs/api-field-inventory.md`, som har mätningen bakom
 varje punkt:
@@ -201,9 +263,18 @@ varje punkt:
 | 15, 16 | SMHI: sikt som signal, och väder vid rätt tidpunkt | dimma fångas inte av dagens trösklar |
 | 17 | `OperativeEvent` för orsakstext | enda riktiga *varför*-texten i hela flödet |
 
-**P0, orört** (se `TAXITIPS_STATUS.md` §7): workern kör på
-`SUPABASE_SERVICE_ROLE_KEY`, inga verifierade backuper, ingen push-pipeline,
-dubbla Stripe-webhookhanterare.
+**P0 — verifierat läge 2026-09-09.** `TAXITIPS_STATUS.md` §7 är skriven mot
+den gamla Supabase/Node-arkitekturen (`alerts`-tabellen, `get_smart_alerts`,
+edge functions) och beskriver inte längre var koden bor. Det faktiska läget,
+kollat mot koden:
+
+| Punkt | Läge |
+|---|---|
+| Entitlement-grind | **Klar.** Varje endpoint i `core/api.py` går via `entitlement_for_request`. Två vägar, se invariant 6. |
+| Stripe-webhook | **En handler** i `billing/webhooks.py` — signaturverifiering, idempotens via `ProcessedWebhookEvent`, alla fyra event. **Men** `taxitips-api/supabase/functions/stripe-webhook/` ligger kvar i repot. Vilken som är live avgörs i Stripe-dashboarden, inte i koden. Kolla och ta bort den döda. |
+| Push-pipeline | **Byggd, men kan inte skicka.** `FIREBASE_SERVICE_ACCOUNT_JSON` är tom i `.env`. `push_cycle --simulate` kör hela beslutskedjan och skriver `push_delivery` utan att skicka. |
+| Backuper | **Saknas helt.** Inget `pg_dump` någonstans i repot. Detta är den allvarligaste kvarvarande punkten: CLAUDE.md gör backup-före-migrering till det som *ersätter* mänsklig granskning. |
+| Service-role-nyckeln | `SUPABASE_SERVICE_ROLE_KEY` används bara av `seed_local_demo` (lokal utveckling). Django-backenden skriver via sin egen DB-anslutning. Den gamla Node-workern i `taxitips-api/` är inte längre den som kör pipelinen. |
 
 **Kända luckor som inte går att koda bort:** Halland, Sörmland, Jämtland,
 Västerbotten och Norrbotten saknas i Trafiklabs ServiceAlerts (404, inte
