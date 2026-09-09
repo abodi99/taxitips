@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../severity_labels.dart';
 import '../theme.dart';
+import 'brand_icons.dart';
 import 'likelihood_badge.dart';
 
 /// Compact, glanceable card for the live signal list. Tapping it opens the full
@@ -11,7 +12,17 @@ class SmartAlertCard extends StatelessWidget {
   final Map<String, dynamic> alert;
   final VoidCallback? onTap;
 
-  const SmartAlertCard({super.key, required this.alert, this.onTap});
+  /// Stjärnan ritas bara när det finns någonstans att spara till.
+  /// `onToggleFavorite: null` = ingen knapp alls, inte en knapp som tyst
+  /// inte gör något -- se ApiClient.supportsFavorites.
+  final ValueChanged<bool>? onToggleFavorite;
+
+  const SmartAlertCard({
+    super.key,
+    required this.alert,
+    this.onTap,
+    this.onToggleFavorite,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -77,6 +88,7 @@ class SmartAlertCard extends StatelessWidget {
     // A low-confidence read is worth flagging inline -- a driver shouldn't treat
     // a guess with the same weight as a clearly-stated cancellation.
     final isLowConfidence = confidence == 'low';
+    final isFavorite = alert['is_favorite'] == true;
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -113,25 +125,21 @@ class SmartAlertCard extends StatelessWidget {
                         // prefer it and fall back to the coarse transit/road
                         // split for sources that don't.
                         if (kind == 'transit' || kind == 'road')
-                          Icon(
-                            switch (alert['mode']?.toString()) {
-                              'train' => Icons.train,
-                              'metro' => Icons.subway,
-                              'tram' => Icons.tram,
-                              'bus' => Icons.directions_bus,
-                              _ => kind == 'transit'
-                                  ? Icons.train
-                                  : Icons.directions_car,
-                            },
-                            size: 15,
-                            color: TbColors.muted,
-                          ),
+                          switch (alert['mode']?.toString()) {
+                            'train' => BrandIcons.train(size: 15, color: TbColors.muted),
+                            'metro' => const Icon(Icons.subway, size: 15, color: TbColors.muted),
+                            'tram' => const Icon(Icons.tram, size: 15, color: TbColors.muted),
+                            'bus' => BrandIcons.bus(size: 15, color: TbColors.muted),
+                            _ => kind == 'transit'
+                                ? BrandIcons.train(size: 15, color: TbColors.muted)
+                                : BrandIcons.taxi(size: 15, color: TbColors.muted),
+                          },
                         if (severityTierShortLabels.containsKey(severityTier))
                           Text(
                             severityTierShortLabels[severityTier]!,
                             style: const TextStyle(
                               fontSize: 12,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.w700,
                               color: TbColors.muted,
                             ),
                           ),
@@ -149,7 +157,7 @@ class SmartAlertCard extends StatelessWidget {
                               vertical: 1,
                             ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFFE7F4EC),
+                              color: TbColors.live.withValues(alpha: 0.10),
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(color: TbColors.live),
                             ),
@@ -161,7 +169,7 @@ class SmartAlertCard extends StatelessWidget {
                               ),
                               style: const TextStyle(
                                 fontSize: 10,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                                 color: TbColors.live,
                               ),
                             ),
@@ -176,14 +184,14 @@ class SmartAlertCard extends StatelessWidget {
                               color: TbColors.sand,
                               borderRadius: BorderRadius.circular(6),
                               border: Border.all(
-                                color: const Color(0xFFC9D0DA),
+                                color: TbColors.line,
                               ),
                             ),
                             child: const Text(
                               'osäker',
                               style: TextStyle(
                                 fontSize: 10,
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                                 color: TbColors.muted,
                               ),
                             ),
@@ -196,6 +204,28 @@ class SmartAlertCard extends StatelessWidget {
                     likelihood: likelihood,
                     distanceKm: (alert['distance_km'] as num?)?.toDouble(),
                   ),
+                  if (onToggleFavorite != null) ...[
+                    const SizedBox(width: 2),
+                    // Sparat tips. Fylld stjärna = det här kortet överlever
+                    // filtren, marknadsradien och att störningen tar slut --
+                    // det ligger kvar under Sparade tills föraren tar bort
+                    // det. Se core/models.py:OpportunityFavorite.
+                    InkWell(
+                      onTap: () => onToggleFavorite!(!isFavorite),
+                      borderRadius: BorderRadius.circular(20),
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(
+                          isFavorite ? Icons.star : Icons.star_border,
+                          size: 22,
+                          color: isFavorite ? TbColors.taxi : TbColors.muted,
+                          semanticLabel: isFavorite
+                              ? 'Ta bort från sparade'
+                              : 'Spara tipset',
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
               const SizedBox(height: 6),
@@ -211,11 +241,7 @@ class SmartAlertCard extends StatelessWidget {
               const SizedBox(height: 2),
               Row(
                 children: [
-                  const Icon(
-                    Icons.schedule,
-                    size: 13,
-                    color: Colors.grey,
-                  ),
+                  BrandIcons.clock(size: 13, color: Colors.grey),
                   const SizedBox(width: 4),
                   Text(
                     timeLeft,
@@ -253,15 +279,11 @@ class SmartAlertCard extends StatelessWidget {
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Icon(
-                      travel.isLastDeparture
-                          ? Icons.last_page
-                          : (travel.hasAlternative
-                                ? Icons.directions_bus
-                                : Icons.schedule_send),
-                      size: 15,
-                      color: travelColor,
-                    ),
+                    travel.isLastDeparture
+                        ? Icon(Icons.last_page, size: 15, color: travelColor)
+                        : travel.hasAlternative
+                            ? BrandIcons.bus(size: 15, color: travelColor)
+                            : Icon(Icons.schedule_send, size: 15, color: travelColor),
                     const SizedBox(width: 5),
                     Expanded(
                       child: Text(

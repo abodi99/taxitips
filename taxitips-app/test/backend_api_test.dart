@@ -98,4 +98,111 @@ void main() {
       'verdict': 'heading',
     });
   });
+
+  // --- Favoriter och notiser -------------------------------------------
+
+  test('favorit sparas med opportunity_id och favorite-flagga', () async {
+    final api = BackendApi(
+      baseUrl: 'http://localhost:8000',
+      client: respond({'ok': true, 'favorite': true}),
+    );
+    await api.setFavorite(
+      opportunityId: 'opp-1',
+      favorite: true,
+      note: 'kolla perrongen',
+      deviceToken: 'tok-1',
+    );
+
+    final body = jsonDecode(seen.single.body) as Map;
+    expect(body['opportunity_id'], 'opp-1');
+    expect(body['favorite'], true);
+    expect(body['note'], 'kolla perrongen');
+    expect(seen.single.headers['X-Device-Token'], 'tok-1');
+  });
+
+  test('avmarkering skickar favorite: false, inte en radering', () async {
+    // POST med favorite:false i stället för DELETE -- samma endpoint åt
+    // båda hållen gör stjärnknappen till ETT anrop, och backend svarar
+    // idempotent på båda.
+    final api = BackendApi(
+      baseUrl: 'http://localhost:8000',
+      client: respond({'ok': true, 'favorite': false, 'removed': true}),
+    );
+    await api.setFavorite(opportunityId: 'opp-1', favorite: false);
+    expect((jsonDecode(seen.single.body) as Map)['favorite'], false);
+  });
+
+  test('note utelämnas helt när den inte satts', () async {
+    // `?note` får inte bli "note": null -- backend skulle skriva över en
+    // befintlig anteckning med tom sträng.
+    final api = BackendApi(
+      baseUrl: 'http://localhost:8000',
+      client: respond({'ok': true, 'favorite': true}),
+    );
+    await api.setFavorite(opportunityId: 'opp-1', favorite: true);
+    expect((jsonDecode(seen.single.body) as Map).containsKey('note'), isFalse);
+  });
+
+  test('favoritlistan skickar position så avståndet kan räknas', () async {
+    final api = BackendApi(
+      baseUrl: 'http://localhost:8000',
+      client: respond({'favorites': []}),
+    );
+    await api.favorites(lat: 55.6, lon: 13.0, deviceToken: 'tok-1');
+    expect(seen.single.url.path, '/api/favorites');
+    expect(seen.single.url.queryParameters, {'lat': '55.6', 'lon': '13.0'});
+  });
+
+  test('notishistoriken bär skälet när enheten saknas', () async {
+    // "Ingen parad telefon" är ett annat svar än "du har inte fått några
+    // notiser än", och en tom lista utan skäl hade blandat ihop dem.
+    final api = BackendApi(
+      baseUrl: 'http://localhost:8000',
+      client: respond({
+        'notifications': [],
+        'reason': 'no_device',
+        'hint': 'Notiser skickas till en parad enhet.',
+      }),
+    );
+    final body = await api.notifications(accessToken: 'jwt-abc');
+    expect(body['reason'], 'no_device');
+    expect(body['notifications'], isEmpty);
+  });
+
+  test('notisinställningar skickar län och orter var för sig', () async {
+    // Två skilda filter med olika tillförlitlighet: länet finns på alla
+    // tips, orten på 39%. Slås de ihop i klienten går den skillnaden
+    // förlorad -- se core/notify.py.
+    final api = BackendApi(
+      baseUrl: 'http://localhost:8000',
+      client: respond({'ok': true, 'prefs': {}}),
+    );
+    await api.saveNotifyPrefs(
+      enabled: true,
+      regions: ['skane', 'rail'],
+      cities: ['Malmö'],
+      types: {'line_paused': true},
+      deviceToken: 'tok-1',
+    );
+
+    final body = jsonDecode(seen.single.body) as Map;
+    expect(body['regions'], ['skane', 'rail']);
+    expect(body['cities'], ['Malmö']);
+    expect(body['types'], {'line_paused': true});
+  });
+
+  test('ospecificerade fält utelämnas i stället för att nollställas', () async {
+    // Sparar man bara "av/på" ska länsvalen ligga kvar. Skickas de som
+    // null tolkar backend det som en tom lista -- alltså "alla län", vilket
+    // tyst hade tagit bort förarens geografiska filter.
+    final api = BackendApi(
+      baseUrl: 'http://localhost:8000',
+      client: respond({'ok': true, 'prefs': {}}),
+    );
+    await api.saveNotifyPrefs(enabled: false);
+
+    final body = jsonDecode(seen.single.body) as Map;
+    expect(body, {'enabled': false});
+  });
 }
+

@@ -102,7 +102,7 @@ class _JoinScreenState extends State<JoinScreen> {
                       ),
                       style: const TextStyle(
                         fontSize: 28,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                         letterSpacing: 4,
                       ),
                       textAlign: TextAlign.center,

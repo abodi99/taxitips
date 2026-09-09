@@ -1,35 +1,63 @@
-/* taxitips brand tokens — from Canva brand kit TaxiTips */
+/* taxitips brand tokens — varumärkesguide taxitips2 (midnatt + guld)
+   Palett, typografi och tonalitet: docs/brand-guide.html
+   Riktvärde för ljusa layouter: 70 % ljusa ytor, 20 % midnatt, 10 % guld. */
 :root {
-  --navy: #08254c;
-  --navy-deep: #051a36;
-  --yellow: #ffc400;
-  --yellow-deep: #e0ac00;
-  --cyan: #19c2d1;
-  --cyan-deep: #1098a6;
-  --foam: #f8f7f2;
-  --foam-soft: #efeee8;
-  --ink: #08254c;
-  --ink-soft: #3d4f6a;
-  --line: rgba(11, 37, 76, 0.14);
+  /* De fem varumärkesfärgerna. Inget annat är varumärkesfärg. */
+  --midnatt: #14213d;
+  --guld: #fca311;
+  --vit: #ffffff;
+  --ljusgra: #f5f7fa;
+  --skiffer: #526078;
+
+  /* Härledda nyanser — samma kulör, för hover, djup och linjer. */
+  --midnatt-djup: #0d1729;
+  --midnatt-mjuk: #253551;
+  --guld-djup: #e08f00;
+  --guld-ljus: #ffb84d;
+  --guld-svag: rgba(252, 163, 17, 0.14);
+  --ljusgra-djup: #e7ebf1;
+
+  /* Text */
+  --ink: var(--midnatt);
+  --ink-soft: var(--skiffer);
+  --line: rgba(20, 33, 61, 0.14);
+  --line-strong: rgba(20, 33, 61, 0.26);
+
+  /* Statusfärger — komplettera alltid med text eller ikon, aldrig färg ensam. */
   --danger: #c0392b;
   --ok: #1f8a5b;
-  --shadow: 0 12px 40px rgba(11, 37, 76, 0.12);
+  --warn: var(--guld-djup);
 
-  /* aliases used across older stylesheets */
-  --taxi: var(--yellow);
-  --taxi-deep: var(--yellow-deep);
-  --asphalt: var(--navy);
-  --road: var(--navy-deep);
-  --signal: var(--cyan);
+  --shadow: 0 12px 40px rgba(20, 33, 61, 0.12);
+  --shadow-soft: 0 4px 16px rgba(20, 33, 61, 0.08);
+
+  /* Alias som äldre stylesheets fortfarande använder.
+     Cyan finns inte i paletten längre: den pekar på skiffer (UI-krom)
+     respektive midnatt (länkar), så gammal markup blir varumärkesriktig
+     utan att varje regel skrivs om. */
+  --navy: var(--midnatt);
+  --navy-deep: var(--midnatt-djup);
+  --yellow: var(--guld);
+  --yellow-deep: var(--guld-djup);
+  --cyan: var(--skiffer);
+  --cyan-deep: var(--midnatt);
+  --foam: var(--ljusgra);
+  --foam-soft: var(--ljusgra-djup);
+  --taxi: var(--guld);
+  --taxi-deep: var(--guld-djup);
+  --asphalt: var(--midnatt);
+  --road: var(--midnatt-djup);
+  --signal: var(--skiffer);
   --live: var(--ok);
-  --sand: var(--foam-soft);
-  --petrol: var(--cyan-deep);
-  --amber: var(--yellow);
-  --mist: var(--foam);
-  --ink-muted: var(--ink-soft);
+  --sand: var(--ljusgra-djup);
+  --petrol: var(--midnatt);
+  --amber: var(--guld);
+  --mist: var(--ljusgra);
+  --ink-muted: var(--skiffer);
 
-  --font-display: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
-  --font-body: "Inter", system-ui, -apple-system, sans-serif;
+  /* Montserrat i rubriker och logotyp, Inter i brödtext och gränssnitt. */
+  --font-display: "Montserrat", "Inter", system-ui, -apple-system, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
   --radius: 14px;
   --radius-pill: 999px;
 }

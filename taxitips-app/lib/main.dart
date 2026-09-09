@@ -174,7 +174,7 @@ class _SplashScreen extends StatelessWidget {
             SvgPicture.asset(
               'assets/brand/logo-on-dark.svg',
               width: 320,
-              height: 74,
+              height: 93,
               fit: BoxFit.contain,
             ),
             SizedBox(height: 28),

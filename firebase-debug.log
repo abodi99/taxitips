@@ -55,3 +55,161 @@
 [debug] [2026-09-08T19:37:09.524Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/cloudfunctions.googleapis.com [omitted]
 [debug] [2026-09-08T19:37:09.564Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firestore.googleapis.com 200
 [debug] [2026-09-08T19:37:09.564Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firestore.googleapis.com [omitted]
+[debug] [2026-09-08T20:32:45.615Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T20:32:45.617Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T20:32:45.715Z] Checked if tokens are valid: false, expires at: 1788899827506
+[debug] [2026-09-08T20:32:45.715Z] Checked if tokens are valid: false, expires at: 1788899827506
+[debug] [2026-09-08T20:32:45.715Z] > refreshing access token with scopes: []
+[debug] [2026-09-08T20:32:45.718Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-09-08T20:32:45.733Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T20:32:45.738Z] Checked if tokens are valid: false, expires at: 1788899827506
+[debug] [2026-09-08T20:32:45.738Z] Checked if tokens are valid: false, expires at: 1788899827506
+[debug] [2026-09-08T20:32:45.739Z] > refreshing access token with scopes: []
+[debug] [2026-09-08T20:32:45.739Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-09-08T20:32:45.739Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T20:32:45.741Z] Checked if tokens are valid: false, expires at: 1788899827506
+[debug] [2026-09-08T20:32:45.742Z] Checked if tokens are valid: false, expires at: 1788899827506
+[debug] [2026-09-08T20:32:45.742Z] > refreshing access token with scopes: []
+[debug] [2026-09-08T20:32:45.742Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-09-08T20:32:45.742Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T20:32:45.752Z] Checked if tokens are valid: false, expires at: 1788899827506
+[debug] [2026-09-08T20:32:45.752Z] Checked if tokens are valid: false, expires at: 1788899827506
+[debug] [2026-09-08T20:32:45.752Z] > refreshing access token with scopes: []
+[debug] [2026-09-08T20:32:45.752Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-09-08T20:32:45.752Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T20:32:45.755Z] Checked if tokens are valid: false, expires at: 1788899827506
+[debug] [2026-09-08T20:32:45.755Z] Checked if tokens are valid: false, expires at: 1788899827506
+[debug] [2026-09-08T20:32:45.755Z] > refreshing access token with scopes: []
+[debug] [2026-09-08T20:32:45.756Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-09-08T20:32:45.756Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T20:32:45.757Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T20:32:45.757Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T20:32:45.758Z] Checked if tokens are valid: false, expires at: 1788899827506
+[debug] [2026-09-08T20:32:45.758Z] Checked if tokens are valid: false, expires at: 1788899827506
+[debug] [2026-09-08T20:32:45.758Z] > refreshing access token with scopes: []
+[debug] [2026-09-08T20:32:45.758Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-09-08T20:32:45.758Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T20:32:45.759Z] Checked if tokens are valid: false, expires at: 1788899827506
+[debug] [2026-09-08T20:32:45.759Z] Checked if tokens are valid: false, expires at: 1788899827506
+[debug] [2026-09-08T20:32:45.759Z] > refreshing access token with scopes: []
+[debug] [2026-09-08T20:32:45.759Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-09-08T20:32:45.759Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T20:32:45.841Z] Checked if tokens are valid: false, expires at: 1788899827506
+[debug] [2026-09-08T20:32:45.841Z] Checked if tokens are valid: false, expires at: 1788899827506
+[debug] [2026-09-08T20:32:45.841Z] > refreshing access token with scopes: []
+[debug] [2026-09-08T20:32:45.841Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-09-08T20:32:45.841Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T20:32:45.849Z] Checked if tokens are valid: false, expires at: 1788899827506
+[debug] [2026-09-08T20:32:45.849Z] Checked if tokens are valid: false, expires at: 1788899827506
+[debug] [2026-09-08T20:32:45.849Z] > refreshing access token with scopes: []
+[debug] [2026-09-08T20:32:45.849Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-09-08T20:32:45.849Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T20:32:45.850Z] Checked if tokens are valid: false, expires at: 1788899827506
+[debug] [2026-09-08T20:32:45.850Z] Checked if tokens are valid: false, expires at: 1788899827506
+[debug] [2026-09-08T20:32:45.850Z] > refreshing access token with scopes: []
+[debug] [2026-09-08T20:32:45.850Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-09-08T20:32:45.850Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T20:32:46.521Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-09-08T20:32:46.521Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T20:32:46.541Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/cloudfunctions.googleapis.com [none]
+[debug] [2026-09-08T20:32:46.541Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/cloudfunctions.googleapis.com x-goog-quota-user=projects/taxibehov
+[debug] [2026-09-08T20:32:46.542Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-09-08T20:32:46.542Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T20:32:46.557Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firestore.googleapis.com [none]
+[debug] [2026-09-08T20:32:46.557Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firestore.googleapis.com x-goog-quota-user=projects/taxibehov
+[debug] [2026-09-08T20:32:46.607Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-09-08T20:32:46.607Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T20:32:46.617Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseapphosting.googleapis.com [none]
+[debug] [2026-09-08T20:32:46.617Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseapphosting.googleapis.com x-goog-quota-user=projects/taxibehov
+[debug] [2026-09-08T20:32:46.645Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-09-08T20:32:46.645Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T20:32:46.655Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseio.com [none]
+[debug] [2026-09-08T20:32:46.655Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseio.com x-goog-quota-user=projects/taxibehov
+[debug] [2026-09-08T20:32:46.657Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-09-08T20:32:46.657Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T20:32:46.671Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebasedataconnect.googleapis.com [none]
+[debug] [2026-09-08T20:32:46.671Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebasedataconnect.googleapis.com x-goog-quota-user=projects/taxibehov
+[debug] [2026-09-08T20:32:46.677Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-09-08T20:32:46.677Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T20:32:46.690Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseapphosting.googleapis.com [none]
+[debug] [2026-09-08T20:32:46.690Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseapphosting.googleapis.com x-goog-quota-user=projects/taxibehov
+[debug] [2026-09-08T20:32:46.694Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-09-08T20:32:46.694Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T20:32:46.704Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/cloudfunctions.googleapis.com [none]
+[debug] [2026-09-08T20:32:46.705Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/cloudfunctions.googleapis.com x-goog-quota-user=projects/taxibehov
+[debug] [2026-09-08T20:32:46.708Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-09-08T20:32:46.708Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T20:32:46.720Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firestore.googleapis.com [none]
+[debug] [2026-09-08T20:32:46.720Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firestore.googleapis.com x-goog-quota-user=projects/taxibehov
+[debug] [2026-09-08T20:32:46.725Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-09-08T20:32:46.726Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T20:32:46.737Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebasedataconnect.googleapis.com [none]
+[debug] [2026-09-08T20:32:46.737Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebasedataconnect.googleapis.com x-goog-quota-user=projects/taxibehov
+[debug] [2026-09-08T20:32:46.738Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-09-08T20:32:46.739Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-08T20:32:46.751Z] >>> [apiv2][query] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseio.com [none]
+[debug] [2026-09-08T20:32:46.751Z] >>> [apiv2][(partial)header] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseio.com x-goog-quota-user=projects/taxibehov
+[debug] [2026-09-08T20:32:46.991Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseio.com 403
+[debug] [2026-09-08T20:32:46.991Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseio.com [omitted]
+[debug] [2026-09-08T20:32:47.562Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/cloudfunctions.googleapis.com 200
+[debug] [2026-09-08T20:32:47.562Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/cloudfunctions.googleapis.com [omitted]
+[debug] [2026-09-08T20:32:47.596Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseapphosting.googleapis.com 200
+[debug] [2026-09-08T20:32:47.596Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseapphosting.googleapis.com [omitted]
+[debug] [2026-09-08T20:32:47.623Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseio.com 403
+[debug] [2026-09-08T20:32:47.623Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseio.com [omitted]
+[debug] [2026-09-08T20:32:47.626Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebasedataconnect.googleapis.com 200
+[debug] [2026-09-08T20:32:47.627Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebasedataconnect.googleapis.com [omitted]
+[debug] [2026-09-08T20:32:47.687Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firestore.googleapis.com 200
+[debug] [2026-09-08T20:32:47.687Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firestore.googleapis.com [omitted]
+[debug] [2026-09-08T20:32:47.717Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseapphosting.googleapis.com 200
+[debug] [2026-09-08T20:32:47.717Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebaseapphosting.googleapis.com [omitted]
+[debug] [2026-09-08T20:32:47.720Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/cloudfunctions.googleapis.com 200
+[debug] [2026-09-08T20:32:47.720Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/cloudfunctions.googleapis.com [omitted]
+[debug] [2026-09-08T20:32:47.734Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebasedataconnect.googleapis.com 200
+[debug] [2026-09-08T20:32:47.734Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firebasedataconnect.googleapis.com [omitted]
+[debug] [2026-09-08T20:32:48.513Z] <<< [apiv2][status] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firestore.googleapis.com 200
+[debug] [2026-09-08T20:32:48.513Z] <<< [apiv2][body] GET https://serviceusage.googleapis.com/v1/projects/taxibehov/services/firestore.googleapis.com [omitted]
+[debug] [2026-09-08T20:32:48.552Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T20:32:48.552Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T20:32:48.553Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T20:32:48.553Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T20:39:04.341Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T20:39:04.342Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T20:39:04.343Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T20:39:04.343Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T20:44:31.380Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T20:44:31.380Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T20:44:31.381Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T20:44:31.381Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T20:53:12.492Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T20:53:12.493Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T20:53:12.494Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T20:53:12.494Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T20:58:17.380Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T20:58:17.381Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T20:58:17.381Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T20:58:17.381Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T21:06:42.483Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T21:06:42.486Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T21:06:42.489Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T21:06:42.489Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T21:14:35.702Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T21:14:35.706Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T21:14:35.711Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T21:14:35.711Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T21:20:31.562Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T21:20:31.563Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T21:20:31.709Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T21:20:31.709Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T21:37:40.518Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T21:37:40.519Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T21:37:40.520Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T21:37:40.520Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T21:44:08.499Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T21:44:08.499Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T21:44:08.500Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T21:44:08.500Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T21:49:54.564Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T21:49:54.564Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)
+[debug] [2026-09-08T21:49:54.565Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-08T21:49:54.566Z] > authorizing via signed-in user (abed.mofleh.93@gmail.com)

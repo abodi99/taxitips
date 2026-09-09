@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../api_client.dart';
 import '../config.dart';
 import '../theme.dart';
+import 'brand_icons.dart';
 
 /// 🚕 / 👍 / 👎 -- förarens svar på ett tips.
 ///
@@ -72,7 +73,7 @@ class _AlertFeedbackBarState extends State<AlertFeedbackBar> {
           'Stämde tipset?',
           style: TextStyle(
             fontSize: 13,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w700,
             letterSpacing: 0.4,
             color: TbColors.muted,
           ),
@@ -84,7 +85,10 @@ class _AlertFeedbackBarState extends State<AlertFeedbackBar> {
           children: [
             _FeedbackButton(
               label: 'Kör dit',
-              icon: Icons.local_taxi,
+              icon: BrandIcons.taxi(
+                size: 17,
+                color: _sent.contains('heading') ? TbColors.live : TbColors.ink,
+              ),
               verdict: 'heading',
               sent: _sent.contains('heading'),
               busy: _busy == 'heading',
@@ -92,7 +96,11 @@ class _AlertFeedbackBarState extends State<AlertFeedbackBar> {
             ),
             _FeedbackButton(
               label: 'Fick körning',
-              icon: Icons.thumb_up_alt_outlined,
+              icon: Icon(
+                Icons.thumb_up_alt_outlined,
+                size: 17,
+                color: _sent.contains('fare') ? TbColors.live : TbColors.ink,
+              ),
               verdict: 'fare',
               sent: _sent.contains('fare'),
               busy: _busy == 'fare',
@@ -100,7 +108,11 @@ class _AlertFeedbackBarState extends State<AlertFeedbackBar> {
             ),
             _FeedbackButton(
               label: 'Ingen kund',
-              icon: Icons.thumb_down_alt_outlined,
+              icon: Icon(
+                Icons.thumb_down_alt_outlined,
+                size: 17,
+                color: _sent.contains('empty') ? TbColors.live : TbColors.ink,
+              ),
               verdict: 'empty',
               sent: _sent.contains('empty'),
               busy: _busy == 'empty',
@@ -135,7 +147,7 @@ class _FeedbackButton extends StatelessWidget {
   });
 
   final String label;
-  final IconData icon;
+  final Widget icon;
   final String verdict;
   final bool sent;
   final bool busy;
@@ -154,11 +166,13 @@ class _FeedbackButton extends StatelessWidget {
               height: 14,
               child: CircularProgressIndicator(strokeWidth: 2),
             )
-          : Icon(sent ? Icons.check : icon, size: 17),
+          : sent
+          ? const Icon(Icons.check, size: 17)
+          : SizedBox(width: 17, height: 17, child: icon),
       label: Text(sent ? 'Tack!' : label),
       style: OutlinedButton.styleFrom(
         foregroundColor: sent ? TbColors.live : TbColors.ink,
-        side: BorderSide(color: sent ? TbColors.live : const Color(0xFFC9D0DA)),
+        side: BorderSide(color: sent ? TbColors.live : TbColors.line),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         textStyle: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700),
       ),

@@ -221,13 +221,13 @@ class _SignupScreenState extends State<SignupScreen> {
                   SvgPicture.asset(
                     'assets/brand/logo-on-dark.svg',
                     width: 320,
-                    height: 74,
+                    height: 93,
                     fit: BoxFit.contain,
                   ),
                   Text(
                     'Skapa konto',
                     style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
+                      fontWeight: FontWeight.w700,
                     ),
                   ),
                   const SizedBox(height: 8),

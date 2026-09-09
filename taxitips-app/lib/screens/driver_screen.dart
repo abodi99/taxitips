@@ -11,6 +11,7 @@ import '../push_service.dart';
 import '../severity_labels.dart';
 import '../theme.dart';
 import '../widgets/alert_feedback_bar.dart';
+import '../widgets/brand_icons.dart';
 import '../widgets/hotspot_map.dart';
 import '../widgets/likelihood_badge.dart';
 import '../widgets/smart_alert_card.dart';
@@ -101,6 +102,7 @@ class _DriverScreenState extends State<DriverScreen> {
   // Showing where each disruption actually is also answers the driver's
   // real question ("var kör jag?") better than a count bubble per town.
   bool _mapShowsPerOpportunity = true;
+  String? _region; // null = alla län/regioner
   String? _place; // null = alla
   double? _userLat;
   double? _userLon;
@@ -117,6 +119,26 @@ class _DriverScreenState extends State<DriverScreen> {
   static const _prefsNearMeKey = 'tb_filter_near_me';
   static const _prefsSourceKey = 'tb_filter_source';
   static const _prefsHiddenTiersKey = 'tb_filter_hidden_tiers';
+  static const _prefsRegionKey = 'tb_filter_region';
+  static const _prefsPlaceKey = 'tb_filter_place';
+
+  static const _regionLabels = <String, String>{
+    'skane': 'Skåne',
+    'sl': 'Stockholm',
+    'vt': 'Västra Götaland',
+    'ul': 'Uppsala',
+    'otraf': 'Östergötland',
+    'klt': 'Kalmar',
+    'varm': 'Värmland',
+    'dt': 'Dalarna',
+    'xt': 'Gävleborg',
+    'vastmanland': 'Västmanland',
+    'krono': 'Kronoberg',
+    'jlt': 'Jönköping',
+    'orebro': 'Örebro',
+    'blekinge': 'Blekinge',
+    'gotland': 'Gotland',
+  };
 
   Future<void> _loadSavedFilters() async {
     try {
@@ -125,11 +147,15 @@ class _DriverScreenState extends State<DriverScreen> {
       final nearMe = prefs.getBool(_prefsNearMeKey);
       final source = prefs.getString(_prefsSourceKey);
       final hiddenTiers = prefs.getStringList(_prefsHiddenTiersKey);
+      final region = prefs.getString(_prefsRegionKey);
+      final place = prefs.getString(_prefsPlaceKey);
       if (!mounted) return;
       setState(() {
         if (highOnly != null) _highOnly = highOnly;
         if (source != null) _sourceFilter = source;
         if (hiddenTiers != null) _hiddenTiers = hiddenTiers.toSet();
+        _region = region;
+        _place = place;
       });
       // "Nära mig" needs a real GPS fix to actually filter anything
       // (_geoFilter no-ops until _userLat/_userLon are set) -- re-run the
@@ -152,6 +178,16 @@ class _DriverScreenState extends State<DriverScreen> {
       await prefs.setBool(_prefsNearMeKey, _nearMe);
       await prefs.setString(_prefsSourceKey, _sourceFilter);
       await prefs.setStringList(_prefsHiddenTiersKey, _hiddenTiers.toList());
+      if (_region == null) {
+        await prefs.remove(_prefsRegionKey);
+      } else {
+        await prefs.setString(_prefsRegionKey, _region!);
+      }
+      if (_place == null) {
+        await prefs.remove(_prefsPlaceKey);
+      } else {
+        await prefs.setString(_prefsPlaceKey, _place!);
+      }
     } catch (_) {
       // Non-fatal -- losing a saved preference isn't worth surfacing an
       // error over.
@@ -186,11 +222,33 @@ class _DriverScreenState extends State<DriverScreen> {
     } else if (widget.api.deviceToken != null) {
       await registerForPush(widget.api);
     }
+    await _updateCurrentPosition();
     await _load();
     _timer = Timer.periodic(
       const Duration(seconds: 30),
       (_) => _load(silent: true),
     );
+  }
+
+  Future<void> _updateCurrentPosition() async {
+    try {
+      var perm = await Geolocator.checkPermission();
+      if (perm == LocationPermission.denied) {
+        perm = await Geolocator.requestPermission();
+      }
+      if (perm == LocationPermission.denied ||
+          perm == LocationPermission.deniedForever) {
+        return;
+      }
+      final pos = await Geolocator.getCurrentPosition();
+      if (!mounted) return;
+      setState(() {
+        _userLat = pos.latitude;
+        _userLon = pos.longitude;
+      });
+    } catch (_) {
+      // Location is an enhancement; the feed still works without a fix.
+    }
   }
 
   String _friendly(Object e) {
@@ -258,9 +316,47 @@ class _DriverScreenState extends State<DriverScreen> {
 
   List<Map<String, dynamic>> get _rawWeek => _asMaps(_data?['week']);
 
+  /// Sparade tips. Kommer färdiga från backend i samma svar som flödet och
+  /// filtreras ALDRIG här -- hela poängen med en favorit är att den
+  /// överlever filtren, marknadsradien och att störningen tar slut.
+  List<Map<String, dynamic>> get _favorites => _asMaps(_data?['favorites']);
+
+  /// Stjärnmarkerar eller avmarkerar ett tips.
+  ///
+  /// Skriver optimistiskt i den lokala listan innan svaret kommit: en
+  /// stjärna som väntar på nätet känns trasig, och backend är idempotent
+  /// (en dubbelsparning svarar `duplicate: true`, inte ett fel). Går det
+  /// fel återställs den och föraren får veta -- tyst misslyckande är värre
+  /// än en synlig återställning.
+  Future<void> _toggleFavorite(Map<String, dynamic> alert, bool favorite) async {
+    final id = alert['id']?.toString();
+    if (id == null || id.isEmpty) return;
+
+    setState(() => alert['is_favorite'] = favorite);
+    try {
+      await widget.api.setFavorite(opportunityId: id, favorite: favorite);
+      // Hämtar om flödet så att `favorites`-listan speglar det som just
+      // sparades -- den byggs av backend, inte här.
+      await _load(silent: true);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => alert['is_favorite'] = !favorite);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            favorite ? 'Kunde inte spara tipset' : 'Kunde inte ta bort tipset',
+          ),
+        ),
+      );
+    }
+  }
+
   /// Place + near-me filters (not kind / high-only).
   List<Map<String, dynamic>> _geoFilter(List<Map<String, dynamic>> list) {
     var out = list;
+    if (_region != null) {
+      out = out.where((a) => a['region']?.toString() == _region).toList();
+    }
     if (_place != null) {
       out = out.where((a) {
         final places = ((a['taxi'] as Map?)?['places'] as List?) ?? [];
@@ -373,6 +469,7 @@ class _DriverScreenState extends State<DriverScreen> {
   bool get _filtersActive =>
       _highOnly ||
       _nearMe ||
+      _region != null ||
       _place != null ||
       _sourceFilter != 'all' ||
       _hiddenTiers.isNotEmpty;
@@ -383,6 +480,7 @@ class _DriverScreenState extends State<DriverScreen> {
     if (_sourceFilter == 'road') bits.add('Bara vägtrafik');
     if (_highOnly) bits.add('Hög prio');
     if (_nearMe) bits.add('Nära dig');
+    if (_region != null) bits.add(_regionLabels[_region] ?? _region!);
     if (_place != null) bits.add(_place!);
     if (_hiddenTiers.isNotEmpty) bits.add('${_hiddenTiers.length} typ dold');
     if (bits.isEmpty) return 'Alla signaler';
@@ -395,6 +493,7 @@ class _DriverScreenState extends State<DriverScreen> {
   void _clearFilters() {
     setState(() {
       _place = null;
+      _region = null;
       _highOnly = true;
       _nearMe = false;
       _sourceFilter = 'all';
@@ -449,8 +548,9 @@ class _DriverScreenState extends State<DriverScreen> {
                         const Text(
                           'Filter',
                           style: TextStyle(
+                            fontFamily: kDisplayFont,
                             fontSize: 24,
-                            fontWeight: FontWeight.w900,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -458,7 +558,7 @@ class _DriverScreenState extends State<DriverScreen> {
                           contentPadding: EdgeInsets.zero,
                           title: const Text(
                             'Bara hög prio',
-                            style: TextStyle(fontWeight: FontWeight.w800),
+                            style: TextStyle(fontWeight: FontWeight.w700),
                           ),
                           subtitle: const Text(
                             'Bara allvarliga störningar (oavsett avstånd)',
@@ -466,11 +566,62 @@ class _DriverScreenState extends State<DriverScreen> {
                           value: _highOnly,
                           onChanged: (v) => apply(() => _highOnly = v),
                         ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Län / region',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        DropdownButtonFormField<String>(
+                          initialValue: _region ?? '__all__',
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            const DropdownMenuItem(
+                              value: '__all__',
+                              child: Text('Hela Sverige'),
+                            ),
+                            for (final region in _availableRegions)
+                              DropdownMenuItem(
+                                value: region,
+                                child: Text(_regionLabels[region] ?? region),
+                              ),
+                          ],
+                          onChanged: (value) => apply(
+                            () => _region = value == '__all__' ? null : value,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        const Text(
+                          'Stad',
+                          style: TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        DropdownButtonFormField<String>(
+                          initialValue: _place ?? '__all__',
+                          isExpanded: true,
+                          decoration: const InputDecoration(
+                            isDense: true,
+                            border: OutlineInputBorder(),
+                          ),
+                          items: [
+                            const DropdownMenuItem(
+                              value: '__all__',
+                              child: Text('Alla städer'),
+                            ),
+                            for (final city in _availableCities)
+                              DropdownMenuItem(value: city, child: Text(city)),
+                          ],
+                          onChanged: (value) => apply(
+                            () => _place = value == '__all__' ? null : value,
+                          ),
+                        ),
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
                           title: const Text(
                             'Nära mig',
-                            style: TextStyle(fontWeight: FontWeight.w800),
+                            style: TextStyle(fontWeight: FontWeight.w700),
                           ),
                           subtitle: const Text('Inom ca 25 km'),
                           value: _nearMe,
@@ -486,7 +637,7 @@ class _DriverScreenState extends State<DriverScreen> {
                         const SizedBox(height: 8),
                         const Text(
                           'Källa',
-                          style: TextStyle(fontWeight: FontWeight.w800),
+                          style: TextStyle(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 8),
                         Wrap(
@@ -501,7 +652,7 @@ class _DriverScreenState extends State<DriverScreen> {
                                 label: Text(
                                   opt.$2,
                                   style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                                 selected: _sourceFilter == opt.$1,
@@ -519,7 +670,7 @@ class _DriverScreenState extends State<DriverScreen> {
                           const SizedBox(height: 16),
                           const Text(
                             'Typ av händelse',
-                            style: TextStyle(fontWeight: FontWeight.w800),
+                            style: TextStyle(fontWeight: FontWeight.w700),
                           ),
                           const SizedBox(height: 4),
                           Text(
@@ -685,6 +836,31 @@ class _DriverScreenState extends State<DriverScreen> {
     return displayTitle(title: title, mode: a['mode']?.toString());
   }
 
+  List<String> get _availableRegions {
+    final regions = <String>{..._regionLabels.keys};
+    for (final alert in _rawActive) {
+      final region = alert['region']?.toString();
+      if (region != null && region.isNotEmpty) regions.add(region);
+    }
+    return regions.toList()..sort(
+      (a, b) => (_regionLabels[a] ?? a).compareTo(_regionLabels[b] ?? b),
+    );
+  }
+
+  List<String> get _availableCities {
+    final cities = <String>{};
+    for (final alert in _rawActive) {
+      if (_region != null && alert['region']?.toString() != _region) continue;
+      final places = ((alert['taxi'] as Map?)?['places'] as List?) ?? [];
+      cities.addAll(
+        places
+            .map((place) => place.toString().trim())
+            .where((place) => place.isNotEmpty),
+      );
+    }
+    return cities.toList()..sort();
+  }
+
   // 'header'/'taxi.driverHint' were legacy events-era fields never populated
   // on real opportunities (get_smart_alerts never returns them) -- this always
   // fell through to a generic placeholder instead of the actual, specific
@@ -793,7 +969,7 @@ class _DriverScreenState extends State<DriverScreen> {
                             : 'KOLLEKTIV',
                         style: TextStyle(
                           fontSize: 12,
-                          fontWeight: FontWeight.w900,
+                          fontWeight: FontWeight.w700,
                           letterSpacing: 0.6,
                           color: Colors.grey.shade700,
                         ),
@@ -812,8 +988,9 @@ class _DriverScreenState extends State<DriverScreen> {
                   Text(
                     _placeName(a),
                     style: const TextStyle(
+                      fontFamily: kDisplayFont,
                       fontSize: 28,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w700,
                       height: 1.1,
                     ),
                   ),
@@ -824,21 +1001,32 @@ class _DriverScreenState extends State<DriverScreen> {
                   Row(
                     children: [
                       _DetailStat(
-                        icon: Icons.schedule,
+                        icon: BrandIcons.clock(
+                          size: 13,
+                          color: Colors.grey.shade700,
+                        ),
                         label: a['is_active'] == false
                             ? '${dateTimeLabel(a['start_time']?.toString())} → ${dateTimeLabel(a['end_time']?.toString())}'
                             : dateTimeLabel(a['start_time']?.toString()),
                       ),
                       const SizedBox(width: 8),
                       _DetailStat(
-                        icon: Icons.speed,
+                        icon: Icon(
+                          Icons.speed,
+                          size: 13,
+                          color: Colors.grey.shade700,
+                        ),
                         label:
                             '${(a['demand_score'] as num?)?.round() ?? '—'}/100',
                       ),
                       if (a['is_active'] == false) ...[
                         const SizedBox(width: 8),
-                        const _DetailStat(
-                          icon: Icons.history,
+                        _DetailStat(
+                          icon: Icon(
+                            Icons.history,
+                            size: 13,
+                            color: Colors.grey.shade700,
+                          ),
                           label: 'Avslutad',
                         ),
                       ],
@@ -867,15 +1055,24 @@ class _DriverScreenState extends State<DriverScreen> {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Icon(
-                          travel.isLastDeparture
-                              ? Icons.last_page
-                              : (travel.hasAlternative
-                                    ? Icons.directions_bus
-                                    : Icons.schedule_send),
-                          size: 17,
-                          color: travel.isStrong ? TbColors.live : TbColors.muted,
-                        ),
+                        (() {
+                          final color = travel.isStrong
+                              ? TbColors.live
+                              : TbColors.muted;
+                          if (travel.isLastDeparture)
+                            return Icon(
+                              Icons.last_page,
+                              size: 17,
+                              color: color,
+                            );
+                          if (travel.hasAlternative)
+                            return BrandIcons.bus(size: 17, color: color);
+                          return Icon(
+                            Icons.schedule_send,
+                            size: 17,
+                            color: color,
+                          );
+                        })(),
                         const SizedBox(width: 6),
                         Expanded(
                           child: Text(
@@ -995,9 +1192,9 @@ class _DriverScreenState extends State<DriverScreen> {
           fontWeight: FontWeight.w500,
           decoration: TextDecoration.none,
         ),
-        child: SafeArea(
-          child: _claiming
-              ? const Center(
+        child: _claiming
+            ? const SafeArea(
+                child: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -1013,468 +1210,606 @@ class _DriverScreenState extends State<DriverScreen> {
                       ),
                     ],
                   ),
-                )
-              : Column(
-                  children: [
-                    // Top bar -- kept to one job each: identity (title + live
-                    // status), and one standard action (settings). Filter and
-                    // refresh both moved down next to the list they actually
-                    // affect (see _filterSummary row below) instead of living
-                    // here -- neither is identity/global-app chrome, they're
-                    // both list controls. A soft shadow gives it depth against
-                    // the flat sand background below instead of a hard edge.
-                    Container(
-                      decoration: const BoxDecoration(
-                        color: TbColors.asphalt,
-                        boxShadow: [
-                          BoxShadow(
-                            color: Color(0x33000000),
-                            blurRadius: 8,
-                            offset: Offset(0, 2),
-                          ),
-                        ],
-                      ),
-                      padding: const EdgeInsets.fromLTRB(8, 8, 8, 12),
-                      child: Row(
-                        children: [
-                          if (widget.onBack != null)
-                            IconButton(
-                              onPressed: widget.onBack,
-                              icon: const Icon(
-                                Icons.arrow_back,
-                                color: TbColors.foam,
-                              ),
-                            )
-                          else
-                            const SizedBox(width: 8),
-                          const Text(
-                            'Taxi Tips',
-                            style: TextStyle(
-                              fontSize: 21,
-                              fontWeight: FontWeight.w900,
-                              color: TbColors.foam,
-                              letterSpacing: -0.2,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          _LivePill(
-                            live: live,
-                            demo: widget.demo,
-                            time: _clock(_data?['updatedAt']),
-                          ),
-                          const Spacer(),
-                          if (widget.onOpenSettings != null)
-                            IconButton(
-                              tooltip: 'Inställningar',
-                              onPressed: widget.onOpenSettings,
-                              icon: const Icon(
-                                Icons.settings_outlined,
-                                color: TbColors.foam,
-                              ),
-                              style: IconButton.styleFrom(
-                                backgroundColor: Colors.white.withValues(
-                                  alpha: 0.08,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
+                ),
+              )
+            : Stack(
+                children: [
+                  // 1. Karta (underst)
+                  Positioned.fill(
+                    child: HotspotMap(
+                      placeStats: _asMaps(_data?['placeStats']),
+                      events: _mapEvents,
+                      userLat: _userLat,
+                      userLon: _userLon,
+                      selectedPlace: _place,
+                      highOnly: _highOnly,
+                      perOpportunity: _mapShowsPerOpportunity,
+                      opportunities: _trafficSignals,
+                      onSelectPlace: (name) => setState(() {
+                        _place = _place == name ? null : name;
+                      }),
+                      onSelectOpportunity: (o) => _openAlertDetail(o),
                     ),
+                  ),
 
-                    if (_entitled == false)
-                      _EntitlementBanner(onOpenSettings: widget.onOpenSettings),
-
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                  // 2. Toppmeny (svävande ovanpå kartan)
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: SafeArea(
+                      bottom: false,
                       child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Expanded(
-                                child: Text(
-                                  'Var behövs taxi?',
+                          Container(
+                            margin: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                            decoration: BoxDecoration(
+                              color: TbColors.asphalt.withValues(alpha: 0.95),
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: const [
+                                BoxShadow(
+                                  color: Colors.black26,
+                                  blurRadius: 10,
+                                  offset: Offset(0, 4),
+                                ),
+                              ],
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 8,
+                            ),
+                            child: Row(
+                              children: [
+                                if (widget.onBack != null)
+                                  IconButton(
+                                    onPressed: widget.onBack,
+                                    icon: const Icon(
+                                      Icons.arrow_back,
+                                      color: TbColors.foam,
+                                    ),
+                                  )
+                                else
+                                  const SizedBox(width: 8),
+                                const Text(
+                                  'Taxi Tips',
                                   style: TextStyle(
-                                    fontSize: 28,
-                                    fontWeight: FontWeight.w900,
-                                    height: 1.1,
-                                    color: TbColors.ink,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w700,
+                                    color: TbColors.foam,
+                                    letterSpacing: -0.2,
                                   ),
                                 ),
-                              ),
-                              // Filter and refresh live here, next to the list
-                              // they control, instead of in the top bar's
-                              // global-app chrome.
-                              Padding(
-                                padding: const EdgeInsets.only(top: 2),
-                                child: Row(
-                                  children: [
-                                    SizedBox(
-                                      width: 48,
-                                      height: 48,
-                                      child: IconButton(
-                                        tooltip: 'Uppdatera',
-                                        onPressed: _refreshing
-                                            ? null
-                                            : () => _load(),
-                                        padding: EdgeInsets.zero,
-                                        icon: _refreshing
-                                            ? const SizedBox(
-                                                width: 20,
-                                                height: 20,
-                                                child:
-                                                    CircularProgressIndicator(
-                                                      strokeWidth: 2,
-                                                    ),
-                                              )
-                                            : const Icon(
-                                                Icons.refresh,
-                                                size: 22,
-                                                color: TbColors.ink,
-                                              ),
-                                        style: IconButton.styleFrom(
-                                          side: const BorderSide(
-                                            color: Color(0xFFC9D0DA),
-                                          ),
-                                          shape: const CircleBorder(),
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    OutlinedButton.icon(
-                                      onPressed: _openFilters,
-                                      icon: Badge(
-                                        isLabelVisible: _filtersActive,
-                                        smallSize: 8,
-                                        backgroundColor: TbColors.taxi,
-                                        child: const Icon(Icons.tune, size: 18),
-                                      ),
-                                      label: const Text('Filter'),
-                                      style: OutlinedButton.styleFrom(
-                                        foregroundColor: TbColors.ink,
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 12,
-                                        ),
-                                        textStyle: const TextStyle(
-                                          fontSize: 15,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ),
-                                  ],
+                                const SizedBox(width: 10),
+                                _LivePill(
+                                  live: live,
+                                  demo: widget.demo,
+                                  time: _clock(_data?['updatedAt']),
                                 ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-                          // Filter-summary and live-status used to be two
-                          // separate stacked lines doing similar "state of the
-                          // world" jobs -- merged into one so a driver scans
-                          // one line instead of two before reaching the map.
-                          // An active filter tints just that segment instead
-                          // of adding its own row.
-                          Row(
-                            children: [
-                              Icon(
-                                live ? Icons.circle : Icons.circle_outlined,
-                                size: 9,
-                                color: live
-                                    ? TbColors.live
-                                    : Colors.grey.shade400,
-                              ),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: RichText(
-                                  overflow: TextOverflow.ellipsis,
-                                  text: TextSpan(
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w600,
-                                      color: live
-                                          ? TbColors.live
-                                          : Colors.grey.shade600,
-                                    ),
-                                    children: [
-                                      TextSpan(
-                                        text: live
-                                            ? 'Live · uppdaterad ${_clock(_data?['updatedAt'])}'
-                                            : 'Data ej live · senast ${_clock(_data?['updatedAt'])}',
-                                      ),
-                                      TextSpan(
-                                        text: ' · $_filterSummary',
-                                        style: TextStyle(
-                                          color: _filtersActive
-                                              ? TbColors.taxiDeep
-                                              : TbColors.muted,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 10),
-                          Stack(
-                            children: [
-                              HotspotMap(
-                                placeStats: _asMaps(_data?['placeStats']),
-                                events: _mapEvents,
-                                userLat: _userLat,
-                                userLon: _userLon,
-                                selectedPlace: _place,
-                                highOnly: _highOnly,
-                                perOpportunity: _mapShowsPerOpportunity,
-                                // Same list the cards below are built from,
-                                // so map and list can never disagree. It
-                                // previously skipped the high-prio filter,
-                                // which meant "Hög prio" showed 5 cards
-                                // while the map plotted ~120 markers, mostly
-                                // low-priority ones the driver had just
-                                // asked not to see.
-                                opportunities: _trafficSignals,
-                                onSelectPlace: (name) => setState(() {
-                                  _place = _place == name ? null : name;
-                                }),
-                                onSelectOpportunity: (o) => _openAlertDetail(o),
-                              ),
-                              Positioned(
-                                top: 8,
-                                right: 8,
-                                child: SizedBox(
-                                  width: 44,
-                                  height: 44,
-                                  child: IconButton(
-                                    tooltip: _mapShowsPerOpportunity
-                                        ? 'Visa orter'
-                                        : 'Visa signaler + avstånd',
-                                    onPressed: () => setState(() {
-                                      _mapShowsPerOpportunity =
-                                          !_mapShowsPerOpportunity;
-                                    }),
-                                    icon: Icon(
-                                      _mapShowsPerOpportunity
-                                          ? Icons.blur_on
-                                          : Icons.pin_drop_outlined,
-                                      size: 20,
-                                      color: TbColors.ink,
+                                const Spacer(),
+                                if (widget.onOpenSettings != null)
+                                  IconButton(
+                                    tooltip: 'Inställningar',
+                                    onPressed: widget.onOpenSettings,
+                                    icon: const Icon(
+                                      Icons.settings_outlined,
+                                      color: TbColors.foam,
                                     ),
                                     style: IconButton.styleFrom(
                                       backgroundColor: Colors.white.withValues(
-                                        alpha: 0.9,
+                                        alpha: 0.08,
                                       ),
-                                      shape: const CircleBorder(),
-                                      elevation: 2,
                                     ),
                                   ),
-                                ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
+                          if (_entitled == false)
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                              ),
+                              child: _EntitlementBanner(
+                                onOpenSettings: widget.onOpenSettings,
+                              ),
+                            ),
                           if (_status != null)
                             Padding(
-                              padding: const EdgeInsets.only(top: 8),
+                              padding: const EdgeInsets.only(top: 4),
                               child: Text(
                                 _status!,
                                 style: const TextStyle(
                                   color: TbColors.live,
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.w900,
+                                  shadows: [
+                                    Shadow(
+                                      blurRadius: 3,
+                                      color: Colors.black45,
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
                           if (_error != null)
                             Padding(
-                              padding: const EdgeInsets.only(top: 8),
+                              padding: const EdgeInsets.only(top: 4),
                               child: Text(
                                 _error!,
                                 style: const TextStyle(
                                   color: TbColors.danger,
-                                  fontWeight: FontWeight.w700,
+                                  fontWeight: FontWeight.w900,
+                                  shadows: [
+                                    Shadow(
+                                      blurRadius: 3,
+                                      color: Colors.black45,
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
                         ],
                       ),
                     ),
+                  ),
 
-                    if (_places.isNotEmpty) ...[
-                      const SizedBox(height: 10),
-                      SizedBox(
-                        height: 44,
-                        child: ListView(
-                          scrollDirection: Axis.horizontal,
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          children: [
-                            _OrtChip(
-                              label: 'Alla',
-                              selected: _place == null,
-                              onTap: () => setState(() => _place = null),
-                            ),
-                            for (final p in _places.take(12))
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8),
-                                child: _OrtChip(
-                                  label: p['name']?.toString() ?? '',
-                                  count: (p['count'] as num?)?.toInt(),
-                                  hot: p['maxLevel'] == 'high',
-                                  selected: _place == p['name'],
-                                  onTap: () => setState(() {
-                                    final name = p['name']?.toString();
-                                    _place = _place == name ? null : name;
-                                  }),
-                                ),
+                  // 3. FAB för kartkontroller
+                  Positioned(
+                    right: 16,
+                    bottom: MediaQuery.of(context).size.height * 0.42 + 16,
+                    child: SafeArea(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          SizedBox(
+                            width: 52,
+                            height: 52,
+                            child: IconButton(
+                              tooltip: _mapShowsPerOpportunity
+                                  ? 'Visa orter'
+                                  : 'Visa signaler + avstånd',
+                              onPressed: () => setState(() {
+                                _mapShowsPerOpportunity =
+                                    !_mapShowsPerOpportunity;
+                              }),
+                              icon: Icon(
+                                _mapShowsPerOpportunity
+                                    ? Icons.blur_on
+                                    : Icons.pin_drop_outlined,
+                                size: 24,
+                                color: TbColors.ink,
                               ),
+                              style: IconButton.styleFrom(
+                                backgroundColor: Colors.white,
+                                shape: const CircleBorder(),
+                                elevation: 4,
+                                shadowColor: Colors.black45,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // 4. Bottenmeny (Sheet)
+                  DraggableScrollableSheet(
+                    initialChildSize: 0.42,
+                    minChildSize: 0.15,
+                    maxChildSize: 0.9,
+                    snap: true,
+                    snapSizes: const [0.15, 0.42, 0.9],
+                    builder: (context, scrollController) {
+                      return Container(
+                        decoration: const BoxDecoration(
+                          color: TbColors.foam,
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(24),
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black26,
+                              blurRadius: 16,
+                              offset: Offset(0, -4),
+                            ),
                           ],
                         ),
-                      ),
-                    ],
-
-                    Expanded(
-                      child: RefreshIndicator(
-                        color: TbColors.taxiDeep,
-                        onRefresh: () => _load(),
-                        child: _signals.isEmpty && _weekSignals.isEmpty
-                            ? ListView(
-                                physics: const AlwaysScrollableScrollPhysics(),
-                                padding: const EdgeInsets.all(40),
-                                children: [
-                                  Icon(
-                                    Icons.local_taxi,
-                                    size: 64,
-                                    color: Colors.grey.shade300,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  // "Nothing high-prio right now" is a real,
-                                  // useful answer -- not an error state. Since
-                                  // high-prio is the default, offer the one
-                                  // action that actually reveals more (turning
-                                  // it off) rather than a reset that would
-                                  // land right back here.
-                                  Text(
-                                    _highOnly
-                                        ? 'Inga starka taxisignaler just nu.'
-                                        : 'Inget i filtret.\nÄndra typ, nära mig eller ort.',
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      fontSize: 17,
-                                      height: 1.4,
-                                      color: Colors.grey.shade700,
-                                    ),
-                                  ),
-                                  if (_highOnly) ...[
-                                    const SizedBox(height: 16),
-                                    Center(
-                                      child: FilledButton(
-                                        onPressed: () {
-                                          setState(() => _highOnly = false);
-                                          _saveFilters();
-                                          // Land in the sheet so the type
-                                          // controls that just became
-                                          // relevant are right there.
-                                          _openFilters();
-                                        },
-                                        child: const Text(
-                                          'Visa svagare signaler',
-                                        ),
-                                      ),
-                                    ),
-                                  ] else if (_filtersActive) ...[
-                                    const SizedBox(height: 16),
-                                    Center(
-                                      child: FilledButton(
-                                        onPressed: _clearFilters,
-                                        child: const Text('Nollställ filter'),
-                                      ),
-                                    ),
-                                  ],
-                                ],
-                              )
-                            : ListView(
-                                physics: const AlwaysScrollableScrollPhysics(),
-                                padding: const EdgeInsets.fromLTRB(
-                                  16,
-                                  4,
-                                  16,
-                                  28,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            // Drag handle
+                            Center(
+                              child: Container(
+                                margin: const EdgeInsets.only(
+                                  top: 10,
+                                  bottom: 4,
                                 ),
+                                width: 40,
+                                height: 4,
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.shade400,
+                                  borderRadius: BorderRadius.circular(2),
+                                ),
+                              ),
+                            ),
+                            // Header-del (rullar inte med listan inuti)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  if (_trafficSignalsVisible.isNotEmpty) ...[
-                                    if (_activeSignalsVisible.isNotEmpty) ...[
-                                      _SectionTitle(
-                                        'Nu — kör hit (${_trafficSignals.length})',
-                                      ),
-                                      for (final a
-                                          in _activeSignalsVisible) ...[
-                                        SmartAlertCard(
-                                          alert: a,
-                                          onTap: () => _openAlertDetail(a),
-                                        ),
-                                        const SizedBox(height: 10),
-                                      ],
-                                    ],
-                                    if (_endedSignalsVisible.isNotEmpty) ...[
-                                      const _SectionTitle('Senaste dygnet'),
-                                      for (final a in _endedSignalsVisible) ...[
-                                        SmartAlertCard(
-                                          alert: a,
-                                          onTap: () => _openAlertDetail(a),
-                                        ),
-                                        const SizedBox(height: 10),
-                                      ],
-                                    ],
-                                    if (_trafficSignals.length >
-                                        _trafficSignalsVisible.length)
-                                      Padding(
-                                        padding: const EdgeInsets.only(
-                                          bottom: 10,
-                                        ),
+                                  Row(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Expanded(
                                         child: Text(
-                                          '+${_trafficSignals.length - _trafficSignalsVisible.length} fler trafiksignaler — öppna Filter → Källa',
+                                          'Var behövs taxi?',
                                           style: TextStyle(
-                                            fontSize: 13,
-                                            color: Colors.grey.shade700,
-                                            fontWeight: FontWeight.w600,
+                                            fontFamily: kDisplayFont,
+                                            fontSize: 26,
+                                            fontWeight: FontWeight.w700,
+                                            height: 1.1,
+                                            color: TbColors.ink,
                                           ),
                                         ),
                                       ),
-                                  ],
-                                  if (_weekSignals.isNotEmpty) ...[
-                                    const SizedBox(height: 8),
-                                    Theme(
-                                      data: Theme.of(context).copyWith(
-                                        dividerColor: Colors.transparent,
-                                      ),
-                                      child: ExpansionTile(
-                                        initiallyExpanded: false,
-                                        tilePadding: EdgeInsets.zero,
-                                        childrenPadding: EdgeInsets.zero,
-                                        title: const Text(
-                                          'Senaste veckan',
-                                          style: TextStyle(
-                                            fontSize: 18,
-                                            fontWeight: FontWeight.w900,
-                                          ),
-                                        ),
-                                        children: [
-                                          for (final a in _weekSignals) ...[
-                                            SmartAlertCard(
-                                              alert: a,
-                                              onTap: () => _openAlertDetail(a),
+                                      Padding(
+                                        padding: const EdgeInsets.only(top: 2),
+                                        child: Row(
+                                          children: [
+                                            SizedBox(
+                                              width: 44,
+                                              height: 44,
+                                              child: IconButton(
+                                                tooltip: 'Uppdatera',
+                                                onPressed: _refreshing
+                                                    ? null
+                                                    : () => _load(),
+                                                padding: EdgeInsets.zero,
+                                                icon: _refreshing
+                                                    ? const SizedBox(
+                                                        width: 20,
+                                                        height: 20,
+                                                        child:
+                                                            CircularProgressIndicator(
+                                                              strokeWidth: 2,
+                                                            ),
+                                                      )
+                                                    : const Icon(
+                                                        Icons.refresh,
+                                                        size: 22,
+                                                        color: TbColors.ink,
+                                                      ),
+                                                style: IconButton.styleFrom(
+                                                  side: const BorderSide(
+                                                    color: TbColors.line,
+                                                  ),
+                                                  shape: const CircleBorder(),
+                                                ),
+                                              ),
                                             ),
-                                            const SizedBox(height: 10),
+                                            const SizedBox(width: 8),
+                                            OutlinedButton.icon(
+                                              onPressed: _openFilters,
+                                              icon: Badge(
+                                                isLabelVisible: _filtersActive,
+                                                smallSize: 8,
+                                                backgroundColor: TbColors.taxi,
+                                                child: BrandIcons.filter(
+                                                  size: 18,
+                                                  color: TbColors.midnatt,
+                                                ),
+                                              ),
+                                              label: const Text('Filter'),
+                                              style: OutlinedButton.styleFrom(
+                                                foregroundColor: TbColors.ink,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                    ),
+                                                textStyle: const TextStyle(
+                                                  fontSize: 15,
+                                                  fontWeight: FontWeight.w700,
+                                                ),
+                                              ),
+                                            ),
                                           ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 6),
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        live
+                                            ? Icons.circle
+                                            : Icons.circle_outlined,
+                                        size: 9,
+                                        color: live
+                                            ? TbColors.live
+                                            : Colors.grey.shade400,
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: RichText(
+                                          overflow: TextOverflow.ellipsis,
+                                          text: TextSpan(
+                                            style: TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.w600,
+                                              color: live
+                                                  ? TbColors.live
+                                                  : Colors.grey.shade600,
+                                            ),
+                                            children: [
+                                              TextSpan(
+                                                text: live
+                                                    ? 'Live · ${_clock(_data?['updatedAt'])}'
+                                                    : 'Ej live · ${_clock(_data?['updatedAt'])}',
+                                              ),
+                                              TextSpan(
+                                                text: ' · $_filterSummary',
+                                                style: TextStyle(
+                                                  color: _filtersActive
+                                                      ? TbColors.taxiDeep
+                                                      : TbColors.muted,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  if (_places.isNotEmpty) ...[
+                                    const SizedBox(height: 10),
+                                    SizedBox(
+                                      height: 44,
+                                      child: ListView(
+                                        scrollDirection: Axis.horizontal,
+                                        padding: EdgeInsets.zero,
+                                        children: [
+                                          _OrtChip(
+                                            label: 'Alla',
+                                            selected: _place == null,
+                                            onTap: () =>
+                                                setState(() => _place = null),
+                                          ),
+                                          for (final p in _places.take(12))
+                                            Padding(
+                                              padding: const EdgeInsets.only(
+                                                left: 8,
+                                              ),
+                                              child: _OrtChip(
+                                                label:
+                                                    p['name']?.toString() ?? '',
+                                                count: (p['count'] as num?)
+                                                    ?.toInt(),
+                                                hot: p['maxLevel'] == 'high',
+                                                selected: _place == p['name'],
+                                                onTap: () => setState(() {
+                                                  final name = p['name']
+                                                      ?.toString();
+                                                  _place = _place == name
+                                                      ? null
+                                                      : name;
+                                                }),
+                                              ),
+                                            ),
                                         ],
                                       ),
                                     ),
                                   ],
+                                  const SizedBox(height: 8),
                                 ],
                               ),
-                      ),
-                    ),
-                  ],
-                ),
-        ),
+                            ),
+
+                            // Rullbar lista inuti sheetet
+                            Expanded(
+                              child: RefreshIndicator(
+                                color: TbColors.taxiDeep,
+                                onRefresh: () => _load(),
+                                child: _signals.isEmpty && _weekSignals.isEmpty
+                                    ? ListView(
+                                        controller: scrollController,
+                                        physics:
+                                            const AlwaysScrollableScrollPhysics(),
+                                        padding: const EdgeInsets.all(40),
+                                        children: [
+                                          BrandIcons.taxi(
+                                            size: 64,
+                                            color: Colors.grey.shade300,
+                                          ),
+                                          const SizedBox(height: 12),
+                                          Text(
+                                            _highOnly
+                                                ? 'Inga starka taxisignaler just nu.'
+                                                : 'Inget i filtret.\\nÄndra typ, nära mig eller ort.',
+                                            textAlign: TextAlign.center,
+                                            style: TextStyle(
+                                              fontSize: 17,
+                                              height: 1.4,
+                                              color: Colors.grey.shade700,
+                                            ),
+                                          ),
+                                          if (_highOnly) ...[
+                                            const SizedBox(height: 16),
+                                            Center(
+                                              child: FilledButton(
+                                                onPressed: () {
+                                                  setState(
+                                                    () => _highOnly = false,
+                                                  );
+                                                  _saveFilters();
+                                                  _openFilters();
+                                                },
+                                                child: const Text(
+                                                  'Visa svagare signaler',
+                                                ),
+                                              ),
+                                            ),
+                                          ] else if (_filtersActive) ...[
+                                            const SizedBox(height: 16),
+                                            Center(
+                                              child: FilledButton(
+                                                onPressed: _clearFilters,
+                                                child: const Text(
+                                                  'Nollställ filter',
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      )
+                                    : ListView(
+                                        controller: scrollController,
+                                        physics:
+                                            const AlwaysScrollableScrollPhysics(),
+                                        padding: const EdgeInsets.fromLTRB(
+                                          16,
+                                          4,
+                                          16,
+                                          40,
+                                        ),
+                                        children: [
+                                          // Sparade tips ligger ÖVER de
+                                          // filtrerade listorna och ritas
+                                          // aldrig genom något filter. Det
+                                          // är hela poängen: ett tips som
+                                          // föraren aktivt sparat ska inte
+                                          // kunna gömmas av ett filter som
+                                          // råkar ligga kvar sedan förra
+                                          // passet.
+                                          if (_favorites.isNotEmpty) ...[
+                                            _SectionTitle(
+                                              'Sparade (${_favorites.length})',
+                                            ),
+                                            for (final a in _favorites) ...[
+                                              SmartAlertCard(
+                                                alert: a,
+                                                onTap: () =>
+                                                    _openAlertDetail(a),
+                                                onToggleFavorite: (v) =>
+                                                    _toggleFavorite(a, v),
+                                              ),
+                                              const SizedBox(height: 10),
+                                            ],
+                                            const SizedBox(height: 6),
+                                          ],
+                                          if (_trafficSignalsVisible
+                                              .isNotEmpty) ...[
+                                            if (_activeSignalsVisible
+                                                .isNotEmpty) ...[
+                                              _SectionTitle(
+                                                'Nu — kör hit (${_trafficSignals.length})',
+                                              ),
+                                              for (final a
+                                                  in _activeSignalsVisible) ...[
+                                                SmartAlertCard(
+                                                  alert: a,
+                                                  onTap: () =>
+                                                      _openAlertDetail(a),
+                                                  onToggleFavorite:
+                                                      widget.api.supportsFavorites
+                                                      ? (v) =>
+                                                            _toggleFavorite(a, v)
+                                                      : null,
+                                                ),
+                                                const SizedBox(height: 10),
+                                              ],
+                                            ],
+                                            if (_endedSignalsVisible
+                                                .isNotEmpty) ...[
+                                              const _SectionTitle(
+                                                'Senaste dygnet',
+                                              ),
+                                              for (final a
+                                                  in _endedSignalsVisible) ...[
+                                                SmartAlertCard(
+                                                  alert: a,
+                                                  onTap: () =>
+                                                      _openAlertDetail(a),
+                                                  onToggleFavorite:
+                                                      widget.api.supportsFavorites
+                                                      ? (v) =>
+                                                            _toggleFavorite(a, v)
+                                                      : null,
+                                                ),
+                                                const SizedBox(height: 10),
+                                              ],
+                                            ],
+                                            if (_trafficSignals.length >
+                                                _trafficSignalsVisible.length)
+                                              Padding(
+                                                padding: const EdgeInsets.only(
+                                                  bottom: 10,
+                                                ),
+                                                child: Text(
+                                                  '+${_trafficSignals.length - _trafficSignalsVisible.length} fler trafiksignaler — öppna Filter → Källa',
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    color: Colors.grey.shade700,
+                                                    fontWeight: FontWeight.w600,
+                                                  ),
+                                                ),
+                                              ),
+                                          ],
+                                          if (_weekSignals.isNotEmpty) ...[
+                                            const SizedBox(height: 8),
+                                            Theme(
+                                              data: Theme.of(context).copyWith(
+                                                dividerColor:
+                                                    Colors.transparent,
+                                              ),
+                                              child: ExpansionTile(
+                                                initiallyExpanded: false,
+                                                tilePadding: EdgeInsets.zero,
+                                                childrenPadding:
+                                                    EdgeInsets.zero,
+                                                title: const Text(
+                                                  'Senaste veckan',
+                                                  style: TextStyle(
+                                                    fontSize: 18,
+                                                    fontWeight: FontWeight.w700,
+                                                  ),
+                                                ),
+                                                children: [
+                                                  for (final a
+                                                      in _weekSignals) ...[
+                                                    SmartAlertCard(
+                                                      alert: a,
+                                                      onTap: () =>
+                                                          _openAlertDetail(a),
+                                                      onToggleFavorite:
+                                                          widget
+                                                              .api
+                                                              .supportsFavorites
+                                                          ? (v) =>
+                                                                _toggleFavorite(
+                                                                  a,
+                                                                  v,
+                                                                )
+                                                          : null,
+                                                    ),
+                                                    const SizedBox(height: 10),
+                                                  ],
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                ],
+              ),
       ),
     );
   }
@@ -1492,7 +1827,7 @@ class _SectionTitle extends StatelessWidget {
         text,
         style: TextStyle(
           fontSize: 18,
-          fontWeight: FontWeight.w900,
+          fontWeight: FontWeight.w700,
           color: Colors.grey.shade800,
         ),
       ),
@@ -1654,7 +1989,7 @@ class _ExplainSectionState extends State<_ExplainSection> {
                       'Varför visas detta?',
                       style: TextStyle(
                         fontSize: 16,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                         color: TbColors.ink,
                       ),
                     ),
@@ -1701,7 +2036,7 @@ String _weatherSummary(Map? raw) {
 /// metadata, not another badge competing with the likelihood pill above it.
 class _DetailStat extends StatelessWidget {
   const _DetailStat({required this.icon, required this.label});
-  final IconData icon;
+  final Widget icon;
   final String label;
 
   @override
@@ -1715,7 +2050,7 @@ class _DetailStat extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 13, color: Colors.grey.shade700),
+          SizedBox(width: 13, height: 13, child: icon),
           const SizedBox(width: 4),
           Text(
             label,
@@ -1750,7 +2085,7 @@ class _ExplainRow extends StatelessWidget {
           label.toUpperCase(),
           style: const TextStyle(
             fontSize: 12,
-            fontWeight: FontWeight.w800,
+            fontWeight: FontWeight.w700,
             letterSpacing: 0.4,
             color: TbColors.muted,
           ),
@@ -1801,7 +2136,7 @@ class _EntitlementBanner extends StatelessWidget {
                 const Text(
                   'Ditt företags provperiod har gått ut',
                   style: TextStyle(
-                    fontWeight: FontWeight.w900,
+                    fontWeight: FontWeight.w700,
                     fontSize: 15,
                     color: TbColors.ink,
                   ),
@@ -1860,7 +2195,7 @@ class _LivePill extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: const Color(0xFFD4CBBC)),
+        border: Border.all(color: TbColors.line),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -1873,7 +2208,7 @@ class _LivePill extends StatelessWidget {
           const SizedBox(width: 6),
           Text(
             label,
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
           ),
         ],
       ),
@@ -1917,14 +2252,14 @@ class _OrtChip extends StatelessWidget {
             border: Border.all(
               color: selected
                   ? (hot ? TbColors.signal : TbColors.taxiDeep)
-                  : const Color(0xFF8A7F70),
+                  : TbColors.line,
               width: 1.5,
             ),
           ),
           child: Text(
             count == null ? label : '$label  $count',
             style: TextStyle(
-              fontWeight: FontWeight.w900,
+              fontWeight: FontWeight.w700,
               fontSize: 15,
               color: fg,
             ),

@@ -15,7 +15,7 @@ class SettingsGroupLabel extends StatelessWidget {
         text.toUpperCase(),
         style: const TextStyle(
           fontSize: 12,
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w700,
           color: TbColors.muted,
           letterSpacing: 0.4,
         ),
@@ -35,7 +35,7 @@ class SettingsGroup extends StatelessWidget {
       color: Colors.white,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(14),
-        side: const BorderSide(color: Color(0xFFC9D0DA)),
+        side: const BorderSide(color: TbColors.line),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
@@ -89,7 +89,8 @@ class SettingsNavRow extends StatelessWidget {
     this.titleColor,
   });
 
-  final IconData icon;
+  // Kan vara IconData eller Widget (t.ex. BrandIcons)
+  final dynamic icon;
   final String title;
   final String? subtitle;
   final Widget? trailing;
@@ -101,7 +102,9 @@ class SettingsNavRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: Icon(icon, color: iconColor ?? TbColors.muted),
+      leading: icon is Widget
+          ? SizedBox(width: 24, height: 24, child: icon)
+          : Icon(icon as IconData, color: iconColor ?? TbColors.muted),
       title: Text(
         title,
         style: TextStyle(fontWeight: FontWeight.w700, color: titleColor),

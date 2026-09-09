@@ -4,4 +4,19 @@
          to allow setting breakpoints, to provide hot reload, etc.
     -->
     <uses-permission android:name="android.permission.INTERNET"/>
+
+    <!-- Klartext-HTTP mot utvecklingsmaskinen.
+
+         Android blockerar okrypterad HTTP som standard sedan API 28, och
+         telefonen kör API 36. Utan det här når appen varken Django
+         (http://<mac>:8001) eller den lokala Supabase-instansen
+         (http://<mac>:54321) - anropen dör i plattformslagret, innan någon
+         av apparnas egna felmeddelanden hinner formuleras, så symptomet
+         blir "inga störningar just nu" i stället för ett nätverksfel.
+
+         Ligger i src/debug/ MED AVSIKT och aldrig i huvudmanifestet:
+         merge:et gäller bara debugbyggen, så release-APK:n behåller
+         Androids HTTPS-krav orört. Produktionsvägarna (api.taxitips.se)
+         är HTTPS och påverkas inte av den här filen. -->
+    <application android:usesCleartextTraffic="true" />
 </manifest>

@@ -3,7 +3,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../api_client.dart';
 import '../theme.dart';
+import '../widgets/brand_icons.dart';
 import '../widgets/company_settings_panel.dart';
+import '../widgets/notification_log_sheet.dart';
 import '../widgets/notify_prefs_sheet.dart';
 import '../widgets/settings_ui.dart';
 
@@ -179,6 +181,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
+  Future<void> _openNotificationLog() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: TbColors.foam,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => NotificationLogSheet(api: widget.api),
+    );
+  }
+
   Future<void> _leaveDevice() async {
     final ok = await showDialog<bool>(
       context: context,
@@ -279,11 +293,22 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           onTap: _editLabel,
                         ),
                         SettingsNavRow(
-                          icon: Icons.notifications_outlined,
+                          icon: BrandIcons.notification(
+                            size: 24,
+                            color: TbColors.muted,
+                          ),
                           title: 'Notiser',
                           subtitle:
                               'Orter och vilka händelser som får störa dig',
                           onTap: _openNotify,
+                        ),
+                        SettingsNavRow(
+                          icon: Icons.history,
+                          title: 'Mina notiser',
+                          subtitle:
+                              'Vad som skickats hit — och spara det du vill '
+                              'komma tillbaka till',
+                          onTap: _openNotificationLog,
                         ),
                         SettingsNavRow(
                           icon: Icons.logout,
@@ -718,7 +743,7 @@ class _EditDialogState extends State<_EditDialog> {
     return AlertDialog(
       title: Text(
         widget.title,
-        style: const TextStyle(fontWeight: FontWeight.w800),
+        style: const TextStyle(fontWeight: FontWeight.w700),
       ),
       content: SingleChildScrollView(
         child: Column(

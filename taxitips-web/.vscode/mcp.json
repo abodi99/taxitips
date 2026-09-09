@@ -1,0 +1,11 @@
+{
+  "servers": {
+    "taxitips-selfhosted": {
+      "url": "https://api.taxitips.se/mcp/v1/mcp",
+      "headers": {
+        "Authorization": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjdXJzb3ItY2xpZW50Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImF1ZCI6ImF1dGhlbnRpY2F0ZWQiLCJpYXQiOjE3ODc0Njc5ODAsImV4cCI6NDk0MzE0MTU4MH0.V5XD1P7varLKFnbzpbdRE0lRi11F3d6WKFk5JJDKx3g",
+        "apikey": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJzdXBhYmFzZSIsImlhdCI6MTc4NzQ2Nzk4MCwiZXhwIjo0OTQzMTQxNTgwLCJyb2xlIjoiYW5vbiJ9.wxFoFcVxscjp0h4UlqltO-uBaH-EFiTIECWzyxovuzI"
+      }
+    }
+  }
+}

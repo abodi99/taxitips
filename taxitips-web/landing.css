@@ -1,20 +1,7 @@
 :root {
-  --ink: #08254c;
-  --ink-soft: #3d4f6a;
-  --foam: #f8f7f2;
-  --sand: #efeee8;
-  --taxi: #ffc400;
-  --taxi-deep: #e0ac00;
-  --asphalt: #08254c;
-  --road: #051a36;
-  --signal: #19c2d1;
-  --live: #1f8a5b;
-  --font-display: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
-  --font-body: "Inter", system-ui, sans-serif;
-  --line: rgba(8, 37, 76, 0.14);
-  --navy: #08254c;
-  --cyan: #19c2d1;
-  --yellow: #ffc400;
+  /* Palett och typografi kommer från brand.css (midnatt + guld).
+     Här står bara det landningssidan lägger till ovanpå. */
+  --live: var(--ok);
 }
 
 *,
@@ -70,7 +57,7 @@ a {
   align-items: center;
   font-size: 0.92rem;
   font-weight: 600;
-  color: rgba(247, 242, 234, 0.95);
+  color: rgba(245, 247, 250, 0.95);
 }
 
 .nav-links a:not(.btn):hover {
@@ -107,28 +94,31 @@ a {
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 78% 22%, rgba(25, 194, 209, 0.2), transparent 22rem),
-    radial-gradient(circle at 18% 80%, rgba(255, 196, 0, 0.16), transparent 26rem),
-    linear-gradient(135deg, #0e4472 0%, #08254c 52%, #051a36 100%);
+    radial-gradient(circle at 78% 22%, rgba(82, 96, 120, 0.55), transparent 22rem),
+    radial-gradient(circle at 18% 80%, rgba(252, 163, 17, 0.16), transparent 26rem),
+    linear-gradient(135deg, var(--midnatt-mjuk) 0%, var(--midnatt) 52%, var(--midnatt-djup) 100%);
 }
 
 .hero-base::after {
+  /* Kartnålen som vattenstämpel. Den nya symbolen är en fylld yta, inte den
+     gamla tunna konturen, så den ligger lägre i opacitet och helt innanför
+     kanten — annars läser den som en form, inte som loggan. */
   content: "";
   position: absolute;
-  inset: -12% -6% auto auto;
-  width: min(58vw, 620px);
-  aspect-ratio: 1;
-  background: url("/brand/logo-mark.svg") center / contain no-repeat;
-  opacity: 0.11;
-  transform: rotate(12deg);
+  inset: 5% 5% auto auto;
+  width: min(32vw, 320px);
+  aspect-ratio: 256 / 280;
+  background: url("/brand/logo-mark-mono-white.svg") center / contain no-repeat;
+  opacity: 0.07;
+  transform: rotate(8deg);
 }
 
 .hero-scrim {
   position: absolute;
   inset: 0;
   background:
-    linear-gradient(180deg, rgba(5, 26, 54, 0.12) 0%, rgba(5, 26, 54, 0.5) 72%, rgba(5, 26, 54, 0.92) 100%),
-    linear-gradient(90deg, rgba(5, 26, 54, 0.8) 0%, rgba(5, 26, 54, 0.12) 70%);
+    linear-gradient(180deg, rgba(20, 33, 61, 0.12) 0%, rgba(20, 33, 61, 0.5) 72%, rgba(20, 33, 61, 0.92) 100%),
+    linear-gradient(90deg, rgba(20, 33, 61, 0.8) 0%, rgba(20, 33, 61, 0.12) 70%);
 }
 
 .hero-light {
@@ -137,7 +127,7 @@ a {
   height: min(55vw, 420px);
   right: 5%;
   bottom: 18%;
-  background: radial-gradient(circle, rgba(240, 180, 41, 0.28), transparent 70%);
+  background: radial-gradient(circle, rgba(252, 163, 17, 0.28), transparent 70%);
   animation: pulse 7s ease-in-out infinite;
   pointer-events: none;
 }
@@ -174,7 +164,7 @@ a {
   margin: 0 0 1.15rem;
   font-size: clamp(1.05rem, 2.4vw, 1.2rem);
   font-weight: 400;
-  color: rgba(247, 242, 234, 0.92);
+  color: rgba(245, 247, 250, 0.92);
   max-width: 30rem;
 }
 
@@ -191,11 +181,11 @@ a {
   gap: 0.4rem;
   padding: 0.4rem 0.75rem;
   border-radius: 999px;
-  background: rgba(247, 242, 234, 0.1);
-  border: 1px solid rgba(247, 242, 234, 0.28);
+  background: rgba(245, 247, 250, 0.1);
+  border: 1px solid rgba(245, 247, 250, 0.28);
   color: #fff;
   font-size: 0.82rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .platform-pill svg {
@@ -246,11 +236,11 @@ a {
 }
 
 .btn-primary:hover {
-  background: #ffc94a;
+  background: var(--guld-ljus);
 }
 
 .btn-ghost {
-  border-color: rgba(247, 242, 234, 0.4);
+  border-color: rgba(245, 247, 250, 0.4);
   color: var(--foam);
   background: rgba(255, 255, 255, 0.06);
 }
@@ -330,18 +320,18 @@ a {
   padding: 0.35rem 0.7rem;
   border-radius: 999px;
   font-size: 0.75rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  background: rgba(25, 194, 209, 0.14);
-  border: 1px solid rgba(25, 194, 209, 0.6);
+  background: rgba(252, 163, 17, 0.14);
+  border: 1px solid rgba(252, 163, 17, 0.55);
   color: var(--taxi);
 }
 
 .install-hint {
   margin: 1rem 0 0;
   font-size: 0.88rem;
-  color: rgba(247, 242, 234, 0.88);
+  color: rgba(245, 247, 250, 0.88);
   max-width: 28rem;
   line-height: 1.4;
 }
@@ -381,7 +371,7 @@ a {
   padding: 0.2rem 0.5rem;
   border-radius: 6px;
   font-size: 0.7rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   background: var(--sand);
@@ -420,7 +410,7 @@ a {
 
 .intel-note code {
   font-size: 0.82em;
-  background: rgba(18, 16, 14, 0.06);
+  background: rgba(20, 33, 61, 0.06);
   padding: 0.1rem 0.35rem;
   border-radius: 4px;
 }
@@ -454,9 +444,9 @@ a {
 .benefit-number {
   display: block;
   margin-bottom: 1.2rem;
-  color: var(--cyan-deep, #1098a6);
+  color: var(--cyan-deep);
   font-size: 0.75rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.12em;
 }
 
@@ -505,7 +495,7 @@ a {
   background: var(--asphalt);
   color: var(--taxi);
   font-size: 0.78rem;
-  font-weight: 800;
+  font-weight: 700;
 }
 
 .signal-icon-go {
@@ -564,7 +554,7 @@ a {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-  box-shadow: 0 18px 40px rgba(8, 37, 76, 0.08);
+  box-shadow: 0 18px 40px rgba(20, 33, 61, 0.08);
 }
 
 .path-card.alt {
@@ -578,17 +568,17 @@ a {
 }
 
 .path-card.alt .path-note {
-  color: rgba(247, 242, 234, 0.65);
+  color: rgba(245, 247, 250, 0.65);
 }
 
 .path-card.alt .path-steps {
-  color: rgba(247, 242, 234, 0.88);
+  color: rgba(245, 247, 250, 0.88);
 }
 
 .path-kicker {
   margin: 0;
   font-size: 0.75rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--taxi-deep);
@@ -662,7 +652,7 @@ a {
   color: var(--ink);
   display: grid;
   place-items: center;
-  font-weight: 800;
+  font-weight: 700;
   font-size: 0.95rem;
 }
 
@@ -687,7 +677,7 @@ a {
 }
 
 .pricing .section-lead {
-  color: rgba(247, 242, 234, 0.78);
+  color: rgba(245, 247, 250, 0.78);
   margin-bottom: 1.5rem;
 }
 
@@ -744,8 +734,8 @@ a {
 }
 
 .offer-main {
-  background: rgba(247, 242, 234, 0.06);
-  border: 1px solid rgba(240, 180, 41, 0.35);
+  background: rgba(245, 247, 250, 0.06);
+  border: 1px solid rgba(252, 163, 17, 0.35);
   border-radius: 16px;
   padding: 1.4rem 1.35rem 1.5rem;
 }
@@ -753,7 +743,7 @@ a {
 .offer-kicker {
   margin: 0;
   font-size: 0.75rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.12em;
   text-transform: uppercase;
   color: var(--taxi);
@@ -773,7 +763,7 @@ a {
 
 .offer-note {
   margin: 0 0 1rem;
-  color: rgba(247, 242, 234, 0.75);
+  color: rgba(245, 247, 250, 0.75);
 }
 
 .offer-includes {
@@ -781,7 +771,7 @@ a {
   padding-left: 1.15rem;
   display: grid;
   gap: 0.4rem;
-  color: rgba(247, 242, 234, 0.9);
+  color: rgba(245, 247, 250, 0.9);
 }
 
 .offer-aside {
@@ -816,7 +806,7 @@ a {
 }
 
 .pricing .btn-ghost {
-  border-color: rgba(247, 242, 234, 0.35);
+  border-color: rgba(245, 247, 250, 0.35);
   color: var(--foam);
 }
 
@@ -829,7 +819,7 @@ a {
 .pay-trust {
   margin-top: 1.75rem;
   padding-top: 1.35rem;
-  border-top: 1px solid rgba(247, 242, 234, 0.14);
+  border-top: 1px solid rgba(245, 247, 250, 0.14);
 }
 
 .pay-trust-label {
@@ -838,7 +828,7 @@ a {
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: rgba(247, 242, 234, 0.55);
+  color: rgba(245, 247, 250, 0.55);
 }
 
 .pay-methods {
@@ -858,35 +848,35 @@ a {
   padding: 0.35rem 0.7rem;
   border-radius: 8px;
   background: #fff;
-  color: #08254c;
+  color: var(--midnatt);
   font-size: 0.78rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.02em;
   box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
 }
 
 .pay-pill.muted {
-  background: rgba(247, 242, 234, 0.12);
-  color: rgba(247, 242, 234, 0.85);
+  background: rgba(245, 247, 250, 0.12);
+  color: rgba(245, 247, 250, 0.85);
   box-shadow: none;
 }
 
 .pay-visa {
   color: #1a1f71;
   font-style: italic;
-  font-weight: 900;
+  font-weight: 700;
   letter-spacing: 0.04em;
 }
 
 .pay-amex {
   color: #2e77bc;
-  font-weight: 900;
+  font-weight: 700;
   letter-spacing: 0.04em;
 }
 
 .pay-swish {
   color: #00a0d6;
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .pay-mc {
@@ -918,7 +908,7 @@ a {
 .pay-trust-note {
   margin: 0.75rem 0 0;
   font-size: 0.88rem;
-  color: rgba(247, 242, 234, 0.65);
+  color: rgba(245, 247, 250, 0.65);
 }
 
 /* Contact */
@@ -948,7 +938,7 @@ a {
 
 .contact-label {
   font-size: 0.75rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: var(--ink-soft);
@@ -987,14 +977,14 @@ a {
 
 .contact-aside p {
   margin: 0 0 1.1rem;
-  color: rgba(247, 242, 234, 0.78);
+  color: rgba(245, 247, 250, 0.78);
   line-height: 1.45;
 }
 
 /* Site footer */
 .site-footer {
-  background: linear-gradient(180deg, #161412 0%, #0f0e0c 100%);
-  color: rgba(247, 242, 234, 0.72);
+  background: linear-gradient(180deg, var(--midnatt) 0%, var(--midnatt-djup) 100%);
+  color: rgba(245, 247, 250, 0.72);
   padding: 3rem clamp(1rem, 4vw, 2.5rem) 2rem;
   border-top: 3px solid var(--taxi);
 }
@@ -1015,7 +1005,7 @@ a {
   margin: 0.55rem 0 1rem;
   max-width: 28ch;
   line-height: 1.4;
-  color: rgba(247, 242, 234, 0.7);
+  color: rgba(245, 247, 250, 0.7);
 }
 
 .social-row {
@@ -1030,17 +1020,17 @@ a {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid rgba(247, 242, 234, 0.22);
+  border: 1px solid rgba(245, 247, 250, 0.22);
   border-radius: 10px;
   color: var(--foam);
-  background: rgba(247, 242, 234, 0.04);
+  background: rgba(245, 247, 250, 0.04);
   transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
 .social-btn:hover {
   border-color: var(--taxi);
   color: var(--taxi);
-  background: rgba(240, 180, 41, 0.08);
+  background: rgba(252, 163, 17, 0.08);
 }
 
 .footer-cols {
@@ -1052,10 +1042,10 @@ a {
 .footer-col h3 {
   margin: 0 0 0.7rem;
   font-size: 0.78rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: rgba(247, 242, 234, 0.45);
+  color: rgba(245, 247, 250, 0.45);
 }
 
 .footer-col ul {
@@ -1068,7 +1058,7 @@ a {
 
 .footer-col a {
   font-weight: 600;
-  color: rgba(247, 242, 234, 0.82);
+  color: rgba(245, 247, 250, 0.82);
 }
 
 .footer-col a:hover {
@@ -1078,16 +1068,16 @@ a {
 .footer-partners,
 .footer-pay {
   padding-top: 0.35rem;
-  border-top: 1px solid rgba(247, 242, 234, 0.1);
+  border-top: 1px solid rgba(245, 247, 250, 0.1);
 }
 
 .footer-partners-label {
   margin: 0 0 0.7rem;
   font-size: 0.75rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  color: rgba(247, 242, 234, 0.42);
+  color: rgba(245, 247, 250, 0.42);
 }
 
 .partner-row {
@@ -1104,23 +1094,23 @@ a {
   align-items: center;
   min-height: 38px;
   padding: 0.4rem 0.85rem;
-  border: 1px solid rgba(247, 242, 234, 0.18);
+  border: 1px solid rgba(245, 247, 250, 0.18);
   border-radius: 999px;
   font-size: 0.82rem;
   font-weight: 700;
   letter-spacing: 0.02em;
-  color: rgba(247, 242, 234, 0.88);
-  background: rgba(247, 242, 234, 0.03);
+  color: rgba(245, 247, 250, 0.88);
+  background: rgba(245, 247, 250, 0.03);
 }
 
 .footer-pay-methods .pay-pill {
   background: #fff;
-  color: #08254c;
+  color: var(--midnatt);
 }
 
 .footer-pay-methods .pay-pill.muted {
-  background: rgba(247, 242, 234, 0.1);
-  color: rgba(247, 242, 234, 0.8);
+  background: rgba(245, 247, 250, 0.1);
+  color: rgba(245, 247, 250, 0.8);
 }
 
 .footer-bottom {
@@ -1129,9 +1119,9 @@ a {
   gap: 0.5rem 1.5rem;
   justify-content: space-between;
   padding-top: 1rem;
-  border-top: 1px solid rgba(247, 242, 234, 0.1);
+  border-top: 1px solid rgba(245, 247, 250, 0.1);
   font-size: 0.85rem;
-  color: rgba(247, 242, 234, 0.5);
+  color: rgba(245, 247, 250, 0.5);
 }
 
 .footer-bottom a:hover {
@@ -1145,7 +1135,7 @@ a {
 .landing-footer {
   padding: 1.75rem clamp(1rem, 4vw, 2.5rem);
   background: var(--road);
-  color: rgba(247, 242, 234, 0.7);
+  color: rgba(245, 247, 250, 0.7);
   display: flex;
   flex-wrap: wrap;
   gap: 0.75rem 1.5rem;
@@ -1245,7 +1235,7 @@ a {
   background: var(--taxi);
   color: var(--ink);
   padding: 0.75rem 1rem;
-  font-weight: 800;
+  font-weight: 700;
   z-index: 100;
 }
 
@@ -1259,7 +1249,7 @@ a {
   font-size: 0.85rem;
   font-weight: 700;
   letter-spacing: 0.04em;
-  color: rgba(247, 242, 234, 0.75);
+  color: rgba(245, 247, 250, 0.75);
 }
 
 .jump-bar {
@@ -1268,7 +1258,7 @@ a {
   gap: 0.5rem;
   padding: 0.85rem clamp(1rem, 4vw, 2.5rem);
   background: var(--road);
-  border-bottom: 1px solid rgba(247, 242, 234, 0.08);
+  border-bottom: 1px solid rgba(245, 247, 250, 0.08);
   position: sticky;
   top: 0;
   z-index: 15;
@@ -1285,8 +1275,8 @@ a {
   align-items: center;
   gap: 0.75rem;
   padding: 0.85rem 1rem;
-  background: rgba(247, 242, 234, 0.06);
-  border: 1px solid rgba(240, 180, 41, 0.35);
+  background: rgba(245, 247, 250, 0.06);
+  border: 1px solid rgba(252, 163, 17, 0.35);
   border-radius: 12px;
   color: var(--foam);
   min-height: 64px;
@@ -1295,7 +1285,7 @@ a {
 
 .jump:hover,
 .jump.on {
-  background: rgba(240, 180, 41, 0.16);
+  background: rgba(252, 163, 17, 0.16);
   border-color: var(--taxi);
   transform: translateY(-1px);
 }
@@ -1308,7 +1298,7 @@ a {
   color: var(--ink);
   display: grid;
   place-items: center;
-  font-weight: 900;
+  font-weight: 700;
   flex-shrink: 0;
 }
 
@@ -1324,7 +1314,7 @@ a {
 }
 
 .jump-txt small {
-  color: rgba(247, 242, 234, 0.65);
+  color: rgba(245, 247, 250, 0.65);
   font-size: 0.82rem;
 }
 
@@ -1365,7 +1355,7 @@ a {
 
 .faq-item summary {
   cursor: pointer;
-  font-weight: 800;
+  font-weight: 700;
   font-size: 1.05rem;
   list-style: none;
   color: var(--ink);
@@ -1379,7 +1369,7 @@ a {
   content: "+";
   float: right;
   color: var(--taxi-deep);
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .faq-item[open] summary::after {
@@ -1441,7 +1431,7 @@ a {
   background: var(--taxi);
   color: var(--ink);
   padding: 0.75rem 1rem;
-  font-weight: 800;
+  font-weight: 700;
   z-index: 100;
 }
 
@@ -1455,7 +1445,7 @@ a {
   font-size: 0.85rem;
   font-weight: 700;
   letter-spacing: 0.04em;
-  color: rgba(247, 242, 234, 0.75);
+  color: rgba(245, 247, 250, 0.75);
 }
 
 .jump-bar {
@@ -1464,7 +1454,7 @@ a {
   gap: 0.5rem;
   padding: 0.85rem clamp(1rem, 4vw, 2.5rem);
   background: var(--road);
-  border-bottom: 1px solid rgba(247, 242, 234, 0.08);
+  border-bottom: 1px solid rgba(245, 247, 250, 0.08);
   position: sticky;
   top: 0;
   z-index: 15;
@@ -1481,8 +1471,8 @@ a {
   align-items: center;
   gap: 0.75rem;
   padding: 0.85rem 1rem;
-  background: rgba(247, 242, 234, 0.06);
-  border: 1px solid rgba(240, 180, 41, 0.35);
+  background: rgba(245, 247, 250, 0.06);
+  border: 1px solid rgba(252, 163, 17, 0.35);
   border-radius: 12px;
   color: var(--foam);
   min-height: 64px;
@@ -1491,7 +1481,7 @@ a {
 
 .jump:hover,
 .jump.on {
-  background: rgba(240, 180, 41, 0.16);
+  background: rgba(252, 163, 17, 0.16);
   border-color: var(--taxi);
   transform: translateY(-1px);
 }
@@ -1504,7 +1494,7 @@ a {
   color: var(--ink);
   display: grid;
   place-items: center;
-  font-weight: 900;
+  font-weight: 700;
   flex-shrink: 0;
 }
 
@@ -1520,7 +1510,7 @@ a {
 }
 
 .jump-txt small {
-  color: rgba(247, 242, 234, 0.65);
+  color: rgba(245, 247, 250, 0.65);
   font-size: 0.82rem;
 }
 
@@ -1561,7 +1551,7 @@ a {
 
 .faq-item summary {
   cursor: pointer;
-  font-weight: 800;
+  font-weight: 700;
   font-size: 1.05rem;
   list-style: none;
   color: var(--ink);
@@ -1575,7 +1565,7 @@ a {
   content: "+";
   float: right;
   color: var(--taxi-deep);
-  font-weight: 900;
+  font-weight: 700;
 }
 
 .faq-item[open] summary::after {
@@ -1608,7 +1598,7 @@ a {
   padding: 0.2rem 0.45rem;
   border-radius: 6px;
   font-size: 0.68rem;
-  font-weight: 900;
+  font-weight: 700;
   letter-spacing: 0.08em;
   background: var(--asphalt);
   color: var(--taxi);
@@ -1639,8 +1629,8 @@ button.linkish {
 .proof-strip {
   padding: 1.5rem 0;
   background: var(--surface, #fff);
-  border-top: 1px solid rgba(26, 24, 22, 0.08);
-  border-bottom: 1px solid rgba(26, 24, 22, 0.08);
+  border-top: 1px solid rgba(20, 33, 61, 0.08);
+  border-bottom: 1px solid rgba(20, 33, 61, 0.08);
 }
 
 .proof-row {
@@ -1662,15 +1652,15 @@ button.linkish {
   margin: 0;
   padding: 0.85rem 1rem;
   border-radius: 12px;
-  background: rgba(26, 24, 22, 0.04);
+  background: rgba(20, 33, 61, 0.04);
   font-size: 0.92rem;
-  color: var(--muted, #6a635a);
+  color: var(--skiffer);
   line-height: 1.35;
 }
 
 .proof-row strong {
   display: block;
-  color: var(--ink, #08254c);
+  color: var(--ink);
   font-size: 0.78rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;

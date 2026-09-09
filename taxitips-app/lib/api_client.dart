@@ -137,8 +137,9 @@ class ApiClient {
     try {
       sessionToken = _sb.auth.currentSession?.accessToken;
     } catch (_) {
-      sessionToken = prefs.getString(_sessionKey);
+      sessionToken = null;
     }
+    if (sessionToken == null) await prefs.remove(_sessionKey);
   }
 
   Future<void> saveSession(String? token) async {
@@ -196,7 +197,11 @@ class ApiClient {
         email: email,
         password: password,
       );
-      await saveSession(res.session?.accessToken);
+      final accessToken = res.session?.accessToken;
+      if (accessToken == null || accessToken.isEmpty) {
+        throw ApiException(401, 'Inloggningen gav ingen giltig session.');
+      }
+      await saveSession(accessToken);
       await saveCredentials(email, password);
 
       // Auth is enough to consider login successful; profile/company bootstrap
@@ -409,6 +414,7 @@ class ApiClient {
       return {'ok': false, 'entitled': false};
     }
   }
+
   Future<Map<String, dynamic>> publicConfig() async => {
     'supabaseUrl': supabaseUrl,
   };
@@ -613,12 +619,47 @@ class ApiClient {
   ];
 
   Future<Map<String, dynamic>> getNotifyPrefs() async {
+    // Django äger katalogerna när backenden finns: händelsetyperna och
+    // länen serveras av /api/notify-prefs, samma lista som push-steget
+    // matchar mot (core/notify.py). Tidigare låg typkatalogen här i Dart
+    // och defaulterna i fcmPush.js -- två kopior i två språk, utan något
+    // som höll ihop dem. En typ kunde vara påslagen i appen och okänd för
+    // sändaren.
+    final backend = _backend;
+    if (backend != null) {
+      final body = await backend.notifyPrefs(
+        deviceToken: deviceToken,
+        accessToken: _accessToken,
+      );
+      final areas = (body['areaCatalog'] as List?)
+              ?.map((e) => e.toString())
+              .toList() ??
+          skaneAreaFallback;
+      return {
+        'prefs': Map<String, dynamic>.from((body['prefs'] as Map?) ?? {}),
+        'companyAreas': areas,
+        'areaCatalog': areas,
+        'regionCatalog': (body['regionCatalog'] as List?) ?? const [],
+        'uncoveredCounties': (body['uncoveredCounties'] as List?) ?? const [],
+        // true = inloggad ägare utan parad telefon. Katalogerna går att
+        // visa, men det finns ingen enhet att spara för -- och det är ett
+        // bättre svar än ett formulär som tyst inte sparar.
+        'readOnly': body['readOnly'] == true,
+        'reason': body['reason'],
+        'meta': {
+          'catalog': (body['typeCatalog'] as List?) ?? notifyTypeCatalog,
+          'tips': const <String>[],
+        },
+      };
+    }
     final meDev = await getDeviceMe();
     final device = meDev['device'] as Map? ?? {};
     final company = meDev['company'] as Map? ?? {};
     final prefs = device['notify_prefs'] ?? {};
     final watchedAreas =
-        (company['watched_areas'] as List?)?.map((e) => e.toString()).toList() ??
+        (company['watched_areas'] as List?)
+            ?.map((e) => e.toString())
+            .toList() ??
         const <String>[];
     // Company areas take priority when set (the office curated them), else
     // fall back to the region-wide list so the picker is never empty.
@@ -634,8 +675,21 @@ class ApiClient {
   Future<Map<String, dynamic>> saveNotifyPrefs({
     bool? enabled,
     List<String>? cities,
+    List<String>? regions,
     Map<String, bool>? types,
   }) async {
+    final backend = _backend;
+    if (backend != null) {
+      final body = await backend.saveNotifyPrefs(
+        enabled: enabled,
+        cities: cities,
+        regions: regions,
+        types: types,
+        deviceToken: deviceToken,
+        accessToken: _accessToken,
+      );
+      return Map<String, dynamic>.from((body['prefs'] as Map?) ?? {});
+    }
     await ensureInitialized();
     final meDev = await getDeviceMe();
     final device = meDev['device'] as Map? ?? {};
@@ -644,6 +698,7 @@ class ApiClient {
     );
     if (enabled != null) current['enabled'] = enabled;
     if (cities != null) current['cities'] = cities;
+    if (regions != null) current['regions'] = regions;
     if (types != null) current['types'] = types;
     await _sb
         .from('devices')
@@ -802,7 +857,7 @@ class ApiClient {
     }
   }
 
-  Future<List> _smartAlertsViaRpc(double lat, double lon) async {
+  Future<List> _smartAlertsViaRpc(double? lat, double? lon) async {
     final rows = await _sb.rpc(
       'get_smart_alerts',
       params: {'p_lat': lat, 'p_lon': lon, 'p_device_token': deviceToken},
@@ -833,6 +888,7 @@ class ApiClient {
       'is_active': m['is_active'] ?? true,
       'kind': m['kind'],
       'mode': m['mode'],
+      'region': m['region'],
       'severity_tier': m['severity_tier'],
       'confidence': m['confidence'],
       'level': m['level'],
@@ -846,6 +902,15 @@ class ApiClient {
       // (core/alternatives.py) så att kort, detaljvy och push säger samma
       // sak. Saknas den (Supabase-vägen) visas ingen rad alls.
       'travel_options': m['travel_options'],
+      // Sätts av backend (core/api.py) utifrån förarens sparade favoriter,
+      // inte av appen: ett sparat tips ska se likadant ut oavsett vilken
+      // enhet det öppnas på.
+      'is_favorite': m['is_favorite'] == true,
+      // Bara satt på rader ur favoritlistan. true = tipset har gallrats ur
+      // databasen och kortet visas ur den sparade ögonblicksbilden.
+      'purged': m['purged'] == true,
+      'favorited_at': m['favorited_at'],
+      'note': m['note'],
     };
     // `taxi.level` hade en egen kopia av gränserna (>50 hög, >20 medel) --
     // en femte kopia av tröskeln som backend redan äger. Nu är det samma
@@ -864,38 +929,48 @@ class ApiClient {
   }) async {
     try {
       await ensureInitialized();
-      final lat = userLat ?? 55.604981; // Default Malmö if no location
-      final lon = userLon ?? 13.003822;
+      final lat = userLat;
+      final lon = userLon;
 
       List rows;
+      // Favoriterna kommer med i samma svar som flödet -- backend skickar
+      // dem alltid, oavsett filter, radie eller om störningen tagit slut.
+      // Ett extra anrop hade gjort favoritlistan tom just när täckningen är
+      // dålig, vilket är när en förare oftast tittar på den.
+      List favoriteRows = const [];
       var source = 'trafiklab';
       final backend = _backend;
       if (backend != null) {
-        // Django-vägen (Spår B). Faller tillbaka på RPC:n om backenden inte
-        // svarar -- en förare mitt i ett pass ska inte förlora listan för
-        // att en tjänst startar om.
-        try {
-          final body = await backend.alerts(
-            lat: lat,
-            lon: lon,
-            deviceToken: deviceToken,
-            accessToken: _accessToken,
-          );
-          rows = (body['alerts'] as List?) ?? const [];
-          source = 'django';
-        } catch (e) {
-          debugPrint('ApiClient[taxi] backend nere, faller tillbaka: $e');
-          rows = await _smartAlertsViaRpc(lat, lon);
-        }
+        // Django äger både marknadsurvalet och bedömningen. Den äldre
+        // RPC-vägen har andra trösklar och kan innehålla inaktuella alerts,
+        // så ett backendfel får inte tyst ersättas med felaktiga taxitips.
+        final body = await backend.alerts(
+          lat: lat,
+          lon: lon,
+          deviceToken: deviceToken,
+          accessToken: _accessToken,
+        );
+        rows = (body['alerts'] as List?) ?? const [];
+        favoriteRows = (body['favorites'] as List?) ?? const [];
+        source = 'django';
       } else {
         rows = await _smartAlertsViaRpc(lat, lon);
       }
 
       final now = DateTime.now().toUtc();
-      final all = [for (final r in rows) _alertFromRow(Map<String, dynamic>.from(r as Map))];
+      final all = [
+        for (final r in rows)
+          _alertFromRow(Map<String, dynamic>.from(r as Map)),
+      ];
+
+      final favorites = [
+        for (final r in favoriteRows)
+          _alertFromRow(Map<String, dynamic>.from(r as Map)),
+      ];
 
       return {
         'alerts': all,
+        'favorites': favorites,
         // Flödet innehåller det senaste dygnet, inte bara det som pågår just
         // nu (`is_active` skiljer dem åt) -- en förare som börjar sitt pass
         // ska kunna se vad som hände i natt.
@@ -915,6 +990,7 @@ class ApiClient {
         );
         return {
           'alerts': const [],
+          'favorites': const [],
           'active': const [],
           'week': const [],
           'events': const [],
@@ -981,6 +1057,90 @@ class ApiClient {
     }
     return map.values.toList();
   }
+
+  /// Sparar eller tar bort ett tips ur favoritlistan.
+  ///
+  /// Bara Django-vägen: favoriterna bor i `opportunity_favorite`, en tabell
+  /// Django äger. Utan backend är stjärnan inte trasig utan frånvarande --
+  /// se `supportsFavorites`, som styr om knappen ritas alls. En knapp som
+  /// syns men tyst inte sparar är sämre än ingen knapp.
+  Future<bool> setFavorite({
+    required String opportunityId,
+    required bool favorite,
+    String? note,
+  }) async {
+    final backend = _backend;
+    if (backend == null) {
+      throw ApiException(501, 'Favoriter kräver Django-backenden');
+    }
+    try {
+      final body = await backend.setFavorite(
+        opportunityId: opportunityId,
+        favorite: favorite,
+        note: note,
+        deviceToken: deviceToken,
+        accessToken: _accessToken,
+      );
+      return body['favorite'] == true;
+    } catch (e, st) {
+      _rethrowAsApiException(e, stackTrace: st, operation: 'setFavorite');
+    }
+  }
+
+  /// Favoritlistan för sig, utan att hämta hela flödet.
+  Future<List<Map<String, dynamic>>> favorites({
+    double? userLat,
+    double? userLon,
+  }) async {
+    final backend = _backend;
+    if (backend == null) return const [];
+    try {
+      final body = await backend.favorites(
+        lat: userLat,
+        lon: userLon,
+        deviceToken: deviceToken,
+        accessToken: _accessToken,
+      );
+      return [
+        for (final r in (body['favorites'] as List?) ?? const [])
+          _alertFromRow(Map<String, dynamic>.from(r as Map)),
+      ];
+    } catch (e, st) {
+      _rethrowAsApiException(e, stackTrace: st, operation: 'favorites');
+    }
+  }
+
+  /// Notiserna den här enheten faktiskt fått.
+  ///
+  /// `reason: no_device` betyder att inloggningen saknar parad telefon --
+  /// notiser går till enheter, och en ägare som loggat in på webben har
+  /// per definition inte fått några. Det är ett svar, inte ett fel, och
+  /// skiljer sig från "du har inte fått några notiser än".
+  Future<Map<String, dynamic>> notifications() async {
+    final backend = _backend;
+    if (backend == null) {
+      return {'notifications': const [], 'reason': 'no_backend'};
+    }
+    try {
+      final body = await backend.notifications(
+        deviceToken: deviceToken,
+        accessToken: _accessToken,
+      );
+      return {
+        'notifications': [
+          for (final n in (body['notifications'] as List?) ?? const [])
+            Map<String, dynamic>.from(n as Map),
+        ],
+        'reason': body['reason'],
+        'hint': body['hint'],
+      };
+    } catch (e, st) {
+      _rethrowAsApiException(e, stackTrace: st, operation: 'notifications');
+    }
+  }
+
+  /// Finns Django-backenden? Favoriter och notishistorik bor bara där.
+  bool get supportsFavorites => _backend != null;
 
   Future<Map<String, dynamic>> health() async => {
     'ok': true,

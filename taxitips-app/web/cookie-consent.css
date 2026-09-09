@@ -6,7 +6,7 @@
   z-index: 9999;
   max-width: 42rem;
   margin: 0 auto;
-  background: #1a1816;
+  background: #14213D;
   color: #f4f1ea;
   border: 1px solid rgba(244, 241, 234, 0.18);
   border-radius: 14px;
@@ -44,7 +44,7 @@
 }
 .tb-cookie-btn-primary {
   background: #f5c518;
-  color: #1a1816;
+  color: #14213D;
 }
 @media (max-width: 520px) {
   .tb-cookie-banner {

@@ -1,6 +1,11 @@
+# Startskärm enligt varumärkesguiden taxitips2: midnatt som botten,
+# kartnål och ordmärke i guld/vitt. Bilderna är transparenta PNG avsedda
+# för #14213D. Kör `dart run flutter_native_splash:create` efter ändring.
 flutter_native_splash:
-  color: "#F8F7F2"
-  image: assets/brand/splash_mark.png
+  color: "#14213D"
+  color_dark: "#14213D"
+  image: assets/brand/splash.png
+  image_dark: assets/brand/splash.png
   fullscreen: true
   android: true
   ios: true
@@ -10,7 +15,9 @@ flutter_native_splash:
   ios_content_mode: center
 
   android_12:
-    color: "#F8F7F2"
-    image: assets/brand/splash_mark.png
-    icon_background_color: "#F8F7F2"
-    fullscreen: true
+    # Android 12 maskar bilden till en cirkel; sätt inte icon_background_color
+    # här — splash-android12.png har redan sitt innehåll innanför cirkeln.
+    color: "#14213D"
+    color_dark: "#14213D"
+    image: assets/brand/splash-android12.png
+    image_dark: assets/brand/splash-android12.png

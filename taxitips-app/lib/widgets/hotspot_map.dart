@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 
 import '../severity_labels.dart';
 import '../theme.dart';
+import 'brand_icons.dart';
 
 class HotspotMap extends StatelessWidget {
   const HotspotMap({
@@ -18,6 +19,7 @@ class HotspotMap extends StatelessWidget {
     this.highOnly = false,
     this.perOpportunity = false,
     this.opportunities = const [],
+    this.mapController,
   });
 
   final List<Map<String, dynamic>> placeStats;
@@ -26,6 +28,7 @@ class HotspotMap extends StatelessWidget {
   final double? userLon;
   final String? selectedPlace;
   final ValueChanged<String?>? onSelectPlace;
+  final MapController? mapController;
 
   /// Tapping a per-opportunity marker should show that opportunity's own detail
   /// directly (same sheet as tapping its list card), not just filter the list by
@@ -66,12 +69,12 @@ class HotspotMap extends StatelessWidget {
         // place-aggregated map below -- the same hue meaning two unrelated
         // things depending on which map mode was active. Likelihood (when
         // known) gets its own ring, decoupled from the mode icon entirely.
-        final icon = switch (mode) {
-          'train' => Icons.train,
-          'metro' => Icons.subway,
-          'tram' => Icons.tram,
-          'bus' => Icons.directions_bus,
-          _ => Icons.directions_car,
+        final modeIcon = switch (mode) {
+          'train' => BrandIcons.train(size: 20, color: Colors.white),
+          'metro' => const Icon(Icons.subway, size: 20, color: Colors.white),
+          'tram' => const Icon(Icons.tram, size: 20, color: Colors.white),
+          'bus' => BrandIcons.bus(size: 20, color: Colors.white),
+          _ => BrandIcons.taxi(size: 20, color: Colors.white),
         };
         final likelihood = likelihoodForAlert(o);
         final ringColor = switch (likelihood) {
@@ -101,22 +104,31 @@ class HotspotMap extends StatelessWidget {
                       color: TbColors.ink,
                       shape: BoxShape.circle,
                       border: Border.all(color: ringColor, width: 3),
-                      boxShadow: const [BoxShadow(blurRadius: 6, color: Colors.black26)],
+                      boxShadow: const [
+                        BoxShadow(blurRadius: 6, color: Colors.black26),
+                      ],
                     ),
-                    child: Icon(icon, size: 20, color: Colors.white),
+                    child: modeIcon,
                   ),
                   if (distanceKm != null)
                     Container(
                       margin: const EdgeInsets.only(top: 2),
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: const Color(0xFFC9D0DA)),
+                        border: Border.all(color: TbColors.line),
                       ),
                       child: Text(
                         '${distanceKm.toStringAsFixed(1)} km',
-                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: TbColors.ink),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: TbColors.ink,
+                        ),
                       ),
                     ),
                 ],
@@ -128,7 +140,8 @@ class HotspotMap extends StatelessWidget {
     }
 
     for (final p in placeStats) {
-      if (perOpportunity) break; // per-opportunity view replaces place aggregation
+      if (perOpportunity)
+        break; // per-opportunity view replaces place aggregation
       if (highOnly && p['maxLevel'] != 'high') continue;
       final lat = (p['lat'] as num?)?.toDouble();
       final lon = (p['lon'] as num?)?.toDouble();
@@ -138,12 +151,16 @@ class HotspotMap extends StatelessWidget {
       final name = p['name']?.toString() ?? '';
       final point = LatLng(lat, lon);
       points.add(point);
-      final size = level == 'high' ? 56.0 : level == 'medium' ? 48.0 : 40.0;
+      final size = level == 'high'
+          ? 56.0
+          : level == 'medium'
+          ? 48.0
+          : 40.0;
       final color = level == 'high'
           ? TbColors.likelihoodHigh
           : level == 'medium'
-              ? TbColors.likelihoodMedium
-              : TbColors.likelihoodLow;
+          ? TbColors.likelihoodMedium
+          : TbColors.likelihoodLow;
       markers.add(
         Marker(
           point: point,
@@ -157,12 +174,14 @@ class HotspotMap extends StatelessWidget {
                 color: color,
                 shape: BoxShape.circle,
                 border: Border.all(color: Colors.white, width: 2),
-                boxShadow: const [BoxShadow(blurRadius: 6, color: Colors.black26)],
+                boxShadow: const [
+                  BoxShadow(blurRadius: 6, color: Colors.black26),
+                ],
               ),
               child: Text(
                 '$count',
                 style: TextStyle(
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                   fontSize: 12,
                   color: level == 'high' ? Colors.white : TbColors.ink,
                 ),
@@ -186,15 +205,23 @@ class HotspotMap extends StatelessWidget {
           width: 36,
           height: 36,
           child: GestureDetector(
-            onTap: () => onSelectPlace?.call(e['place']?.toString() ?? e['city']?.toString()),
+            onTap: () => onSelectPlace?.call(
+              e['place']?.toString() ?? e['city']?.toString(),
+            ),
             child: Container(
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                color: const Color(0xFF2F6FED),
+                color: TbColors.midnatt,
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.white, width: 2),
               ),
-              child: const Text('E', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900)),
+              child: const Text(
+                'E',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
             ),
           ),
         ),
@@ -227,34 +254,31 @@ class HotspotMap extends StatelessWidget {
     // see signals that are already there. maxZoom guards the degenerate
     // single-marker case (a zero-area bounds box) from zooming in absurdly
     // close on one point.
-    final cameraFit = points.isNotEmpty
-        ? CameraFit.bounds(
-            bounds: LatLngBounds.fromPoints(points),
-            padding: const EdgeInsets.all(32),
-            maxZoom: 14,
-          )
-        : null;
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: SizedBox(
-        height: 220,
-        child: FlutterMap(
-          options: MapOptions(
-            initialCenter: const LatLng(55.7, 13.2),
-            initialZoom: 9.0,
-            initialCameraFit: cameraFit,
-            interactionOptions: const InteractionOptions(flags: InteractiveFlag.all),
+    return FlutterMap(
+      mapController: mapController,
+      options: MapOptions(
+        initialCenter: const LatLng(62.0, 15.0),
+        initialZoom: 4.7,
+        initialCameraFit: CameraFit.bounds(
+          bounds: LatLngBounds(
+            const LatLng(55.2, 10.5),
+            const LatLng(69.2, 24.5),
           ),
-          children: [
-            TileLayer(
-              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-              userAgentPackageName: 'se.taxibehov.app',
-            ),
-            MarkerLayer(markers: markers),
-          ],
+          padding: const EdgeInsets.all(16),
+          maxZoom: 5.2,
+        ),
+        interactionOptions: const InteractionOptions(
+          flags: InteractiveFlag.all,
         ),
       ),
+      children: [
+        TileLayer(
+          urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+          userAgentPackageName: 'se.taxibehov.app',
+        ),
+        MarkerLayer(markers: markers),
+      ],
     );
   }
 }

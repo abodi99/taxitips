@@ -1,154 +1,192 @@
 import 'package:flutter/material.dart';
 
-/// taxitips brand — Canva kit TaxiTips
+/// taxitips varumärke — varumärkesguiden taxitips2 (midnatt + guld).
+///
+/// Paletten är fem färger och inget mer: midnatt, guld, vit, ljusgrå och
+/// skiffer. Allt annat här är antingen en härledd nyans av samma kulör (för
+/// hover, djup och linjer) eller en statusfärg. Statusfärger får finnas
+/// utanför paletten men ska alltid följas av text eller ikon — guiden tillåter
+/// aldrig färg som ensam bärare av betydelse.
 class TbColors {
-  static const navy = Color(0xFF08254C);
-  static const navyDeep = Color(0xFF051A36);
-  static const foam = Color(0xFFF8F7F2);
-  static const sand = Color(0xFFEFEEE8);
-  static const yellow = Color(0xFFFFC400);
-  static const yellowDeep = Color(0xFFE0AC00);
-  static const cyan = Color(0xFF19C2D1);
-  static const cyanDeep = Color(0xFF1098A6);
+  // De fem varumärkesfärgerna.
+  static const midnatt = Color(0xFF14213D);
+  static const guld = Color(0xFFFCA311);
+  static const vit = Color(0xFFFFFFFF);
+  static const ljusgra = Color(0xFFF5F7FA);
+  static const skiffer = Color(0xFF526078);
+
+  // Härledda nyanser.
+  static const midnattDjup = Color(0xFF0D1729);
+  static const midnattMjuk = Color(0xFF253551);
+  static const guldDjup = Color(0xFFE08F00);
+  static const ljusgraDjup = Color(0xFFE7EBF1);
+  static const line = Color(0xFFD9DCE0);
+
+  // Statusfärger — alltid tillsammans med text eller ikon.
   static const live = Color(0xFF1F8A5B);
-  static const ink = Color(0xFF08254C);
-  static const muted = Color(0xFF3D4F6A);
   static const danger = Color(0xFFC0392B);
 
-  // Customer-likelihood scale -- one color system reused identically across
-  // the card pill, both map modes, and the detail sheet's explain accent bar.
-  // Deliberately reuses existing hues (live green / yellowDeep / the map's
-  // prior one-off "low" brown) rather than inventing new ones, and is kept
-  // separate from `signal` (cyan): cyan used to double as both "high
-  // severity" on one map view and "train" on the other -- the same hue
-  // meaning two unrelated things depending on which view was active. Cyan is
-  // now purely a UI-chrome/mode accent; likelihood always uses these three.
+  // Kundsannolikhet -- ett färgsystem som återanvänds identiskt i kortets
+  // pill, i båda kartlägena och i detaljvyns förklaringsribba. Skalan ligger
+  // inom paletten så långt den kan: guld för mellanläget (guld = markör och
+  // tips i guiden) och skiffer för det svaga läget. Endast det höga läget tar
+  // en statusfärg, eftersom grönt är den enda signal en förare läser som
+  // "det här är värt att köra på" utan att först läsa etiketten.
   static const likelihoodHigh = live;
-  static const likelihoodMedium = yellowDeep;
-  static const likelihoodLow = Color(0xFF6B6358);
+  static const likelihoodMedium = guldDjup;
+  static const likelihoodLow = skiffer;
 
-  // aliases
-  static const asphalt = navy;
-  static const road = navyDeep;
-  static const taxi = yellow;
-  static const taxiDeep = yellowDeep;
-  static const signal = cyan;
+  // Alias. Namnen fanns före varumärkesbytet och används på ~150 ställen i
+  // appen; de pekar nu på paletten i stället för på den gamla marinblå/cyan-
+  // uppsättningen. Cyan finns inte kvar som varumärkesfärg: den pekade både
+  // på "hög allvarlighetsgrad" i ena kartläget och på "tåg" i det andra, så
+  // den delas nu upp på skiffer (UI-krom) och midnatt (länkar).
+  static const navy = midnatt;
+  static const navyDeep = midnattDjup;
+  static const foam = ljusgra;
+  static const sand = ljusgraDjup;
+  static const yellow = guld;
+  static const yellowDeep = guldDjup;
+  static const cyan = skiffer;
+  static const cyanDeep = midnatt;
+  static const ink = midnatt;
+  static const muted = skiffer;
+  static const asphalt = midnatt;
+  static const road = midnattDjup;
+  static const taxi = guld;
+  static const taxiDeep = guldDjup;
+  static const signal = skiffer;
 }
+
+/// Montserrat i rubriker och logotyp, Inter i brödtext och gränssnitt.
+/// Guiden slutar på Bold 700 — inga tyngre vikter finns i de medföljande
+/// typsnittsfilerna, så w800/w900 skulle bara falla tillbaka på 700 ändå.
+const String kDisplayFont = 'Montserrat';
+const String kBodyFont = 'Inter';
 
 ThemeData buildTaxiTheme() {
   const scheme = ColorScheme(
     brightness: Brightness.light,
-    primary: TbColors.yellow,
-    onPrimary: TbColors.navy,
-    secondary: TbColors.cyan,
-    onSecondary: Colors.white,
+    primary: TbColors.guld,
+    onPrimary: TbColors.midnatt,
+    secondary: TbColors.midnatt,
+    onSecondary: TbColors.vit,
     error: TbColors.danger,
-    onError: Colors.white,
-    surface: Colors.white,
-    onSurface: TbColors.ink,
-    surfaceContainerHighest: TbColors.sand,
-    outline: Color(0xFFC9D0DA),
+    onError: TbColors.vit,
+    surface: TbColors.vit,
+    onSurface: TbColors.midnatt,
+    surfaceContainerHighest: TbColors.ljusgraDjup,
+    outline: TbColors.line,
   );
 
   return ThemeData(
     useMaterial3: true,
     colorScheme: scheme,
-    scaffoldBackgroundColor: TbColors.foam,
-    fontFamily: 'Roboto',
+    scaffoldBackgroundColor: TbColors.ljusgra,
+    fontFamily: kBodyFont,
     appBarTheme: const AppBarTheme(
-      backgroundColor: TbColors.navy,
-      foregroundColor: TbColors.foam,
+      backgroundColor: TbColors.midnatt,
+      foregroundColor: TbColors.vit,
       elevation: 0,
       centerTitle: false,
       titleTextStyle: TextStyle(
-        color: TbColors.foam,
+        fontFamily: kDisplayFont,
+        color: TbColors.vit,
         fontSize: 20,
-        fontWeight: FontWeight.w800,
+        fontWeight: FontWeight.w700,
       ),
     ),
     filledButtonTheme: FilledButtonThemeData(
       style: FilledButton.styleFrom(
-        backgroundColor: TbColors.yellow,
-        foregroundColor: TbColors.navy,
+        backgroundColor: TbColors.guld,
+        foregroundColor: TbColors.midnatt,
         // Size.fromHeight uses infinite width and breaks buttons inside Row.
         minimumSize: const Size(64, 52),
-        textStyle: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+        textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
       style: OutlinedButton.styleFrom(
-        foregroundColor: TbColors.ink,
-        side: const BorderSide(color: Color(0xFFC9D0DA), width: 1.5),
+        foregroundColor: TbColors.midnatt,
+        side: const BorderSide(color: TbColors.line, width: 1.5),
         minimumSize: const Size(64, 48),
-        textStyle: const TextStyle(fontWeight: FontWeight.w700),
+        textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
-        foregroundColor: TbColors.cyanDeep,
-        textStyle: const TextStyle(fontWeight: FontWeight.w700),
+        foregroundColor: TbColors.midnatt,
+        textStyle: const TextStyle(fontWeight: FontWeight.w600),
       ),
     ),
     chipTheme: ChipThemeData(
-      backgroundColor: Colors.white,
-      selectedColor: TbColors.yellow,
-      disabledColor: TbColors.sand,
-      labelStyle: const TextStyle(fontWeight: FontWeight.w700, color: TbColors.ink),
-      secondaryLabelStyle: const TextStyle(fontWeight: FontWeight.w700, color: TbColors.ink),
-      side: const BorderSide(color: Color(0xFFC9D0DA)),
+      backgroundColor: TbColors.vit,
+      selectedColor: TbColors.guld,
+      disabledColor: TbColors.ljusgraDjup,
+      labelStyle: const TextStyle(fontWeight: FontWeight.w600, color: TbColors.midnatt),
+      secondaryLabelStyle: const TextStyle(fontWeight: FontWeight.w600, color: TbColors.midnatt),
+      side: const BorderSide(color: TbColors.line),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
     ),
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
-      fillColor: Colors.white,
+      fillColor: TbColors.vit,
       border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
       enabledBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: Color(0xFFC9D0DA), width: 1.5),
+        borderSide: const BorderSide(color: TbColors.line, width: 1.5),
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(10),
-        borderSide: const BorderSide(color: TbColors.cyan, width: 2),
+        borderSide: const BorderSide(color: TbColors.midnatt, width: 2),
       ),
     ),
     cardTheme: CardThemeData(
-      color: Colors.white,
+      color: TbColors.vit,
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(12),
-        side: const BorderSide(color: Color(0xFFC9D0DA)),
+        side: const BorderSide(color: TbColors.line),
       ),
     ),
     listTileTheme: const ListTileThemeData(
-      textColor: TbColors.ink,
-      iconColor: TbColors.ink,
-      titleTextStyle: TextStyle(color: TbColors.ink, fontWeight: FontWeight.w800, fontSize: 16),
-      subtitleTextStyle: TextStyle(color: TbColors.muted, fontSize: 13),
+      textColor: TbColors.midnatt,
+      iconColor: TbColors.midnatt,
+      titleTextStyle: TextStyle(
+        fontFamily: kDisplayFont,
+        color: TbColors.midnatt,
+        fontWeight: FontWeight.w600,
+        fontSize: 16,
+      ),
+      subtitleTextStyle: TextStyle(color: TbColors.skiffer, fontSize: 13),
     ),
     textTheme: const TextTheme(
-      bodyLarge: TextStyle(color: TbColors.ink),
-      bodyMedium: TextStyle(color: TbColors.ink),
-      bodySmall: TextStyle(color: TbColors.muted),
-      titleLarge: TextStyle(color: TbColors.ink, fontWeight: FontWeight.w900),
-      titleMedium: TextStyle(color: TbColors.ink, fontWeight: FontWeight.w800),
-      titleSmall: TextStyle(color: TbColors.ink, fontWeight: FontWeight.w700),
-      labelLarge: TextStyle(color: TbColors.ink, fontWeight: FontWeight.w700),
+      headlineLarge: TextStyle(fontFamily: kDisplayFont, color: TbColors.midnatt, fontWeight: FontWeight.w700),
+      headlineMedium: TextStyle(fontFamily: kDisplayFont, color: TbColors.midnatt, fontWeight: FontWeight.w700),
+      headlineSmall: TextStyle(fontFamily: kDisplayFont, color: TbColors.midnatt, fontWeight: FontWeight.w700),
+      titleLarge: TextStyle(fontFamily: kDisplayFont, color: TbColors.midnatt, fontWeight: FontWeight.w700),
+      titleMedium: TextStyle(fontFamily: kDisplayFont, color: TbColors.midnatt, fontWeight: FontWeight.w600),
+      titleSmall: TextStyle(fontFamily: kDisplayFont, color: TbColors.midnatt, fontWeight: FontWeight.w600),
+      bodyLarge: TextStyle(color: TbColors.midnatt),
+      bodyMedium: TextStyle(color: TbColors.midnatt),
+      bodySmall: TextStyle(color: TbColors.skiffer),
+      labelLarge: TextStyle(color: TbColors.midnatt, fontWeight: FontWeight.w600),
     ),
     navigationBarTheme: NavigationBarThemeData(
-      backgroundColor: TbColors.navy,
-      indicatorColor: TbColors.yellow,
+      backgroundColor: TbColors.midnatt,
+      indicatorColor: TbColors.guld,
       labelTextStyle: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
         return TextStyle(
-          fontWeight: FontWeight.w800,
+          fontWeight: FontWeight.w600,
           fontSize: 13,
-          color: selected ? TbColors.yellow : TbColors.foam.withValues(alpha: 0.7),
+          color: selected ? TbColors.guld : TbColors.vit.withValues(alpha: 0.7),
         );
       }),
       iconTheme: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
         return IconThemeData(
-          color: selected ? TbColors.navy : TbColors.foam.withValues(alpha: 0.75),
+          color: selected ? TbColors.midnatt : TbColors.vit.withValues(alpha: 0.75),
           size: 26,
         );
       }),

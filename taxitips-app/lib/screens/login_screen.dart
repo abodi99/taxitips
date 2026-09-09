@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -29,15 +30,15 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   static const _prefillEnabled = bool.fromEnvironment(
     'ENABLE_TEST_LOGIN',
-    defaultValue: true,
+    defaultValue: kDebugMode,
   );
   static const _prefillEmail = String.fromEnvironment(
     'PREFILL_EMAIL',
-    defaultValue: 'test@taxitips.se',
+    defaultValue: 'agare@malmotaxi.se',
   );
   static const _prefillPassword = String.fromEnvironment(
     'PREFILL_PASSWORD',
-    defaultValue: 'TaxiTips123!',
+    defaultValue: 'taxitips123',
   );
 
   final _email = TextEditingController();
@@ -143,7 +144,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   SvgPicture.asset(
                     'assets/brand/logo-on-dark.svg',
                     width: 320,
-                    height: 74,
+                    height: 93,
                     fit: BoxFit.contain,
                   ),
                   const SizedBox(height: 8),
@@ -165,7 +166,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         const Text(
                           'Kontor',
                           style: TextStyle(
-                            fontWeight: FontWeight.w800,
+                            fontWeight: FontWeight.w700,
                             fontSize: 18,
                           ),
                         ),

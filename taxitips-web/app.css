@@ -1,17 +1,9 @@
 :root {
-  --bg: #f8f7f2;
-  --surface: #ffffff;
-  --ink: #08254c;
-  --muted: #3d4f6a;
-  --line: rgba(8, 37, 76, 0.14);
-  --asphalt: #08254c;
-  --taxi: #ffc400;
-  --taxi-deep: #e0ac00;
-  --danger: #c0392b;
-  --go: #1f8a5b;
-  --cyan: #19c2d1;
-  --font-display: "Plus Jakarta Sans", "Inter", system-ui, sans-serif;
-  --font-body: "Inter", system-ui, sans-serif;
+  /* Palett och typografi kommer från brand.css (midnatt + guld). */
+  --bg: var(--ljusgra);
+  --surface: var(--vit);
+  --muted: var(--skiffer);
+  --go: var(--ok);
   --touch: 44px;
   --tabbar-h: 56px;
   --radius: 12px;
@@ -21,6 +13,15 @@
 *::before,
 *::after {
   box-sizing: border-box;
+}
+
+/* Rubriker i Montserrat, gränssnitt och brödtext i Inter. */
+h1,
+h2,
+h3,
+.brand {
+  font-family: var(--font-display);
+  font-weight: 700;
 }
 
 html,
@@ -48,7 +49,7 @@ a {
   top: 0;
   z-index: 20;
   background: var(--asphalt);
-  color: #f7f2ea;
+  color: var(--vit);
   padding: calc(0.45rem + env(safe-area-inset-top)) 0.9rem 0.65rem;
 }
 
@@ -80,24 +81,24 @@ a {
   font-weight: 700;
   padding: 0.25rem 0.5rem;
   border-radius: 999px;
-  background: rgba(247, 242, 234, 0.08);
+  background: rgba(245, 247, 250, 0.08);
 }
 
 .dot {
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #888;
+  background: var(--skiffer);
 }
 
 .dot.live {
-  background: #3dcf6a;
+  background: var(--ok);
 }
 .dot.warn {
   background: var(--taxi);
 }
 .dot.err {
-  background: #ff6b5a;
+  background: var(--danger);
 }
 
 .icon-btn {
@@ -105,7 +106,7 @@ a {
   height: 40px;
   border: none;
   border-radius: 10px;
-  background: rgba(247, 242, 234, 0.1);
+  background: rgba(245, 247, 250, 0.1);
   color: #fff;
   font-size: 1.35rem;
   font-weight: 700;
@@ -133,7 +134,7 @@ a {
 .focus-sub {
   margin: 0.25rem 0 0;
   font-size: 0.78rem;
-  color: rgba(247, 242, 234, 0.62);
+  color: rgba(245, 247, 250, 0.62);
   max-width: 36rem;
   display: -webkit-box;
   -webkit-line-clamp: 1;
@@ -168,11 +169,11 @@ a {
   border-radius: 999px;
   min-height: var(--touch);
   font: inherit;
-  font-weight: 800;
+  font-weight: 700;
   font-size: 0.88rem;
   cursor: pointer;
   background: transparent;
-  color: rgba(247, 242, 234, 0.55);
+  color: rgba(245, 247, 250, 0.55);
 }
 
 .mode-btn.on {
@@ -187,9 +188,9 @@ a {
 }
 
 .chip-btn {
-  border: 1px solid rgba(247, 242, 234, 0.22);
+  border: 1px solid rgba(245, 247, 250, 0.22);
   background: transparent;
-  color: rgba(247, 242, 234, 0.88);
+  color: rgba(245, 247, 250, 0.88);
   border-radius: 999px;
   min-height: var(--touch);
   padding: 0 0.85rem;
@@ -205,7 +206,7 @@ a {
 
 .chip-btn[aria-pressed="true"],
 .chip-btn.on {
-  background: rgba(240, 180, 41, 0.2);
+  background: rgba(252, 163, 17, 0.2);
   border-color: var(--taxi);
   color: var(--taxi);
 }
@@ -213,7 +214,7 @@ a {
 .status-meta {
   margin: 0.4rem 0 0;
   font-size: 0.75rem;
-  color: rgba(247, 242, 234, 0.55);
+  color: rgba(245, 247, 250, 0.55);
 }
 
 .filter-check {
@@ -248,7 +249,7 @@ a {
   border-radius: var(--radius);
   overflow: hidden;
   border: 1px solid var(--line);
-  background: #d5ddd5;
+  background: var(--ljusgra-djup);
 }
 
 .app-feed {
@@ -292,7 +293,7 @@ a {
 }
 
 .hotspot.high {
-  border-color: rgba(180, 35, 24, 0.45);
+  border-color: rgba(192, 57, 43, 0.45);
 }
 
 .hotspot .count {
@@ -309,7 +310,7 @@ a {
 .list-section-title {
   margin: 0.35rem 0 0.1rem;
   font-size: 0.7rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   color: var(--muted);
@@ -326,18 +327,18 @@ a {
 }
 
 .card.high {
-  border-color: rgba(31, 122, 58, 0.35);
-  background: linear-gradient(180deg, #f3faf5 0%, #fff 55%);
+  border-color: rgba(31, 138, 91, 0.35);
+  background: linear-gradient(180deg, rgba(31, 138, 91, 0.07) 0%, var(--vit) 55%);
 }
 
 .card.event,
 .card.event-news {
-  border-color: rgba(47, 111, 237, 0.28);
+  border-color: rgba(82, 96, 120, 0.35);
   cursor: pointer;
 }
 
 .card.event-news:focus-visible {
-  outline: 2px solid #2f6fed;
+  outline: 2px solid var(--midnatt);
   outline-offset: 2px;
 }
 
@@ -360,7 +361,7 @@ a {
 .card .badge {
   flex-shrink: 0;
   font-size: 0.65rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
   padding: 0.3rem 0.5rem;
@@ -376,26 +377,27 @@ a {
 
 .card .badge.event,
 .card .badge.phase {
-  background: #2f6fed;
-  color: #fff;
+  background: var(--midnatt);
+  color: var(--vit);
 }
 
 .card.phase-approaching .badge.phase {
-  background: #1f7a3a;
+  background: var(--ok);
 }
 
 .card.phase-live .badge.phase {
-  background: #2f6fed;
+  background: var(--guld);
+  color: var(--midnatt);
 }
 
 .card.phase-after .badge.phase {
-  background: #e0ac00;
-  color: #08254c;
+  background: var(--skiffer);
+  color: var(--vit);
 }
 
 .card.phase-upcoming .badge.phase {
-  background: #5a554e;
-  color: #fff;
+  background: var(--ljusgra-djup);
+  color: var(--midnatt);
 }
 
 .card .why {
@@ -430,7 +432,7 @@ a {
   display: inline-block;
   margin-top: 0.35rem;
   font-weight: 700;
-  color: #2f6fed;
+  color: var(--midnatt);
   text-decoration: underline;
 }
 
@@ -479,22 +481,22 @@ a {
   border-radius: 50%;
   border: 2px solid #fff;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.28);
-  font-weight: 900;
+  font-weight: 700;
   font-size: 11px;
   color: #fff;
 }
 .hot-marker.high {
-  background: #b42318;
+  background: var(--danger);
 }
 .hot-marker.medium {
-  background: #e0ac00;
-  color: #08254c;
+  background: var(--guld-djup);
+  color: var(--midnatt);
 }
 .hot-marker.low {
-  background: #6b6358;
+  background: var(--skiffer);
 }
 .hot-marker.event {
-  background: #2f6fed;
+  background: var(--midnatt);
   border-radius: 8px;
 }
 
@@ -514,7 +516,7 @@ a {
 
 .sheet::backdrop,
 .notify-dialog::backdrop {
-  background: rgba(26, 24, 22, 0.5);
+  background: rgba(20, 33, 61, 0.5);
 }
 
 .sheet-inner,
@@ -553,7 +555,7 @@ a {
   border: none;
   background: none;
   font: inherit;
-  font-weight: 800;
+  font-weight: 700;
   color: var(--taxi-deep);
   cursor: pointer;
   padding: 0.35rem 0.15rem;
@@ -596,7 +598,7 @@ a {
   border-radius: 999px;
   padding: 0.45rem 0.85rem;
   font: inherit;
-  font-weight: 800;
+  font-weight: 700;
   font-size: 0.85rem;
   cursor: pointer;
 }
@@ -659,7 +661,7 @@ a {
 .kind-row .kind-tag {
   display: inline-block;
   font-size: 0.68rem;
-  font-weight: 800;
+  font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   padding: 0.2rem 0.4rem;
@@ -669,12 +671,12 @@ a {
 }
 
 .kind-row .kind-tag.event {
-  background: #2f6fed;
-  color: #fff;
+  background: var(--midnatt);
+  color: var(--vit);
 }
 .kind-row .kind-tag.road {
-  background: #5c564c;
-  color: #fff;
+  background: var(--skiffer);
+  color: var(--vit);
 }
 
 /* —— Tab bar —— */
@@ -697,8 +699,8 @@ a {
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  color: rgba(247, 242, 234, 0.5);
-  font-weight: 800;
+  color: rgba(245, 247, 250, 0.5);
+  font-weight: 700;
   font-size: 0.95rem;
 }
 
@@ -753,7 +755,7 @@ a {
   gap: 0.45rem;
 }
 .city-chip {
-  border: 1.5px solid #8a7f70;
+  border: 1.5px solid var(--line-strong);
   background: #fff;
   color: var(--ink);
   border-radius: 999px;
@@ -810,7 +812,7 @@ a {
   line-height: 1.35;
 }
 .notify-tips {
-  background: #ebe4d6;
+  background: var(--ljusgra);
   border-radius: 12px;
   padding: 0.85rem 1rem;
   font-size: 0.88rem;
@@ -822,7 +824,7 @@ a {
 .notify-save {
   margin: 0.75rem 0 0;
   font-weight: 700;
-  color: #1b7a3d;
+  color: var(--ok);
   font-size: 0.9rem;
 }
 

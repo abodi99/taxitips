@@ -18,9 +18,13 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
   bool _enabled = true;
   Map<String, bool> _types = {};
   Set<String> _cities = {};
+  Set<String> _regions = {};
   List<Map<String, dynamic>> _catalog = [];
+  List<Map<String, dynamic>> _regionCatalog = [];
+  List<String> _uncovered = [];
   List<String> _tips = [];
   List<String> _areaChoices = [];
+  bool _readOnly = false;
 
   @override
   void initState() {
@@ -51,6 +55,18 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
         _cities = {
           for (final c in (prefs['cities'] as List?) ?? []) c.toString(),
         };
+        _regions = {
+          for (final r in (prefs['regions'] as List?) ?? []) r.toString(),
+        };
+        _regionCatalog =
+            (data['regionCatalog'] as List?)?.cast<Map<String, dynamic>>() ??
+            const [];
+        _uncovered =
+            (data['uncoveredCounties'] as List?)
+                ?.map((e) => e.toString())
+                .toList() ??
+            const [];
+        _readOnly = data['readOnly'] == true;
         _catalog = (meta['catalog'] as List?)?.cast<Map<String, dynamic>>() ?? [];
         _tips = (meta['tips'] as List?)?.map((e) => e.toString()).toList() ?? [];
         _areaChoices = choices;
@@ -70,6 +86,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
       await widget.api.saveNotifyPrefs(
         enabled: _enabled,
         cities: _cities.toList()..sort(),
+        regions: _regions.toList()..sort(),
         types: _types,
       );
       if (mounted) {
@@ -119,7 +136,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
               ),
               const Text(
                 'Notiser',
-                style: TextStyle(fontSize: 26, fontWeight: FontWeight.w900, color: TbColors.ink),
+                style: TextStyle(fontSize: 26, fontWeight: FontWeight.w700, color: TbColors.ink),
               ),
               const SizedBox(height: 6),
               Text(
@@ -136,7 +153,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                 borderRadius: BorderRadius.circular(12),
                 child: SwitchListTile(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                  title: const Text('Alla notiser', style: TextStyle(fontWeight: FontWeight.w800)),
+                  title: const Text('Alla notiser', style: TextStyle(fontWeight: FontWeight.w700)),
                   subtitle: Text(
                     _enabled ? 'På — filtreras enligt nedan' : 'Av — ingen push',
                     style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
@@ -151,9 +168,101 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                 ),
               ),
               const SizedBox(height: 18),
+              // Länen först, och orterna som en förfining under. Ordningen
+              // speglar hur mycket de faktiskt går att lita på: mätt på 506
+              // aktiva tips bär ALLA en region, medan 61% saknar ortsuppgift
+              // helt. Ett ortsfilter ensamt hade tystat majoriteten av alla
+              // riktiga störningar -- se core/notify.py.
+              if (_regionCatalog.isNotEmpty) ...[
+                Text(
+                  'Län du kör i',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    color: Colors.grey.shade800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  _regions.isEmpty
+                      ? 'Inga valda = notiser från hela landet.'
+                      : 'Notiser från valda län. Störningar utan känt län släpps alltid igenom.',
+                  style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
+                ),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    for (final r in _regionCatalog)
+                      FilterChip(
+                        label: Text(
+                          r['label']?.toString() ?? '',
+                          style: const TextStyle(fontWeight: FontWeight.w700),
+                        ),
+                        // Järnvägen är ett eget val, inte ett län:
+                        // Trafikverkets tågdata saknar länsfält, så ett
+                        // tågtips skrivs som "rail" oavsett var stationen
+                        // ligger. Väljer man det tillsammans med ett län
+                        // avgränsas tågen ändå geografiskt av
+                        // marknadsradien -- samma 150 km som listan
+                        // använder (core/notify.py:within_reach).
+                        tooltip: (r['note']?.toString() ?? '').isEmpty
+                            ? null
+                            : r['note'].toString(),
+                        selected: _regions.contains(r['key']?.toString()),
+                        selectedColor: TbColors.taxi,
+                        checkmarkColor: TbColors.ink,
+                        onSelected: _enabled && !_readOnly
+                            ? (sel) {
+                                final key = r['key']?.toString();
+                                if (key == null) return;
+                                setState(() {
+                                  if (sel) {
+                                    _regions.add(key);
+                                  } else {
+                                    _regions.remove(key);
+                                  }
+                                });
+                                _persist();
+                              }
+                            : null,
+                      ),
+                  ],
+                ),
+                if (_regions.isNotEmpty)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton(
+                      onPressed: _enabled && !_readOnly
+                          ? () {
+                              setState(() => _regions.clear());
+                              _persist();
+                            }
+                          : null,
+                      child: const Text('Rensa länsval (hela landet)'),
+                    ),
+                  ),
+                if (_uncovered.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  // Ärligt om luckorna i stället för att tiga om dem: de här
+                  // länen saknar kollektivtrafikkälla (404 hos Trafiklab).
+                  // Ett val vi inte kan infria hade lästs som "lugnt där".
+                  Text(
+                    'Saknar kollektivtrafikdata: ${_uncovered.join(', ')}. '
+                    'Tåg och väg täcks ändå i hela landet.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      height: 1.35,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 18),
+              ],
               Text(
                 'Orter du kör i',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Colors.grey.shade800),
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Colors.grey.shade800),
               ),
               const SizedBox(height: 4),
               // Honest about the actual behaviour: a city filter removes
@@ -208,7 +317,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
               const SizedBox(height: 18),
               Text(
                 'Vilka händelser?',
-                style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: Colors.grey.shade800),
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, color: Colors.grey.shade800),
               ),
               const SizedBox(height: 8),
               for (final t in _catalog) ...[
@@ -219,7 +328,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                     contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                     title: Text(
                       t['label']?.toString() ?? '',
-                      style: const TextStyle(fontWeight: FontWeight.w800, color: TbColors.ink),
+                      style: const TextStyle(fontWeight: FontWeight.w700, color: TbColors.ink),
                     ),
                     subtitle: Text(
                       '${t['short'] ?? ''}\n${t['help'] ?? ''}',
@@ -251,13 +360,13 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                 Container(
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFF0E8D8),
+                    color: TbColors.ljusgraDjup,
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text('Tips', style: TextStyle(fontWeight: FontWeight.w900)),
+                      const Text('Tips', style: TextStyle(fontWeight: FontWeight.w700)),
                       const SizedBox(height: 6),
                       for (final tip in _tips)
                         Padding(

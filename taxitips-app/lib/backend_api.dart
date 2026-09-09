@@ -67,6 +67,7 @@ class BackendApi {
   Future<Map<String, dynamic>> alerts({
     double? lat,
     double? lon,
+    bool includeAll = false,
     String? deviceToken,
     String? accessToken,
   }) async {
@@ -74,10 +75,14 @@ class BackendApi {
       queryParameters: {
         if (lat != null) 'lat': '$lat',
         if (lon != null) 'lon': '$lon',
+        if (includeAll) 'all': '1',
       },
     );
     final res = await _client
-        .get(uri, headers: _headers(deviceToken: deviceToken, accessToken: accessToken))
+        .get(
+          uri,
+          headers: _headers(deviceToken: deviceToken, accessToken: accessToken),
+        )
         .timeout(_timeout);
     final body = await _decode(res, 'alerts');
     // `entitled: false` är inte ett fel -- det är svaret "du ser inga tips,
@@ -122,6 +127,105 @@ class BackendApi {
         )
         .timeout(_timeout);
     return _decode(res, 'feedback');
+  }
+
+  /// Förarens sparade tips. Skickas ALLTID av backend, oavsett filter,
+  /// marknadsradie eller om störningen hunnit ta slut -- se
+  /// core/api.py:_favorites_for. Appen behöver därför inte gissa vilka som
+  /// föll bort ur `alerts` och varför.
+  Future<Map<String, dynamic>> favorites({
+    double? lat,
+    double? lon,
+    String? deviceToken,
+    String? accessToken,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/favorites').replace(
+      queryParameters: {
+        if (lat != null) 'lat': '$lat',
+        if (lon != null) 'lon': '$lon',
+      },
+    );
+    final res = await _client
+        .get(
+          uri,
+          headers: _headers(deviceToken: deviceToken, accessToken: accessToken),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'favorites');
+  }
+
+  /// Sparar eller tar bort en favorit. `favorite: false` tar bort.
+  Future<Map<String, dynamic>> setFavorite({
+    required String opportunityId,
+    required bool favorite,
+    String? note,
+    String? deviceToken,
+    String? accessToken,
+  }) async {
+    final res = await _client
+        .post(
+          Uri.parse('$baseUrl/api/favorites'),
+          headers: _headers(deviceToken: deviceToken, accessToken: accessToken),
+          body: jsonEncode({
+            'opportunity_id': opportunityId,
+            'favorite': favorite,
+            'note': ?note,
+          }),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'setFavorite');
+  }
+
+  /// Notiserna den HÄR enheten faktiskt fått -- läst ur push_delivery, inte
+  /// framräknad på nytt. En lista över "vad du borde ha fått" hade ändrats
+  /// retroaktivt varje gång ett reglage rördes.
+  Future<Map<String, dynamic>> notifications({
+    String? deviceToken,
+    String? accessToken,
+  }) async {
+    final res = await _client
+        .get(
+          Uri.parse('$baseUrl/api/notifications'),
+          headers: _headers(deviceToken: deviceToken, accessToken: accessToken),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'notifications');
+  }
+
+  Future<Map<String, dynamic>> notifyPrefs({
+    String? deviceToken,
+    String? accessToken,
+  }) async {
+    final res = await _client
+        .get(
+          Uri.parse('$baseUrl/api/notify-prefs'),
+          headers: _headers(deviceToken: deviceToken, accessToken: accessToken),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'notifyPrefs');
+  }
+
+  Future<Map<String, dynamic>> saveNotifyPrefs({
+    bool? enabled,
+    List<String>? regions,
+    List<String>? cities,
+    Map<String, bool>? types,
+    String? deviceToken,
+    String? accessToken,
+  }) async {
+    final res = await _client
+        .post(
+          Uri.parse('$baseUrl/api/notify-prefs'),
+          headers: _headers(deviceToken: deviceToken, accessToken: accessToken),
+          body: jsonEncode({
+            'enabled': ?enabled,
+            'regions': ?regions,
+            'cities': ?cities,
+            'types': ?types,
+          }),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'saveNotifyPrefs');
   }
 
   Future<Map<String, dynamic>> config() async {

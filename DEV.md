@@ -9,7 +9,11 @@ colima start                                     # containerruntime
 cd taxitips-api && supabase start                # Postgres
 cd ../taxitips-backend && ./.venv/bin/python manage.py runserver 8000
 cd ../taxitips-pipeline-viz && node server.js    # visualiseraren
-cd ../taxitips-app && flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8000
+cd ../taxitips-app
+flutter run \
+  --dart-define=API_BASE_URL=http://127.0.0.1:8000 \
+  --dart-define=SUPABASE_URL=http://127.0.0.1:54321 \
+  --dart-define=SUPABASE_ANON_KEY=$(cd ../taxitips-api && supabase status -o json | python3 -c 'import sys,json;print(json.load(sys.stdin)["PUBLISHABLE_KEY"])')
 ```
 
 Fyll på med färsk data när du vill — en källa per kommando:

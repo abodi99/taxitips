@@ -1,0 +1,17 @@
+{
+  "collection": "taxitips",
+  "brand": "TaxiTips",
+  "colors": {
+    "Midnatt": "#14213D",
+    "Guld": "#FCA311",
+    "Vit": "#FFFFFF",
+    "Ljusgrå": "#F5F7FA",
+    "Skiffer": "#526078"
+  },
+  "fonts": {
+    "heading": "Montserrat Bold 700 / Semibold 600",
+    "body": "Inter Regular 400 / Medium 500"
+  },
+  "tagline": "Rätt plats. Rätt tillfälle.",
+  "voice": "TaxiTips är en tydlig, hjälpsam och saklig guide för taxiförare och taxibolag. Vi hjälper användaren att förstå trafikläget och upptäcka platser där behovet av taxi kan öka. Skriv på enkel svenska, tilltala användaren med du och använd korta, aktiva meningar. Börja med plats och händelse. Visa tid och källa när de finns. Skilj verifierad information från uppskattningar. Lova aldrig kunder, intäkter eller garanterade körningar. Undvik överdrifter, onödig teknikjargong och stressande uppmaningar."
+}

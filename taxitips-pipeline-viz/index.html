@@ -4,20 +4,26 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>TaxiTips — datapipeline</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700&display=swap" rel="stylesheet">
 <style>
+  /* Varumärkesguiden taxitips2: midnatt, guld, vit, ljusgrå, skiffer.
+     --cyan och --brown fanns i den gamla paletten och pekar nu på skiffer;
+     namnen står kvar eftersom de används på ett trettiotal ställen nedan. */
   :root {
-    --navy:#08254C; --foam:#F8F7F2; --sand:#EFEEE8; --yellow:#FFC400;
-    --cyan:#19C2D1; --green:#1F8A5B; --amber:#E0AC00; --brown:#6B6358;
-    --muted:#3D4F6A; --line:#C9D0DA; --danger:#C0392B;
+    --navy:#14213D; --foam:#F5F7FA; --sand:#E7EBF1; --yellow:#FCA311;
+    --cyan:#526078; --green:#1F8A5B; --amber:#E08F00; --brown:#526078;
+    --muted:#526078; --line:#D9DCE0; --danger:#C0392B;
   }
   *{box-sizing:border-box}
-  body{margin:0;font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+  body{margin:0;font:15px/1.55 "Inter",-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
        background:var(--foam);color:var(--navy)}
   header{background:var(--navy);color:var(--foam);padding:26px 32px}
-  header h1{margin:0 0 4px;font-size:26px;font-weight:900;letter-spacing:-.3px}
+  header h1{margin:0 0 4px;font-family:"Montserrat",sans-serif;font-size:26px;font-weight:700;letter-spacing:-.3px}
   header p{margin:0;opacity:.75;font-size:14px}
   main{max-width:1180px;margin:0 auto;padding:28px 32px 80px}
-  h2{font-size:19px;font-weight:900;margin:38px 0 6px}
+  h2{font-family:"Montserrat",sans-serif;font-size:19px;font-weight:700;margin:38px 0 6px}
   h2:first-child{margin-top:0}
   .sub{color:var(--muted);font-size:14px;margin:0 0 16px}
   .card{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:14px}
@@ -25,8 +31,8 @@
   /* pipeline flow */
   .flow{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:12px;align-items:stretch}
   .stage{background:#fff;border:1px solid var(--line);border-radius:14px;padding:16px;position:relative}
-  .stage h3{margin:0 0 3px;font-size:14px;font-weight:900;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
-  .stage .big{font-size:30px;font-weight:900;line-height:1.1;margin:6px 0 2px}
+  .stage h3{margin:0 0 3px;font-size:14px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+  .stage .big{font-size:30px;font-weight:700;line-height:1.1;margin:6px 0 2px}
   .stage .note{font-size:12.5px;color:var(--muted);line-height:1.45}
   .stage.accent{border-left:5px solid var(--cyan)}
   .stage.accent-g{border-left:5px solid var(--green)}
@@ -82,8 +88,8 @@
     border:1px solid var(--line);border-radius:8px;padding:5px 9px;font-size:11.5px;color:var(--muted)}
   .legend{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 0;font-size:13px;align-items:center}
   .legend b{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:5px;vertical-align:-1px}
-  .lg-h{background:#1F8A5B}.lg-m{background:#E0AC00}.lg-l{background:#6B6358}
-  .raw{background:#08254C;color:#dfe8f5;padding:12px 14px;border-radius:10px;font-size:12px;
+  .lg-h{background:var(--green)}.lg-m{background:var(--amber)}.lg-l{background:var(--brown)}
+  .raw{background:var(--navy);color:#dfe8f5;padding:12px 14px;border-radius:10px;font-size:12px;
        line-height:1.5;overflow:auto;max-height:280px;white-space:pre-wrap;word-break:break-word}
 </style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
@@ -282,14 +288,17 @@ function drawMapGeneric(elId,points,opts){
 function drawMap(points){
   drawMapGeneric('map',points,{
     radius:o=>6+Math.round((o.demand_score||0)/14),
-    color:o=>({high:'#1F8A5B',medium:'#E0AC00',low:'#6B6358'})[likelihood(o.severity_tier,o.demand_score,o.demand_score)],
+    color:o=>({high:'#1F8A5B',medium:'#E08F00',low:'#526078'})[likelihood(o.severity_tier,o.demand_score,o.demand_score)],
     popup:popupHtml,
   });
 }
 
 // Karta 8a: rådata, en färg per källa -- innan något är sammanslaget eller
 // klassificerat, så bara källa+rå JSON finns att visa.
-const SOURCE_COLOR={trafiklab:'#19C2D1',sl:'#E0AC00',vt:'#6B4FA0',trafikverket_rail:'#1F8A5B',trafikverket:'#C0392B',smhi:'#3D4F6A'};
+// Kvalitativ skala för sex datakällor — fler urskiljbara kulörer än
+// varumärkespaletten har. Midnatt, guld och skiffer kommer därifrån;
+// resten är statusfärger som redan används i vyn.
+const SOURCE_COLOR={trafiklab:'#14213D',sl:'#E08F00',vt:'#6B4FA0',trafikverket_rail:'#1F8A5B',trafikverket:'#C0392B',smhi:'#526078'};
 function sourcePopupHtml(se){
   const srcName=SOURCE_SV[se.source]||se.source||'okänd källa';
   let html='<b>'+esc(srcName)+'</b><br><code>'+esc(se.external_id||'')+'</code>'+
@@ -302,7 +311,7 @@ function sourcePopupHtml(se){
 function drawSourceMap(rows){
   drawMapGeneric('map-sources',rows,{
     radius:()=>6,
-    color:se=>SOURCE_COLOR[se.source]||'#6B6358',
+    color:se=>SOURCE_COLOR[se.source]||'#526078',
     popup:sourcePopupHtml,
   });
 }
@@ -315,7 +324,7 @@ function aiStatus(o){
   }
   return 'pending';
 }
-const AI_COLOR={lowered:'#1F8A5B',unchanged:'#3D4F6A',pending:'#E0AC00'};
+const AI_COLOR={lowered:'#1F8A5B',unchanged:'#526078',pending:'#E08F00'};
 const AI_LABEL={lowered:'Sänkt av Genkit',unchanged:'Granskad, oförändrad',pending:'Väntar på granskning'};
 function aiPopupHtml(o){
   let html=popupHtml(o);
@@ -344,7 +353,7 @@ function drawAiMap(rows){
 function drawDriverMap(rows){
   drawMapGeneric('map-driver',rows,{
     radius:o=>6+Math.round((o.demand_score||0)/14),
-    color:o=>({high:'#1F8A5B',medium:'#E0AC00',low:'#6B6358'})[likelihood(o.severity_tier,o.demand_score,o.demand_score)],
+    color:o=>({high:'#1F8A5B',medium:'#E08F00',low:'#526078'})[likelihood(o.severity_tier,o.demand_score,o.demand_score)],
     popup:popupHtml,
   });
 }

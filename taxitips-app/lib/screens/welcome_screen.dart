@@ -29,7 +29,7 @@ class WelcomeScreen extends StatelessWidget {
                   SvgPicture.asset(
                     'assets/brand/logo-on-dark.svg',
                     width: 360,
-                    height: 83,
+                    height: 105,
                     fit: BoxFit.contain,
                   ),
                   const SizedBox(height: 32),
@@ -37,9 +37,10 @@ class WelcomeScreen extends StatelessWidget {
                     'Kör smartare.',
                     textAlign: TextAlign.center,
                     style: TextStyle(
+                      fontFamily: kDisplayFont,
                       color: TbColors.foam,
                       fontSize: 30,
-                      fontWeight: FontWeight.w900,
+                      fontWeight: FontWeight.w700,
                       height: 1.1,
                     ),
                   ),

@@ -512,8 +512,8 @@ function renderMap(data) {
   if (userPos) {
     L.circleMarker([userPos.lat, userPos.lon], {
       radius: 7,
-      color: "#08254c",
-      fillColor: "#ffc400",
+      color: "#14213D",
+      fillColor: "#FCA311",
       fillOpacity: 1,
       weight: 2,
     })

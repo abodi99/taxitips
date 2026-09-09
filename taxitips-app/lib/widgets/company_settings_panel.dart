@@ -6,6 +6,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../api_client.dart';
 import '../theme.dart';
+import 'brand_icons.dart';
 import 'settings_ui.dart';
 
 const _primaryCities = [
@@ -206,7 +207,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                 const SizedBox(height: 16),
                 const Text(
                   'Orter ni kör i',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 6),
                 Text(
@@ -233,7 +234,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                             label: Text(
                               name,
                               style: const TextStyle(
-                                fontWeight: FontWeight.w800,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
                             selected: _selected.contains(name),
@@ -296,7 +297,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
             const SizedBox(height: 16),
             const Text(
               'Bolagskod till förarna',
-              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900),
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 6),
             Text(
@@ -317,7 +318,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 32,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                   letterSpacing: 5,
                 ),
               ),
@@ -373,7 +374,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 28,
-                  fontWeight: FontWeight.w900,
+                  fontWeight: FontWeight.w700,
                   letterSpacing: 4,
                 ),
               ),
@@ -488,7 +489,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                       'Hantera användare',
                       style: TextStyle(
                         fontSize: 22,
-                        fontWeight: FontWeight.w900,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
                     Text(
@@ -771,7 +772,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
         SettingsGroup(
           children: [
             SettingsNavRow(
-              icon: Icons.location_on_outlined,
+              icon: BrandIcons.office(size: 24, color: TbColors.muted),
               title: 'Orter ni kör i',
               subtitle: _areasSummary,
               onTap: _openAreasSheet,
