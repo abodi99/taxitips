@@ -328,7 +328,10 @@ class _DriverScreenState extends State<DriverScreen> {
   /// (en dubbelsparning svarar `duplicate: true`, inte ett fel). Går det
   /// fel återställs den och föraren får veta -- tyst misslyckande är värre
   /// än en synlig återställning.
-  Future<void> _toggleFavorite(Map<String, dynamic> alert, bool favorite) async {
+  Future<void> _toggleFavorite(
+    Map<String, dynamic> alert,
+    bool favorite,
+  ) async {
     final id = alert['id']?.toString();
     if (id == null || id.isEmpty) return;
 
@@ -1059,14 +1062,16 @@ class _DriverScreenState extends State<DriverScreen> {
                           final color = travel.isStrong
                               ? TbColors.live
                               : TbColors.muted;
-                          if (travel.isLastDeparture)
+                          if (travel.isLastDeparture) {
                             return Icon(
                               Icons.last_page,
                               size: 17,
                               color: color,
                             );
-                          if (travel.hasAlternative)
+                          }
+                          if (travel.hasAlternative) {
                             return BrandIcons.bus(size: 17, color: color);
+                          }
                           return Icon(
                             Icons.schedule_send,
                             size: 17,
@@ -1712,9 +1717,13 @@ class _DriverScreenState extends State<DriverScreen> {
                                                   onTap: () =>
                                                       _openAlertDetail(a),
                                                   onToggleFavorite:
-                                                      widget.api.supportsFavorites
-                                                      ? (v) =>
-                                                            _toggleFavorite(a, v)
+                                                      widget
+                                                          .api
+                                                          .supportsFavorites
+                                                      ? (v) => _toggleFavorite(
+                                                          a,
+                                                          v,
+                                                        )
                                                       : null,
                                                 ),
                                                 const SizedBox(height: 10),
@@ -1732,9 +1741,13 @@ class _DriverScreenState extends State<DriverScreen> {
                                                   onTap: () =>
                                                       _openAlertDetail(a),
                                                   onToggleFavorite:
-                                                      widget.api.supportsFavorites
-                                                      ? (v) =>
-                                                            _toggleFavorite(a, v)
+                                                      widget
+                                                          .api
+                                                          .supportsFavorites
+                                                      ? (v) => _toggleFavorite(
+                                                          a,
+                                                          v,
+                                                        )
                                                       : null,
                                                 ),
                                                 const SizedBox(height: 10),

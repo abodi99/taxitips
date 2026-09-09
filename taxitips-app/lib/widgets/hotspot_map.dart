@@ -140,8 +140,9 @@ class HotspotMap extends StatelessWidget {
     }
 
     for (final p in placeStats) {
-      if (perOpportunity)
+      if (perOpportunity) {
         break; // per-opportunity view replaces place aggregation
+      }
       if (highOnly && p['maxLevel'] != 'high') continue;
       final lat = (p['lat'] as num?)?.toDouble();
       final lon = (p['lon'] as num?)?.toDouble();
