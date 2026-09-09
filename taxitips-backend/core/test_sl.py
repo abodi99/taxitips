@@ -7,7 +7,14 @@ from datetime import datetime, timedelta, timezone as dt_tz
 
 from django.test import TestCase
 
-from core.sources.sl import build_site_index, is_actionable, mode_hint_from, normalize_deviation, pick_variant
+from core.sources.sl import (
+    build_site_index,
+    extract_stop_and_time_from_details,
+    is_actionable,
+    mode_hint_from,
+    normalize_deviation,
+    pick_variant,
+)
 
 NOW = datetime(2026, 9, 5, 18, 0, tzinfo=dt_tz.utc)
 
@@ -118,3 +125,78 @@ class NormalizeDeviation(TestCase):
             deviation(scope={"stop_areas": [{"id": 80351, "name": "Södergården"}], "lines": []}), index
         )
         self.assertIsNone(a["lat"])
+
+    def test_falls_back_to_the_free_text_stop_and_time_when_stop_areas_is_empty(self):
+        # "mellan Varvsgatan kl 6:45 och Fridhemsplan" -- a real example
+        # from the field inventory measurement (docs/api-field-inventory.md #5).
+        index = build_site_index([
+            {"gid": "9001", "operator": "sl", "name": "Varvsgatan", "lat": 59.33, "lon": 18.02},
+        ])
+        a = normalize_deviation(
+            deviation(message_variants=[{
+                "header": "Inställd avgång",
+                "details": "Inställd avgång för buss linje 4 mellan Varvsgatan kl 6:45 och "
+                           "Fridhemsplan pga tekniskt fel.",
+                "language": "sv",
+            }]),
+            index,
+        )
+        self.assertEqual(a["lat"], 59.33)
+        self.assertEqual(a["lon"], 18.02)
+        self.assertEqual(a["mentioned_time_at"].strftime("%H:%M"), "06:45")
+
+
+class ExtractStopAndTimeFromDetails(TestCase):
+    def test_extracts_a_stop_name_and_time_after_fran(self):
+        index = build_site_index([
+            {"gid": "1", "operator": "sl", "name": "Skärholmen", "lat": 59.28, "lon": 17.9},
+        ])
+        hit = extract_stop_and_time_from_details(
+            "Förseningar upp till 15 minuter för buss linje 865 från Skärholmen 08:52 "
+            "mot Rudsjöterrassen på grund av ett tekniskt fel.",
+            index,
+        )
+        self.assertIsNotNone(hit)
+        self.assertEqual(hit["lat"], 59.28)
+        self.assertEqual(hit["lon"], 17.9)
+        self.assertEqual(hit["time"].strftime("%H:%M"), "08:52")
+
+    def test_returns_none_when_the_text_has_no_stop_and_time_pattern(self):
+        index = build_site_index([
+            {"gid": "1", "operator": "sl", "name": "Skärholmen", "lat": 59.28, "lon": 17.9},
+        ])
+        self.assertIsNone(extract_stop_and_time_from_details("Vagnbrist.", index))
+
+    def test_kl_alone_is_not_mistaken_for_a_stop_name(self):
+        # Regression for the measured false-hit: "mellan kl. 6:45 och 8:00"
+        # has no stop name before "kl." at all.
+        index = build_site_index([
+            {"gid": "1", "operator": "sl", "name": "Kl", "lat": 59.0, "lon": 18.0},
+        ])
+        self.assertIsNone(
+            extract_stop_and_time_from_details(
+                "Anropsstyrd trafik ersätter buss 148 mellan kl. 6:45 och 8:00.", index
+            )
+        )
+
+    def test_a_name_not_found_in_the_registry_yields_no_hit_not_a_guess(self):
+        # The text says "Sollentuna station" but the registry only has
+        # "Sollentuna" -- an exact-match lookup must not fuzzy its way
+        # to a coordinate.
+        index = build_site_index([
+            {"gid": "1", "operator": "sl", "name": "Sollentuna", "lat": 59.43, "lon": 17.95},
+        ])
+        self.assertIsNone(
+            extract_stop_and_time_from_details(
+                "Förseningar för pendeltåg från Sollentuna station 07:10 mot Stockholm C.", index
+            )
+        )
+
+    def test_returns_none_without_a_site_index(self):
+        self.assertIsNone(
+            extract_stop_and_time_from_details("från Skärholmen 08:52 mot Rudsjöterrassen", {})
+        )
+        self.assertIsNone(
+            extract_stop_and_time_from_details("från Skärholmen 08:52 mot Rudsjöterrassen", None)
+        )
+

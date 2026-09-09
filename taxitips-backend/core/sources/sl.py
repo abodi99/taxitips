@@ -11,7 +11,8 @@ Docs ber om högst ett anrop per minut; relevant först när ett schema för
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone as dt_timezone
+import re
+from datetime import datetime, time as dt_time, timedelta, timezone as dt_timezone
 from zoneinfo import ZoneInfo
 
 import requests
@@ -107,6 +108,55 @@ def mode_hint_from(lines: list[dict] | None) -> str | None:
     return None
 
 
+# Svenska hållplatsnamn börjar med versal ("Varvsgatan", "Skärholmen").
+# Att kräva versal är det som håller "kl." ute ur träffen -- ett naivt
+# \S+ före "kl" plockar upp ordet "kl." självt som "hållplatsnamn" när
+# texten saknar en riktig hållplats framför tidsangivelsen (mätt
+# fallgrop, se docs/api-field-inventory.md #5).
+_STOP_NAME_WORD = r"[A-ZÅÄÖ][\w'\-]*"
+_STOP_TIME_RE = re.compile(
+    rf"(?:från|mellan)\s+(?P<namn>{_STOP_NAME_WORD}(?:\s+{_STOP_NAME_WORD})*)"
+    rf"\s+(?:kl\.?\s+)?(?P<tid>\d{{1,2}}[:.]\d{{2}})"
+)
+
+
+def _find_site_by_name(name: str, site_index: dict) -> dict | None:
+    target = name.strip().casefold()
+    for site in site_index.values():
+        if str(site.get("name") or "").strip().casefold() == target:
+            return site
+    return None
+
+
+def extract_stop_and_time_from_details(details: str | None, site_index: dict | None) -> dict | None:
+    """
+    Sista utväg när stop_areas-uppslaget inte gav koordinat: SL:s fritext
+    bär ofta mönstret "(från|mellan) <hållplats> [kl] HH:MM" (mätt: 21/25
+    agerbara larm, se docs/api-field-inventory.md #5).
+
+    Slår bara igenom vid en EXAKT namnmatchning mot registret -- ingen
+    fuzzy-matchning. En gissad koordinat skickar en förare till fel
+    gathörn (AGENTS.md invariant 2), så "Sollentuna station" i texten men
+    "Sollentuna" i registret ska ge ingen träff, inte en nästan-träff.
+    """
+    if not details or not site_index:
+        return None
+    match = _STOP_TIME_RE.search(details)
+    if not match:
+        return None
+    name = match.group("namn").strip()
+    if name.casefold().rstrip(".") == "kl":
+        return None
+    site = _find_site_by_name(name, site_index)
+    if not site:
+        return None
+    hour_str, minute_str = re.split(r"[:.]", match.group("tid"))
+    hour, minute = int(hour_str), int(minute_str)
+    if not (0 <= hour < 24 and 0 <= minute < 60):
+        return None
+    return {"lat": site["lat"], "lon": site["lon"], "time": dt_time(hour, minute)}
+
+
 def normalize_deviation(deviation: dict, site_index: dict | None) -> dict | None:
     variant = pick_variant(deviation.get("message_variants"))
     if not variant:
@@ -139,6 +189,17 @@ def normalize_deviation(deviation: dict, site_index: dict | None) -> dict | None
     start = _parse(deviation.get("publish", {}).get("from"))
     upto = _parse(deviation.get("publish", {}).get("upto"))
 
+    # Andra chansen när stop_areas inte gav något: 21/25 agerbara larm
+    # namnger en hållplats + klockslag i fritexten i stället (se
+    # extract_stop_and_time_from_details). Bara vid en exakt registerträff.
+    mentioned_at = None
+    if lat is None:
+        hit = extract_stop_and_time_from_details(variant.get("details"), site_index)
+        if hit:
+            lat, lon = hit["lat"], hit["lon"]
+            local_date = (start or datetime.now(dt_timezone.utc)).astimezone(STOCKHOLM).date()
+            mentioned_at = datetime.combine(local_date, hit["time"], tzinfo=STOCKHOLM)
+
     return {
         "id": f"sl:{deviation.get('deviation_case_id')}",
         "header": variant.get("header") or "Störning",
@@ -159,6 +220,9 @@ def normalize_deviation(deviation: dict, site_index: dict | None) -> dict | None
         "source": "sl",
         "region": "sl",
         "lat": lat, "lon": lon,
+        # Klockslaget SL nämnde i fritexten, bara satt när det parades med
+        # en hållplats vi faktiskt kunde slå upp (se ovan).
+        "mentioned_time_at": mentioned_at,
         "mode_hint": mode_hint_from(lines),
         # scope_alias ("Buss 803") är den enda linje-etiketten SL ger --
         # tidigare bara sparad i sl-bagaget nedan, aldrig visad. Samma
