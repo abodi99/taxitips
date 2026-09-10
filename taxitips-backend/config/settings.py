@@ -122,7 +122,14 @@ _database = database_from_url(
         "DATABASE_URL", "postgresql://postgres:postgres@127.0.0.1:54322/postgres"
     )
 )
-if Path("/.dockerenv").exists() and _database["HOST"] in ("127.0.0.1", "localhost"):
+# Bara lokal docker-compose (appen i container, Postgres på host via
+# `supabase start`). På Coolify ska DATABASE_URL peka på rätt hostnamn
+# rakt av -- skriv inte om till host.docker.internal där (finns inte).
+if (
+    os.environ.get("DJANGO_DOCKER_HOST_GATEWAY") == "1"
+    and Path("/.dockerenv").exists()
+    and _database["HOST"] in ("127.0.0.1", "localhost")
+):
     _database["HOST"] = "host.docker.internal"
 
 DATABASES = {"default": _database}
