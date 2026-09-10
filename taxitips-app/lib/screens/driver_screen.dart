@@ -53,11 +53,11 @@ class _DriverScreenState extends State<DriverScreen> {
   bool _claiming = false;
   bool _refreshing = false;
   bool? _entitled; // null = okänt/inte kollat än, kör inte spärr förrän vi vet.
-  // On by default: the screen exists to answer "var finns taxibehov just nu",
-  // and the honest answer is a short list of places actually worth driving to
-  // -- not 250 signals dominated by buses running a few minutes late. Weaker
-  // signals stay one tap away for a driver who deliberately wants them.
-  bool _highOnly = true;
+  // Av som default: med dagens data (många planerade ersättningsarbeten
+  // korrekt märkta low) ger "Bara hög prio" en tom lista som ser ut som
+  // "inga störningar". Föraren slår på filtret när hen vill korta ner.
+  // Sparad preferens i SharedPreferences vinner fortfarande.
+  bool _highOnly = false;
   bool _nearMe = false;
 
   /// Event types the driver has explicitly switched off. Stored as an
@@ -358,7 +358,17 @@ class _DriverScreenState extends State<DriverScreen> {
   List<Map<String, dynamic>> _geoFilter(List<Map<String, dynamic>> list) {
     var out = list;
     if (_region != null) {
-      out = out.where((a) => a['region']?.toString() == _region).toList();
+      // Järnväg skrivs alltid som region="rail" (saknar länsfält hos
+      // Trafikverket). Ett länsfilter som krävt exakt match hade dolt
+      // varje tågtips -- samma fälla som invariant 14 i AGENTS.md för
+      // notiser. Feedet har redan kapats till 150 km, så rail i svaret
+      // hör hemma i vald marknad.
+      out = out
+          .where((a) {
+            final r = a['region']?.toString();
+            return r == _region || r == 'rail';
+          })
+          .toList();
     }
     if (_place != null) {
       out = out.where((a) {
@@ -400,6 +410,9 @@ class _DriverScreenState extends State<DriverScreen> {
   // Road tiers are deliberately excluded -- an accident/closure delays people
   // already in a car, it doesn't strand pedestrians who'd need a taxi, so it's
   // never "high priority" here regardless of how bad the road situation reads.
+  //
+  // Ersättningstrafik (has_alternative) räknas som low på backend -- annars
+  // fyllde filtret listan med planerade ombyggnader där bussen redan går.
   /// "Hög prio" must mean the same thing the card's badge means, or the
   /// screen contradicts itself -- both ask: how strong is this signal?
   bool _isHighSeverity(Map<String, dynamic> a) {
@@ -410,6 +423,15 @@ class _DriverScreenState extends State<DriverScreen> {
     return likelihoodForAlert(a) == CustomerLikelihood.high;
   }
 
+  DateTime? _signalTime(Map<String, dynamic> a) {
+    final raw = a['start_time'] ?? a['computed_at'];
+    if (raw is String && raw.isNotEmpty) return DateTime.tryParse(raw);
+    if (raw is num) {
+      return DateTime.fromMillisecondsSinceEpoch(raw.toInt());
+    }
+    return null;
+  }
+
   void _sortSignals(List<Map<String, dynamic>> list) {
     list.sort((a, b) {
       // Active disruptions always rank above yesterday's ended ones,
@@ -417,12 +439,16 @@ class _DriverScreenState extends State<DriverScreen> {
       final aActive = a['is_active'] != false;
       final bActive = b['is_active'] != false;
       if (aActive != bActive) return aActive ? -1 : 1;
-      final ra = _rank((a['taxi'] as Map?)?['level']);
-      final rb = _rank((b['taxi'] as Map?)?['level']);
-      if (rb != ra) return rb.compareTo(ra);
-      // Within the same level bucket, break ties on the actual numeric
-      // worth_it_score (e.g. two 'high' alerts aren't equally worth chasing --
-      // a 100-point cancelled train line should still rank above an 85-point one).
+      // Nyast först inom varje sektion -- föraren vill se vad som just
+      // hänt, inte det äldsta högpoängstipset från i natt.
+      final ta = _signalTime(a);
+      final tb = _signalTime(b);
+      if (ta != null && tb != null && ta != tb) {
+        return tb.compareTo(ta);
+      }
+      if (ta != null && tb == null) return -1;
+      if (ta == null && tb != null) return 1;
+      // Same time: stronger score first, then place name.
       final sa = ((a['worth_it_score'] as num?) ?? 0);
       final sb = ((b['worth_it_score'] as num?) ?? 0);
       if (sa != sb) return sb.compareTo(sa);
@@ -435,6 +461,16 @@ class _DriverScreenState extends State<DriverScreen> {
     if (_highOnly) {
       list = list.where(_isHighSeverity).toList();
     }
+    _sortSignals(list);
+    return list;
+  }
+
+  /// Kartmarkörer: samma ort/källa/nära-mig-filter som listan, men INTE
+  /// "Bara hög prio". Annars töms kartan när ersättningstrafik korrekt
+  /// räknas som low — föraren ser ingen plats att köra till trots att
+  /// det finns koordinatsatta tips. Ringfärgen på markören visar prio.
+  List<Map<String, dynamic>> get _mapOpportunities {
+    final list = _sourceFilterList(_geoFilter(_rawActive));
     _sortSignals(list);
     return list;
   }
@@ -490,14 +526,14 @@ class _DriverScreenState extends State<DriverScreen> {
     return bits.join(' · ');
   }
 
-  // Resets to the app's default view (high prio only), not to "show
-  // everything" -- the default IS the intended answer to "var finns
-  // taxibehov just nu", so returning to it is what "nollställ" should mean.
+  // Resets to "visa allt i marknaden" -- inte till hög-prio-filtret.
+  // Hög-prio som default tömde listan när ersättningstrafik korrekt
+  // räknades som low, och såg ut som att pipelinen var död.
   void _clearFilters() {
     setState(() {
       _place = null;
       _region = null;
-      _highOnly = true;
+      _highOnly = false;
       _nearMe = false;
       _sourceFilter = 'all';
       _hiddenTiers = {};
@@ -1003,14 +1039,19 @@ class _DriverScreenState extends State<DriverScreen> {
                   // without scrolling into "Varför visas detta?" for either.
                   Row(
                     children: [
-                      _DetailStat(
-                        icon: BrandIcons.clock(
-                          size: 13,
-                          color: Colors.grey.shade700,
+                      // Flexible: datum/tid-etiketten kan bli lång ("→"-intervall
+                      // för avslutade larm) och får krympa/klippas i stället för
+                      // att trycka ut score-badgen på smala skärmar.
+                      Flexible(
+                        child: _DetailStat(
+                          icon: BrandIcons.clock(
+                            size: 13,
+                            color: Colors.grey.shade700,
+                          ),
+                          label: a['is_active'] == false
+                              ? '${dateTimeLabel(a['start_time']?.toString())} → ${dateTimeLabel(a['end_time']?.toString())}'
+                              : dateTimeLabel(a['start_time']?.toString()),
                         ),
-                        label: a['is_active'] == false
-                            ? '${dateTimeLabel(a['start_time']?.toString())} → ${dateTimeLabel(a['end_time']?.toString())}'
-                            : dateTimeLabel(a['start_time']?.toString()),
                       ),
                       const SizedBox(width: 8),
                       _DetailStat(
@@ -1227,9 +1268,9 @@ class _DriverScreenState extends State<DriverScreen> {
                       userLat: _userLat,
                       userLon: _userLon,
                       selectedPlace: _place,
-                      highOnly: _highOnly,
+                      highOnly: false,
                       perOpportunity: _mapShowsPerOpportunity,
-                      opportunities: _trafficSignals,
+                      opportunities: _mapOpportunities,
                       onSelectPlace: (name) => setState(() {
                         _place = _place == name ? null : name;
                       }),
@@ -2065,12 +2106,16 @@ class _DetailStat extends StatelessWidget {
         children: [
           SizedBox(width: 13, height: 13, child: icon),
           const SizedBox(width: 4),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              color: Colors.grey.shade800,
+          Flexible(
+            child: Text(
+              label,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 1,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: Colors.grey.shade800,
+              ),
             ),
           ),
         ],

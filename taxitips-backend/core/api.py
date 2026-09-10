@@ -149,7 +149,11 @@ def _serialize(o: Opportunity, distance_km: float | None, now) -> dict:
         "is_active": is_active,
         "worth_it_score": worth_it,
         # Bedömningen görs här nu, inte i Dart -- se core/thresholds.py.
-        "level": thresholds.customer_likelihood(o.severity_tier, o.demand_score, worth_it),
+        # has_alternative måste med, annars blir planerade
+        # ersättningsbussar "high" i listfilter och badge.
+        "level": thresholds.customer_likelihood(
+            o.severity_tier, o.demand_score, worth_it, o.has_alternative
+        ),
         # Den RIKTIGA push-grinden, inte bara poänggolvet. Fältet hette
         # redan notify_worthy men svarade på en annan fråga än den push-
         # steget ställer: golvet ensamt sa "ja" om en försening på 60 poäng,
@@ -160,6 +164,9 @@ def _serialize(o: Opportunity, distance_km: float | None, now) -> dict:
         "notify_worthy": thresholds.is_notify_worthy(
             o.severity_tier, o.demand_score, o.has_alternative
         ),
+        # Appen speglar level lokalt när backend-fält saknas; behöver samma
+        # signal så Dart-fallbacken inte "återuppväcker" ersättningstrafik.
+        "has_alternative": o.has_alternative,
         # Räknades ut av core/compensation.py men nådde aldrig en förare:
         # get_smart_alerts skrevs innan fälten fanns.
         "compensation_eligible": o.compensation_eligible,
@@ -222,9 +229,24 @@ def feed_for(
             # ärvs från RPC:n så att befintlig data beter sig likadant.
             if not home_region or (o.region or "skane") != home_region:
                 continue
-        out.append(_serialize(o, distance_km, now))
+        row = _serialize(o, distance_km, now)
+        # Bara en tiebreak, inte huvudordningen -- poängen avgör om det är
+        # värt att köra dit, inte hur nytt tipset är. Utan den här raden
+        # låg två likvärdiga tips i godtycklig databasordning, vilket i
+        # praktiken innebar äldst-först och gjorde flödet stillastående.
+        row["_computed_at"] = o.computed_at
+        out.append(row)
 
-    out.sort(key=lambda a: (-a["worth_it_score"], a["distance_km"] is None, a["distance_km"] or 0))
+    out.sort(
+        key=lambda a: (
+            -a["worth_it_score"],
+            a["distance_km"] is None,
+            a["distance_km"] or 0,
+            -a["_computed_at"].timestamp(),
+        )
+    )
+    for row in out:
+        del row["_computed_at"]
 
     # Väghändelser hålls åtskilda från tipslistan, inte utanför svaret.
     # Skälet står i core/taxi_relevance.score_road_alert: en olycka eller

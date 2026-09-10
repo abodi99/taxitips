@@ -415,12 +415,13 @@ class StopArea(models.Model):
 
 class RailAssessment(models.Model):
     """
-    Genkits granskning av ett tåg-tips.
+    Genkits granskning av ett tips.
 
-    Sparas separat från Opportunity av två skäl: bedömningen ska kunna
-    granskas i efterhand, och den får ALDRIG höja en poäng -- bara sänka.
-    Ett falskt högt tips kostar en förare en bomresa; ett falskt lågt
-    kostar ingenting.
+    Sparas separat från Opportunity så bedömningen kan granskas i
+    efterhand. För confidence=low (omklassning) får final_score vara
+    modellens poäng även om den är högre än regelns -- regelverket har
+    redan sagt att det inte vet. För övriga anrop gäller fortfarande
+    min(rule, model).
     """
 
     opportunity = models.ForeignKey(
@@ -437,7 +438,9 @@ class RailAssessment(models.Model):
     )
     rule_score = models.IntegerField(help_text="Vad regelverket gav.")
     model_score = models.IntegerField(help_text="Vad modellen föreslog.")
-    final_score = models.IntegerField(help_text="min(rule, model) -- aldrig högre.")
+    final_score = models.IntegerField(
+        help_text="Omklassning: model_score. Dämpning: min(rule, model)."
+    )
     verdict = models.TextField(blank=True, help_text="Modellens motivering.")
     model_name = models.CharField(max_length=60, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
@@ -450,9 +453,12 @@ class RailAssessment(models.Model):
         return f"{self.rule_score} → {self.final_score}"
 
     def save(self, *args, **kwargs):
-        # Skyddsräcket i koden, inte bara i dokumentationen: en modell som
-        # vill höja poängen ignoreras.
-        self.final_score = min(self.rule_score, self.model_score)
+        # Omklassning (confidence=low) sätter _allow_reclassify och får
+        # använda modellens poäng rakt av. Övriga anrop får bara sänka.
+        if getattr(self, "_allow_reclassify", False):
+            self.final_score = max(0, min(100, int(self.model_score)))
+        else:
+            self.final_score = min(self.rule_score, self.model_score)
         super().save(*args, **kwargs)
 
 

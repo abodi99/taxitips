@@ -1,8 +1,8 @@
 """
 Tester för språkmodellsgranskningen.
 
-Tyngdpunkten är skyddsräcket. En modell som kan höja poäng skickar förare
-på bomresor -- det är den enda felmodet som kostar riktiga pengar.
+confidence=low → omklassning (får höja/sänka + byta tier).
+confidence≠low / reclassify=False → bara sänka.
 """
 
 from django.test import TestCase
@@ -20,34 +20,67 @@ def make(score=85, title="Hållplats Elektravägen inställd pga vägarbete", **
     return Opportunity.objects.get(external_id="sl:test")
 
 
-class GuardrailTests(TestCase):
+class ReclassifyTests(TestCase):
     def test_model_can_lower(self):
         o = make(score=85)
-        review(o, lambda p: '{"score": 20, "stranded": false, "why": "vägarbete"}')
+        review(o, lambda p: '{"score": 20, "severity_tier": "disruption_unclassified", "stranded": false, "why": "vägarbete"}')
         o.refresh_from_db()
         self.assertEqual(o.demand_score, 20)
+        self.assertEqual(o.severity_tier, "disruption_unclassified")
 
-    def test_model_cannot_raise(self):
-        # Det enda felet som kostar pengar: en modell som skickar förare
-        # på bomresor genom att höja en poäng.
-        o = make(score=40)
-        review(o, lambda p: '{"score": 99, "stranded": true, "why": "allvarligt"}')
-        o.refresh_from_db()
-        self.assertEqual(o.demand_score, 40, "poängen får aldrig höjas")
-
-    def test_guardrail_lives_in_the_model_too(self):
-        # Även om någon anropar RailAssessment direkt ska taket gälla.
-        o = make(score=30)
-        a = RailAssessment.objects.create(
-            opportunity=o, cache_key="x", rule_score=30, model_score=95,
-            final_score=95,  # medvetet fel -- save() ska rätta det
+    def test_low_confidence_may_raise_and_re_tier(self):
+        # Fritexten sa "riskerar försening" men regex satte cancelled/60.
+        # Omklassning ska få sänka tier och poäng -- eller höja om tipset
+        # var undervärderat.
+        o = make(
+            score=25,
+            title="Linje 4 stoppad helt -- ingen trafik",
+            severity_tier="vehicle_delayed",
         )
+        review(
+            o,
+            lambda p: (
+                '{"score": 80, "severity_tier": "line_paused", '
+                '"stranded": true, "has_alternative": false, '
+                '"why": "hela linjen stoppad"}'
+            ),
+        )
+        o.refresh_from_db()
+        self.assertEqual(o.demand_score, 80)
+        self.assertEqual(o.severity_tier, "line_paused")
+        self.assertEqual(o.confidence, "medium")
+
+    def test_dampen_mode_cannot_raise(self):
+        o = make(score=40)
+        review(
+            o,
+            lambda p: '{"score": 99, "severity_tier": "line_paused", "stranded": true, "why": "allvarligt"}',
+            reclassify=False,
+        )
+        o.refresh_from_db()
+        self.assertEqual(o.demand_score, 40, "dämpning får aldrig höja")
+
+    def test_guardrail_dampen_in_model_save(self):
+        o = make(score=30)
+        a = RailAssessment(
+            opportunity=o, cache_key="x", rule_score=30, model_score=95,
+            final_score=95,
+        )
+        a.save()
         self.assertEqual(a.final_score, 30)
+
+    def test_reclassify_flag_allows_raise_in_model_save(self):
+        o = make(score=30)
+        a = RailAssessment(
+            opportunity=o, cache_key="y", rule_score=30, model_score=80,
+            final_score=80,
+        )
+        a._allow_reclassify = True
+        a.save()
+        self.assertEqual(a.final_score, 80)
 
 
 class FailureTests(TestCase):
-    """En trasig modell får aldrig ändra ett tips eller stoppa pipelinen."""
-
     def test_exception_keeps_rule_score(self):
         o = make(score=85)
         def boom(prompt):
@@ -64,17 +97,12 @@ class FailureTests(TestCase):
 
     def test_json_embedded_in_prose_is_still_read(self):
         o = make(score=85)
-        review(o, lambda p: 'Här kommer svaret:\n{"score": 10, "why": "över"}\nTack!')
+        review(o, lambda p: 'Här kommer svaret:\n{"score": 10, "severity_tier": "road_work", "why": "över"}\nTack!')
         o.refresh_from_db()
         self.assertEqual(o.demand_score, 10)
 
 
 class CacheKeyTests(TestCase):
-    """
-    Cache på titel ger noll träffar -- tågtitlar bär tågnummer och
-    klockslag och är därför nästan unika (28 av 28 i en mätning).
-    """
-
     def test_same_shape_different_numbers_share_key(self):
         a = make(score=85, title="Tåg 12111 08:29 är inställt från Motala")
         key_a = normalize_key(a)
@@ -93,7 +121,7 @@ class CacheKeyTests(TestCase):
 class CacheTests(TestCase):
     def test_second_call_uses_cache_not_the_model(self):
         o = make(score=85)
-        review(o, lambda p: '{"score": 15, "why": "vägarbete"}')
+        review(o, lambda p: '{"score": 15, "severity_tier": "road_work", "why": "vägarbete"}')
 
         calls = []
         def should_not_run(prompt):
@@ -103,3 +131,13 @@ class CacheTests(TestCase):
         o2 = make(score=85, title="Hållplats Elektravägen inställd pga vägarbete")
         review(o2, should_not_run)
         self.assertEqual(calls, [], "cachen ska ha svarat, ingen modell anropad")
+
+    def test_bypass_cache_calls_model(self):
+        o = make(score=85)
+        review(o, lambda p: '{"score": 15, "why": "vägarbete"}')
+        calls = []
+        def track(prompt):
+            calls.append(prompt)
+            return '{"score": 12, "severity_tier": "road_work", "why": "igen"}'
+        review(o, track, bypass_cache=True)
+        self.assertEqual(len(calls), 1)

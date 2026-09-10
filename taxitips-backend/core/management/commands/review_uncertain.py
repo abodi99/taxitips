@@ -1,23 +1,20 @@
 """
 Låter en språkmodell granska osäkra bedömningar.
 
-Körs bara på confidence=low -- resten är redan välgrundat, och att
-granska det vore att betala för att bekräfta något systemet redan vet.
+Körs på confidence=low (omklassning med full kontext). Med --all även
+övriga aktiva tipps utan ignore -- då bara som dämpning om confidence
+inte är low.
 
-    python manage.py review_uncertain --dry-run   # visa vad som skulle granskas
-    python manage.py review_uncertain             # kör på riktigt
+    python manage.py review_uncertain --dry-run
+    python manage.py review_uncertain
+    python manage.py review_uncertain --force --limit 40
+    python manage.py review_uncertain --all --force
 
 Kostnadsval, medvetna
 ----------------------
-- gemini-flash-lite-latest: den billigaste, snabbaste modellen som räcker
-  för en enkel klassificeringsuppgift (poäng + boolean + kort motivering).
-  Ingen anledning att betala för en tyngre modells resonemang här -- se
-  docs/data-sources.md om du vill jämföra prisnivåer.
-- temperature=0: samma text ska ge samma svar. Utan det blir cachen i
-  core/genkit.py meningslös och poängen hoppar mellan cykler.
-- --limit 40 (redan existerande golv): körs bara på de mest osäkra tipsen,
-  inte alla. Kombinerat med confidence=low-filtret och cachen ovan är
-  volymen per körning i praktiken någon handfull unika anrop.
+- gemini-flash-lite-latest: billigast som räcker för klassificering.
+- temperature=0: samma text → samma svar, cachen blir meningsfull.
+- --limit: tak per körning.
 """
 
 import asyncio
@@ -32,8 +29,6 @@ from core.models import Opportunity
 
 MODEL = "googleai/gemini-flash-lite-latest"
 
-# Genkit-instansen mintas lazy, bara när ett riktigt anrop faktiskt görs --
-# --dry-run ska aldrig kräva en nyckel, precis som innan.
 _ai = None
 
 
@@ -44,34 +39,19 @@ def _genkit():
     from genkit import Genkit
     from genkit_google_genai import GoogleAI
 
-    # GoogleAI (Gemini Developer API-nyckel) -- inte VertexAI. Projektet
-    # "taxibehov" har fakturering avstängd; VertexAI kräver ett GCP-konto
-    # med fakturering aktiverad, GoogleAI gör det inte (samma fria nivå
-    # som redan användes via rå HTTP innan den här ändringen).
     _ai = Genkit(plugins=[GoogleAI()], model=MODEL)
     return _ai
 
 
 class ReviewVerdict(BaseModel):
-    """Samma form som core/genkit.py:s PROMPT redan ber om -- Genkits
-    schemavalidering ersätter den gamla regex-baserade JSON-utplockningen,
-    utan att ändra vad review() förväntar sig få tillbaka."""
-
     score: int = Field(ge=0, le=100)
+    severity_tier: str = ""
     stranded: bool = False
+    has_alternative: bool | None = None
     why: str = Field(default="", max_length=300)
 
 
 def call_genkit(prompt: str) -> str:
-    """
-    Anropar Gemini via Genkit. Nyckeln tas från GEMINI_API_KEY (samma
-    miljövariabel som innan).
-
-    Returnerar en JSON-sträng, inte det validerade objektet direkt --
-    core/genkit.py:s review()/_parse() förblir orörda, och deras redan
-    testade "JSON inbäddat i prosa"-fall gäller fortfarande om Genkits
-    egen schemavalidering någon gång inte slår till.
-    """
     key = os.environ.get("GEMINI_API_KEY")
     if not key:
         raise RuntimeError(
@@ -93,46 +73,79 @@ def call_genkit(prompt: str) -> str:
 
 
 class Command(BaseCommand):
-    help = "Granskar osäkra tips med en språkmodell (sänker aldrig fel håll)"
+    help = (
+        "Omklassar osäkra tips med Genkit (full kontext). "
+        "confidence=low får höjas/sänkas; övriga bara sänkas."
+    )
 
     def add_arguments(self, parser):
         parser.add_argument("--dry-run", action="store_true")
         parser.add_argument("--limit", type=int, default=40)
+        parser.add_argument(
+            "--force",
+            action="store_true",
+            help="Hoppa över cache och anropa modellen igen.",
+        )
+        parser.add_argument(
+            "--all",
+            action="store_true",
+            help="Alla aktiva tipps (inte bara confidence=low).",
+        )
 
     def handle(self, *args, **options):
-        uncertain = list(
-            Opportunity.objects.filter(
-                confidence="low", end_time__gt=timezone.now()
-            ).exclude(severity_tier="ignore").order_by("-demand_score")[: options["limit"]]
+        qs = (
+            Opportunity.objects.filter(end_time__gt=timezone.now())
+            .exclude(severity_tier="ignore")
+            .exclude(kind="road")
         )
+        if not options["all"]:
+            qs = qs.filter(confidence="low")
+        uncertain = list(qs.order_by("-demand_score")[: options["limit"]])
 
         if not uncertain:
             self.stdout.write(
-                "inga osäkra tips just nu -- regelverket räcker.\n"
-                "Modellen körs bara på confidence=low; efter tågsignalerna "
-                "ligger alla tågtips på high."
+                "inga tips att granska just nu "
+                "(confidence=low tomt; prova --all).\n"
             )
             return
 
         if options["dry_run"]:
             for o in uncertain:
-                self.stdout.write(f"  {o.demand_score:3}  {(o.title or '')[:64]}")
-            self.stdout.write(f"\n{len(uncertain)} tips skulle granskas (inget anropades)")
+                self.stdout.write(
+                    f"  {o.demand_score:3}  {o.confidence:6}  "
+                    f"{o.severity_tier or '?':22}  {(o.title or '')[:56]}"
+                )
+            self.stdout.write(
+                f"\n{len(uncertain)} tips skulle granskas (inget anropades)"
+            )
             return
 
-        lowered = failed = 0
+        changed = failed = 0
         for o in uncertain:
-            before = o.demand_score
-            result = review(o, call_genkit)
+            before_score = o.demand_score
+            before_tier = o.severity_tier
+            reclassify = o.confidence == "low"
+            result = review(
+                o,
+                call_genkit,
+                reclassify=reclassify,
+                bypass_cache=options["force"],
+            )
             if result is None:
                 failed += 1
                 continue
-            if result.final_score < before:
-                lowered += 1
+            o.refresh_from_db()
+            if o.demand_score != before_score or o.severity_tier != before_tier:
+                changed += 1
                 self.stdout.write(
-                    f"  {before} → {result.final_score}  {(o.title or '')[:50]}"
+                    f"  {before_score}/{before_tier} → "
+                    f"{o.demand_score}/{o.severity_tier}  "
+                    f"{(o.title or '')[:48]}"
                 )
 
-        self.stdout.write(self.style.SUCCESS(
-            f"granskade {len(uncertain)}, sänkte {lowered}, misslyckades {failed}"
-        ))
+        self.stdout.write(
+            self.style.SUCCESS(
+                f"granskade {len(uncertain)}, ändrade {changed}, "
+                f"misslyckades {failed}"
+            )
+        )

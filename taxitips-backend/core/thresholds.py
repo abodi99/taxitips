@@ -92,7 +92,10 @@ def is_notify_worthy(
 
 
 def customer_likelihood(
-    severity_tier: str | None, demand_score: int, worth_it_score: int
+    severity_tier: str | None,
+    demand_score: int,
+    worth_it_score: int,
+    has_alternative: bool = False,
 ) -> str:
     """
     "Hur troligt är det att det står folk här" -- high/medium/low.
@@ -100,8 +103,17 @@ def customer_likelihood(
     Port av severity_labels.darts customerLikelihood(). Flyttad hit av
     samma skäl som poängreglerna: bedömningen ska göras en gång, av den som
     har datan, inte räknas om i varje klient som råkar visa samma tips.
+
+    `has_alternative` sänker till low: källan har själv skrivit ut
+    ersättningstrafik, så resenären har redan ett alternativ. Utan den
+    här grinden fylldes "Bara hög prio" av planerade ombyggnader ("bussar
+    ersätter spårvagnarna … till oktober") där ingen står strandsatt.
+    Kortet ligger kvar i listan -- det är bara färgen/filtret som ska
+    spegla verkligheten (samma resonemang som is_notify_worthy).
     """
     if worth_it_score <= 0:
+        return "low"
+    if has_alternative:
         return "low"
     if severity_tier in HIGH_SEVERITY_TIERS:
         return "high"

@@ -893,6 +893,7 @@ class ApiClient {
       'confidence': m['confidence'],
       'level': m['level'],
       'notify_worthy': m['notify_worthy'],
+      'has_alternative': m['has_alternative'] == true,
       'compensation_eligible': m['compensation_eligible'] == true,
       'compensation_amount_kr': m['compensation_amount_kr'],
       // true/false/null -- null betyder att huvudmannen inte skriver ut

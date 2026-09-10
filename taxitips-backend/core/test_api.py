@@ -390,6 +390,20 @@ class LevelTests(ApiTestCase):
                 self.assertEqual(alert["level"], level)
                 self.assertEqual(alert["notify_worthy"], notify)
 
+    def test_replacement_traffic_is_not_high_priority(self):
+        # Planerad ersättningsbuss är fortfarande ett tips i listan, men
+        # den får inte vara "high" -- då fyllde "Bara hög prio" skärmen
+        # med ombyggnader där bussen redan går.
+        opportunity(
+            severity_tier=SeverityTier.VEHICLE_CANCELLED,
+            demand_score=90,
+            has_alternative=True,
+        )
+        alert = self.get_alerts()["alerts"][0]
+        self.assertEqual(alert["level"], "low")
+        self.assertFalse(alert["notify_worthy"])
+        self.assertTrue(alert["has_alternative"])
+
     def test_config_endpoint_serves_the_same_numbers(self):
         config = self.client.get("/api/config").json()
         self.assertEqual(config["notifyScoreFloor"], 50)

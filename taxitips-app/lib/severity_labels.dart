@@ -73,6 +73,12 @@ CustomerLikelihood likelihoodForAlert(Map alert) => customerLikelihood(
   worthItScore: (alert['worth_it_score'] as num?) ?? 0,
   demandScore: (alert['demand_score'] as num?) ?? 0,
   backendLevel: alert['level']?.toString(),
+  // travel_options.has_alternative speglar samma fält; flat has_alternative
+  // kommer från Django. Båda behövs så cachead/Supabase-data inte
+  // återuppväcker ersättningstrafik som "high".
+  hasAlternative:
+      alert['has_alternative'] == true ||
+      TravelOptions.of(alert)?.hasAlternative == true,
 );
 
 CustomerLikelihood customerLikelihood({
@@ -80,7 +86,11 @@ CustomerLikelihood customerLikelihood({
   required num worthItScore,
   num demandScore = 0,
   String? backendLevel,
+  bool hasAlternative = false,
 }) {
+  // Ersättningstrafik först -- även om en cachead backendLevel säger
+  // "high" (äldre svar innan thresholds.py sänkte dem).
+  if (hasAlternative) return CustomerLikelihood.low;
   switch (backendLevel) {
     case 'high':
       return CustomerLikelihood.high;

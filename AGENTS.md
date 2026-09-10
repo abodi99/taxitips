@@ -198,8 +198,11 @@ Var och en av dem är skriven efter att ha gått sönder på riktigt.
 8. **Migrationer följer expand → migrate → contract.** Aldrig destruktivt i
    samma deploy som koden som slutar använda kolumnen. `pg_dump` före
    migration mot produktion, alltid.
-9. **AI-granskningen får bara sänka poäng** (`min(regel, modell)`), klämt
-   både i `genkit.py` och i `RailAssessment.save()`.
+9. **AI-granskningen (Genkit) på `confidence=low` får omklassa** poäng
+   och `severity_tier` (även höja) -- regelverket har redan sagt att
+   fritexten är osäker. På övriga tips gäller fortfarande bara sänkning
+   (`min(regel, modell)`), klämt i `RailAssessment.save()` när
+   `_allow_reclassify` saknas.
 10. **Ett tips ska alltid gå att förklara**: vilka `source_event_ids`,
     vilken regel, vilken konfidens.
 11. **`notify_worthy` är den riktiga notisgrinden, inte en poänggräns.**

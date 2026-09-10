@@ -25,3 +25,6 @@ stripe==11.4.1
 # (ingen firebase-admin -- se billing/fcm.py). Version låst av
 # genkit-google-genais eget beroende (kräver >=2.47.0), inte av FCM-koden.
 google-auth==2.57.1
+
+# Produktion: Coolify kör gunicorn, inte manage.py runserver.
+gunicorn==23.0.0
