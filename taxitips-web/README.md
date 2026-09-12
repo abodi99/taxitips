@@ -1,18 +1,38 @@
-# TaxiTips Web (landing + admin + portal)
+# Taxi Tips — web
 
-Statisk webb kopplad till **Supabase** på `https://api.taxitips.se`.
+The marketing landing page. That's the web's entire job now — company
+account management, driver registration, and billing all live in the
+Taxitips native app.
 
-## Kör lokalt
+Plain HTML/CSS/JS on Vite. No framework, no backend calls, no forms.
+
+## Local dev
 
 ```bash
-cd taxitips-web
-npx --yes serve -l 5173 .
+npm install
+npm run dev
 ```
 
-Öppna http://localhost:5173
+Opens on http://localhost:5173 with hot reload.
 
-## Supabase
+## Build
 
-- URL och anon key: `js/config.js` (production defaults).
-- API-hjälpare: `js/supabase-api.js` (`window.tt.api`).
-- Login: Supabase Auth (`login.html`).
+```bash
+npm run build
+```
+
+Outputs static files to `dist/`, served by the `Dockerfile`'s nginx stage.
+
+## Structure
+
+- `index.html` — the page
+- `src/style.css` — styles
+- `src/brand.css` — brand tokens (5 colors, 2 fonts) — source of truth, do not add colors
+- `public/brand/` — logo, favicon, icon set
+
+## Design system
+
+Built with the `impeccable` skill against `PRODUCT.md` (product truth).
+Direction: "Signaltavlan" — the real-time transit departure/status-board
+visual language (navy board housing, gold as the live-signal color),
+not a generic SaaS dashboard hero.

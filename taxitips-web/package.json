@@ -1,8 +1,18 @@
 {
   "name": "taxitips-web",
   "private": true,
+  "version": "1.0.0",
+  "type": "module",
   "scripts": {
-    "start": "npx --yes serve -l 5173 .",
-    "dev": "npm start"
+    "dev": "vite --port 5173",
+    "build": "vite build",
+    "preview": "vite preview --port 5173",
+    "start": "node server.mjs"
+  },
+  "devDependencies": {
+    "vite": "^6.0.0"
+  },
+  "dependencies": {
+    "firebase": "^12.19.0"
   }
 }

@@ -1,0 +1,53 @@
+/* Taxi Tips brand tokens — midnatt (navy) + guld (gold).
+   Five brand colors. Nothing else is a brand color. */
+:root {
+  --midnatt: #14213d;
+  --guld: #fca311;
+  --vit: #ffffff;
+  --ljusgra: #f5f7fa;
+  --skiffer: #526078;
+
+  --midnatt-djup: #0d1729;
+  --midnatt-mjuk: #253551;
+  --guld-djup: #e08f00;
+  --guld-ljus: #ffb84d;
+  --ljusgra-djup: #e7ebf1;
+
+  --ink: var(--midnatt);
+  --ink-soft: var(--skiffer);
+  --line: rgba(20, 33, 61, 0.14);
+  --line-strong: rgba(20, 33, 61, 0.26);
+
+  --danger: #c0392b;
+  --ok: #1f8a5b;
+  --warn: var(--guld-djup);
+
+  --font-display: "Montserrat", "Inter", system-ui, -apple-system, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --radius: 14px;
+  --radius-pill: 999px;
+}
+
+.brand-logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  text-decoration: none;
+  color: inherit;
+  line-height: 0;
+}
+
+.brand-logo img {
+  display: block;
+  height: 2rem;
+  width: auto;
+  transition: transform 0.2s ease-out;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .brand-logo:hover img {
+    transform: scale(1.06);
+  }
+}

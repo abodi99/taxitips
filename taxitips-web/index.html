@@ -2,364 +2,334 @@
 <html lang="sv">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Taxi Tips — Tips när taxi behövs i Skåne</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Taxi Tips — Vet var det är läge att köra</title>
+  <meta name="description" content="Taxi Tips läser tågstopp, vägincidenter och stora evenemang i realtid och visar var efterfrågan är på väg upp, innan den syns på gatan. Snart som app för iPhone och Android." />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
   <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="/brand/favicon-32.png" type="image/png" sizes="32x32" />
   <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
-  <link rel="stylesheet" href="/brand.css" />
-  <meta name="description" content="Taxi Tips visar trafikbaserade kör-tips när tåg och vägar stör trafiken i Skåne. För förare och taxibolag — se tipset, kör." />
-  <meta name="keywords" content="taxi Skåne, taxiförare app, störningar tåg, var behövs taxi, Malmö taxi, Lund taxi, Helsingborg taxi" />
-  <meta name="robots" content="index,follow" />
-  <meta name="author" content="Taxi Tips" />
-  <link rel="canonical" href="https://taxitips.se/" />
-
-  <meta property="og:type" content="website" />
-  <meta property="og:locale" content="sv_SE" />
-  <meta property="og:site_name" content="Taxi Tips" />
-  <meta property="og:title" content="Taxi Tips — Tips när taxi behövs" />
-  <meta property="og:description" content="Live-tips för taxiförare: tågstopp, olyckor och trafikstörningar. Se tipset, kör." />
-  <meta property="og:url" content="https://taxitips.se/" />
-
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:title" content="Taxi Tips — Tips när taxi behövs" />
-  <meta name="twitter:description" content="Live-tips för taxiförare i Skåne. Se tipset, kör." />
-
-  <meta name="theme-color" content="#14213D" />
-  <meta name="apple-mobile-web-app-capable" content="yes" />
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="apple-mobile-web-app-title" content="Taxi Tips" />
-  <meta name="mobile-web-app-capable" content="yes" />
-  <link rel="manifest" href="/site.webmanifest" />
-
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="/landing.css" />
-  <link rel="stylesheet" href="/cookie-consent.css" />
-
-  <script type="application/ld+json">
-  {
-    "@context": "https://schema.org",
-    "@graph": [
-      {
-        "@type": "WebSite",
-        "name": "Taxi Tips",
-        "url": "https://taxitips.se/",
-        "description": "Trafikbaserade kör-tips när taxi behövs — tåg och väg i Skåne.",
-        "inLanguage": "sv-SE"
-      },
-      {
-        "@type": "Organization",
-        "name": "Taxi Tips",
-        "url": "https://taxitips.se/",
-        "email": "hej@taxitips.se",
-        "telephone": "+46-40-123-45-67",
-        "address": {
-          "@type": "PostalAddress",
-          "addressLocality": "Malmö",
-          "addressRegion": "Skåne",
-          "addressCountry": "SE"
-        }
-      },
-      {
-        "@type": "SoftwareApplication",
-        "name": "Taxi Tips",
-        "applicationCategory": "BusinessApplication",
-        "operatingSystem": "iOS, Android, Web",
-        "offers": {
-          "@type": "Offer",
-          "price": "199",
-          "priceCurrency": "SEK",
-          "description": "Per förartelefon och månad"
-        },
-        "areaServed": {
-          "@type": "AdministrativeArea",
-          "name": "Skåne"
-        }
-      },
-      {
-        "@type": "FAQPage",
-        "mainEntity": [
-          {
-            "@type": "Question",
-            "name": "Vad gör Taxi Tips?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Appen visar trafikbaserade kör-tips vid inställda tåg, olyckor och avstängda vägar, så föraren kan fatta snabba beslut."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Hur kommer jag igång som förare?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Ange bolagskoden från kontoret, se tipset och kör dit."
-            }
-          },
-          {
-            "@type": "Question",
-            "name": "Vad kostar det för taxibolaget?",
-            "acceptedAnswer": {
-              "@type": "Answer",
-              "text": "Från 199 kr per förartelefon och månad. Prova gratis och avsluta när du vill."
-            }
-          }
-        ]
-      }
-    ]
-  }
-  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/brand.css" />
+  <link rel="stylesheet" href="/src/style.css" />
 </head>
-<body class="landing app-site scan-mode">
-  <a class="skip-link" href="#start">Hoppa till kom igång</a>
+<body>
+  <a class="skip-link" href="#huvudinnehall">Hoppa till innehåll</a>
 
-  <nav class="landing-nav" aria-label="Huvudnavigering">
-    <a class="brand brand-logo" href="/"><img src="/brand/logo-on-dark.svg" alt="taxitips" height="32" /></a>
-    <div class="nav-links">
-      <a href="#start">Start</a>
-      <a href="#pris">Pris</a>
-      <a href="#fragor">Frågor</a>
-      <a href="#kontakt">Kontakt</a>
-      <a class="btn btn-nav" href="/login.html">Webbportal för bolag</a>
-    </div>
-  </nav>
-
-  <header class="hero hero-app" id="top">
-    <div class="hero-media" aria-hidden="true">
-      <div class="hero-base"></div>
-      <div class="hero-scrim"></div>
-      <div class="hero-light"></div>
-    </div>
-
-    <div class="hero-split">
-      <div class="hero-content">
-        <p class="app-badge reveal reveal-delay-1">Live trafikdata för förare</p>
-        <h1 class="reveal reveal-delay-1">Hitta nästa körning</h1>
-        <p class="hero-lead reveal reveal-delay-2">
-          Föraren ser nästa körning i appen. Bolaget sköter allt runt omkring i webbportalen.
-        </p>
-        <div class="cta-row reveal reveal-delay-3">
-          <a class="btn btn-primary" href="/signup.html">Starta gratis i 14 dagar</a>
-          <a class="btn btn-ghost" href="/app.html?demo=1">Se demo i appen</a>
-        </div>
-        <div class="platform-row reveal reveal-delay-3" aria-label="Villkor för start">
-          <span class="platform-pill">14 dagar gratis</span>
-          <span class="platform-pill">Avsluta när du vill</span>
-          <span class="platform-pill">Betala per förartelefon</span>
-        </div>
-      </div>
-    </div>
+  <header class="nav" id="siteNav">
+    <a class="brand-logo" href="/"><img src="/brand/logo-on-dark.svg" alt="Taxi Tips" height="28" /></a>
+    <a class="nav-cta" href="#app" data-track="cta_nav">Så funkar det</a>
   </header>
 
-  <section class="section explainer" id="explainer" aria-labelledby="explainer-title">
-    <div class="section-inner wide">
-      <p class="eyebrow">Så fungerar det</p>
-      <h2 id="explainer-title">Appen hittar körningen</h2>
-      <p class="section-lead">Föraren får ett enkelt trafikbaserat tips i appen. Webbportalen sköter administrationen.</p>
-      <ol class="signal-flow">
-        <li class="signal-step">
-          <span class="signal-icon" aria-hidden="true">01</span>
-          <div><strong>Trafikdata</strong><p>Tåg- och vägstatus från anslutna källor.</p></div>
-        </li>
-        <li class="signal-step">
-          <span class="signal-icon" aria-hidden="true">02</span>
-            <div><strong>Appen prioriterar</strong><p>Signalerna vägs ihop och sorteras efter styrka och plats.</p></div>
-        </li>
-        <li class="signal-step">
-          <span class="signal-icon signal-icon-go" aria-hidden="true">03</span>
-            <div><strong>Föraren kör dit</strong><p>Se tipset i appen, öppna kartan och välj nästa körning.</p></div>
-        </li>
-      </ol>
-    </div>
-  </section>
-
-  <section class="section benefits" aria-labelledby="benefits-title">
-    <div class="section-inner wide">
-      <p class="eyebrow">I förarappen</p>
-      <h2 id="benefits-title">Allt för nästa beslut</h2>
-      <div class="benefit-grid">
-        <article class="benefit-item">
-          <span class="benefit-number">01</span>
-          <h3>Se läget direkt</h3>
-          <p>En snabb överblick över tåg- och vägstörningar i de orter du kör i.</p>
-        </article>
-        <article class="benefit-item">
-          <span class="benefit-number">02</span>
-          <h3>Få rätt prioritet</h3>
-          <p>Starka signaler lyfts fram så du slipper leta bland oviktig information.</p>
-        </article>
-        <article class="benefit-item">
-          <span class="benefit-number">03</span>
-          <h3>Kör med bättre tajming</h3>
-          <p>Öppna en signal, se platsen på kartan och välj om du ska köra dit.</p>
-        </article>
-      </div>
-    </div>
-  </section>
-
-  <section class="section paths" id="start" aria-labelledby="start-title">
-    <div class="section-inner wide">
-      <p class="eyebrow">Steg 1</p>
-      <h2 id="start-title">App eller webbportal?</h2>
-      <p class="section-lead">Föraren kör i appen. Taxibolaget administrerar i webbportalen.</p>
-
-      <div class="path-grid">
-        <article class="path-card" id="forare">
-          <p class="path-kicker">För dig som kör</p>
-          <h3>Registrera din telefon</h3>
-          <ol class="path-steps">
-            <li>Be kontoret om koden</li>
-            <li>Skriv in koden här</li>
-            <li>Se tipset och kör</li>
-          </ol>
-          <a class="btn btn-primary" href="/join.html">Koppla telefon</a>
-          <p class="path-note">Använd bolagskoden från kontoret. Det tar mindre än två minuter.</p>
-        </article>
-
-        <article class="path-card alt" id="kontor">
-          <p class="path-kicker">Webbportal för taxibolag</p>
-          <h3>Administrera bolaget</h3>
-          <ol class="path-steps">
-            <li>Skapa och hantera kontot</li>
-            <li>Välj orter och förartelefoner</li>
-            <li>Dela anslutningskoden</li>
-          </ol>
-          <div class="cta-row">
-            <a class="btn btn-primary" href="/signup.html">Skapa konto</a>
-            <a class="btn btn-ghost dark" href="/login.html">Logga in</a>
+  <main id="huvudinnehall">
+    <section class="hero">
+      <div class="hero-inner">
+        <div class="hero-copy">
+          <h1>Vet var det<br />är läge att köra.</h1>
+          <p class="hero-lead">
+            Taxi Tips läser tågstopp, vägincidenter och stora evenemang i realtid och
+            visar var efterfrågan är på väg upp, innan den syns på gatan.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#app" data-track="cta_hero_secondary">Så funkar det ↓</a>
           </div>
-          <p class="path-note">Logga in i webbportalen för att administrera bolaget · <a href="/pricing.html">Se pris</a></p>
-        </article>
-      </div>
-    </div>
-  </section>
 
-  <section class="section proof-strip" id="info" aria-labelledby="proof-title">
-    <div class="section-inner wide">
-      <p class="eyebrow">Trafikkällor</p>
-      <h2 id="proof-title" class="visually-hidden">Tåg och väg</h2>
-      <ul class="proof-row">
-        <li><strong>Tåg</strong> Inställt &amp; stora förseningar</li>
-        <li><strong>Väg</strong> Olyckor &amp; avstängt</li>
-        <li><strong>Prioritet</strong> Där taxi behövs mest</li>
-      </ul>
-    </div>
-  </section>
-
-  <section class="section pricing" id="pris" aria-labelledby="price-title">
-    <div class="section-inner wide">
-      <p class="eyebrow">Pris</p>
-      <h2 id="price-title">Börja enkelt</h2>
-      <p class="section-lead">Prova Taxi Tips gratis. Betala bara för de förartelefoner ni kopplar till bolaget.</p>
-      <div class="offer-panel">
-        <div class="offer-main">
-          <p class="offer-kicker">För taxibolag</p>
-          <p class="offer-price">199 <span>kr</span></p>
-          <p class="offer-note">från per förartelefon och månad</p>
-          <ul class="offer-includes">
-            <li>14 dagar gratis</li>
-            <li>Live-tips från tåg och väg</li>
-            <li>Samlad överblick för bolaget</li>
-            <li>Avsluta när du vill</li>
-          </ul>
-          <a class="btn btn-primary" href="/signup.html">Starta gratis</a>
+          <div class="store-row store-row-hero">
+            <span class="store-badge">
+              <img src="/brand/icons/apple.svg" alt="" aria-hidden="true" />
+              <span><small>Kommer till</small><strong>App Store</strong></span>
+            </span>
+            <span class="store-badge">
+              <img src="/brand/icons/google-play.svg" alt="" aria-hidden="true" />
+              <span><small>Kommer till</small><strong>Google Play</strong></span>
+            </span>
+          </div>
         </div>
-        <div class="offer-aside">
-          <h3 class="offer-aside-title">Så kommer ni igång</h3>
-          <ol>
-            <li>Skapa bolagets konto</li>
-            <li>Välj orter att bevaka</li>
-            <li>Dela koden med förarna</li>
-          </ol>
-          <p class="offer-aside-foot">Inga långa avtal. Ni ser aktuell totalsumma innan ni startar.</p>
+
+        <div class="phone-mockup" id="phoneMockup">
+          <div class="phone-mockup-tilt">
+          <div class="phone-frame">
+            <div class="phone-notch" aria-hidden="true"></div>
+            <div class="phone-screen">
+              <div class="board" aria-label="Exempel på signaltavla, inte live data">
+                <div class="board-head">
+                  <span class="board-dot" aria-hidden="true"></span>
+                  <span class="board-title">AKTIVA SIGNALER</span>
+                  <span class="board-example">Exempel</span>
+                </div>
+                <div class="board-cols" aria-hidden="true">
+                  <span>TID</span><span>PLATS</span><span>STYRKA</span><span>ORSAK</span>
+                </div>
+                <ul class="board-rows">
+                  <li class="board-row board-row-hot">
+                    <span class="col-time">18:42</span>
+                    <span class="col-place">Malmö C</span>
+                    <span class="col-strength">HÖG</span>
+                    <span class="col-reason">Tåg inställt, Pågatåg</span>
+                  </li>
+                  <li class="board-row board-row-hot">
+                    <span class="col-time">19:05</span>
+                    <span class="col-place">Lund C</span>
+                    <span class="col-strength">HÖG</span>
+                    <span class="col-reason">Konsert slutar, Kulturen</span>
+                  </li>
+                  <li class="board-row">
+                    <span class="col-time">19:20</span>
+                    <span class="col-place">Helsingborg</span>
+                    <span class="col-strength">MEDEL</span>
+                    <span class="col-reason">Vägarbete, E4</span>
+                  </li>
+                  <li class="board-row board-row-hot">
+                    <span class="col-time">19:47</span>
+                    <span class="col-place">Malmö Arena</span>
+                    <span class="col-strength">HÖG</span>
+                    <span class="col-reason">Match slutar, SHL</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
+          </div>
+          </div>
         </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <section class="section contact" id="kontakt" aria-labelledby="contact-title">
-    <div class="section-inner wide">
-      <p class="eyebrow">Kontakt</p>
-      <h2 id="contact-title">Frågor?</h2>
-      <p class="section-lead">Mejla oss — vi hjälper till med appen, webbportalen eller faktura.</p>
-      <div class="cta-row">
-        <a class="btn btn-primary" href="mailto:hej@taxitips.se?subject=Taxi%20Tips">Skicka mejl</a>
-        <a class="btn btn-ghost dark" href="/app.html?demo=1">Prova demo</a>
+    <section class="benefit" aria-labelledby="benefit-title">
+      <div class="section-inner">
+        <h2 id="benefit-title" data-reveal>Färre tomma mil. Fler betalande resor.</h2>
+        <div class="benefit-grid">
+          <div class="benefit-item" data-reveal>
+            <img src="/brand/icons/route.svg" alt="" aria-hidden="true" />
+            <h3>Kör mot efterfrågan</h3>
+            <p>Sluta gissa var nästa resa dyker upp. Signalen visar var den redan är på väg upp.</p>
+          </div>
+          <div class="benefit-item" data-reveal>
+            <img src="/brand/icons/clock.svg" alt="" aria-hidden="true" />
+            <h3>Mindre väntetid</h3>
+            <p>Kortare tid mellan körningar ger fler resor och mer intäkt per skift.</p>
+          </div>
+          <div class="benefit-item" data-reveal>
+            <img src="/brand/icons/drivers.svg" alt="" aria-hidden="true" />
+            <h3>Hela bolaget vinner</h3>
+            <p>Alla förartelefoner ser samma signaler, så bolaget sprider bilarna smartare.</p>
+          </div>
+        </div>
       </div>
-    </div>
-  </section>
+    </section>
 
-  <section class="section faq" id="fragor" aria-labelledby="faq-title">
-    <div class="section-inner wide">
-      <p class="eyebrow">Vanliga frågor</p>
-      <h2 id="faq-title">Det viktigaste först</h2>
-      <div class="faq-list">
-        <details class="faq-item">
-          <summary>Vad gör Taxi Tips?</summary>
-          <p>Förarappen samlar trafikdata om tåg och vägar och visar var en taxi kan behövas just nu.</p>
-        </details>
-        <details class="faq-item">
-          <summary>Hur kommer jag igång som förare?</summary>
-          <p>Be kontoret om bolagskoden, koppla din telefon på sidan Registrera telefon och öppna sedan förarvyn.</p>
-        </details>
-        <details class="faq-item">
-          <summary>Vad görs i webbportalen?</summary>
-          <p>Taxibolaget skapar kontot, väljer orter, hanterar förartelefoner och delar anslutningskoden.</p>
-        </details>
-        <details class="faq-item">
-          <summary>Vad kostar tjänsten?</summary>
-          <p>Du kan prova gratis. Därefter betalar bolaget per förartelefon och månad. Aktuellt pris visas på prissidan.</p>
-        </details>
+    <section class="mechanism" aria-labelledby="mechanism-title">
+      <div class="section-inner">
+        <h2 id="mechanism-title">Från störning till körning</h2>
+        <ol class="line">
+          <li class="line-stop" data-reveal>
+            <span class="pictogram pictogram-detect" aria-hidden="true">
+              <span class="ping"></span>
+              <span class="ping ping-2"></span>
+              <span class="dot"></span>
+            </span>
+            <h3>Störningen upptäcks</h3>
+            <p>Riktiga tågstopp, vägincidenter och stora evenemang, direkt när de händer. Inga gissningar och inga gamla mönster.</p>
+          </li>
+          <li class="line-stop" data-reveal>
+            <span class="pictogram pictogram-rank" aria-hidden="true">
+              <span class="bar bar-1"></span>
+              <span class="bar bar-2"></span>
+              <span class="bar bar-3"></span>
+            </span>
+            <h3>Signalen rangordnas</h3>
+            <p>Vägs mot plats och tid och rangordnas: Hög, Medel, Låg. Aldrig ett gissat exakt antal resenärer, bara vad som går att lita på.</p>
+          </li>
+          <li class="line-stop" data-reveal>
+            <span class="pictogram pictogram-route" aria-hidden="true">
+              <span class="route-path"></span>
+              <span class="route-car"></span>
+              <span class="route-pin"></span>
+            </span>
+            <h3>Föraren kör dit</h3>
+            <p>Signalen och varför den finns visas i appen. Föraren väljer om det är läge att köra dit. Beslutet är alltid förarens.</p>
+          </li>
+        </ol>
       </div>
-    </div>
-  </section>
+    </section>
+
+    <section class="faq" id="faq" aria-labelledby="faq-title">
+      <div class="section-inner">
+        <h2 id="faq-title" data-reveal>Vanliga frågor</h2>
+        <div class="faq-list">
+          <div class="faq-item" data-reveal>
+            <button class="faq-question" aria-expanded="false">
+              <span>När släpps appen?</span>
+              <span class="faq-icon" aria-hidden="true"></span>
+            </button>
+            <div class="faq-answer-wrap">
+              <div class="faq-answer"><p>Inom kort i Skåne, för både iPhone och Android. Hör av er så mejlar vi så snart den är redo.</p></div>
+            </div>
+          </div>
+          <div class="faq-item" data-reveal>
+            <button class="faq-question" aria-expanded="false">
+              <span>Vad kostar det?</span>
+              <span class="faq-icon" aria-hidden="true"></span>
+            </button>
+            <div class="faq-answer-wrap">
+              <div class="faq-answer"><p>Prenumerationen betalas per förartelefon direkt i appen. Hör av er så berättar vi mer om priset för ert bolag.</p></div>
+            </div>
+          </div>
+          <div class="faq-item" data-reveal>
+            <button class="faq-question" aria-expanded="false">
+              <span>Vilken data bygger signalerna på?</span>
+              <span class="faq-icon" aria-hidden="true"></span>
+            </button>
+            <div class="faq-answer-wrap">
+              <div class="faq-answer"><p>Verkliga tågstopp, vägincidenter och stora evenemang i realtid: aldrig gissningar eller historiska mönster.</p></div>
+            </div>
+          </div>
+          <div class="faq-item" data-reveal>
+            <button class="faq-question" aria-expanded="false">
+              <span>Behöver varje förare ett eget konto?</span>
+              <span class="faq-icon" aria-hidden="true"></span>
+            </button>
+            <div class="faq-answer-wrap">
+              <div class="faq-answer"><p>Nej. Föraren kopplar sin telefon till bolaget med en kod. Inget separat konto behövs.</p></div>
+            </div>
+          </div>
+          <div class="faq-item" data-reveal>
+            <button class="faq-question" aria-expanded="false">
+              <span>Vilka plattformar stöds?</span>
+              <span class="faq-icon" aria-hidden="true"></span>
+            </button>
+            <div class="faq-answer-wrap">
+              <div class="faq-answer"><p>iPhone och Android. Samma app och samma signaler oavsett plattform.</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="app" id="app" aria-labelledby="app-title">
+      <div class="section-inner" data-reveal>
+        <h2 id="app-title">Allt sker i appen</h2>
+        <p class="app-lead">Kontot, förartelefonerna och fakturan hanteras i Taxi Tips-appen, samma app för hela bolaget.</p>
+
+        <div class="store-row">
+          <span class="store-badge">
+            <img src="/brand/icons/apple.svg" alt="" aria-hidden="true" />
+            <span><small>Kommer till</small><strong>App Store</strong></span>
+          </span>
+          <span class="store-badge">
+            <img src="/brand/icons/google-play.svg" alt="" aria-hidden="true" />
+            <span><small>Kommer till</small><strong>Google Play</strong></span>
+          </span>
+        </div>
+      </div>
+    </section>
+
+    <section class="capture" id="kontakt" aria-labelledby="capture-title">
+      <div class="section-inner">
+        <h2 id="capture-title" class="capture-heading" data-reveal>Hör av dig</h2>
+        <div class="capture-grid capture-grid-single">
+          <div class="capture-card" data-reveal>
+            <span class="capture-icon" aria-hidden="true">
+              <img src="/brand/icons/office.svg" alt="" />
+            </span>
+            <h3 id="contact-title">Skicka en förfrågan</h3>
+            <p class="capture-lead">
+              Vill ni ha en kort demo eller prata bolagsavtal? Skriv några rader, vi svarar från hej@taxitips.se.
+            </p>
+            <form id="contactForm" class="capture-form" novalidate>
+              <label class="field">
+                <span>Namn</span>
+                <input type="text" name="name" autocomplete="name" required placeholder="Ditt namn" />
+              </label>
+              <label class="field">
+                <span>E-post</span>
+                <input type="email" name="email" autocomplete="email" required placeholder="du@taxibolag.se" />
+              </label>
+              <label class="field">
+                <span>Bolag <em>(valfritt)</em></span>
+                <input type="text" name="company" autocomplete="organization" placeholder="T.ex. Malmö Taxi AB" />
+              </label>
+              <label class="field">
+                <span>Meddelande</span>
+                <textarea name="message" rows="4" required minlength="10" placeholder="Hur många förartelefoner? När vill ni starta?"></textarea>
+              </label>
+              <button type="submit" class="btn btn-primary" data-track="form_contact">Skicka</button>
+              <p class="form-status" data-form-status hidden></p>
+            </form>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
 
   <footer class="site-footer">
-    <div class="footer-inner">
-      <div class="footer-brand-block">
-        <a class="brand brand-logo" href="/"><img src="/brand/logo-on-dark.svg" alt="taxitips" height="32" /></a>
-        <p class="footer-tagline">Tips när taxi behövs — Skåne.</p>
+    <div class="footer-newsletter" data-reveal>
+      <div class="footer-newsletter-inner">
+        <div>
+          <h2>Håll dig uppdaterad</h2>
+          <p>Vi mejlar när det finns nytt att berätta om Taxi Tips. Inget annat.</p>
+        </div>
+        <form id="earlyAccessForm" class="newsletter-form" novalidate>
+          <label class="visually-hidden" for="newsletterEmail">E-post</label>
+          <input id="newsletterEmail" type="email" name="email" autocomplete="email" required placeholder="du@taxibolag.se" />
+          <button type="submit" class="btn btn-primary" data-track="form_early_access">Prenumerera</button>
+          <p class="form-status" data-form-status hidden></p>
+        </form>
       </div>
+      <p class="form-fineprint">Dubbel opt-in via Listmonk. Du kan avprenumerera när som helst.</p>
+    </div>
 
-      <div class="footer-cols">
-        <div class="footer-col">
-          <h3>Produkt</h3>
-          <ul>
-            <li><a href="#start">Kom igång</a></li>
-            <li><a href="#fragor">Vanliga frågor</a></li>
-            <li><a href="/pricing.html">Pris</a></li>
-            <li><a href="/app.html?demo=1">Prova demo</a></li>
-          </ul>
-        </div>
-        <div class="footer-col">
-          <h3>Bolag</h3>
-          <ul>
-            <li><a href="/signup.html">Skapa konto</a></li>
-            <li><a href="/login.html">Logga in</a></li>
-            <li><a href="#kontakt">Kontakt</a></li>
-          </ul>
-        </div>
-        <div class="footer-col">
-          <h3>Juridiskt</h3>
-          <ul>
-            <li><a href="/privacy.html">Datapolicy</a></li>
-            <li><a href="/terms.html">Villkor</a></li>
-            <li><button type="button" class="linkish" onclick="window.tbOpenCookieSettings && tbOpenCookieSettings()">Cookies</button></li>
-          </ul>
+    <div class="footer-top">
+      <div class="footer-brand">
+        <a class="brand-logo" href="/"><img src="/brand/logo-on-dark.svg" alt="Taxi Tips" height="26" /></a>
+        <p class="footer-tagline">Tips när taxi behövs. Byggt för taxibolag i Skåne — appen läser trafiken så förarna slipper gissa.</p>
+        <div class="store-row store-row-footer">
+          <span class="store-badge store-badge-sm">
+            <img src="/brand/icons/apple.svg" alt="" aria-hidden="true" />
+            <span><small>Kommer till</small><strong>App Store</strong></span>
+          </span>
+          <span class="store-badge store-badge-sm">
+            <img src="/brand/icons/google-play.svg" alt="" aria-hidden="true" />
+            <span><small>Kommer till</small><strong>Google Play</strong></span>
+          </span>
         </div>
       </div>
 
-      <div class="footer-bottom">
-        <p>© <span id="footer-year">2026</span> Taxi Tips. Alla rättigheter förbehållna.</p>
-        <p class="footer-org">A2M Tech · Malmö · <a href="mailto:hej@taxitips.se">hej@taxitips.se</a></p>
+      <div class="footer-col">
+        <h3>Produkt</h3>
+        <ul>
+          <li><a href="#app">Så funkar det</a></li>
+          <li><a href="#faq">Vanliga frågor</a></li>
+        </ul>
       </div>
+
+      <div class="footer-col">
+        <h3>Kontakt</h3>
+        <ul>
+          <li><a href="mailto:hej@taxitips.se">hej@taxitips.se</a></li>
+          <li><a href="#kontakt">Skicka en förfrågan</a></li>
+          <li>Malmö, Sverige</li>
+        </ul>
+      </div>
+
+      <div class="footer-col">
+        <h3>Företaget</h3>
+        <ul>
+          <li>A2M Tech</li>
+          <li><button type="button" class="linkish" data-reopen-consent>Cookies</button></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="footer-bottom">
+      <p>© <span id="footerYear"></span> Taxi Tips · A2M Tech</p>
+      <p>Malmö, Sverige</p>
     </div>
   </footer>
 
-  <script src="/landing.js"></script>
-  <script src="/cookie-consent.js"></script>
-  <script>
-    document.getElementById("footer-year").textContent = String(new Date().getFullYear());
-  </script>
+  <a class="sticky-cta" id="stickyCta" href="#app" data-track="cta_sticky">Så funkar det</a>
+
+  <script type="module" src="/src/main.js"></script>
 </body>
 </html>
