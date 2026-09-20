@@ -94,6 +94,7 @@ CITY_COORDS: dict[str, tuple[float, float]] = {
     "Ängelholm": (56.2428, 12.8622),
     "Simrishamn": (55.5566, 14.3503),
     "Staffanstorp": (55.6425, 13.2075),
+    "Svedala": (55.5075, 13.234),
     "Kävlinge": (55.792, 13.1102),
     "Lomma": (55.6726, 13.069),
     "Vellinge": (55.4636, 13.0197),
@@ -241,6 +242,42 @@ REGION_ANCHOR: dict[str, str] = {
     "otraf": "Linköping", "klt": "Kalmar", "varm": "Karlstad", "dt": "Falun",
     "xt": "Gävle", "vastmanland": "Västerås", "krono": "Växjö", "jlt": "Jönköping",
     "orebro": "Örebro", "blekinge": "Karlskrona", "gotland": "Visby",
+}
+
+# Orter man kan välja under notisinställningarna, per län. Ankarpunkten
+# från REGION_ANCHOR ingår alltid; övriga är städer som faktiskt förekommer
+# i CITY_COORDS / HUBS för det länet. Push-filtret (core/notify.py) matchar
+# dem som delsträng mot opportunity.places -- tom lista = hela länet.
+REGION_CITIES: dict[str, list[str]] = {
+    "skane": [
+        "Malmö", "Lund", "Helsingborg", "Kristianstad", "Hässleholm",
+        "Landskrona", "Trelleborg", "Ystad", "Ängelholm", "Höör", "Eslöv",
+        "Kävlinge", "Staffanstorp", "Svedala", "Vellinge", "Lomma",
+        "Simrishamn", "Höganäs", "Bromölla",
+    ],
+    "sl": [
+        "Stockholm", "Solna", "Södertälje", "Nacka", "Sundbyberg", "Täby",
+        "Norrtälje",
+    ],
+    "vt": [
+        "Göteborg", "Mölndal", "Kungsbacka", "Borås", "Trollhättan",
+        "Uddevalla", "Skövde",
+    ],
+    "ul": ["Uppsala", "Enköping"],
+    "otraf": ["Linköping", "Norrköping", "Motala"],
+    "jlt": ["Jönköping", "Nässjö"],
+    "krono": ["Växjö", "Älmhult", "Markaryd"],
+    # Ronneby för flygplatsens skull: utan orten i listan filtrerade
+    # ortsvalet i notisinställningarna tyst bort varje flygtips från
+    # Ronneby Airport för alla Blekingeförare.
+    "blekinge": ["Karlskrona", "Ronneby"],
+    "klt": ["Kalmar"],
+    "varm": ["Karlstad"],
+    "dt": ["Falun"],
+    "xt": ["Gävle"],
+    "vastmanland": ["Västerås"],
+    "orebro": ["Örebro"],
+    "gotland": ["Visby"],
 }
 
 # Stop-name gazetteer (tier 3): loaded once per process from the StopArea

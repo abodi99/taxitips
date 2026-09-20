@@ -45,7 +45,11 @@ REVIEW_INTERVAL_SECONDS = 5 * 60
 
 # (kommando, extra kwargs). site-uppdatering styrs separat nedan via
 # skip_sites, så den bara körs var 24:e timme, inte varje 90s-cykel.
-DISRUPTION_COMMANDS = ["poll_rail", "poll_trafiklab", "poll_sl", "poll_vasttrafik"]
+#
+# poll_flights får ligga i samma 90-sekunderscykel trots att Swedavia har en
+# kvot att hushålla med: kommandot har en egen kadensgrind per flygplats
+# (thresholds.AIRPORTS) och gör ingenting alls när ingen är mogen.
+DISRUPTION_COMMANDS = ["poll_rail", "poll_trafiklab", "poll_sl", "poll_vasttrafik", "poll_flights"]
 SITE_AWARE_COMMANDS = {"poll_sl", "poll_vasttrafik"}
 
 

@@ -18,22 +18,19 @@ node server.js
 
 Öppna http://localhost:4000
 
-## Vad sidan visar
+## Sidorna
 
-1. **Flödet** — källa → source_events → scoring → opportunities → app/push
-2. **Datakällor** — Trafiklab, Trafikverket, SMHI, GTFS static: vad var och en
-   ger, hur ofta den hämtas, och vad den faktiskt används till
-3. **Bearbetningen** — de sex stegen från rå payload till poäng, med
-   poängtaket per severity_tier
-4. **Live-fördelning** — hur de aktiva opportunities just nu fördelar sig
-   över severity_tier
-5. **Ett spårat exempel** — en verklig störning hela vägen: rå källdata →
-   klassificering och poäng → vad föraren ser på kortet
-6. **Vad som inte fungerar än** — ärliga luckor (GTFS static-matchning,
-   Västtrafik, vägsignaler som nollas ut på avstånd)
+Mot Django (`VIZ_BACKEND=http://127.0.0.1:8000 node server.js`) har varje tjänst en egen sida:
 
-Punkt 4 och 5 hämtas live från produktionen; resten är beskrivningar av
-pipelinen som uppdateras för hand när koden ändras.
+| Sida | Innehåll |
+|---|---|
+| `/` | Översikt: färskhet och vad föraren får, per tjänst |
+| `/tag`, `/kollektivtrafik`, `/vag`, `/flyg`, `/vader`, `/evenemang` | `service.html`: källorna, analysstegen, sorter och regler, och vad föraren får med varför. Ett tips öppnar hela kedjan från rådata till notisbeslut. |
+| `/farjor` | Färjeankomsterna (tidtabell + AIS), sorterade för taxiföraren |
+| `/system` | Den gamla helsidan: lanseringsläge, FCM-test, täckning, ersättningsregler |
+
+Data kommer från `/api/pipeline/services`, `/api/pipeline/service/<tjänst>` och
+`/api/pipeline/tip/<id>` i Django (`core/service_view.py`), som alla bara svarar med DEBUG.
 
 ## Varför den failar högljutt
 

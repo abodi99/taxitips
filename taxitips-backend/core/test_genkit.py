@@ -141,3 +141,45 @@ class CacheTests(TestCase):
             return '{"score": 12, "severity_tier": "road_work", "why": "igen"}'
         review(o, track, bypass_cache=True)
         self.assertEqual(len(calls), 1)
+
+
+class AiNeverSolePushTests(TestCase):
+    """
+    Modellen får omklassa ett osäkert tips, men aldrig ensam väcka en telefon.
+    Utan spärren kunde en höjning till line_paused skickas inom 30 s, innan nästa
+    pollrunda skrev tillbaka regelvärdena.
+    """
+
+    RAISE = '{"score": 82, "severity_tier": "line_paused", "stranded": true, "has_alternative": false, "why": "hela linjen"}'
+
+    def test_a_raise_is_marked_and_never_pushed(self):
+        from core import notify
+
+        o = make(score=30, severity_tier="disruption_unclassified")
+        review(o, lambda prompt: self.RAISE)
+        o.refresh_from_db()
+        self.assertIsNotNone(o.ai_adjusted_at)
+        self.assertEqual(o.severity_tier, "line_paused")
+        self.assertEqual(notify.decide({"counties": ["05"]}, o).reason, "ai_only")
+        self.assertNotIn(o, notify.candidates())
+
+    def test_lowering_is_not_marked(self):
+        o = make(score=85)
+        review(o, lambda prompt: '{"score": 20, "severity_tier": "line_paused", "stranded": false, "has_alternative": null, "why": "ersättningsbuss"}')
+        o.refresh_from_db()
+        self.assertIsNone(o.ai_adjusted_at)
+
+    def test_the_next_pipeline_write_restores_the_rule_and_clears_the_mark(self):
+        o = make(score=30, severity_tier="disruption_unclassified")
+        review(o, lambda prompt: self.RAISE)
+        make(score=30, severity_tier="disruption_unclassified")
+        o.refresh_from_db()
+        self.assertIsNone(o.ai_adjusted_at)
+        self.assertEqual((o.demand_score, o.severity_tier), (30, "disruption_unclassified"))
+
+    def test_the_prompt_carries_no_driver_company_or_position(self):
+        from core.genkit import _prompt_for
+
+        prompt = _prompt_for(make(score=30)).lower()
+        for word in ("device", "token", "company", "bolag", "notify_prefs", "lat=", "lon="):
+            self.assertNotIn(word, prompt)

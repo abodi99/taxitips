@@ -10,11 +10,14 @@ inga taxikunder.
 
 from __future__ import annotations
 
-from django.test import TestCase, override_settings
+from unittest import mock
+
+from django.test import SimpleTestCase, TestCase, override_settings
 
 from core.models import SeverityTier
 from core.sources.trafikverket_road import (
     configured_counties,
+    fetch_road_situations,
     level_for_deviation,
     normalize_situation,
     parse_wgs84_geometry,
@@ -276,3 +279,51 @@ class TierTests(TestCase):
         )
         self.assertEqual(result.tier, SeverityTier.IGNORE)
         self.assertEqual(result.score, 0)
+
+
+POST = "core.sources.trafikverket_road.requests.post"
+
+
+def _page(ids: range) -> mock.Mock:
+    response = mock.Mock(ok=True, status_code=200, content=b"{}")
+    response.json.return_value = {"RESPONSE": {"RESULT": [{"Situation": [
+        {"Id": f"SE_STA_TRISSID_{i}", "Deviation": []} for i in ids
+    ]}]}}
+    return response
+
+
+class PagingTests(SimpleTestCase):
+    """
+    Vägpollen hämtade tidigare en sida med limit=min(100 × län, 2000) och fick
+    2 000 av 3 496 situationer. Nu följs skip tills en sida är kort.
+    """
+
+    def test_follows_skip_until_a_short_page(self):
+        pages = [_page(range(0, 1000)), _page(range(1000, 2000)), _page(range(2000, 2486))]
+        with mock.patch(POST, side_effect=pages) as post:
+            fetched = fetch_road_situations("nyckel", ["1"])
+        self.assertEqual(fetched["situations"], 2486)
+        self.assertEqual(fetched["pages"], 3)
+        self.assertTrue(fetched["complete"])
+        bodies = [call.kwargs["data"].decode() for call in post.call_args_list]
+        for body, skip in zip(bodies, ("0", "1000", "2000")):
+            self.assertIn(f'limit="1000" skip="{skip}" orderby="Id"', body)
+
+    def test_a_situation_repeated_across_pages_is_counted_once(self):
+        with mock.patch(POST, side_effect=[_page(range(0, 1000)), _page(range(999, 1500))]):
+            fetched = fetch_road_situations("nyckel", ["1"])
+        self.assertEqual(fetched["situations"], 1500)
+
+    def test_the_page_cap_marks_the_answer_incomplete(self):
+        with mock.patch("core.sources.trafikverket_road.MAX_PAGES", 2):
+            with mock.patch(POST, side_effect=[_page(range(0, 1000)), _page(range(1000, 2000))]):
+                fetched = fetch_road_situations("nyckel", ["1"])
+        self.assertFalse(fetched["complete"])
+        self.assertEqual(fetched["situations"], 2000)
+
+    def test_an_error_on_a_later_page_fails_the_round(self):
+        error = mock.Mock(ok=False, status_code=500, content=b"{}")
+        error.json.return_value = {"RESPONSE": {"RESULT": [{"ERROR": {"MESSAGE": "Internal error"}}]}}
+        with mock.patch(POST, side_effect=[_page(range(0, 1000)), error]):
+            with self.assertRaises(RuntimeError):
+                fetch_road_situations("nyckel", ["1"])

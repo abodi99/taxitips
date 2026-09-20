@@ -8,6 +8,8 @@ const severityTierLabels = {
   'line_delayed': 'Försening på linjen',
   'vehicle_cancelled': 'En avgång inställd (andra avgångar/ersättning finns)',
   'vehicle_delayed': 'En avgång försenad',
+  'arrival_wave': 'Många flyg landar samtidigt',
+  'last_arrival': 'Sista planet — inget mer landar på flera timmar',
   'road_accident_or_closure': 'Olycka eller avstängd väg',
   'road_work_or_queue': 'Vägarbete eller köbildning',
   'road_work': 'Mindre vägarbete',
@@ -20,6 +22,8 @@ const severityTierShortLabels = {
   'line_delayed': 'Försening, linjen kör',
   'vehicle_cancelled': 'Enstaka avgång inställd',
   'vehicle_delayed': 'Enstaka avgång försenad',
+  'arrival_wave': 'Ankomstvåg',
+  'last_arrival': 'Sista ankomsten',
   'road_accident_or_closure': 'Olycka/avstängning',
   'road_work_or_queue': 'Vägarbete/kö',
   'road_work': 'Vägarbete',
@@ -49,8 +53,17 @@ enum CustomerLikelihood { high, medium, low }
 // need a taxi. Only transit disruptions (a stopped line, a cancelled vehicle)
 // actually leave people without transport, so only those drive "likely
 // customers" up. Road incidents fall through to `low` regardless of tier.
+// arrival_wave stannar på medium även när poängen är hög, och till skillnad
+// från vehicle_cancelled lyfts den aldrig av _highScoreFloor nedan: vi vet att
+// planen landar, men inte att någon faktiskt står utan transport. Speglar
+// core/thresholds.py:s customer_likelihood exakt.
 const _highSeverityTiers = {'line_paused'};
-const _mediumSeverityTiers = {'line_delayed', 'vehicle_cancelled'};
+const _mediumSeverityTiers = {
+  'line_delayed',
+  'vehicle_cancelled',
+  'arrival_wave',
+  'last_arrival',
+};
 
 /// Fallback-golvet, inte källan.
 ///
@@ -140,12 +153,56 @@ const _genericTitles = {
   'ändrad körväg',
 };
 
+/// Färdsätt + sidokällor som föraren kan filtrera på i appen.
+///
+/// Ordningen speglar hur en taxiförare tänker: först det som skapar
+/// kunder (tåg/buss/…), sedan väg (sammanhang), färjor och evenemang.
+const filterModeOptions = <(String, String)>[
+  ('train', 'Tåg'),
+  ('metro', 'Tunnelbana'),
+  ('tram', 'Spårvagn'),
+  ('bus', 'Buss'),
+  ('boat', 'Båt'),
+  ('flight', 'Flyg'),
+  ('road', 'Väg'),
+  ('ferry', 'Färjor'),
+  ('events', 'Evenemang'),
+];
+
+const filterModeKeys = <String>[
+  'train',
+  'metro',
+  'tram',
+  'bus',
+  'boat',
+  'flight',
+  'road',
+  'ferry',
+  'events',
+];
+
+/// Vilken filterknapp ett tips hör till. Tomt mode + kind road/flight
+/// faller tillbaka till kind; okänd kollektivtrafik → `bus` så den går
+/// att stänga av tillsammans med övrig lokaltrafik.
+String alertFilterMode(Map<String, dynamic> alert) {
+  final mode = alert['mode']?.toString();
+  if (mode != null && mode.isNotEmpty) {
+    if (mode == 'rail') return 'train';
+    return mode;
+  }
+  final kind = alert['kind']?.toString();
+  if (kind == 'road') return 'road';
+  if (kind == 'flight') return 'flight';
+  if (kind == 'ferry') return 'ferry';
+  return 'bus';
+}
+
 String displayTitle({required String? title, required String? mode}) {
   final t = title?.trim();
   if (t == null || t.isEmpty) return 'Tips';
   if (_genericTitles.contains(t.toLowerCase())) {
     final modeLabel = switch (mode) {
-      'train' => 'Tåg',
+      'train' || 'rail' => 'Tåg',
       // SL reports metro and tram distinctly, and the backend keeps them
       // distinct rather than flattening both into "Tåg" -- a Stockholm driver
       // reads "Tunnelbana" and knows immediately which kind of stop to head
@@ -154,7 +211,9 @@ String displayTitle({required String? title, required String? mode}) {
       'metro' => 'Tunnelbana',
       'tram' => 'Spårvagn',
       'bus' => 'Buss',
+      'boat' => 'Båt',
       'road' => 'Väg',
+      'flight' => 'Flyg',
       _ => null,
     };
     if (modeLabel != null) return '$modeLabel: $t';
@@ -213,12 +272,17 @@ class TravelOptions {
     required this.isLastDeparture,
     required this.hasAlternative,
     required this.minutes,
+    this.planner,
   });
 
   final String? summary;
   final bool isLastDeparture;
   final bool hasAlternative;
   final int? minutes;
+
+  /// Vem som svarade på "vart och med vad": reseplaneraren (ResRobot), eller
+  /// null när raden kommer från stationens egen avgångstavla eller källans text.
+  final String? planner;
 
   static TravelOptions? of(Map alert) {
     final raw = alert['travel_options'];
@@ -230,6 +294,7 @@ class TravelOptions {
       isLastDeparture: raw['is_last_departure'] == true,
       hasAlternative: raw['has_alternative'] == true,
       minutes: (raw['next_departure_minutes'] as num?)?.toInt(),
+      planner: raw['planner']?.toString(),
     );
   }
 

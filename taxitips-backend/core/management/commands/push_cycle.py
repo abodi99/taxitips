@@ -8,7 +8,8 @@ Kör push-steget en gång, för hand.
 utveckling: den svarar på frågan som annars kräver att man läser loggar
 efter att en notis uteblivit -- *vilken* grind stoppade den, för *vilken*
 enhet. Varje avvisad enhet listas med sitt skäl (`type_off:line_paused`,
-`region_not_chosen:sl`, `notifications_off`, ...).
+`no_area`, `outside_area`, `notifications_off`, ...; alla koder står i
+core/notify.REASONS).
 
 Utan FIREBASE_SERVICE_ACCOUNT_JSON går bara --dry-run. Det är avsiktligt
 inte ett fel: hela urvalslogiken går att prova, och går att testa, utan ett

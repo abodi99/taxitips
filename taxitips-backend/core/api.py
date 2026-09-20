@@ -24,15 +24,16 @@ import json
 import logging
 from datetime import timedelta
 
+from django.core.cache import cache
 from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
-from core import notify, thresholds
+from core import areas, notify, thresholds
 from core.alternatives import travel_options
-from core.coverage import uncovered_counties
+from core.coverage import county_catalog, uncovered_counties
 from core.entitlement import entitlement_for_request, verify_supabase_jwt
 from core.geo import haversine_km
 from core.models import (
@@ -68,8 +69,10 @@ def _cors(response, request):
     if origin and (origin in allowed or local):
         response["Access-Control-Allow-Origin"] = origin
         response["Vary"] = "Origin"
-        response["Access-Control-Allow-Headers"] = "X-Device-Token, Authorization, Content-Type"
+        response["Access-Control-Allow-Headers"] = "X-Device-Token, Authorization, Content-Type, X-TT-Position, If-None-Match"
         response["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
+        # Utan den kan en webbklient inte läsa ETag och skicka den tillbaka.
+        response["Access-Control-Expose-Headers"] = "ETag"
     return response
 
 
@@ -85,6 +88,99 @@ def _float(value, default=None):
         return float(value)
     except (TypeError, ValueError):
         return default
+
+
+POSITION_HEADER = "X-TT-Position"
+
+
+def position_from(request) -> tuple[float | None, float | None]:
+    """
+    Förarens position för det här anropet, avrundad till två decimaler
+    (ungefär en kilometer).
+
+    Appen skickar den i headern `X-TT-Position: lat,lon`, inte i URL:en, där
+    den hamnar i åtkomstloggar hos varje proxy på vägen. En header skyddar inte
+    i sig: servern sparar aldrig positionen, och core/log_filters.py tar bort
+    koordinater ur loggposter. Query-parametrarna läses för äldre appversioner.
+    """
+    lat = lon = None
+    raw = request.headers.get(POSITION_HEADER) or ""
+    if "," in raw:
+        first, _, second = raw.partition(",")
+        lat, lon = _float(first.strip()), _float(second.strip())
+    if lat is None or lon is None:
+        lat, lon = _float(request.GET.get("lat")), _float(request.GET.get("lon"))
+    if lat is None or lon is None or not (-90 <= lat <= 90 and -180 <= lon <= 180):
+        return None, None
+    return round(lat, 2), round(lon, 2)
+
+
+def feed_etag(payload: dict) -> str:
+    """
+    Svag ETag över svarets innehåll, utan generatedAt (som ändras varje anrop).
+
+    Appen skickar tillbaka den i If-None-Match. Är inget ändrat svarar servern 304
+    utan kropp och appen behåller det den har. Oförändrade tips skrivs inte om
+    (core/repository.upsert_opportunities), så svaret står still mellan
+    pollrundor när ingenting hänt.
+    """
+    import hashlib
+
+    stable = {key: value for key, value in payload.items() if key != "generatedAt"}
+    body = json.dumps(stable, sort_keys=True, default=str, ensure_ascii=False)
+    return f'W/"{hashlib.sha1(body.encode("utf-8")).hexdigest()}"'
+
+
+# Hur länge ett uträknat flöde delas mellan förare med samma filter och avrundade
+# position. Mätt 2026-09-13: två workers klarade ~45 svar/s när varje anrop räknade
+# ut flödet -- även de som blev 304. Pipelinen skriver tips var 90:e sekund och appen
+# hämtar var 60:e, så ett flöde som är 20 s gammalt märks inte.
+FEED_CACHE_SECONDS = 20
+
+
+def shared_feed(
+    lat, lon, *, include_all: bool, regions: list[str], counties: list[str], municipalities: list[str] | None = None,
+) -> dict:
+    """
+    Flödet utan det personliga (favoriterna), med ETag-delen, ur cachen eller nyräknat.
+
+    Nyckeln är allt som påverkar urvalet: avrundad position, län, marknader och
+    include_all. Två förare i samma kilometerruta med samma filter får samma svar.
+    """
+    import hashlib
+
+    parts = json.dumps([lat, lon, include_all, sorted(regions), sorted(counties), sorted(municipalities or [])])
+    key = "feed:" + hashlib.sha1(parts.encode("utf-8")).hexdigest()
+    shared = cache.get(key)
+    if shared is not None:
+        return shared
+    feed = feed_for(
+        lat, lon, include_all=include_all, regions=regions or None, counties=counties or None,
+        municipalities=municipalities or None,
+    )
+    payload = {
+        **feed,
+        # Väghändelserna kapas i svaret, se thresholds.FEED_CONTEXT_LIMIT. feed_for
+        # returnerar alla, så pipeline-sidan fortsätter att räkna dem.
+        "context": feed["context"][: thresholds.FEED_CONTEXT_LIMIT],
+        "contextTotal": len(feed["context"]),
+        "entitled": True,
+        "config": thresholds.as_config(),
+    }
+    payload.pop("favorites", None)
+    shared = {"payload": payload, "digest": feed_etag(payload)[3:-1][:24]}
+    cache.set(key, shared, FEED_CACHE_SECONDS)
+    return shared
+
+
+def _mark_favorites(rows: list[dict], favorite_ids: set[str]) -> list[dict]:
+    if not favorite_ids:
+        return rows
+    return [{**row, "is_favorite": True} if row["id"] in favorite_ids else row for row in rows]
+
+
+def _if_none_match(request) -> set[str]:
+    return {tag.strip() for tag in (request.headers.get("If-None-Match") or "").split(",") if tag.strip()}
 
 
 def _iso(dt):
@@ -140,6 +236,9 @@ def _serialize(o: Opportunity, distance_km: float | None, now) -> dict:
         "lat": o.lat,
         "lon": o.lon,
         "region": o.region,
+        "county": o.county_code,
+        "countyName": areas.COUNTY_NAMES.get(o.county_code or ""),
+        "municipality": o.municipality_code,
         "places": o.places,
         "start_time": _iso(o.start_time),
         "end_time": _iso(o.end_time),
@@ -186,12 +285,38 @@ def _serialize(o: Opportunity, distance_km: float | None, now) -> dict:
     }
 
 
+def _apply_combinations(rows: list[dict], now) -> list[dict]:
+    """
+    Kombinationslagrets rader på flödet (core/combine.py): en dubblett döljs bakom sin
+    primära rad, ett påslag höjer ordningen. Varje ändring får sin skälrad och sitt
+    regel-id i `combined`, så att kortet kan förklara den.
+    """
+    from core.models import Combination
+
+    by_external = {row["_external_id"]: row for row in rows}
+    if not by_external:
+        return rows
+    hidden: set[str] = set()
+    for combination in Combination.objects.filter(primary_external_id__in=list(by_external), expires_at__gt=now):
+        row = by_external[combination.primary_external_id]
+        row["reasons"] = [*(row.get("reasons") or []), combination.reason]
+        row.setdefault("combined", []).append(combination.rule_id)
+        if combination.effect == "merge":
+            hidden.update(combination.member_external_ids)
+        elif combination.boost and row.get("is_active"):
+            row["worth_it_score"] = min(100, row["worth_it_score"] + combination.boost)
+    return [row for row in rows if row["_external_id"] not in hidden]
+
+
 def feed_for(
     lat: float | None,
     lon: float | None,
     now=None,
     include_all: bool = False,
     owner_key: str | None = None,
+    regions: list[str] | None = None,
+    counties: list[str] | None = None,
+    municipalities: list[str] | None = None,
 ) -> dict:
     """
     Tipsflödet för en position -- urvalet, avståndet och ordningen.
@@ -207,20 +332,81 @@ def feed_for(
     * marknaden för koordinatlösa tips härleds ur REGION_ANCHOR i stället
       för tre hårdkodade rutor -- se core/thresholds.market_region().
     * `level` och `notify_worthy` räknas ut här i stället för i appen.
+
+    `regions` (valda län i appfiltret) byter ut GPS-radien mot samma
+    länsankare som pushen (`notify.list_matches_regions`). Annars kapade
+    en Malmö-GPS Stockholm/Göteborg innan listfiltret kunde matcha dem.
     """
     now = now or timezone.now()
     home_region = thresholds.market_region(lat, lon)
+    chosen_regions = [str(r) for r in (regions or []) if str(r).strip()]
+    # Körområde i län (P0-B1). Äldre klienter skickar marknader; de översätts.
+    chosen_counties = sorted({str(c) for c in (counties or []) if str(c) in areas.COUNTY_NAMES})
+    if not chosen_counties and chosen_regions:
+        chosen_counties = areas.device_counties({"regions": chosen_regions})
+    chosen_municipalities = areas.device_municipalities({"municipalities": municipalities or []})
+    # Län och kommuner som koder att snitta mot tipsens area_codes; en vald kommun
+    # ersätter sitt län. Se core/areas.device_area_codes.
+    chosen_area = areas.device_area_codes({"counties": chosen_counties, "municipalities": chosen_municipalities})
+
+    if not include_all and not chosen_area and not chosen_regions and (lat is None or lon is None):
+        # Varken körområde eller position: vi vet inte var föraren kör. Tidigare
+        # kom då varje tips med koordinat i hela landet med. Nu ber appen föraren
+        # välja län i stället -- favoriterna följer ändu med.
+        return {
+            "alerts": [],
+            "context": [],
+            "favorites": _favorites_for(owner_key, lat, lon, now) if owner_key else [],
+            "homeRegion": None,
+            "counties": [],
+            "municipalities": [],
+            "needsArea": True,
+            "generatedAt": _iso(now),
+        }
 
     rows = Opportunity.objects.filter(
         end_time__gt=now - timedelta(hours=thresholds.FEED_LOOKBACK_HOURS),
         demand_score__gt=0,
     ).exclude(severity_tier="ignore")
 
+    # Förfilter i SQL: läs bara tips som kan hamna i svaret. Slingan nedan fäller
+    # fortfarande det slutliga avgörandet med exakt avstånd och län -- filtret får
+    # bara vara vidare än den, aldrig snävare.
+    if not include_all:
+        from django.db.models import Q
+
+        if chosen_area:
+            # Tomma area_codes: rader skrivna innan länen fanns (se backfill_areas).
+            rows = rows.filter(Q(area_codes__has_any_keys=chosen_area) | Q(area_codes=[]))
+        elif not chosen_regions and lat is not None and lon is not None:
+            import math
+
+            dlat = thresholds.MARKET_RADIUS_KM / 110.57
+            dlon = thresholds.MARKET_RADIUS_KM / (111.32 * max(math.cos(math.radians(lat)), 0.01))
+            rows = rows.filter(
+                Q(lat__isnull=True)
+                | Q(lon__isnull=True)
+                | Q(lat__range=(lat - dlat, lat + dlat), lon__range=(lon - dlon, lon + dlon))
+            )
+
     out = []
     for o in rows:
         distance_km = None
         if o.lat is not None and o.lon is not None and lat is not None and lon is not None:
             distance_km = round(haversine_km(lat, lon, o.lat, o.lon), 1)
+
+        if chosen_area and not include_all:
+            # Körområdet äger geografin -- inte var telefonen står just nu.
+            # Tipsets län och kommun inklusive grannar inom buffertarna, se core/areas.py.
+            if not set(notify.tip_area_codes(o)) & set(chosen_area):
+                continue
+        elif chosen_regions and not include_all:
+            # Bara marknader utan motsvarande län, t.ex. enbart "rail".
+            if not notify.list_matches_regions(
+                o.region, o.lat, o.lon, chosen_regions
+            ):
+                continue
+        elif o.lat is not None and o.lon is not None and lat is not None and lon is not None:
             if not include_all and distance_km > thresholds.MARKET_RADIUS_KM:
                 continue
         elif o.lat is None or o.lon is None:
@@ -235,7 +421,11 @@ def feed_for(
         # låg två likvärdiga tips i godtycklig databasordning, vilket i
         # praktiken innebar äldst-först och gjorde flödet stillastående.
         row["_computed_at"] = o.computed_at
+        row["_external_id"] = o.external_id
         out.append(row)
+
+    # Kombinationslagret före sorteringen: ett påslag ska synas i ordningen.
+    out = _apply_combinations(out, now)
 
     out.sort(
         key=lambda a: (
@@ -247,6 +437,7 @@ def feed_for(
     )
     for row in out:
         del row["_computed_at"]
+        del row["_external_id"]
 
     # Väghändelser hålls åtskilda från tipslistan, inte utanför svaret.
     # Skälet står i core/taxi_relevance.score_road_alert: en olycka eller
@@ -277,6 +468,9 @@ def feed_for(
         "context": context,
         "favorites": favorites,
         "homeRegion": home_region,
+        "counties": chosen_counties,
+        "municipalities": chosen_municipalities,
+        "needsArea": False,
         "generatedAt": _iso(now),
     }
 
@@ -325,6 +519,53 @@ def _favorites_for(owner_key: str, lat, lon, now) -> list[dict]:
     return out
 
 
+
+def county_gate(ent, counties: list[str], municipalities: list[str]) -> tuple[list[str], list[str]]:
+    """
+    Snittet mellan licensens länsrättigheter och förarens filter.
+
+    Förarens val får SMALNA AV, aldrig vidga. Två följder som är lätta att
+    missa:
+
+    * Utan valda län gäller licensens län -- inte GPS-radien. Annars hade en
+      förare som står i ett grannlän sett tips hen inte betalar för, och
+      positionen hade blivit en behörighet (§5).
+    * En vald kommun måste ligga i ett län licensen har. SCB:s kommunkod bär
+      länskoden i de två första siffrorna, så prövningen är ett prefix.
+
+    `ent.unrestricted` betyder att företaget ännu inte migrerats till
+    licensmodellen; då gäller filtret som förut.
+    """
+    if getattr(ent, "unrestricted", True):
+        return counties, municipalities
+    entitled = set(getattr(ent, "counties", ()) or ())
+    chosen = {str(c).strip() for c in counties if str(c).strip()}
+    allowed_counties = sorted(entitled & chosen) if chosen else sorted(entitled)
+    allowed_municipalities = [
+        m for m in municipalities if str(m)[:2] in (set(allowed_counties) or entitled)
+    ]
+    return allowed_counties, allowed_municipalities
+
+
+def tip_within_entitlement(ent, opportunity) -> bool:
+    """
+    Får den här åtkomsten se det HÄR tipset? Används av detaljvyn och
+    direktlänkar -- ett id i en URL får inte gå förbi länsrättigheten (§3).
+
+    Tips utan länskoder släpps igenom, samma undantag som listan gör: de är
+    rader skrivna innan länen fanns, och tågtips som saknar länsfält i
+    Trafikverkets data (invariant 14). Avståndsgrinden i `within_reach()`
+    håller dem, inte länsfiltret.
+    """
+    if getattr(ent, "unrestricted", True):
+        return True
+    codes = [str(c) for c in (getattr(opportunity, "area_codes", None) or [])]
+    if not codes:
+        return True
+    entitled = set(getattr(ent, "counties", ()) or ())
+    return any(code in entitled or code[:2] in entitled for code in codes)
+
+
 @require_GET
 def alerts(request):
     """GET /api/alerts?lat=..&lon=..  (X-Device-Token eller Bearer-JWT)"""
@@ -336,13 +577,67 @@ def alerts(request):
         # gjorde ägar-buggen osynlig i ett halvår.
         return _json(request, {"alerts": [], "entitled": False, "reason": ent.reason})
 
-    feed = feed_for(
-        _float(request.GET.get("lat")),
-        _float(request.GET.get("lon")),
-        include_all=request.GET.get("all") == "1",
-        owner_key=owner_key_for(request),
+    raw_regions = request.GET.get("regions") or ""
+    regions = [r.strip() for r in raw_regions.split(",") if r.strip()]
+    counties = [c.strip() for c in (request.GET.get("counties") or "").split(",") if c.strip()]
+    municipalities = [m.strip() for m in (request.GET.get("municipalities") or "").split(",") if m.strip()]
+    lat, lon = position_from(request)
+    if not counties and not municipalities and not regions and (lat is None or lon is None):
+        # Ingen position och inget filter i anropet: enhetens sparade körområde
+        # gäller, så att en äldre app utan länsval inte får en tom lista.
+        device = _device_for(request)
+        if device is not None:
+            counties = areas.device_counties(device.notify_prefs)
+            municipalities = areas.device_municipalities(device.notify_prefs)
+
+    if not getattr(ent, "unrestricted", True):
+        # Licensmodellen gäller: rättigheten äger geografin. `regions` är
+        # källornas gamla marknadsnycklar och kan inte kontrolleras mot en
+        # länsrättighet -- de översätts till län och prövas som alla andra.
+        if regions and not counties:
+            counties = areas.device_counties({"regions": regions})
+        regions = []
+        counties, municipalities = county_gate(ent, counties, municipalities)
+        if not counties and not municipalities:
+            return _json(request, {
+                "alerts": [], "context": [], "favorites": [],
+                "entitled": False, "reason": "no_entitled_county",
+                "message": "Billicensen har inget län som matchar ditt filter.",
+            })
+
+    shared = shared_feed(
+        lat, lon, include_all=request.GET.get("all") == "1", regions=regions, counties=counties,
+        municipalities=municipalities,
     )
-    return _json(request, {**feed, "entitled": True, "config": thresholds.as_config()})
+
+    # Favoriterna är personliga och räknas per anrop; resten delas av alla med samma
+    # filter och avrundade position. ETag:en bär båda delarna, så en ny favorit syns
+    # direkt, och 304 avgörs innan något serialiseras.
+    import hashlib
+
+    owner = owner_key_for(request)
+    favorites = _favorites_for(owner, lat, lon, timezone.now()) if owner else []
+    favorites_digest = hashlib.sha1(
+        json.dumps(favorites, sort_keys=True, default=str).encode("utf-8")
+    ).hexdigest()[:16]
+    etag = f'W/"{shared["digest"]}-{favorites_digest}"'
+    if etag in _if_none_match(request):
+        from django.http import HttpResponseNotModified
+
+        response = _cors(HttpResponseNotModified(), request)
+    else:
+        favorite_ids = {f["id"] for f in favorites}
+        base = shared["payload"]
+        response = _json(request, {
+            **base,
+            "alerts": _mark_favorites(base["alerts"], favorite_ids),
+            "context": _mark_favorites(base["context"], favorite_ids),
+            "favorites": favorites,
+        })
+    response["ETag"] = etag
+    # Personligt svar som alltid omvalideras: ingen delad cache får spara det.
+    response["Cache-Control"] = "private, no-cache"
+    return response
 
 
 @require_GET
@@ -359,6 +654,10 @@ def opportunity_detail(request, opportunity_id):
 
     o = Opportunity.objects.filter(id=opportunity_id).first()
     if o is None:
+        return _json(request, {"error": "not_found"}, status=404)
+    if not tip_within_entitlement(ent, o):
+        # Samma svar som ett okänt id: en direktlänk ska inte kunna användas
+        # för att ta reda på att ett tips finns i ett län man inte betalar för.
         return _json(request, {"error": "not_found"}, status=404)
 
     events = SourceEvent.objects.filter(id__in=[str(i) for i in (o.source_event_ids or [])])
@@ -501,7 +800,7 @@ def favorites(request):
             request,
             {
                 "favorites": _favorites_for(
-                    owner, _float(request.GET.get("lat")), _float(request.GET.get("lon")), now
+                    owner, *position_from(request), now
                 )
             },
         )
@@ -623,6 +922,22 @@ def _device_for(request):
     return Device.objects.filter(token=token).first()
 
 
+def request_area(request, lat, lon) -> tuple[list[str], list[str]]:
+    """
+    Län och kommuner för anropet: parametrarna `counties` och `municipalities`, annars
+    enhetens sparade körområde när positionen saknas. Samma regel som /api/alerts, så att
+    tips, färjor och evenemang alltid gäller samma område.
+    """
+    counties = [c.strip() for c in (request.GET.get("counties") or "").split(",") if c.strip()]
+    municipalities = [m.strip() for m in (request.GET.get("municipalities") or "").split(",") if m.strip()]
+    if not counties and not municipalities and (lat is None or lon is None):
+        device = _device_for(request)
+        if device is not None:
+            counties = areas.device_counties(device.notify_prefs)
+            municipalities = areas.device_municipalities(device.notify_prefs)
+    return counties, municipalities
+
+
 @csrf_exempt
 def notify_prefs(request):
     """
@@ -651,11 +966,24 @@ def notify_prefs(request):
     catalogs = {
         "typeCatalog": notify.type_catalog(),
         "regionCatalog": notify.region_catalog(),
+        # Orter per län -- appen visar bara dem under valda län. Se
+        # core/notify.cities_by_region.
+        "citiesByRegion": notify.cities_by_region(),
+        # Platt lista för bakåtkompatibilitet (äldre klienter). Samma
+        # orter som i citiesByRegion, utan länsnyckel.
+        "areaCatalog": sorted(
+            {c for cities in notify.cities_by_region().values() for c in cities}
+        ),
         # Län vi bevisligen inte hämtar kollektivtrafik för. Visas som en
         # förklaring, aldrig som något att kryssa i: ett val vi inte kan
         # infria hade tolkats som "lugnt där" i stället för "vi hämtar inte
         # där". Se core/coverage.py.
         "uncoveredCounties": uncovered_counties(),
+        # Körområde: alla 21 län, med kollektivtrafikkälla eller inte. Ersätter
+        # regionCatalog, som finns kvar för äldre klienter.
+        "countyCatalog": county_catalog(),
+        # Kommunerna per län, för att förfina ett valt län.
+        "municipalityCatalog": areas.municipality_catalog(),
         "defaults": notify.default_prefs(),
         "notifyScoreFloor": thresholds.NOTIFY_SCORE_FLOOR,
     }
@@ -677,7 +1005,13 @@ def notify_prefs(request):
 
     if request.method == "GET":
         stored = device.notify_prefs if isinstance(device.notify_prefs, dict) else {}
-        return _json(request, {"prefs": stored, "readOnly": False, **catalogs})
+        return _json(request, {
+            "prefs": stored, "readOnly": False,
+            # Länen som gäller för notisbeslutet: sparade län, annars de gamla
+            # marknadsvalen översatta. Tom lista = inget körområde.
+            "counties": areas.device_counties(stored),
+            **catalogs,
+        })
 
     try:
         body = json.loads(request.body or b"{}")
@@ -700,8 +1034,329 @@ def notify_prefs(request):
     if isinstance(body.get("regions"), list):
         known = {r["key"] for r in notify.region_catalog()}
         current["regions"] = [str(r) for r in body["regions"] if str(r) in known]
+    if isinstance(body.get("counties"), list):
+        current["counties"] = sorted({str(c) for c in body["counties"] if str(c) in areas.COUNTY_NAMES})
+    if isinstance(body.get("municipalities"), list):
+        current["municipalities"] = areas.device_municipalities({"municipalities": body["municipalities"]})
     if isinstance(body.get("cities"), list):
         current["cities"] = [str(c) for c in body["cities"] if str(c).strip()][:50]
+    # Orter som inte hör till något valt län rensas bort. Annars kunde en
+    # förare välja Skåne, kryssa Malmö, byta till Stockholm -- och fortfarande
+    # ha Malmö kvar i prefs utan att UI:t visar det.
+    allowed_cities = {
+        c
+        for key in current.get("regions") or []
+        if key != "rail"
+        for c in notify.cities_by_region().get(key, [])
+    }
+    if allowed_cities:
+        current["cities"] = [
+            c for c in (current.get("cities") or []) if c in allowed_cities
+        ][:50]
+    elif current.get("regions"):
+        # Bara "rail" valt, eller län utan orter -- ortfiltret har ingen mening.
+        current["cities"] = []
 
     Device.objects.filter(id=device.id).update(notify_prefs=current)
-    return _json(request, {"ok": True, "prefs": current, **catalogs})
+    return _json(request, {"ok": True, "prefs": current, "counties": areas.device_counties(current), **catalogs})
+
+
+@csrf_exempt
+def presence(request):
+    """
+    GET  /api/presence                 -- {"on": bool, "expiresAt": ...}
+    POST /api/presence {"on": true}    -- "i tjänst", med positionen i X-TT-Position
+    POST /api/presence {"on": false}   -- av; raden tas bort direkt
+
+    Servern sparar bara rutan (≈ 5 km) och svarar aldrig med den. Se core/presence.py.
+    """
+    from core import presence as presence_rules
+
+    if request.method == "OPTIONS":
+        return _json(request, {"ok": True})
+    if request.method not in ("GET", "POST"):
+        return _json(request, {"error": "method_not_allowed"}, status=405)
+
+    ent = entitlement_for_request(request)
+    if not ent.ok:
+        return _json(request, {"error": "not_entitled", "reason": ent.reason}, status=403)
+    device = _device_for(request)
+    if device is None:
+        return _json(request, {"error": "no_device"}, status=400)
+
+    now = timezone.now()
+    info = {"radiusKm": presence_rules.RADIUS_KM, "ttlMinutes": int(presence_rules.TTL.total_seconds() // 60)}
+    if request.method == "GET":
+        row = presence_rules.fresh([device.id], now).get(str(device.id))
+        return _json(request, {"on": row is not None, "expiresAt": _iso(row.expires_at) if row else None, **info})
+
+    try:
+        body = json.loads(request.body or b"{}")
+    except ValueError:
+        return _json(request, {"error": "invalid_json"}, status=400)
+    if body.get("on") is not True:
+        presence_rules.set_off_duty(device.id)
+        return _json(request, {"ok": True, "on": False, **info})
+
+    lat, lon = position_from(request)
+    if lat is None:
+        return _json(request, {"error": "no_position"}, status=400)
+    expires_at = presence_rules.set_on_duty(device.id, lat, lon, now)
+    return _json(request, {"ok": True, "on": True, "expiresAt": _iso(expires_at), **info})
+
+
+@csrf_exempt
+@require_POST
+def device_session(request):
+    """
+    Registrera den här telefonen för push och koppla den till inloggat konto.
+
+    Anropas efter e-postinloggning (och vid kontobyte). Skapar eller
+    uppdaterar en devices-rad med:
+    * installation_id som stabil token (samma telefon → samma rad)
+    * user_id från JWT
+    * company_id från company_members
+    * push_token (FCM)
+    * last_seen_at = nu
+
+    Förartoken-vägen (X-Device-Token) uppdaterar bara push + last_seen på
+    den befintliga enheten och sätter user_id om JWT också skickas.
+    """
+    import uuid
+
+    from billing.models import CompanyMember, Device
+    from core.entitlement import entitlement_for_request, verify_supabase_jwt
+
+    try:
+        body = json.loads(request.body or b"{}")
+    except ValueError:
+        return _json(request, {"error": "invalid_json"}, status=400)
+
+    push_token = (body.get("push_token") or "").strip() or None
+    installation_id = (body.get("installation_id") or "").strip()
+    label = (body.get("label") or "App").strip()[:80] or "App"
+    platform = (body.get("platform") or "").strip()[:32]
+    now = timezone.now()
+
+    auth = request.headers.get("Authorization", "")
+    jwt_payload = None
+    if auth.lower().startswith("bearer "):
+        jwt_payload = verify_supabase_jwt(auth[7:].strip())
+    user_id = (jwt_payload or {}).get("sub")
+
+    device_header = request.headers.get("X-Device-Token") or ""
+    # 1) Befintlig förarenhet / tidigare owner_app: spara push + last_seen
+    # (+ user_id/company vid kontobyte).
+    if device_header:
+        device = Device.objects.filter(token=device_header).first()
+        if device is None:
+            return _json(request, {"error": "unknown_device"}, status=404)
+        updates = {"last_seen_at": now}
+        if push_token:
+            updates["push_token"] = push_token
+        if user_id:
+            updates["user_id"] = user_id
+            member = (
+                CompanyMember.objects.filter(user_id=user_id, status="active")
+                .order_by("created_at")
+                .first()
+            )
+            if member is not None:
+                updates["company_id"] = member.company_id
+        Device.objects.filter(id=device.id).update(**updates)
+        device.refresh_from_db()
+        return _json(
+            request,
+            {
+                "ok": True,
+                "device_id": str(device.id),
+                "device_token": device.token,
+                "company_id": str(device.company_id),
+                "user_id": str(device.user_id) if device.user_id else None,
+                "last_seen_at": now.isoformat(),
+                "linked": "existing_device",
+            },
+        )
+
+    # 2) Inloggad ägare/admin utan förartoken: upsert via installation_id.
+    if not user_id:
+        return _json(request, {"error": "login_required"}, status=401)
+    if not installation_id or len(installation_id) < 8:
+        return _json(request, {"error": "installation_id_required"}, status=400)
+
+    member = (
+        CompanyMember.objects.filter(user_id=user_id, status="active")
+        .order_by("created_at")
+        .first()
+    )
+    if member is None:
+        return _json(request, {"error": "no_company"}, status=403)
+
+    company_id = member.company_id
+    ent = entitlement_for_request(request)
+    display_label = f"{label} ({platform})" if platform else label
+
+    device = Device.objects.filter(token=installation_id).first()
+    if device is None:
+        # Samma FCM-token på en annan rad (kontobyte på samma telefon):
+        # flytta pushen hit så gamla kontot inte väcks.
+        if push_token:
+            Device.objects.filter(push_token=push_token).exclude(
+                token=installation_id
+            ).update(push_token=None)
+        device = Device.objects.create(
+            id=uuid.uuid4(),
+            company_id=company_id,
+            token=installation_id,
+            label=display_label,
+            kind="owner_app",
+            push_token=push_token,
+            notify_prefs={},
+            created_at=now,
+            user_id=user_id,
+            last_seen_at=now,
+        )
+        linked = "created"
+    else:
+        if push_token:
+            Device.objects.filter(push_token=push_token).exclude(
+                id=device.id
+            ).update(push_token=None)
+        Device.objects.filter(id=device.id).update(
+            company_id=company_id,
+            user_id=user_id,
+            push_token=push_token or device.push_token,
+            last_seen_at=now,
+            label=display_label,
+            kind=device.kind or "owner_app",
+        )
+        linked = "updated"
+
+    # auth.users.last_sign_in_at uppdateras av Supabase Auth vid login.
+    # Här speglar vi sessionen på devices.last_seen_at för push/debug.
+    return _json(
+        request,
+        {
+            "ok": True,
+            "device_id": str(device.id),
+            "device_token": installation_id,
+            "company_id": str(company_id),
+            "user_id": user_id,
+            "last_seen_at": now.isoformat(),
+            "entitled": bool(ent),
+            "entitlement_reason": ent.reason,
+            "linked": linked,
+        },
+    )
+
+
+# --- Lokal utvecklings-hjälp: lista enheter + skicka test-FCM --------------
+
+
+@require_GET
+def push_devices(request):
+    """
+    Lista enheter med (eller utan) FCM-token. Bara DEBUG -- annars vore det
+    en katalog över alla telefoner i produktion.
+    """
+    from django.conf import settings
+
+    if not settings.DEBUG:
+        return _json(request, {"error": "debug_only"}, status=403)
+
+    from billing.models import Device
+
+    rows = []
+    for d in Device.objects.all().order_by("-created_at")[:100]:
+        rows.append(
+            {
+                "id": str(d.id),
+                "label": d.label,
+                "kind": d.kind,
+                "token": d.token,
+                "has_push": bool(d.push_token),
+                "push_token_prefix": (d.push_token or "")[:16] or None,
+                "company_id": str(d.company_id) if d.company_id else None,
+                "user_id": str(d.user_id) if d.user_id else None,
+                "last_seen_at": d.last_seen_at.isoformat() if d.last_seen_at else None,
+            }
+        )
+    return _json(request, {"devices": rows, "count": len(rows)})
+
+
+@csrf_exempt
+@require_POST
+def push_send(request):
+    """
+    Skicka en testnotis till en vald enhet. DEBUG-only. Använder samma
+    FCM-väg som push_cycle, så en lokal nyckel i .env räcker.
+    """
+    from django.conf import settings
+
+    if not settings.DEBUG:
+        return _json(request, {"error": "debug_only"}, status=403)
+
+    try:
+        body = json.loads(request.body or b"{}")
+    except ValueError:
+        return _json(request, {"error": "invalid_json"}, status=400)
+
+    from billing.fcm import get_access_token, load_service_account, send_push
+    from billing.models import Device
+
+    device_id = body.get("device_id")
+    device_token = body.get("device_token")
+    title = (body.get("title") or "TaxiTips test").strip()[:120]
+    text = (body.get("body") or "Testnotis från pipeline-viz").strip()[:400]
+
+    device = None
+    if device_id:
+        device = Device.objects.filter(id=device_id).first()
+    elif device_token:
+        device = Device.objects.filter(token=device_token).first()
+    if device is None:
+        return _json(request, {"error": "device_not_found"}, status=404)
+    if not device.push_token:
+        return _json(
+            request,
+            {
+                "error": "no_push_token",
+                "hint": "Öppna appen på telefonen och tillåt notiser först.",
+                "device": {"id": str(device.id), "label": device.label},
+            },
+            status=400,
+        )
+
+    sa = load_service_account(settings.FIREBASE_SERVICE_ACCOUNT_JSON or "")
+    if not sa:
+        return _json(
+            request,
+            {
+                "error": "no_service_account",
+                "hint": "Sätt FIREBASE_SERVICE_ACCOUNT_JSON i taxitips-backend/.env",
+            },
+            status=503,
+        )
+
+    access = get_access_token(sa)
+    result = send_push(
+        sa,
+        access,
+        token=device.push_token,
+        title=title,
+        body=text,
+        data={"source": "pipeline_viz", "kind": "test"},
+    )
+    return _json(
+        request,
+        {
+            "ok": result.get("ok") is True,
+            "fcm": result,
+            "device": {
+                "id": str(device.id),
+                "label": device.label,
+                "has_push": True,
+            },
+        },
+        status=200 if result.get("ok") else 502,
+    )

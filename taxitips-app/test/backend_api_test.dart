@@ -21,6 +21,55 @@ void main() {
     });
   }
 
+  test('I tjänst: positionen i headern, avrundad, aldrig i URL eller body', () async {
+    final api = BackendApi(
+      baseUrl: 'http://localhost:8000',
+      client: respond({'ok': true, 'on': true}),
+    );
+    await api.setPresence(on: true, lat: 55.60498, lon: 13.00382, deviceToken: 'tok-1');
+    expect(seen.single.url.path, '/api/presence');
+    expect(seen.single.url.queryParameters, isEmpty);
+    expect(seen.single.headers['X-TT-Position'], '55.60,13.00');
+    expect(jsonDecode(seen.single.body), {'on': true});
+
+    await api.setPresence(on: false, lat: 55.6, lon: 13.0, deviceToken: 'tok-1');
+    // Av skickar ingen position alls.
+    expect(seen.last.headers.containsKey('X-TT-Position'), isFalse);
+    expect(jsonDecode(seen.last.body), {'on': false});
+  });
+
+  test('färjor: område i query, position avrundad i headern', () async {
+    final api = BackendApi(
+      baseUrl: 'http://localhost:8000',
+      client: respond({'ferries': [], 'terminals': []}),
+    );
+    await api.ferries(lat: 56.04321, lon: 12.65432, counties: ['12', '01'], deviceToken: 'tok-1');
+    expect(seen.single.url.path, '/api/ferries');
+    expect(seen.single.url.queryParameters, {'counties': '01,12'});
+    expect(seen.single.headers['X-TT-Position'], '56.04,12.65');
+    expect(seen.single.headers['X-Device-Token'], 'tok-1');
+  });
+
+  test('evenemang: dagar och kommuner i query, ingen position i URL:en', () async {
+    final api = BackendApi(
+      baseUrl: 'http://localhost:8000',
+      client: respond({'events': []}),
+    );
+    await api.events(lat: 59.33, lon: 18.07, municipalities: ['0180'], deviceToken: 'tok-1');
+    expect(seen.single.url.path, '/api/events');
+    expect(seen.single.url.queryParameters, {'days': '14', 'municipalities': '0180'});
+    expect(seen.single.headers['X-TT-Position'], '59.33,18.07');
+  });
+
+  test('evenemang: en vald period skickas som from och to i stället för days', () async {
+    final api = BackendApi(
+      baseUrl: 'http://localhost:8000',
+      client: respond({'events': []}),
+    );
+    await api.events(from: '2026-10-03', to: '2026-10-05', counties: ['01']);
+    expect(seen.single.url.queryParameters, {'from': '2026-10-03', 'to': '2026-10-05', 'counties': '01'});
+  });
+
   test('förartoken följer med som header, inte som query', () async {
     final api = BackendApi(
       baseUrl: 'http://localhost:8000/',
@@ -29,7 +78,10 @@ void main() {
     await api.alerts(lat: 55.6, lon: 13.0, deviceToken: 'tok-1');
 
     expect(seen.single.headers['X-Device-Token'], 'tok-1');
-    expect(seen.single.url.queryParameters, {'lat': '55.6', 'lon': '13.0'});
+    // Positionen går i en header, avrundad -- aldrig i URL:en, där den hamnar
+    // i proxyloggar.
+    expect(seen.single.url.queryParameters, isEmpty);
+    expect(seen.single.headers['X-TT-Position'], '55.60,13.00');
     // Avslutande snedstreck i basadressen får inte bli en dubbel i sökvägen.
     expect(seen.single.url.path, '/api/alerts');
   });

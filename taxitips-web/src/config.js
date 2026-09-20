@@ -69,3 +69,18 @@ export const twenty = {
   workspaceUrl: "https://taxitips.tw.a2m-tech.com",
   leadPath: "/api/lead",
 };
+
+/**
+ * Kundportalen (portal.html): Supabase Auth för inloggningen och
+ * TaxiTips-backenden för bilar, licenser, län och abonnemang.
+ *
+ * Bara publika värden här. Anon-nyckeln är publik med avsikt -- den ger inte
+ * åtkomst till något: domäntabellerna har RLS och förarnas data nås bara via
+ * backendens egna kontroller (se taxitips-api/supabase/migrations/
+ * 20260920000002_lock_down_domain_tables.sql).
+ */
+export const portal = {
+  supabaseUrl: import.meta.env.VITE_SUPABASE_URL || "https://api.taxitips.se",
+  supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || "",
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || "https://api.taxitips.se",
+};

@@ -81,6 +81,20 @@ def human_gap(minutes: int) -> str:
     return f"{hours} tim" if rest == 0 else f"{hours} tim {rest} min"
 
 
+ROUTE_PREFIX = "Nästa resa mot "
+
+
+def route_note(destination: str, label: str, departs_local: str, changes: int = 0) -> str:
+    """
+    ResRobots resa som en rad: "Nästa resa mot Nässjö C: Länstrafik tåg 3493 22:58, 1 byte".
+    Bytena står med: utan dem såg samma första tåg ut att gå mot två olika mål.
+    """
+    text = f"{ROUTE_PREFIX}{destination or 'slutstationen'}: {label} {departs_local}"
+    if changes:
+        text += f", {changes} {'byte' if changes == 1 else 'byten'}"
+    return text
+
+
 def travel_options(
     *,
     next_departure_at: datetime | None,
@@ -110,18 +124,27 @@ def travel_options(
             # avgör om det är någon idé att åka dit.
             departed, minutes = True, 0
 
+    # ResRobots resa mot samma slutstation (core/sources/resrobot.py) står i anteckningen som
+    # "Nästa resa mot X: Regional tåg 178 14:09" -- oavsett om den räknas som ett alternativ.
+    # Förut syntes den bara när has_alternative var sant, så en förare med en timmes glapp
+    # såg "Nästa avgång 14:09" utan att veta vart eller med vad.
+    route = alternative_note if alternative_note.startswith(ROUTE_PREFIX) else ""
     parts: list[str] = []
     if is_last_departure:
         parts.append("Sista avgången härifrån")
     elif departed:
         parts.append(f"Nästa avgång gick {clock}")
+    elif minutes is not None and route:
+        parts.append(f"{route} (om {human_gap(minutes)})")
     elif minutes is not None:
         gap = human_gap(minutes)
         parts.append(f"Nästa avgång {clock} (om {gap})" if clock else f"Nästa avgång om {gap}")
+    elif route:
+        parts.append(route)
 
-    if has_alternative and alternative_note:
+    if has_alternative and alternative_note and alternative_note != route:
         parts.append(alternative_note)
-    elif has_alternative:
+    elif has_alternative and not alternative_note:
         parts.append("Ersättningstrafik finns")
 
     return {
@@ -132,6 +155,9 @@ def travel_options(
         "is_last_departure": is_last_departure,
         "has_alternative": has_alternative,
         "alternative": alternative_note or None,
+        # Resan mot samma mål, och vem som svarade: reseplaneraren, inte stationens tavla.
+        "route": route or None,
+        "planner": "ResRobot" if route else None,
         # None, inte tom sträng: appen ska kunna skilja "vi vet inget" från
         # "vi vet att det inte finns något", och de två fallen ser olika ut
         # på ett kort.

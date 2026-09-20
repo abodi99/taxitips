@@ -1,0 +1,669 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TaxiTips — tjänst</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root{--navy:#14213D;--foam:#F5F7FA;--sand:#E7EBF1;--yellow:#FCA311;--yellow-soft:#FFF4DE;--green:#17694A;--green-soft:#E3F4EA;
+        --amber:#8A5300;--amber-soft:#FFF1D6;--danger:#A93226;--danger-soft:#FDE8E6;--blue:#155a9c;--blue-soft:#E3EEFB;
+        --muted:#4A5770;--line:#D9DCE0;--card:#fff}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--foam);color:var(--navy)}
+  header{background:var(--navy);color:#fff;padding:12px 20px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+  header .brand{font-size:17px;font-weight:800;margin:0;letter-spacing:.2px}
+  nav a{color:#c9d1e0;text-decoration:none;margin-right:14px;font-weight:700;padding-bottom:3px;white-space:nowrap;line-height:2}
+  nav a.on{color:#fff;border-bottom:2px solid var(--yellow)}
+  .status{margin-left:auto;font-size:12.5px;color:#c9d1e0}
+  main{max-width:1400px;margin:0 auto;padding:22px 20px 60px}
+  h1{font-size:26px;margin:0 0 4px}
+  h2{font-size:19px;margin:0 0 10px;display:flex;align-items:center;gap:10px}
+  h2 .n{display:inline-flex;width:28px;height:28px;border-radius:50%;background:var(--navy);color:#fff;font-size:14px;
+        align-items:center;justify-content:center}
+  h3{font-size:15px;margin:16px 0 8px}
+  .question{font-size:17px;color:var(--muted);font-style:italic;margin:0 0 14px;max-width:900px}
+  .deliver{background:var(--yellow-soft);border-left:5px solid var(--yellow);border-radius:10px;padding:12px 16px;max-width:900px}
+  .deliver b{display:block;font-size:12px;text-transform:uppercase;letter-spacing:.06em;margin-bottom:3px}
+  .toc{display:flex;gap:8px;flex-wrap:wrap;margin:16px 0 26px}
+  .toc a{background:#fff;border:1px solid var(--line);border-radius:20px;padding:4px 12px;color:var(--navy);text-decoration:none;font-weight:700;font-size:13px}
+  section{margin-bottom:34px;scroll-margin-top:12px}
+  .lead{color:var(--muted);margin:-4px 0 12px;max-width:900px}
+  .foot{color:var(--muted);font-size:12.5px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+  .grid{display:grid;gap:10px}
+  .sources{grid-template-columns:repeat(auto-fill,minmax(280px,1fr))}
+  .src b{font-size:14.5px}
+  .src .line{margin-top:4px;font-size:13px}
+  .pill{display:inline-block;padding:1px 8px;border-radius:12px;font-size:12px;font-weight:800;white-space:nowrap}
+  .t-ok,.t-färsk{background:var(--green-soft);color:var(--green)} .t-warn,.t-gammal{background:var(--amber-soft);color:var(--amber)}
+  .t-bad,.t-fel,.t-inaktuell{background:var(--danger-soft);color:var(--danger)} .t-none,.t-saknas,.t-okänd{background:var(--sand);color:var(--muted)}
+  .t-notify{background:var(--danger-soft);color:var(--danger)} .t-list{background:var(--blue-soft);color:var(--blue)}
+  .t-hidden{background:var(--sand);color:var(--muted)} .t-score{background:var(--navy);color:#fff}
+  .steps{grid-template-columns:repeat(auto-fill,minmax(240px,1fr))}
+  .step b{display:flex;gap:8px;align-items:center;margin-bottom:4px}
+  .step b i{font-style:normal;display:inline-flex;width:22px;height:22px;border-radius:50%;background:var(--yellow);font-size:12px;
+            align-items:center;justify-content:center}
+  .step p{margin:0 0 6px;font-size:13.5px}
+  code{font:12px ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--foam);padding:1px 5px;border-radius:5px;color:var(--muted)}
+  .funnel{display:flex;flex-direction:column;gap:6px;margin-top:12px}
+  .frow{display:grid;grid-template-columns:minmax(0,1fr) 200px 70px;gap:12px;align-items:center}
+  .frow .bar{height:12px;border-radius:6px;background:var(--sand);overflow:hidden}
+  .frow .bar i{display:block;height:100%;background:var(--navy)}
+  .frow:last-child .bar i{background:var(--danger)}
+  .frow .num{font-weight:800;text-align:right;font-variant-numeric:tabular-nums}
+  @media (max-width:640px){.frow{grid-template-columns:minmax(0,1fr) 60px}.frow .bar{display:none}}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.05em;padding:6px;
+     border-bottom:1px solid var(--line)}
+  td{padding:7px 6px;border-bottom:1px solid var(--sand);vertical-align:top}
+  tr.click{cursor:pointer} tr.click:hover{background:var(--foam)}
+  .tablewrap{overflow-x:auto}
+  .num{font-variant-numeric:tabular-nums}
+  .toolbar{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+  .chip{border:1px solid var(--line);background:#fff;border-radius:20px;padding:5px 12px;font:inherit;font-weight:700;font-size:13px;cursor:pointer;color:var(--navy)}
+  .chip.on{background:var(--yellow);border-color:var(--yellow)}
+  .chip .c{color:var(--muted);font-weight:600;margin-left:4px}
+  input[type=search]{padding:6px 10px;border:1px solid var(--line);border-radius:8px;min-width:230px;font:inherit;margin-left:auto}
+  .result{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:16px;align-items:start}
+  @media (max-width:1050px){.result{grid-template-columns:1fr}}
+  .list{display:flex;flex-direction:column;gap:6px}
+  .group{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:12px 2px 2px}
+  .group:first-child{margin-top:0}
+  .item{display:grid;grid-template-columns:64px minmax(0,1fr);gap:12px;width:100%;text-align:left;background:#fff;border:1px solid var(--line);
+        border-radius:12px;padding:10px 12px;cursor:pointer;font:inherit;color:inherit}
+  .item:hover{border-color:#aab3c2}
+  .item.sel{border-color:var(--navy);box-shadow:inset 5px 0 0 var(--yellow)}
+  .item:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+  .lead-cell{border-radius:9px;padding:6px 2px;text-align:center;background:var(--sand);align-self:start}
+  .lead-cell b{display:block;font-size:19px;line-height:1.1;font-variant-numeric:tabular-nums}
+  .lead-cell span{font-size:11px;color:var(--muted)}
+  .lead-cell.notify{background:var(--danger-soft)} .lead-cell.notify b{color:var(--danger)}
+  .lead-cell.list{background:var(--blue-soft)} .lead-cell.list b{color:var(--blue)}
+  .item .t{font-weight:800;font-size:14.5px}
+  .item .s{color:var(--muted);font-size:13px;margin:1px 0 5px}
+  .item .w{font-size:12.5px;color:var(--muted);margin-top:5px}
+  .badges{display:flex;gap:5px;flex-wrap:wrap}
+  #map{height:620px;border-radius:10px}
+  .mapcard{position:sticky;top:12px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+  .empty{padding:18px;text-align:center;color:var(--muted)}
+  .err{color:var(--danger)}
+  .kv{display:grid;grid-template-columns:170px minmax(0,1fr);gap:4px 10px;font-size:13.5px;margin:0}
+  .kv dt{color:var(--muted)} .kv dd{margin:0;font-weight:600;overflow-wrap:anywhere}
+  .drawer{position:fixed;top:0;left:0;height:100%;width:min(540px,100%);background:#fff;box-shadow:8px 0 30px rgba(20,33,61,.18);
+          transform:translateX(-105%);transition:transform .2s ease;z-index:2000;overflow:auto;padding:18px 20px 40px}
+  .drawer.open{transform:none}
+  @media (max-width:1050px){.drawer{left:auto;right:0;box-shadow:-8px 0 30px rgba(20,33,61,.18);transform:translateX(105%)}}
+  @media (max-width:700px){.drawer{top:auto;bottom:0;height:85vh;width:100%;border-radius:16px 16px 0 0;transform:translateY(105%)}}
+  .drawer .close{position:sticky;top:0;float:right;border:0;background:var(--sand);border-radius:50%;width:32px;height:32px;
+                 font-size:18px;cursor:pointer;color:var(--navy)}
+  .drawer h2{font-size:18px;margin:0 40px 2px 0;display:block}
+  .drawer h4{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:20px 0 6px}
+  .verdict{border-radius:10px;padding:10px 12px;margin:10px 0 0;font-weight:600}
+  .verdict.notify{background:var(--danger-soft)} .verdict.list{background:var(--blue-soft)} .verdict.hidden{background:var(--sand)}
+  .gates{list-style:none;margin:0;padding:0}
+  .gates li{margin:4px 0;display:flex;gap:8px}
+  .gates .y{color:var(--green);font-weight:800} .gates .n{color:var(--danger);font-weight:800}
+  pre{background:var(--foam);border-radius:8px;padding:10px;font:11.5px/1.45 ui-monospace,Menlo,monospace;max-height:340px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+  details summary{cursor:pointer;font-weight:700;font-size:13px;margin-top:6px}
+  .drawer ul{margin:4px 0 0 18px;padding:0} .drawer li{margin:3px 0}
+  .lv20{background:#C9D1DD} .lv40{background:#E0A94A} .lv70{background:#D2691E} .lv90{background:#A93226}
+  .pill.lv20{color:var(--navy)} .pill.lv40{color:#3d2a00} .pill.lv70,.pill.lv90{color:#fff}
+  .lvbar{display:flex;height:10px;border-radius:5px;overflow:hidden;background:var(--sand);margin:6px 0}
+  .lvbar i{display:block;height:100%}
+  .apgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px}
+  .apcard{text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;cursor:pointer;font:inherit;color:inherit}
+  .apcard:hover{border-color:#8792a6} .apcard.sel{border-color:var(--navy);box-shadow:inset 5px 0 0 var(--yellow)}
+  .apcard.cph{background:var(--yellow-soft)}
+  .apcard:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+  .aphead span{color:var(--muted);font-size:13px}
+  .apnum{font-size:13px;margin-top:2px} .apnum b{font-size:20px}
+  .daybars{display:flex;align-items:flex-end;gap:2px;height:90px;border-bottom:1px solid var(--line);margin-top:4px}
+  .daybars i{flex:1;background:var(--sand);border-radius:2px 2px 0 0;min-width:2px}
+  .daybars i.on{background:var(--navy)}
+  .daybars.hours i.on{background:#D2691E}
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">TaxiTips</span>
+  <nav id="nav"></nav>
+  <div class="status" id="status">Hämtar…</div>
+</header>
+<main>
+  <h1 id="title">…</h1>
+  <p class="question" id="question"></p>
+  <div class="deliver"><b>Det här får föraren</b><span id="deliver"></span></div>
+  <div class="toc">
+    <a href="#sources">1 · Källorna</a><a href="#analysis">2 · Så analyseras det</a>
+    <a href="#rules">3 · Sorter och regler</a><a href="#result">4 · Vad föraren får</a>
+  </div>
+
+  <section id="sources">
+    <h2><span class="n">1</span>Källorna</h2>
+    <p class="lead">Vad som hämtas och hur färskt det är. Färskheten räknas från senaste <i>lyckade</i> hämtning, mot källans gräns.</p>
+    <div class="grid sources" id="sourceCards"></div>
+  </section>
+
+  <section id="analysis">
+    <h2><span class="n">2</span>Så analyseras det</h2>
+    <p class="lead">Stegen från rådata till det föraren ser, med filen där varje steg bor. Siffrorna under visar hur mycket som är kvar efter varje steg just nu.</p>
+    <div class="grid steps" id="steps"></div>
+    <div class="card" style="margin-top:12px"><div class="funnel" id="funnel"></div></div>
+    <div id="extra"></div>
+  </section>
+
+  <section id="rules">
+    <h2><span class="n">3</span>Sorter och regler</h2>
+    <p class="lead" id="rulesLead">Vilka sorter och poängregler som slog till, hur många gånger och med vilken poäng. Klicka på en regel för att se exemplet med högst poäng.</p>
+    <div class="grid" style="grid-template-columns:minmax(0,1fr)">
+      <div class="card tablewrap"><table id="tiers"></table></div>
+      <div class="card tablewrap" id="rulesCard"><table id="ruleTable"></table></div>
+    </div>
+  </section>
+
+  <section id="result">
+    <h2><span class="n">4</span>Vad föraren får</h2>
+    <p class="lead" id="resultLead">Varje rad är ett tips som det ser ut i förarens app, med varför. Klicka för hela kedjan: rådatan, tolkningen, poängen och notisbeslutet.</p>
+    <div id="evx-phq" class="card" style="margin-bottom:12px;display:none"></div>
+    <div class="toolbar" id="toolbar"></div>
+    <div class="foot" id="countLine" style="margin:-4px 0 10px"></div>
+    <div class="result">
+      <div class="list" id="list"></div>
+      <div class="card mapcard"><div id="map"></div><div class="legend" id="legend"></div></div>
+    </div>
+  </section>
+</main>
+
+<aside class="drawer" id="drawer" aria-hidden="true" role="dialog" aria-labelledby="drawerTitle">
+  <button class="close" id="drawerClose" aria-label="Stäng">×</button>
+  <div id="drawerBody"></div>
+</aside>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+const PAGES=[['/','Översikt'],['/tag','Tåg'],['/kollektivtrafik','Buss och spårvagn'],['/vag','Väg'],['/flyg','Flyg'],
+             ['/farjor','Färjor'],['/evenemang','Evenemang'],['/vader','Väder'],['/system','System']];
+const KEY=location.pathname.replace(/^\//,'').split('/')[0];
+document.getElementById('nav').innerHTML=PAGES.map(([h,l])=>`<a href="${h}"${h==='/'+KEY?' class="on"':''}>${l}</a>`).join('');
+
+const S={data:null,groups:null,kindsOff:new Set(),q:'',selected:null,map:null,layer:null};
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmtN=n=>n==null?'—':Number(n).toLocaleString('sv');
+const hhmm=iso=>iso?new Date(iso).toLocaleTimeString('sv',{hour:'2-digit',minute:'2-digit'}):'—';
+const dayTime=iso=>iso?new Date(iso).toLocaleString('sv',{weekday:'short',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):'—';
+const ago=m=>m==null?'aldrig':m<1?'nyss':m<60?`för ${m} min sedan`:m<1440?`för ${Math.round(m/60)} h sedan`:`för ${Math.round(m/1440)} dygn sedan`;
+const isEvents=()=>KEY==='evenemang';
+const kv=rows=>`<dl class="kv">${rows.filter(r=>r[1]!=null&&r[1]!=='').map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+const badge=b=>`<span class="pill t-${esc(b.tone)}">${esc(b.text)}</span>`;
+const GROUP_COLOR={notify:'#A93226',list:'#155a9c',hidden:'#8792a6'};
+
+// ---------- 1 · Källorna ----------
+function renderSources(d){
+  document.getElementById('sourceCards').innerHTML=d.sources.map(s=>{
+    const limit=s.maxAgeMinutes?` (gräns ${s.maxAgeMinutes} min)`:'';
+    return `<div class="card src"><b>${esc(s.label)}</b> <span class="pill t-${esc(s.state)}">${esc(s.state)}</span>
+      ${s.what?`<div class="foot">${esc(s.what)}</div>`:''}
+      <div class="line">Senast lyckad ${ago(s.lastSuccessAgeMinutes)}${limit}</div>
+      <div class="line foot">Senaste körningen: ${fmtN(s.events)} händelser hämtade, ${fmtN(s.written)} skrivna${s.consecutiveFailures?` · ${s.consecutiveFailures} fel i rad`:''}</div>
+      ${s.message?`<div class="line ${s.ok===false?'err':'foot'}">${esc(s.message)}</div>`:''}</div>`;
+  }).join('');
+}
+
+// ---------- 2 · Så analyseras det ----------
+function renderAnalysis(d){
+  document.getElementById('steps').innerHTML=d.steps.map((s,i)=>`<div class="card step"><b><i>${i+1}</i>${esc(s.title)}</b>
+    <p>${esc(s.text)}</p><code>${esc(s.code)}</code></div>`).join('');
+  const top=Math.max(1,...d.funnel.map(f=>f.n));
+  document.getElementById('funnel').innerHTML='<h3 style="margin:0 0 4px">Kvar efter varje steg, just nu</h3>'+d.funnel.map(f=>`<div class="frow">
+    <div><b>${esc(f.label)}</b><div class="foot">${esc(f.note)}</div></div>
+    <div class="bar"><i style="width:${Math.max(f.n?1.5:0,100*f.n/top)}%"></i></div><div class="num">${fmtN(f.n)}</div></div>`).join('');
+  document.getElementById('extra').innerHTML=renderExtra(d);
+  bindDelays();
+}
+
+function renderExtra(d){
+  const x=d.extra||{};
+  if(KEY==='tag'&&x.rail){
+    const r=x.rail, nd=x.nextDeparture||{}, rr=r.resrobot||{};
+    const buckets=Object.entries(nd.buckets||{});
+    return `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr));margin-top:12px">
+      <div class="card"><h3 style="margin-top:0">Senaste hämtningen från Trafikverket</h3>${kv([
+        ['Tidsfönster',r.window_hours!=null?`${r.window_hours} timmar`:null],['Inställda tåg',fmtN(r.cancelled_trains)],
+        ['Inställda avgångar',fmtN(r.cancelled_departures)],['Försenade avgångar',fmtN(r.delayed_departures)],
+        ['Stationer med tips',fmtN(r.tip_stations)],['Hämtade rader',`${fmtN(r.rows)} på ${fmtN(r.pages)} sidor`],
+        ['Komplett hämtning',r.complete?'ja, hela svaret':'nej: något kan saknas'],
+        ['ResRobot denna månad',rr.calls!=null?`${fmtN(rr.calls)} av ${fmtN(rr.budget)} anrop`:null]])}</div>
+      <div class="card"><h3 style="margin-top:0">Nästa avgång från stationen</h3>
+        <p class="foot" style="margin-top:0">${fmtN(nd.known)} av ${fmtN(nd.total)} tåg-tips har en känd nästa avgång, ${fmtN(nd.lastDeparture)} var sista avgången.</p>
+        ${buckets.map(([k,n])=>`<div class="frow" style="grid-template-columns:90px minmax(0,1fr) 40px"><div>${esc(k)}</div>
+          <div class="bar"><i style="width:${nd.known?100*n/nd.known:0}%"></i></div><div class="num">${n}</div></div>`).join('')}</div></div>`;
+  }
+  if(KEY==='flyg'&&x.airports){
+    return `<div class="card tablewrap" style="margin-top:12px"><h3 style="margin-top:0">Flygplatserna och deras regel</h3><table>
+      <tr><th>Flygplats</th><th>Stad</th><th>Regel</th></tr>${x.airports.map(a=>`<tr><td><b>${esc(a.iata)}</b> ${esc(a.name)}</td>
+      <td>${esc(a.city)}</td><td>${a.rule==='wave'?`ankomstvåg vid minst ${a.waveMin} landningar samma halvtimme`:`sista ankomsten (${esc(a.rule)})`}</td></tr>`).join('')}</table></div>`
+      +flightHistory(x.history||{})+`<div class="card" id="delays" style="margin-top:12px">${delaysHtml()}</div>`;
+  }
+  if(KEY==='evenemang'){
+    const eb=x.endBasis||{};
+    return `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(300px,1fr));margin-top:12px">
+      <div class="card"><h3 style="margin-top:0">Var de kommande 30 dagarna är</h3>${(x.byCity||[]).slice(0,10).map(c=>`<div class="frow" style="grid-template-columns:120px minmax(0,1fr) 40px">
+        <div>${esc(c.city)}</div><div class="bar"><i style="width:${100*c.n/Math.max(1,x.byCity[0].n)}%"></i></div><div class="num">${c.n}</div></div>`).join('')}</div>
+      <div class="card"><h3 style="margin-top:0">Varifrån sluttiden kommer</h3>${kv([['Från källan',fmtN(eb.source)],['Förutsagd av källan',fmtN(eb.predicted)],
+        ['Uppskattad efter kategori',fmtN(eb.estimated)],['Okänd',fmtN(eb.unknown)]])}</div></div>`;
+  }
+  if(KEY==='vag'&&x.maxScore!=null) return `<p class="foot" style="margin-top:10px">Högsta poäng bland vägtipsen just nu: <b>${x.maxScore}</b>.</p>`;
+  return '';
+}
+
+// ---------- Flyg: historik och förseningar ----------
+// Swedavia bakåt i tiden, ur de sparade flygtipsen, så att det går att se att hämtningen går.
+function flightHistory(h){
+  const days=h.days||[], runs=h.runs||[];
+  const dayLabel=d=>new Date(d+'T12:00:00').toLocaleDateString('sv',{weekday:'short',day:'numeric',month:'short'});
+  return `<div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(360px,1fr));margin-top:12px">
+    <div class="card tablewrap"><h3 style="margin-top:0">Historik: flygtips per dag (Swedavia)</h3>
+      <p class="foot" style="margin-top:0">Senast lyckad hämtning ${h.lastSuccessAt?dayTime(h.lastSuccessAt):'aldrig'} · ${fmtN(h.calls)} av ${fmtN(h.budget)} anrop i ${esc(h.month||'månaden')}.
+        En dag med 0 betyder att ingen hämtning gick, eller att inget fönster nådde tröskeln.</p>
+      <table><tr><th>Dag</th><th class="num">Ankomstvågor</th><th class="num">Sista ankomsten</th><th class="num">Högsta poäng</th><th>Flygplatser</th></tr>
+      ${days.map(d=>`<tr><td>${esc(dayLabel(d.date))}</td><td class="num">${d.wave||'—'}</td><td class="num">${d.last||'—'}</td>
+        <td class="num">${d.maxScore||'—'}</td><td class="foot">${Object.entries(d.airports).map(([k,n])=>`${esc(k)} ${n}`).join(', ')||'<span class="err">inga tips</span>'}</td></tr>`).join('')}</table></div>
+    <div class="card tablewrap"><h3 style="margin-top:0">Senaste hämtningen per flygplats</h3><table>
+      <tr><th>Flygplats</th><th class="num">Ankomster</th><th class="num">Borttagna</th><th class="num">Fönster över tröskeln</th><th>Hämtad</th></tr>
+      ${runs.map(r=>`<tr><td><b>${esc(r.iata)}</b> ${esc(r.name)}</td><td class="num">${fmtN(r.arrivals)}</td><td class="num">${fmtN(r.notArriving)}</td>
+        <td class="num">${fmtN(r.windows)}</td><td>${dayTime(r.fetchedAt)}</td></tr>`).join('')||'<tr><td colspan="5" class="foot">Ingen hämtning ännu.</td></tr>'}</table></div></div>`;
+}
+
+// PredictHQ:s flygförseningar i Sverige och på Köpenhamn. Laddas direkt, hålls i backendens cache i
+// tio minuter och sparas aldrig. Nivån är PHQ Rank: 20 minimal, 40 måttlig, 70 betydande, 90 svår.
+const DELAYS={back:90,ahead:14,loading:false,data:null,error:null,airport:null};
+const LEVEL_CLASS={20:'lv20',40:'lv40',70:'lv70',90:'lv90'};
+function hourRanges(hours){
+  const top=Math.max(...hours); if(!top) return '—';
+  const hot=hours.map(n=>n>=top*0.5), out=[];
+  for(let h=0;h<24;h++) if(hot[h]&&!hot[(h+23)%24]){ let e=h; while(hot[(e+1)%24]&&(e+1)%24!==h) e=(e+1)%24; out.push(`${String(h).padStart(2,'0')}–${String((e+1)%24).padStart(2,'0')}`); }
+  return out.join(', ')||'hela dygnet';
+}
+function levelBar(levels,n){
+  return `<div class="lvbar">${Object.entries(levels).filter(([,c])=>c).map(([l,c])=>`<i class="${LEVEL_CLASS[l]}" style="width:${100*c/n}%" title="${esc(DELAYS.data.levels[l])}: ${c}"></i>`).join('')}</div>`;
+}
+const localText=v=>(v||'').replace('T',' ').slice(0,16);
+function delaysHtml(){
+  const d=DELAYS.data;
+  const head=`<div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap"><h3 style="margin:0">Flygförseningar i Sverige och på Köpenhamn (PredictHQ)</h3>
+    <select id="delaysBack" aria-label="Hur långt bakåt">${[7,30,90].map(n=>`<option value="${n}"${n===DELAYS.back?' selected':''}>${n} dagar bakåt</option>`).join('')}</select>
+    <button class="chip" id="delaysLoad">${DELAYS.loading?'Hämtar…':'Uppdatera'}</button>
+    <span class="foot">${d?`hämtat ${hhmm(d.fetchedAt)}${d.cached?' (från cache)':` · ${d.calls} anrop`}`:''}</span></div>
+    <p class="foot">Live från PredictHQ, sparas inte (deras villkor förbjuder lagring). Från Danmark bara Köpenhamn. Förseningar är oplanerade händelser: de syns när de inträffar, aldrig i förväg.</p>`;
+  if(DELAYS.error) return head+`<p class="err">PredictHQ svarade inte: ${esc(DELAYS.error)}</p>`;
+  if(!d) return head+`<p class="foot">${DELAYS.loading?'Hämtar förseningarna, ungefär tio sekunder…':''}</p>`;
+  const L=d.levels;
+  const legend=`<div class="legend" style="margin:0 0 10px">${Object.entries(L).map(([k,v])=>`<span><i class="${LEVEL_CLASS[k]}"></i>${esc(v)} (rank ${k})</span>`).join('')}</div>`;
+  const cards=d.airports.map(a=>{
+    const last=a.latest||{};
+    return `<button class="apcard${DELAYS.airport===(a.code||a.airport)?' sel':''}${a.code==='CPH'?' cph':''}" data-ap="${esc(a.code||a.airport)}">
+      <div class="aphead"><b>${esc(a.code)}</b> <span>${esc(a.airport)}</span>${a.country==='DK'?' <span class="pill t-none">Danmark</span>':''}${a.ongoing?' <span class="pill t-bad">pågår nu</span>':''}</div>
+      <div class="apnum"><b>${a.n}</b> ${a.n===1?'försening':'förseningar'} · snitt ${a.avgMinutes} min</div>
+      ${levelBar(a.levels,a.n)}
+      <div class="foot">Oftast ${hourRanges(a.hours)} · senast ${esc(localText(last.startLocal))}–${esc((last.endLocal||'').slice(11,16))}, ${esc(last.levelLabel||'')}</div></button>`;
+  }).join('');
+  const sel=d.airports.find(a=>(a.code||a.airport)===DELAYS.airport)||d.airports[0];
+  if(!sel) return head+'<p class="foot">Inga förseningar i perioden.</p>';
+  const days=[]; for(let t=new Date(d.from+'T12:00:00'), end=new Date(Math.min(Date.now(),new Date(d.to+'T12:00:00'))); t<=end; t.setDate(t.getDate()+1)) days.push(t.toISOString().slice(0,10));
+  const maxDay=Math.max(1,...days.map(x=>sel.days[x]||0)), maxHour=Math.max(1,...sel.hours);
+  const list=d.delays.filter(x=>(x.code||x.airport)===(sel.code||sel.airport));
+  return head+legend+`<div class="apgrid">${cards}</div>
+    <div class="card" style="margin-top:12px"><h3 style="margin-top:0">${esc(sel.code)} ${esc(sel.airport)}: ${sel.n} förseningar ${esc(d.from)} – i dag</h3>
+      <div class="grid" style="grid-template-columns:repeat(auto-fit,minmax(320px,1fr))">
+        <div><div class="foot">Per dag</div><div class="daybars">${days.map(x=>{const n=sel.days[x]||0;return `<i style="height:${n?Math.max(8,100*n/maxDay):2}%" class="${n?'on':''}" title="${x}: ${n}"></i>`;}).join('')}</div>
+          <div class="foot" style="display:flex;justify-content:space-between"><span>${esc(days[0]||'')}</span><span>${esc(days[days.length-1]||'')}</span></div></div>
+        <div><div class="foot">Tid på dygnet (lokal tid, timmar förseningen pågick)</div><div class="daybars hours">${sel.hours.map((n,h)=>`<i style="height:${n?Math.max(8,100*n/maxHour):2}%" class="${n?'on':''}" title="${String(h).padStart(2,'0')}:00: ${n}"></i>`).join('')}</div>
+          <div class="foot" style="display:flex;justify-content:space-between"><span>00</span><span>06</span><span>12</span><span>18</span><span>23</span></div></div>
+      </div>
+      <p class="foot">PredictHQ såg förseningen i mitten ${sel.seenAfterMedianMin==null?'—':sel.seenAfterMedianMin<=0?`${-sel.seenAfterMedianMin} min innan den började`:`${sel.seenAfterMedianMin} min efter att den började`}.</p>
+      <div class="tablewrap" style="max-height:380px;overflow:auto"><table><tr><th>Start (lokal tid)</th><th>Slut</th><th class="num">Längd</th><th>Nivå</th><th class="num">Local rank</th><th>Upptäckt</th></tr>
+      ${list.map(x=>`<tr${x.ongoing?' style="background:var(--danger-soft)"':''}><td>${esc(localText(x.startLocal))}${x.ongoing?' <span class="pill t-bad">pågår</span>':''}</td><td>${esc((x.endLocal||'').slice(11,16))}</td>
+        <td class="num">${x.minutes} min</td><td><span class="pill ${LEVEL_CLASS[x.level]}">${esc(x.levelLabel)}</span></td><td class="num">${x.localRank??'—'}</td>
+        <td class="foot">${x.seenAfterMin==null?'—':x.seenAfterMin<=0?`${-x.seenAfterMin} min före start`:`${x.seenAfterMin} min efter start`}</td></tr>`).join('')}</table></div>
+    </div>
+    <details style="margin-top:8px"><summary>Så läses datan</summary><p class="foot">Varje försening är en punkt på flygplatsen med start och slut.
+      Tiderna kommer i UTC och visas här i flygplatsens lokala tid. Nivån är PHQ Rank enligt PredictHQ:s dokumentation: 20 minimal, 40 måttlig,
+      70 betydande, 90 svår; titeln ("Moderate Delays") säger måttlig även vid rank 20 och används inte. Local rank är samma skala sett mot
+      flygplatsens egen normalnivå. Ingen publik (PHQ Attendance) finns för förseningar. "Upptäckt" är PredictHQ:s first_seen mot starten.
+      <a href="https://docs.predicthq.com/getting-started/predicthq-data/event-categories/unscheduled-events" target="_blank" rel="noopener">Dokumentationen</a>.</p></details>`;
+}
+function bindDelays(){
+  const host=document.getElementById('delays'); if(!host) return;
+  if(!DELAYS.data&&!DELAYS.loading&&!DELAYS.error){ loadDelays(); return; }
+  host.innerHTML=delaysHtml();
+  const sel=document.getElementById('delaysBack'); if(sel) sel.onchange=()=>{DELAYS.back=Number(sel.value);loadDelays();};
+  const btn=document.getElementById('delaysLoad'); if(btn) btn.onclick=loadDelays;
+  host.querySelectorAll('[data-ap]').forEach(b=>b.onclick=()=>{DELAYS.airport=b.dataset.ap;bindDelays();});
+}
+async function loadDelays(){
+  if(DELAYS.loading) return;
+  DELAYS.loading=true; DELAYS.error=null;
+  const host=document.getElementById('delays'); if(host) host.innerHTML=delaysHtml();
+  try{
+    const r=await fetch(`/api/pipeline/airport-delays?back=${DELAYS.back}&ahead=${DELAYS.ahead}`); const d=await r.json();
+    if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status));
+    DELAYS.data=d;
+    if(!DELAYS.airport&&d.airports.length) DELAYS.airport=d.airports[0].code||d.airports[0].airport;
+  }catch(e){ DELAYS.error=e.message; }
+  DELAYS.loading=false; bindDelays();
+}
+
+// ---------- 3 · Sorter och regler ----------
+function renderRules(d){
+  const tiers=d.tiers||[];
+  document.getElementById('tiers').innerHTML=isEvents()
+    ?`<tr><th>Kategori</th><th class="num">Antal (30 dagar)</th></tr>`+tiers.map(t=>`<tr><td>${esc(t.label)}</td><td class="num">${fmtN(t.n)}</td></tr>`).join('')
+    :`<tr><th>Sort</th><th class="num">Antal</th><th>Allvar</th><th>Kan ge notis?</th></tr>`+(tiers.map(t=>`<tr><td><b>${esc(t.label)}</b> <span class="foot">${esc(t.tier)}</span></td>
+      <td class="num">${fmtN(t.n)}</td><td>${esc(t.level)}</td><td>${t.notifyWorthy?'ja, om poängen räcker':'nej'}</td></tr>`).join('')||'<tr><td colspan="4" class="foot">Inga aktiva tips just nu.</td></tr>');
+  const rules=d.rules||[];
+  document.getElementById('rulesCard').style.display=rules.length?'':'none';
+  document.getElementById('rulesLead').textContent=isEvents()
+    ?'Evenemangen har inga poängregler: de sorteras efter kategori, och sluttiden avgör när folk går ut.'
+    :'Vilka sorter och poängregler som slog till, hur många gånger och med vilken poäng. Klicka på en regel för att se exemplet med högst poäng.';
+  document.getElementById('ruleTable').innerHTML=`<tr><th>Regel</th><th class="num">Antal</th><th class="num">Snitt</th><th class="num">Högst</th><th>Regelns golv/tak och anteckning</th><th>Exempel</th></tr>`+
+    rules.map(r=>{const s=r.scoring;return `<tr class="click" data-id="${esc(r.exampleId)}"><td><code>${esc(r.rule)}</code></td>
+      <td class="num">${fmtN(r.n)}</td><td class="num">${r.avgScore}</td><td class="num">${r.maxScore}</td>
+      <td class="foot">${s?`golv ${s.floor??'—'}, tak ${s.cap??'—'}, säkerhet ${esc(s.confidence)}. ${esc(s.note)}`:'ingen rad i ScoringRule (poängen sätts i källans kod)'}</td>
+      <td>${esc(r.example)}</td></tr>`;}).join('');
+  document.querySelectorAll('#ruleTable tr.click').forEach(tr=>tr.onclick=()=>openTip(tr.dataset.id));
+}
+
+// ---------- 4 · Vad föraren får ----------
+function groupKeys(d){ return isEvents()?[]:Object.keys(d.groups||{}); }
+function renderToolbar(d){
+  const counts={};
+  for(const c of d.cards) counts[c.group]=(counts[c.group]||0)+1;
+  if(!S.groups) S.groups=new Set(groupKeys(d));
+  const chips=groupKeys(d).map(g=>`<button class="chip${S.groups.has(g)?' on':''}" data-g="${g}">${esc(d.groups[g])}${g==='hidden'?' (exempel)':''}<span class="c">${fmtN(counts[g]||0)}</span></button>`).join('');
+  document.getElementById('toolbar').innerHTML=chips+`<span id="kindChips" style="display:contents"></span><input type="search" id="q" placeholder="${isEvents()?'Sök evenemang, plats, stad':'Sök ort, station, linje'}" value="${esc(S.q)}" aria-label="Sök">`;
+  renderKindChips();
+  document.querySelectorAll('#toolbar [data-g]').forEach(b=>b.onclick=()=>{const g=b.dataset.g;S.groups.has(g)?S.groups.delete(g):S.groups.add(g);renderResult();});
+  const q=document.getElementById('q');
+  let timer; q.oninput=()=>{clearTimeout(timer);timer=setTimeout(()=>{S.q=q.value.trim();isEvents()?renderResult():load();},isEvents()?0:350);};
+}
+
+function visibleCards(){
+  const d=S.data, q=S.q.toLowerCase();
+  return d.cards.filter(c=>isEvents()
+    ?(!S.kindsOff.has(c.kind)&&(!q||`${c.title} ${c.sub}`.toLowerCase().includes(q)))
+    :S.groups.has(c.group));
+}
+
+// Evenemangens sort: fotboll, ishockey, handboll och annan sport, sedan kategorierna. Allt är på
+// från början; en knapp slår av och på. Räknas om när PredictHQ live slås in.
+function renderKindChips(){
+  const host=document.getElementById('kindChips');
+  if(!host||!isEvents()) return;
+  const labels=S.data.kindLabels||(S.data.extra||{}).kindLabels||{}, counts={};
+  for(const c of S.data.cards) counts[c.kind]=(counts[c.kind]||0)+1;
+  const order=[...Object.keys(labels),...Object.keys(counts).filter(k=>!(k in labels))].filter(k=>counts[k]);
+  const all=order.every(k=>!S.kindsOff.has(k));
+  host.innerHTML=`<button class="chip${all?' on':''}" data-all="1">Alla sorter</button>`+order.map(k=>
+    `<button class="chip${S.kindsOff.has(k)?'':' on'}" data-kind="${esc(k)}" aria-pressed="${!S.kindsOff.has(k)}">${esc(labels[k]||k)}<span class="c">${fmtN(counts[k])}</span></button>`).join('');
+  host.querySelector('[data-all]').onclick=()=>{S.kindsOff.clear();renderResult();};
+  host.querySelectorAll('[data-kind]').forEach(b=>b.onclick=()=>{
+    const k=b.dataset.kind;
+    // Första klicket när allt är på: visa bara den sorten.
+    if(order.every(x=>!S.kindsOff.has(x))) order.forEach(x=>{ if(x!==k) S.kindsOff.add(x); });
+    else S.kindsOff.has(k)?S.kindsOff.delete(k):S.kindsOff.add(k);
+    renderResult();});
+}
+
+function leadCell(c){
+  if(isEvents()) return `<div class="lead-cell"><b>${esc(hhmm(c.at))}</b><span>till ${esc(hhmm(c.until))}</span></div>`;
+  return `<div class="lead-cell ${c.group}"><b>${c.score}</b><span>poäng</span></div>`;
+}
+function groupHeading(c){
+  if(!isEvents()) return c.groupLabel;
+  const d=new Date(c.group+'T12:00:00');
+  return isNaN(d)?c.group:d.toLocaleDateString('sv',{weekday:'long',day:'numeric',month:'long'});
+}
+
+function renderResult(){
+  renderKindChips();
+  const d=S.data, cards=visibleCards(), c=d.counts||{};
+  let last=null, html='';
+  for(const card of cards){
+    if(card.group!==last){ html+=`<div class="group">${esc(groupHeading(card))}</div>`; last=card.group; }
+    html+=`<button class="item${S.selected===card.id?' sel':''}" data-id="${esc(card.id)}">${leadCell(card)}<div>
+      <div class="t">${esc(card.title)}</div><div class="s">${esc(card.sub)}</div>
+      <div class="badges">${card.badges.map(badge).join('')}</div>
+      <div class="w">${esc(card.why[0]||'')}</div></div></button>`;
+  }
+  document.getElementById('list').innerHTML=html||`<div class="card empty">${d.counts.active?'Inget i det här urvalet.':'Inga aktiva tips från den här tjänsten just nu. Se källornas färskhet ovan.'}</div>`;
+  document.querySelectorAll('#list .item').forEach(b=>b.onclick=()=>openCard(b.dataset.id));
+  document.getElementById('countLine').textContent=isEvents()
+    ?`${fmtN(cards.length)} kommande evenemang${S.q?` som matchar "${S.q}"`:''}.`
+    :`${fmtN(c.shown)} tips i förarens lista${d.query?` som matchar "${d.query}"`:''}; visar de ${fmtN(c.listed)} med högst poäng${c.shown>c.listed?' (sök för att hitta fler)':''}. `+
+     `${fmtN(c.hidden)} visas inte för föraren; ${fmtN(c.noiseShown)} av dem som exempel.`;
+  renderMap(cards);
+}
+
+function renderMap(cards){
+  if(!S.map){
+    S.map=L.map('map',{scrollWheelZoom:false,maxZoom:16});
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+      {attribution:'&copy; Esri · OpenStreetMap',maxZoom:16}).addTo(S.map);
+    L.control.scale({imperial:false}).addTo(S.map);
+    S.map.once('click',()=>S.map.scrollWheelZoom.enable());
+    S.map.fitBounds([[55.2,10.9],[66.5,24.0]]);
+    S.layer=L.layerGroup().addTo(S.map);
+  }
+  S.layer.clearLayers();
+  for(const c of cards){
+    if(c.lat==null||c.lon==null) continue;
+    const color=isEvents()?'#FCA311':GROUP_COLOR[c.group]||'#8792a6';
+    L.circleMarker([c.lat,c.lon],{radius:S.selected===c.id?10:6,color:'#fff',weight:1.5,fillColor:color,fillOpacity:.9})
+      .bindTooltip(`<b>${esc(c.title)}</b><br>${esc(c.sub)}`,{direction:'top'}).on('click',()=>openCard(c.id)).addTo(S.layer);
+  }
+  document.getElementById('legend').innerHTML=isEvents()
+    ?'<span><i style="background:#FCA311"></i>evenemang</span><span>Klicka på en punkt för detaljer.</span>'
+    :`<span><i style="background:${GROUP_COLOR.notify}"></i>notis och lista</span><span><i style="background:${GROUP_COLOR.list}"></i>bara i listan</span><span><i style="background:${GROUP_COLOR.hidden}"></i>visas inte</span>`;
+}
+
+// ---------- Detaljpanel ----------
+function openCard(id){
+  S.selected=id;
+  document.querySelectorAll('#list .item').forEach(b=>b.classList.toggle('sel',b.dataset.id===id));
+  const card=S.data.cards.find(c=>c.id===id);
+  if(card&&card.lat!=null) S.map.setView([card.lat,card.lon],Math.max(S.map.getZoom(),10));
+  renderMap(visibleCards());
+  isEvents()?openDrawer(eventDetail(card)):openTip(id);
+}
+
+async function openTip(id){
+  openDrawer('<p class="foot">Hämtar hela kedjan…</p>');
+  try{
+    const r=await fetch('/api/pipeline/tip/'+encodeURIComponent(id)); const t=await r.json();
+    if(!r.ok||t.error) throw new Error(t.error||('HTTP '+r.status));
+    openDrawer(tipDetail(t));
+  }catch(e){ openDrawer(`<p class="err">Kunde inte hämta tipset: ${esc(e.message)}</p>`); }
+}
+
+function gate(ok,text){ return `<li><span class="${ok?'y':'n'}">${ok?'✓':'✗'}</span><span>${text}</span></li>`; }
+
+function tipDetail(t){
+  const n=t.notify, s=t.scoring, nd=t.nextDeparture||{}, ai=t.aiReview;
+  const events=t.sourceEvents||[];
+  return `
+    <h2 id="drawerTitle">${esc(t.title)}</h2>
+    <div class="foot">${esc(t.sub)}</div>
+    <div class="verdict ${n.group}">Vad föraren får: ${esc(t.groupLabel)}. ${esc(n.why)}</div>
+    <div class="badges" style="margin-top:8px">${t.badges.map(badge).join('')}</div>
+
+    <h4>1 · Källan: vad som kom in</h4>
+    ${events.length?events.map((e,i)=>`${i?'<hr style="border:0;border-top:1px solid var(--sand);margin:10px 0">':''}${kv([
+      ['Källa',esc(e.sourceLabel)],['Källans id',`<code>${esc(e.externalId)}</code>`],['Senast sparad med nytt innehåll',dayTime(e.fetchedAt)],
+      ['Gäller enligt källan',e.activeFrom||e.activeTo?`${dayTime(e.activeFrom)} – ${dayTime(e.activeTo)}`:null],
+      ['Position',e.lat!=null?`${e.lat.toFixed(4)}, ${e.lon.toFixed(4)}`:'ingen i källan']])}
+      <details><summary>Rådatan som den kom</summary><pre>${esc(JSON.stringify(e.raw,null,2).slice(0,30000))}</pre></details>`).join('')
+      :'<p class="foot">Källhändelsen finns inte längre (gallrad).</p>'}
+    ${t.missingSourceEvents?`<p class="foot">${t.missingSourceEvents} källhändelse(r) är redan gallrade.</p>`:''}
+
+    <h4>2 · Tolkningen</h4>
+    ${kv([['Färdsätt',esc(t.modeLabel)],['Sort',`${esc(t.tierLabel)} <span class="foot">(${esc(t.tier)})</span>`],
+          ['Allvarsnivå',esc(t.level)],['Regel',`<code>${esc(t.rule)}</code>`],['Säkerhet',esc(t.confidence)],
+          ['Sammanfattning',t.summary?esc(t.summary):null]])}
+
+    <h4>3 · Poängen</h4>
+    ${kv([['Poäng',`<b>${t.score}</b> av 100`],
+          ['Regelns golv och tak',s?`golv ${s.floor??'—'}, tak ${s.cap??'—'}`:'sätts i källans kod, inte i ScoringRule'],
+          ['Regelns anteckning',s&&s.note?esc(s.note):null],
+          ['AI-granskning',ai?`regel ${ai.ruleScore}, modell ${ai.modelScore}, slutlig ${ai.finalScore} (${esc(ai.verdict)})`:null]])}
+    ${t.reasons.length?`<p class="foot" style="margin:8px 0 2px">Skälen som står på tipset:</p><ul>${t.reasons.map(r=>`<li>${esc(r)}</li>`).join('')}</ul>`:''}
+
+    <h4>4 · Notisbeslutet</h4>
+    <ul class="gates">
+      ${gate(t.tier!=='ignore'&&t.score>0,'Inte brus och poäng över 0: syns i förarens lista')}
+      ${gate(n.worthyTier,`Sorten ${esc(t.tierLabel.toLowerCase())} är notisvärd`)}
+      ${gate(t.score>=n.floor,`Poängen ${t.score} når notisgränsen ${n.floor}`)}
+      ${gate(!n.hasAlternative,n.hasAlternative?`Källan skriver ut ett alternativ: ${esc(t.alternative.note||'ersättningstrafik')}`:'Inget uttalat alternativ')}
+    </ul>
+    <p class="foot">Sedan förarens egna val: notiser på, typen påslagen, och tipset i förarens körområde (län och kommun), eller nära rutan när föraren är "i tjänst". <code>core/notify.py decide()</code>${t.times.notifiedAt?` · skickad ${dayTime(t.times.notifiedAt)}`:''}</p>
+
+    <h4>5 · Tid och plats</h4>
+    ${kv([['Gäller',`${dayTime(t.times.start)} – ${dayTime(t.times.end)}`],['Räknad',dayTime(t.times.computedAt)],
+          ['Marknad',esc(t.area.region)],['Län · kommun',t.area.county?`${esc(t.area.county)} · ${esc(t.area.municipality||'—')}`:'okänt'],
+          ['Nästa avgång',nd.minutes!=null?`om ${nd.minutes} min (${hhmm(nd.at)})`:null],['Sista avgången',nd.isLast?'ja':null],
+          ['Taxiersättning',t.compensation.eligible?`ja, upp till ${fmtN(t.compensation.amountKr)} kr`:null]])}`;
+}
+
+function eventDetail(c){
+  const x=c.detail||{};
+  return `<h2 id="drawerTitle">${esc(c.title)}</h2><div class="foot">${esc(c.sub)}</div>
+    <div class="verdict list">${c.why.map(w=>esc(w.replace(/\.+$/,''))).join('. ')}.</div>
+    <div class="badges" style="margin-top:8px">${c.badges.map(badge).join('')}</div>
+    <h4>Tid</h4>${kv([['Start',dayTime(c.at)],['Slut',dayTime(c.until)],['Tid känd',x.timeKnown===false?'nej, bara datum':'ja'],['Flera dagar',x.multiDay?'ja':null]])}
+    <h4>Källan</h4>${kv([['Källa',esc(x.sourceLabel)],['Status',esc(x.statusLabel)],['Adress',esc(x.address)],['Publik',esc(x.attendanceText)],
+      ['Rang',x.rank!=null?`${x.rank} (lokalt ${x.localRank??'—'})`:null],['Länk',x.url?`<a href="${esc(x.url)}" target="_blank" rel="noopener">öppna hos källan</a>`:null]])}`;
+}
+
+function openDrawer(html){
+  const d=document.getElementById('drawer');
+  document.getElementById('drawerBody').innerHTML=html;
+  d.classList.add('open'); d.setAttribute('aria-hidden','false'); d.scrollTop=0;
+}
+function closeDrawer(){ const d=document.getElementById('drawer'); d.classList.remove('open'); d.setAttribute('aria-hidden','true'); }
+document.getElementById('drawerClose').onclick=closeDrawer;
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeDrawer(); });
+
+// ---------- PredictHQ Live ----------
+let phqState = { days: 14, loading: false, data: null, error: null };
+// esc, hhmm och fmtN finns redan överst på sidan; en andra deklaration stoppar hela skriptet.
+
+function phqDraw(){
+  const host = document.getElementById('evx-phq');
+  if(!isEvents()) { host.style.display = 'none'; return; }
+  const live = S.data.predicthqLive || {};
+  host.style.display = 'block';
+  
+  const options = [7,14,30].filter(n=>n<=(live.maxDays||30))
+    .map(n=>`<option value="${n}"${n===phqState.days?' selected':''}>${n} dagar</option>`).join('');
+  let text;
+  if(!live.available) text = '<b>PredictHQ live är av.</b> Kräver DEBUG och PREDICTHQ_ACCESS_TOKEN i backend.';
+  else if(phqState.loading) text = '<b>Hämtar PredictHQ live…</b> ungefär fyra sekunder per två veckor.';
+  else if(phqState.error) text = `<b style="color:var(--danger)">PredictHQ svarade inte:</b> ${esc(phqState.error)}`;
+  else if(phqState.data) {
+    const p = phqState.data;
+    text = `<b>PredictHQ live:</b> ${p.events.length} evenemang de närmaste ${p.days} dagarna, ${p.matchedTicketmaster} ihopparade med Ticketmaster · ${p.calls} anrop på ${(p.durationMs/1000).toFixed(1)} s · hämtat ${hhmm(p.fetchedAt)}${p.overflow?' · <b style="color:var(--danger)">kapat av abonnemanget</b>':''} · <b>sparas inte</b>`;
+  } else {
+    text = `<b>PredictHQ live:</b> Inte hämtat. ${live.cacheAgeDays!=null?`Senast lyckade var ${live.cacheAgeDays} dagar sedan.`:'Deras villkor förbjuder lagring.'}`;
+  }
+  
+  host.innerHTML = `<div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+    <div style="flex:1 1 auto;font-size:13.5px">${text}</div>
+    ${live.available ? `<select onchange="phqState.days=Number(this.value);phqLoad()" style="padding:4px 8px;border-radius:6px;border:1px solid var(--line);background:#fff;font:inherit">${options}</select>
+    <button onclick="phqLoad()" style="padding:4px 12px;border-radius:6px;border:1px solid var(--line);background:#fff;font:inherit;font-weight:600;cursor:pointer">${phqState.data?'Hämta igen':'Hämta live'}</button>` : ''}
+  </div>`;
+}
+
+function phqLoad(){
+  if(phqState.loading) return;
+  phqState.loading = true; phqState.error = null; phqDraw();
+  fetch(`/api/pipeline/predicthq?days=${encodeURIComponent(phqState.days)}`)
+    .then(r=>r.json().catch(()=>({error:`HTTP ${r.status}`})))
+    .then(body=>{
+      if(body.error){ phqState.error = body.error; return; }
+      phqState.data = body;
+      phqMerge();
+      renderResult();
+    })
+    .catch(err=>{ phqState.error = String(err); })
+    .finally(()=>{ phqState.loading = false; phqDraw(); });
+}
+
+function phqMerge(){
+  if(!phqState.data) return;
+  const end_label = {"source": "sluttid från källan", "predicted": "sluttid förutsagd av källan", "estimated": "sluttid uppskattad", "unknown": "sluttid okänd"};
+  const phqCards = phqState.data.events.map(e => {
+    let badges = [
+      {text: e.sportLabel || e.categoryLabel || e.category || "", tone: "none"},
+      {text: end_label[e.endBasis] || e.endBasis || "", tone: (e.endBasis === "estimated" || e.endBasis === "unknown") ? "warn" : "none"}
+    ];
+    if (e.sizeLabel) badges.push({text: e.sizeLabel, tone: "none"});
+    let why = [
+      `Slutar ${e.endLocal || '?'} (${end_label[e.endBasis] || ''})`.trim(),
+      `Utsläpp: folk går ut från ${e.endLocal || '?'} till ${e.leaveUntilLocal || '?'}`
+    ];
+    if (e.endNote) why.push(e.endNote);
+    return {
+      id: e.id, title: e.name || "", group: e.startDate || "", groupLabel: e.startDate || "",
+      kind: e.sport || e.category || "ovrigt", kindLabel: e.sportLabel || e.categoryLabel || "",
+      sub: [e.venueName, e.city].filter(Boolean).join(" · "),
+      badges: badges.filter(b => b.text),
+      why: why, lat: e.lat, lon: e.lon, at: e.startAt, until: e.endAt,
+      timeText: `${e.startLocal || '?'}–${e.endLocal || '?'}`,
+      detail: {
+        sourceLabel: e.sourceLabel, url: e.url, address: e.address, statusLabel: e.statusLabel,
+        attendanceText: e.attendanceText, rank: e.rank, localRank: e.localRank, multiDay: e.multiDay, timeKnown: e.timeKnown
+      }
+    };
+  });
+  
+  const paired = new Set(phqState.data.events.map(e => e.ticketmasterId).filter(Boolean));
+  const base = S.baseCards || S.data.cards;
+  S.baseCards = base;
+  
+  S.data.cards = phqCards.concat(base.filter(c => {
+    // Om kortet är från ticketmaster (det har id som börjar på tm_) kollar vi paired
+    return !paired.has(c.id.replace('tm_', ''));
+  })).sort((a,b) => (a.group||'').localeCompare(b.group||'') || String(a.at||'~').localeCompare(String(b.at||'~')) || (a.title||'').localeCompare(b.title||'','sv'));
+}
+
+// ---------- Laddning ----------
+async function load(){
+  try{
+    const qs=!isEvents()&&S.q?`?q=${encodeURIComponent(S.q)}`:'';
+    const r=await fetch(`/api/pipeline/service/${encodeURIComponent(KEY)}${qs}`); const d=await r.json();
+    if(!r.ok||d.error) throw new Error(d.error||('HTTP '+r.status));
+    S.data=d;
+    S.baseCards = null; // Återställ vid ny backend-laddning
+    document.title=`TaxiTips — ${d.title}`;
+    document.getElementById('title').textContent=d.title;
+    document.getElementById('question').textContent=d.question;
+    document.getElementById('deliver').textContent=d.deliver;
+    if(KEY==='flyg'&&!document.getElementById('tocDelays')){
+      document.querySelector('.toc').insertAdjacentHTML('beforeend','<a id="tocDelays" href="#delays">Flygförseningar (CPH och Sverige)</a>');
+    }
+    document.getElementById('status').textContent=`uppdaterad ${hhmm(d.generatedAt)}`;
+    renderSources(d); renderAnalysis(d); renderRules(d); renderToolbar(d); 
+    phqMerge(); // Applicerar eventuell befintlig live-data
+    phqDraw();
+    renderResult();
+  }catch(e){
+    document.getElementById('status').innerHTML=`<span class="err">Kunde inte hämta: ${esc(e.message)}</span>`;
+  }
+}
+setInterval(()=>{ if(document.visibilityState==='visible'&&!document.getElementById('drawer').classList.contains('open')) load(); },60000);
+load();
+</script>
+</body>
+</html>

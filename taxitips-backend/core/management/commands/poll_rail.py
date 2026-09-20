@@ -12,10 +12,13 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
+from core.alternatives import route_note
+
 from core.health import polling
-from core.models import Station
+from core.models import SourceStatus, Station
 from core.repository import upsert_opportunities, upsert_source_events
 from core.scoring import classify
+from core.sources import resrobot
 from core.sources.trafikverket_rail import TrafikverketRail
 
 
@@ -39,8 +42,24 @@ class Command(BaseCommand):
             return
 
         client = TrafikverketRail(key)
-        alerts = client.fetch()
+        previous = (
+            SourceStatus.objects.filter(source="trafikverket_rail").values_list("detail", flat=True).first() or {}
+        )
+        finder = None
+        if settings.RESROBOT_API_KEY:
+            # Nästa resa mot samma slutstation för inställda tåg -- se core/sources/resrobot.py.
+            now = timezone.now()
+            finder = resrobot.AlternativeFinder(
+                settings.RESROBOT_API_KEY, stations=client.stations(), now=now,
+                state=previous.get("resrobot"), previous=resrobot.previous_answers(now),
+            )
+        alerts = client.fetch(alternative_for=finder)
         status.events = len(alerts)
+        # Unika inställda tåg i fönstret, sidor och komplett-flagga; ResRobot-budgeten och
+        # hållplats-id:n bärs vidare till nästa runda här.
+        status.detail = {**client.last_stats, **({"resrobot": finder.detail()} if finder else {})}
+        if client.last_stats.get("complete") is False:
+            status.note = "ofullständig hämtning: sidtaket nåddes"
 
         # Stationsregistret sparas i stället för att bara leva i processens
         # minne. rail_station-tabellen fanns men inget skrev till den, så
@@ -94,6 +113,8 @@ class Command(BaseCommand):
                     "has_replacement": a.has_replacement,
                     "replacement_mode": a.replacement_mode,
                     "replacement_note": a.replacement_note,
+                    "alternative_basis": a.alternative_basis,
+                    "alternative": a.alternative,
                 }, ensure_ascii=False),
                 "lat": a.lat, "lon": a.lon,
             }
@@ -144,6 +165,12 @@ class Command(BaseCommand):
                 "has_alternative": a.has_replacement or a.next_departure_is_bus,
                 "alternative_note": (
                     a.replacement_note
+                    or (
+                        route_note(a.destination, a.alternative_label,
+                                   f"{timezone.localtime(a.next_departure_at):%H:%M}",
+                                   int((a.alternative or {}).get("changes") or 0))
+                        if a.alternative_basis == "resrobot" and a.next_departure_at else ""
+                    )
                     or ("Nästa avgång härifrån är en buss" if a.next_departure_is_bus else "")
                 ),
             }

@@ -27,6 +27,8 @@ import requests
 from django.conf import settings
 from google.transit import gtfs_realtime_pb2 as pb
 
+from core.time_limits import reraise_time_limit
+
 CAUSE = {
     1: "Okänd orsak", 2: "Övrigt", 3: "Tekniskt fel", 4: "Strejk",
     5: "Demonstration", 6: "Olycka", 7: "Semester", 8: "Väder",
@@ -239,6 +241,7 @@ def fetch_trafiklab_alerts(api_key: str) -> dict:
             merged.extend(fetch_operator_alerts(api_key, operator))
             ok.append(operator)
         except Exception as err:  # noqa: BLE001 -- one bad operator must not kill the batch
+            reraise_time_limit(err)
             errors.append({"operator": operator, "error": str(err)})
 
     if not ok:

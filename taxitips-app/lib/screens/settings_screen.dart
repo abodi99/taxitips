@@ -28,7 +28,7 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _loading = true;
   String? _error;
-  bool _refreshingCompany = false;
+  int _companyPanelEpoch = 0;
 
   // Office
   final _name = TextEditingController();
@@ -101,24 +101,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _refreshCompanyDetails() async {
-    setState(() => _refreshingCompany = true);
-    try {
-      final me = await widget.api.me();
-      final company = me['company'] as Map<String, dynamic>? ?? {};
-      if (!mounted) return;
-      setState(() {
-        _name.text = company['name']?.toString() ?? '';
-        _orgNumber.text = company['orgNumber']?.toString() ?? '';
-      });
-      _showSnack('Företagsuppgifter uppdaterade');
-    } catch (e) {
-      _showSnack(_cleanError(e), isError: true);
-    } finally {
-      if (mounted) setState(() => _refreshingCompany = false);
-    }
-  }
-
   Future<void> _editEmail() async {
     final ok = await showDialog<dynamic>(
       context: context,
@@ -145,12 +127,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (_) => _EditDialog(
-        title: 'Telefonnamn',
+        title: 'Enhetens namn',
         fields: [
           TextField(
             controller: controller,
             autofocus: true,
-            decoration: const InputDecoration(labelText: 'Namn på telefonen'),
+            decoration: const InputDecoration(
+              labelText: 'Namn på enheten',
+              helperText: 'Syns för bolagsadmin under Team',
+            ),
           ),
         ],
         onSubmit: () async {
@@ -218,6 +203,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
     widget.onLeftDevice?.call();
   }
 
+  Future<void> _openSupport() async {
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Support'),
+        content: const Text(
+          'Mejla oss eller öppna kontaktsidan. Supportärenden skapas i '
+          'webbportalen för inloggade ägare.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Avbryt'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'web'),
+            child: const Text('Webb'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, 'mail'),
+            child: const Text('Mejla'),
+          ),
+        ],
+      ),
+    );
+    if (choice == 'mail') {
+      await launchUrl(
+        Uri.parse('mailto:hej@taxitips.se?subject=TaxiTips%20support'),
+      );
+    } else if (choice == 'web') {
+      await launchUrl(
+        Uri.parse('https://taxitips.se/#kontakt'),
+        mode: LaunchMode.externalApplication,
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -227,9 +249,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ? const Center(child: CircularProgressIndicator(color: TbColors.taxi))
           : RefreshIndicator(
               color: TbColors.taxiDeep,
-              onRefresh: _load,
+              onRefresh: () async {
+                await _load();
+                if (mounted) {
+                  setState(() => _companyPanelEpoch++);
+                }
+              },
               child: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 8, 16, 32),
+                padding: EdgeInsets.fromLTRB(
+                  16,
+                  8,
+                  16,
+                  32 + MediaQuery.paddingOf(context).bottom,
+                ),
                 children: [
                   if (_error != null) ...[
                     _ErrorBanner(message: _error!),
@@ -251,14 +283,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ? '—'
                               : _orgNumber.text,
                         ),
-                        SettingsNavRow(
-                          icon: Icons.refresh,
-                          title: 'Uppdatera företagsuppgifter',
-                          subtitle: 'Hämta senaste uppgifterna från API:t',
-                          onTap: _refreshingCompany
-                              ? () {}
-                              : _refreshCompanyDetails,
-                        ),
                         SettingsEditRow(
                           icon: Icons.email_outlined,
                           title: 'E-post',
@@ -274,7 +298,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ],
                     ),
                     const SizedBox(height: 20),
-                    CompanySettingsPanel(api: widget.api),
+                    CompanySettingsPanel(
+                      key: ValueKey(_companyPanelEpoch),
+                      api: widget.api,
+                    ),
                   ],
                   if (_isDevice) ...[
                     const SettingsGroupLabel('Den här telefonen'),
@@ -288,27 +315,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ),
                         SettingsEditRow(
                           icon: Icons.smartphone_outlined,
-                          title: 'Telefonnamn',
+                          title: 'Enhetens namn',
                           value: _label.text.isEmpty ? '—' : _label.text,
                           onTap: _editLabel,
-                        ),
-                        SettingsNavRow(
-                          icon: BrandIcons.notification(
-                            size: 24,
-                            color: TbColors.muted,
-                          ),
-                          title: 'Notiser',
-                          subtitle:
-                              'Orter och vilka händelser som får störa dig',
-                          onTap: _openNotify,
-                        ),
-                        SettingsNavRow(
-                          icon: Icons.history,
-                          title: 'Mina notiser',
-                          subtitle:
-                              'Vad som skickats hit — och spara det du vill '
-                              'komma tillbaka till',
-                          onTap: _openNotificationLog,
                         ),
                         SettingsNavRow(
                           icon: Icons.logout,
@@ -316,6 +325,44 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           iconColor: TbColors.danger,
                           titleColor: TbColors.danger,
                           onTap: _leaveDevice,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    const SettingsGroupLabel('Notiser'),
+                    SettingsGroup(
+                      children: [
+                        SettingsNavRow(
+                          icon: BrandIcons.notification(
+                            size: 24,
+                            color: TbColors.muted,
+                          ),
+                          title: 'Notisinställningar',
+                          subtitle:
+                              'På/av och händelsetyper — '
+                              'län följer filtret på huvudskärmen',
+                          onTap: _openNotify,
+                        ),
+                        SettingsNavRow(
+                          icon: Icons.history,
+                          title: 'Mina notiser',
+                          subtitle:
+                              'Vad som skickats hit — '
+                              'spara det du vill komma tillbaka till',
+                          onTap: _openNotificationLog,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                    const SettingsGroupLabel('Support'),
+                    SettingsGroup(
+                      children: [
+                        SettingsNavRow(
+                          icon: Icons.support_agent_outlined,
+                          title: 'Kontakta oss',
+                          subtitle: 'hej@taxitips.se · taxitips.se',
+                          trailingIcon: Icons.open_in_new,
+                          onTap: _openSupport,
                         ),
                       ],
                     ),

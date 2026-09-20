@@ -9,12 +9,15 @@ var lugnt", vilket är exakt vad AGENTS.md §9 varnar för.
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import timedelta
 
+from django.db import connection
 from django.test import TestCase
 from django.utils import timezone
 
+from billing.models import Company
 from core import notify, thresholds
 from core.models import (
     Opportunity,
@@ -41,14 +44,53 @@ def opportunity(**kwargs) -> Opportunity:
 
 
 class FakeDevice:
-    """En enhet utan databas -- matchningen ska gå att prova utan Supabase."""
+    """
+    En enhet utan databas -- matchningen ska gå att prova utan Supabase.
 
-    def __init__(self, prefs=None, label="Testbil"):
+    `company_id` måste ändå peka på ett riktigt bolag: mottagarkontrollen strax
+    före sändningen (fleet/push_gate.py) slår upp bolagets period, och en enhet
+    utan bolag nekas -- vilket är rätt svar i produktion och fel i ett test av
+    filterlogiken. `SupabaseCompanyMixin` skapar bolaget.
+    """
+
+    def __init__(self, prefs=None, label="Testbil", company_id=None):
         self.id = uuid.uuid4()
         self.label = label
         self.token = f"tok-{self.id}"
         self.push_token = f"fcm-{self.id}"
-        self.notify_prefs = prefs if prefs is not None else {}
+        self.company_id = company_id or SupabaseCompanyMixin.company_id
+        # Skåne som standard: utan körområde får ingen enhet notiser (no_area),
+        # och testernas tips ligger i Skåne om inget annat sägs.
+        self.notify_prefs = prefs if prefs is not None else {"counties": ["12"]}
+
+
+class SupabaseCompanyMixin:
+    """
+    Skapar den omanagerade `companies`-tabellen och ett aktivt bolag, av samma
+    skäl som core/test_api.ApiTestCase: gränsen mellan Djangos tabeller och
+    Supabases ska kosta en rad att korsa, så att den märks.
+    """
+
+    company_id = None
+
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        with connection.schema_editor() as editor:
+            editor.create_model(Company)
+        company = Company.objects.create(
+            id=uuid.uuid4(), name="Testbolaget AB", join_code=str(uuid.uuid4())[:8],
+            seats=5, status="active", created_at=timezone.now(),
+            subscription_status="active",
+        )
+        SupabaseCompanyMixin.company_id = company.id
+
+    @classmethod
+    def tearDownClass(cls):
+        SupabaseCompanyMixin.company_id = None
+        with connection.schema_editor() as editor:
+            editor.delete_model(Company)
+        super().tearDownClass()
 
 
 class TypeGateTests(TestCase):
@@ -126,9 +168,10 @@ class NotifyWorthyTests(TestCase):
 
     def test_score_floor_applies_within_a_worthy_tier(self):
         o = opportunity(severity_tier=SeverityTier.VEHICLE_CANCELLED, demand_score=49)
-        self.assertFalse(notify.match_device({}, o).ok)
+        skane = {"counties": ["12"]}
+        self.assertEqual(notify.decide(skane, o).reason, "not_notify_worthy")
         o.demand_score = thresholds.NOTIFY_SCORE_FLOOR
-        self.assertTrue(notify.match_device({}, o).ok)
+        self.assertTrue(notify.decide(skane, o).ok)
 
     def test_stated_replacement_traffic_stops_the_push(self):
         """
@@ -155,32 +198,73 @@ class MatchReasonTests(TestCase):
         """Ett tyst nej går inte att felsöka -- det var så ägar-buggen kunde
         leva i ett halvår."""
         o = opportunity(region="sl", severity_tier=SeverityTier.LINE_PAUSED, demand_score=80)
+        stockholm = {"counties": ["01"]}
+        self.assertEqual(notify.decide({"enabled": False}, o).reason, "notifications_off")
         self.assertEqual(
-            notify.match_device({"enabled": False}, o).reason, "notifications_off"
-        )
-        self.assertEqual(
-            notify.match_device({"types": {"line_paused": False}}, o).reason,
+            notify.decide({"types": {"line_paused": False}}, o).reason,
             "type_off:line_paused",
         )
-        self.assertEqual(
-            notify.match_device({"regions": ["skane"]}, o).reason,
-            "region_not_chosen:sl",
-        )
+        self.assertEqual(notify.decide({}, o).reason, "no_area")
+        self.assertEqual(notify.decide({"regions": ["skane"]}, o).reason, "outside_area")
         elsewhere = opportunity(places=["Solna centrum"], region="sl")
         self.assertEqual(
-            notify.match_device({"cities": ["Malmö"]}, elsewhere).reason,
+            notify.decide({**stockholm, "cities": ["Malmö"]}, elsewhere).reason,
             "city_not_chosen",
         )
-        self.assertEqual(notify.match_device({}, o).reason, "match")
+        unplaced = opportunity(region="rail", severity_tier=SeverityTier.LINE_PAUSED, demand_score=80)
+        self.assertEqual(notify.decide(stockholm, unplaced).reason, "unplaced_tip")
+        self.assertEqual(notify.decide(stockholm, o).reason, "match")
+
+    def test_every_reason_code_is_documented(self):
+        o = opportunity(region="sl", severity_tier=SeverityTier.LINE_PAUSED, demand_score=80)
+        weak = opportunity(region="sl", severity_tier=SeverityTier.LINE_PAUSED, demand_score=1)
+        codes = {
+            notify.decide(prefs, tip).reason.split(":")[0]
+            for prefs, tip in (
+                ({}, weak), ({"enabled": False}, o), ({"types": {"line_paused": False}}, o),
+                ({}, o), ({"counties": ["12"]}, o), ({"counties": ["01"]}, o),
+                ({"counties": ["01"], "cities": ["Malmö"]}, opportunity(places=["Solna"], region="sl")),
+            )
+        }
+        self.assertLessEqual(codes, set(notify.REASONS))
 
 
-class PushCycleTests(TestCase):
+class AreaDecisionTests(TestCase):
+    """
+    P0-B2: ingen rikstäckande standardnotis. Utan körområde väcks ingen, och
+    ett tips som inte går att placera i ett län pushas inte.
+    """
+
+    def test_no_area_means_no_push(self):
+        o = opportunity(severity_tier=SeverityTier.LINE_PAUSED, demand_score=80)
+        self.assertEqual(notify.decide({}, o).reason, "no_area")
+        self.assertEqual(notify.decide({"regions": ["rail"]}, o).reason, "no_area")
+
+    def test_a_tip_just_across_the_county_border_reaches_the_neighbour(self):
+        arlanda = opportunity(
+            region="sl", severity_tier=SeverityTier.LINE_PAUSED, demand_score=80, lat=59.6519, lon=17.9186,
+        )
+        self.assertTrue(notify.decide({"counties": ["03"]}, arlanda).ok)
+
+    def test_stored_area_codes_are_used(self):
+        o = opportunity(severity_tier=SeverityTier.LINE_PAUSED, demand_score=80, county_code="25", area_codes=["25"])
+        self.assertEqual(notify.decide({"counties": ["12"]}, o).reason, "outside_area")
+        self.assertTrue(notify.decide({"counties": ["25"]}, o).ok)
+
+    def test_norrbotten_can_be_the_whole_area(self):
+        kiruna = opportunity(
+            region=None, severity_tier=SeverityTier.LINE_PAUSED, demand_score=80, lat=67.8558, lon=20.2253,
+        )
+        self.assertTrue(notify.decide({"counties": ["25"]}, kiruna).ok)
+
+
+class PushCycleTests(SupabaseCompanyMixin, TestCase):
     """Cykeln, med en injicerad transport -- inget nätverk, inget Firebase."""
 
     def setUp(self):
         self.sent = []
 
-        def sender(*, token, title, body, data):
+        def sender(*, token, title, body, data, **_):
             self.sent.append({"token": token, "title": title, "body": body, "data": data})
             return {"ok": True}
 
@@ -258,7 +342,7 @@ class PushCycleTests(TestCase):
         ok_device = FakeDevice(label="Fungerar")
         broken = FakeDevice(label="Trasig")
 
-        def flaky(*, token, title, body, data):
+        def flaky(*, token, title, body, data, **_):
             if token == broken.push_token:
                 raise RuntimeError("nätverket dog")
             self.sent.append({"token": token})
@@ -270,7 +354,8 @@ class PushCycleTests(TestCase):
             result = notify.run_push_cycle(sender=flaky)
 
         self.assertEqual(result["sent"], 1)
-        self.assertEqual(result["failed"], 1)
+        # Ett undantag från transporten är tillfälligt: försöks igen, räknas inte som misslyckat.
+        self.assertEqual(result["retrying"], 1)
         self.assertEqual(len(self.sent), 1)
 
     def test_push_title_leads_with_where_and_what(self):
@@ -311,6 +396,14 @@ class NotifyPrefsApiTests(TestCase):
         # löfte vi inte kan hålla -- tystnaden hade lästs som "lugnt".
         labels = {r["label"] for r in notify.region_catalog()}
         self.assertNotIn("Halland", labels)
+
+    def test_cities_by_region_scopes_towns_under_their_county(self):
+        by_region = notify.cities_by_region()
+        self.assertIn("Malmö", by_region["skane"])
+        self.assertIn("Stockholm", by_region["sl"])
+        # En Skåne-ort ska inte kunna väljas under Stockholm -- det hade
+        # sett ut som ett filter men aldrig matchat rätt tips.
+        self.assertNotIn("Malmö", by_region["sl"])
 
 
 class FavoriteTests(TestCase):
@@ -377,7 +470,7 @@ class ReachTests(TestCase):
         )
         match = notify.match_device({"regions": ["skane", "rail"]}, o)
         self.assertFalse(match.ok)
-        self.assertEqual(match.reason, "too_far")
+        self.assertEqual(match.reason, "outside_area")
 
     def test_the_same_choice_still_delivers_trains_at_home(self):
         o = opportunity(
@@ -407,3 +500,141 @@ class ReachTests(TestCase):
 
     def test_a_tip_without_coordinates_is_never_suppressed(self):
         self.assertTrue(notify.within_reach(None, None, ["skane"]))
+
+    def test_list_matches_regions_mirrors_app_filter(self):
+        # Marknadsnyckel matchar rakt; rail nära ankaret ingår; långt bort bort.
+        self.assertTrue(
+            notify.list_matches_regions("sl", 59.33, 18.07, ["sl"])
+        )
+        self.assertFalse(
+            notify.list_matches_regions("skane", 55.60, 13.00, ["sl"])
+        )
+        self.assertTrue(
+            notify.list_matches_regions("rail", 59.33, 18.07, ["sl"])
+        )
+        self.assertFalse(
+            notify.list_matches_regions(
+                "rail", self.ORNSKOLDSVIK[0], self.ORNSKOLDSVIK[1], ["sl"]
+            )
+        )
+        self.assertTrue(
+            notify.list_matches_regions("sl", None, None, ["sl"])
+        )
+        self.assertFalse(
+            notify.list_matches_regions("sl", None, None, ["vt"])
+        )
+
+
+class OutboxTests(SupabaseCompanyMixin, TestCase):
+    """
+    P0-B3: köa först, skicka sedan. Varken en krasch, ett tillfälligt fel eller
+    en död token ger dubbletter, tappade notiser eller en tystad telefon.
+    """
+
+    def setUp(self):
+        self.calls = []
+        self.device = FakeDevice()
+        self.tip = opportunity(severity_tier=SeverityTier.LINE_PAUSED, demand_score=80)
+
+    def cycle(self, sender, now=None):
+        from unittest.mock import patch
+
+        with patch.object(notify, "_devices", return_value=[self.device]):
+            return notify.run_push_cycle(sender=sender, now=now)
+
+    def ok(self, **message):
+        self.calls.append(message)
+        return {"ok": True}
+
+    def queued_as(self, status, next_attempt_at):
+        PushDelivery.objects.create(
+            opportunity=self.tip, opportunity_external_id=self.tip.external_id,
+            device_id=self.device.id, device_token=self.device.token, title="t", body="b",
+            snapshot={}, ok=False, status=status, next_attempt_at=next_attempt_at,
+            expires_at=timezone.now() + timedelta(minutes=10),
+        )
+        Opportunity.objects.filter(pk=self.tip.pk).update(notified_at=timezone.now())
+
+    def test_a_crash_after_queueing_neither_loses_nor_duplicates(self):
+        from unittest.mock import patch
+
+        with patch.object(notify, "_send_due", side_effect=RuntimeError("workern dog")):
+            with self.assertRaises(RuntimeError):
+                self.cycle(self.ok)
+        self.assertEqual(PushDelivery.objects.get().status, PushDelivery.Status.PENDING)
+        self.cycle(self.ok)
+        self.cycle(self.ok)
+        self.assertEqual(len(self.calls), 1)
+
+    def test_a_delivery_left_sending_by_a_killed_worker_is_sent_once_after_the_lease(self):
+        self.queued_as(PushDelivery.Status.SENDING, timezone.now() - timedelta(seconds=1))
+        self.cycle(self.ok)
+        self.cycle(self.ok)
+        self.assertEqual(len(self.calls), 1)
+        self.assertEqual(PushDelivery.objects.get().status, PushDelivery.Status.SENT)
+
+    def test_a_delivery_within_its_lease_is_left_alone(self):
+        self.queued_as(PushDelivery.Status.SENDING, timezone.now() + timedelta(minutes=4))
+        self.cycle(self.ok)
+        self.assertEqual(self.calls, [])
+
+    def test_a_transient_error_is_retried_and_then_sent(self):
+        responses = [{"ok": False, "status": 503, "body": "Service Unavailable"}, {"ok": True}]
+
+        def flaky(**message):
+            self.calls.append(message)
+            return responses.pop(0)
+
+        self.assertEqual(self.cycle(flaky)["retrying"], 1)
+        later = timezone.now() + notify.PUSH_RETRY_BACKOFF[0] + timedelta(seconds=1)
+        self.assertEqual(self.cycle(flaky, now=later)["sent"], 1)
+        delivery = PushDelivery.objects.get()
+        self.assertEqual((delivery.status, delivery.attempts, delivery.ok), (PushDelivery.Status.SENT, 2, True))
+
+    def test_nothing_is_sent_after_the_notification_has_expired(self):
+        self.cycle(lambda **message: {"ok": False, "status": 503, "body": ""})
+        much_later = timezone.now() + notify.PUSH_TTL + timedelta(minutes=1)
+        result = self.cycle(self.ok, now=much_later)
+        self.assertEqual(result["expired"], 1)
+        self.assertEqual(self.calls, [])
+        self.assertEqual(PushDelivery.objects.get().status, PushDelivery.Status.EXPIRED)
+
+    def test_an_unregistered_token_is_cleared_and_not_retried(self):
+        from unittest.mock import patch
+
+        dead = {"ok": False, "status": 404, "body": json.dumps({"error": {
+            "status": "NOT_FOUND",
+            "details": [{"@type": "type.googleapis.com/google.firebase.fcm.v1.FcmError", "errorCode": "UNREGISTERED"}],
+        }})}
+        with patch.object(notify, "clear_push_token") as clear:
+            result = self.cycle(lambda **message: dead)
+        clear.assert_called_once_with(self.device.id)
+        self.assertEqual(result["failed"], 1)
+        self.assertEqual(PushDelivery.objects.get().status, PushDelivery.Status.FAILED)
+
+    def test_a_payload_error_does_not_silence_a_working_phone(self):
+        from unittest.mock import patch
+
+        bad = {"ok": False, "status": 400, "body": json.dumps({"error": {
+            "status": "INVALID_ARGUMENT", "message": "Invalid value at 'message.data[0].value'",
+        }})}
+        with patch.object(notify, "clear_push_token") as clear:
+            result = self.cycle(lambda **message: bad)
+        clear.assert_not_called()
+        self.assertEqual(result["failed"], 1)
+
+    def test_the_message_carries_a_collapse_key_and_a_ttl(self):
+        self.cycle(self.ok)
+        message = self.calls[0]
+        self.assertEqual(message["collapse_key"], notify.collapse_key(self.tip.external_id))
+        self.assertGreater(message["ttl_seconds"], 0)
+        self.assertLessEqual(message["ttl_seconds"], notify.PUSH_TTL.total_seconds())
+
+
+class MunicipalityDecisionTests(TestCase):
+    def test_a_municipality_is_the_whole_area_for_its_county(self):
+        stockholm = opportunity(region="sl", severity_tier=SeverityTier.LINE_PAUSED, demand_score=80, lat=59.3326, lon=18.0649)
+        sodertalje = opportunity(region="sl", severity_tier=SeverityTier.LINE_PAUSED, demand_score=80, lat=59.1955, lon=17.6253)
+        prefs = {"counties": ["01"], "municipalities": ["0180"]}
+        self.assertTrue(notify.decide(prefs, stockholm).ok)
+        self.assertEqual(notify.decide(prefs, sodertalje).reason, "outside_area")

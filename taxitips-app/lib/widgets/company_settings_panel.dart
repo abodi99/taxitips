@@ -22,6 +22,12 @@ const _primaryCities = [
   'Ängelholm',
 ];
 
+/// En plats i abonnemanget = en förartelefon som får vara kopplad samtidigt.
+/// Ägare/admin loggar in med e-post och räknas inte som plats.
+const _seatsExplainShort =
+    'En plats = en förartelefon som kan vara kopplad samtidigt. '
+    'Ni betalar för telefonplatser, inte för bilar.';
+
 /// Företagsinställningar i samma liststil som Konto ovanför.
 class CompanySettingsPanel extends StatefulWidget {
   const CompanySettingsPanel({super.key, required this.api});
@@ -101,7 +107,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
   }
 
   String get _areasSummary =>
-      _selected.isEmpty ? 'Hela Skåne' : _selected.join(', ');
+      _selected.isEmpty ? 'Inga standardorter valda' : _selected.join(', ');
 
   bool _showMoreCities = false;
 
@@ -206,12 +212,13 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                 ),
                 const SizedBox(height: 16),
                 const Text(
-                  'Orter ni kör i',
+                  'Bolagets standardorter',
                   style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Inget valt = hela Skåne.',
+                  'Valfritt — påverkar ortkatalogen. Förarens länsfilter '
+                  '(Skåne, Stockholm …) och notiser styrs från huvudskärmen.',
                   style: TextStyle(color: Colors.grey.shade700),
                 ),
                 if (_savingAreas)
@@ -302,7 +309,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
             const SizedBox(height: 6),
             Text(
               'Föraren öppnar appen → Registrera telefon → anger koden. '
-              '${freeSeats > 0 ? '$freeSeats ledig${freeSeats == 1 ? '' : 'a'} plats${freeSeats == 1 ? '' : 'er'}.' : 'Inga lediga platser — använd byteskod för att byta telefon.'}',
+              '${freeSeats > 0 ? '$freeSeats ledig${freeSeats == 1 ? '' : 'a'} plats${freeSeats == 1 ? '' : 'er'} kvar.' : 'Inga lediga platser — ta bort en telefon eller öka antalet platser, alternativt använd byteskod för att byta telefon.'}',
               style: TextStyle(color: Colors.grey.shade700, height: 1.35),
             ),
             const SizedBox(height: 16),
@@ -380,7 +387,8 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
               ),
               const SizedBox(height: 8),
               const Text(
-                'Ange på den nya telefonen under “Byt telefon”. Gäller 30 min.',
+                'Ange på den nya telefonen under “Byt telefon”. Gäller 30 min. '
+                'Platsen flyttas — ni behöver ingen extra plats.',
               ),
             ],
           ),
@@ -428,27 +436,55 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     try {
       await widget.api.deleteDevice(id);
       await _reload();
-      _showSnack('Telefon borttagen');
+      _showSnack('Telefon borttagen — platsen är ledig');
     } catch (e) {
       _showSnack(_cleanError(e), isError: true);
     }
   }
 
-  Future<void> _addMember() async {
+  Future<void> _inviteAdminViaMail() async {
+    final company = _me?['company'] as Map<String, dynamic>? ?? {};
+    final name = company['name']?.toString() ?? 'bolaget';
+    final uri = Uri.parse(
+      'mailto:hej@taxitips.se'
+      '?subject=${Uri.encodeComponent('Bjud in admin — $name')}'
+      '&body=${Uri.encodeComponent(
+        'Hej!\n\nVi vill bjuda in en kollega som admin till $name.\n'
+        'E-post till den som ska bjudas in: \n\nTack!',
+      )}',
+    );
     final ok = await showDialog<bool>(
       context: context,
-      builder: (_) => _MemberDialog(api: widget.api),
+      builder: (ctx) => AlertDialog(
+        title: const Text('Bjud in kollega'),
+        content: const Text(
+          'Ägare och admins loggar in med e-post — de tar ingen plats i '
+          'abonnemanget. Just nu skapas nya inloggningar via support '
+          '(webbportalen saknar ännu egen inbjudan).',
+          style: TextStyle(height: 1.4),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Avbryt'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Mejla support'),
+          ),
+        ],
+      ),
     );
     if (ok == true) {
-      await _reload();
-      _showSnack('Medlem tillagd — inbjudan skickad');
+      await launchUrl(uri);
     }
   }
 
-  Future<void> _openUsersSheet(
+  Future<void> _openTeamSheet(
     List<Map<String, dynamic>> devices,
     List<Map<String, dynamic>> members,
     String joinCode,
+    int seats,
     int freeSeats,
   ) async {
     const roleSv = {
@@ -456,6 +492,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       'company_admin': 'Admin',
       'driver': 'Förare',
     };
+
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -464,7 +501,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
       builder: (ctx) => FractionallySizedBox(
-        heightFactor: 0.86,
+        heightFactor: 0.88,
         child: SafeArea(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -486,15 +523,28 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                     ),
                     const SizedBox(height: 16),
                     const Text(
-                      'Hantera användare',
+                      'Team',
                       style: TextStyle(
                         fontSize: 22,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
+                    const SizedBox(height: 4),
                     Text(
-                      '${members.length} admin${members.length == 1 ? '' : 'er'} · ${devices.length} förare',
+                      '${members.length} inloggad${members.length == 1 ? '' : 'e'} · '
+                      '${devices.length} av $seats förartelefon'
+                      '${seats == 1 ? '' : 'er'}',
                       style: TextStyle(color: Colors.grey.shade700),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Inloggade (ägare/admin) tar ingen plats. '
+                      'Varje förartelefon tar en plats.',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 13,
+                        height: 1.35,
+                      ),
                     ),
                   ],
                 ),
@@ -508,7 +558,11 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                         SettingsNavRow(
                           icon: Icons.vpn_key_outlined,
                           title: 'Bolagskod',
-                          subtitle: '$joinCode · $freeSeats lediga platser',
+                          subtitle: freeSeats > 0
+                              ? '$joinCode · $freeSeats ledig'
+                                    '${freeSeats == 1 ? '' : 'a'} '
+                                    'plats${freeSeats == 1 ? '' : 'er'}'
+                              : '$joinCode · fullt — öka platser eller byt telefon',
                           trailing: IconButton(
                             tooltip: 'Kopiera',
                             icon: const Icon(Icons.copy, size: 20),
@@ -521,7 +575,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                       ],
                     ),
                     const SizedBox(height: 20),
-                    const SettingsGroupLabel('Admins'),
+                    const SettingsGroupLabel('Alla i teamet'),
                     SettingsGroup(
                       children: [
                         for (final m in members)
@@ -535,17 +589,35 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                             title: Text(
                               (m['name']?.toString().isNotEmpty ?? false)
                                   ? m['name'].toString()
-                                  : (m['email']?.toString() ?? '—'),
+                                  : ((m['email']?.toString().isNotEmpty ??
+                                          false)
+                                      ? m['email'].toString()
+                                      : 'Admin'),
                               style: const TextStyle(
                                 fontWeight: FontWeight.w700,
                               ),
                             ),
                             subtitle: Text(
-                              '${m['email']} · ${roleSv[m['role']] ?? m['role']}',
+                              [
+                                if ((m['email']?.toString().isNotEmpty ??
+                                        false) &&
+                                    (m['name']?.toString().isNotEmpty ??
+                                        false))
+                                  m['email'],
+                                'Inloggning · tar ingen plats',
+                              ].join(' · '),
                             ),
-                            trailing: m['role'] != 'company_owner'
-                                ? IconButton(
-                                    tooltip: 'Ta bort admin',
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                _RoleChip(
+                                  label: roleSv[m['role']] ??
+                                      m['role']?.toString() ??
+                                      'Admin',
+                                ),
+                                if (m['role'] != 'company_owner')
+                                  IconButton(
+                                    tooltip: 'Ta bort',
                                     icon: const Icon(
                                       Icons.person_remove_outlined,
                                       color: TbColors.danger,
@@ -556,29 +628,15 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                                         m['userId'].toString(),
                                       );
                                     },
-                                  )
-                                : null,
+                                  ),
+                              ],
+                            ),
                           ),
-                        SettingsNavRow(
-                          icon: Icons.person_add_outlined,
-                          title: 'Lägg till admin',
-                          subtitle: 'Bjud in kollega till kontoret',
-                          onTap: () async {
-                            Navigator.pop(ctx);
-                            await _addMember();
-                          },
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                    const SettingsGroupLabel('Förare och enheter'),
-                    SettingsGroup(
-                      children: [
                         if (devices.isEmpty)
                           const SettingsInfoRow(
                             icon: Icons.smartphone_outlined,
-                            title: 'Inga telefoner',
-                            value: 'Ge bolagskoden till föraren',
+                            title: 'Inga förartelefoner ännu',
+                            value: 'Dela bolagskoden så kopplar föraren sin telefon',
                           ),
                         for (final d in devices)
                           ListTile(
@@ -593,29 +651,46 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                               ),
                             ),
                             subtitle: Text(
-                              '${d['hasPush'] == true ? 'Redo' : 'Öppnad'} · ${d['swapsRemainingThisMonth'] ?? 2} byte kvar i månaden',
+                              '${d['hasPush'] == true ? 'Redo för notiser' : 'Öppnad'} · '
+                              '${d['swapsRemainingThisMonth'] ?? 2} byte kvar i månaden · '
+                              '1 plats',
                             ),
-                            trailing: PopupMenuButton<String>(
-                              onSelected: (value) async {
-                                Navigator.pop(ctx);
-                                if (value == 'transfer') {
-                                  await _makeTransfer(d);
-                                } else if (value == 'delete') {
-                                  await _deleteDevice(d['id'].toString());
-                                }
-                              },
-                              itemBuilder: (_) => const [
-                                PopupMenuItem(
-                                  value: 'transfer',
-                                  child: Text('Byt telefon (byteskod)'),
-                                ),
-                                PopupMenuItem(
-                                  value: 'delete',
-                                  child: Text('Ta bort telefon'),
+                            trailing: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const _RoleChip(label: 'Förare'),
+                                PopupMenuButton<String>(
+                                  onSelected: (value) async {
+                                    Navigator.pop(ctx);
+                                    if (value == 'transfer') {
+                                      await _makeTransfer(d);
+                                    } else if (value == 'delete') {
+                                      await _deleteDevice(d['id'].toString());
+                                    }
+                                  },
+                                  itemBuilder: (_) => const [
+                                    PopupMenuItem(
+                                      value: 'transfer',
+                                      child: Text('Byt telefon (byteskod)'),
+                                    ),
+                                    PopupMenuItem(
+                                      value: 'delete',
+                                      child: Text('Ta bort telefon'),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
                           ),
+                        SettingsNavRow(
+                          icon: Icons.person_add_outlined,
+                          title: 'Bjud in kollega (admin)',
+                          subtitle: 'Via support — tar ingen plats',
+                          onTap: () async {
+                            Navigator.pop(ctx);
+                            await _inviteAdminViaMail();
+                          },
+                        ),
                       ],
                     ),
                   ],
@@ -633,6 +708,10 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Ta bort medlem?'),
+        content: const Text(
+          'Personen kan inte längre logga in som admin. '
+          'Förartelefoner påverkas inte.',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -655,60 +734,249 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     }
   }
 
+  bool get _hasSubscription {
+    final billing = _me?['billing'] as Map<String, dynamic>? ?? {};
+    if (billing['hasSubscription'] == true) return true;
+    final company = _me?['company'] as Map<String, dynamic>? ?? {};
+    final id =
+        company['stripeSubscriptionId'] ?? company['stripe_subscription_id'];
+    return id != null && id.toString().isNotEmpty;
+  }
+
   String _billingStatusLabel() {
     final company = _me?['company'] as Map<String, dynamic>? ?? {};
     final billing = _me?['billing'] as Map<String, dynamic>? ?? {};
-    if (company['status'] == 'owner') return 'Ägare · gratis';
-    final status = company['status']?.toString() ?? '';
-    final trialEnd = billing['trialEndsAt'] ?? company['trialEndsAt'];
-    if (status == 'trial' && trialEnd is num) {
-      final days =
-          ((trialEnd - DateTime.now().millisecondsSinceEpoch) / 86400000)
-              .ceil();
-      return 'Provperiod · $days dag${days == 1 ? '' : 'ar'} kvar';
+    final status =
+        (billing['status'] ?? company['status'])?.toString() ?? '';
+    final subStatus =
+        (billing['subscriptionStatus'] ??
+                company['subscriptionStatus'] ??
+                company['subscription_status'])
+            ?.toString() ??
+        '';
+
+    if (status == 'trial') return 'Provperiod · aktiv';
+    if (status == 'active' || subStatus == 'active') {
+      return 'Aktivt medlemskap';
     }
-    if (status == 'active') return 'Aktivt medlemskap';
-    if (status == 'past_due') return 'Betalning saknas';
-    if (status == 'canceled') return 'Avslutas vid periodens slut';
+    if (status == 'past_due' || subStatus == 'past_due') {
+      return 'Betalning saknas — tips pausade';
+    }
+    if (status == 'canceled' ||
+        subStatus == 'canceled' ||
+        subStatus == 'unpaid') {
+      return 'Uppsagt — tips pausade';
+    }
+    if (_hasSubscription) return 'Medlemskap registrerat';
     return 'Ej aktivt medlemskap';
   }
 
-  Future<void> _openBillingPortal() async {
+  /// Starta = Stripe Checkout. Hantera/avsluta = Customer Portal.
+  Future<void> _startOrManageMembership() async {
     setState(() => _billingBusy = true);
     try {
-      final data = await widget.api.billingPortal();
+      final seats = (_me?['company']?['seats'] is num)
+          ? (_me!['company']['seats'] as num).toInt()
+          : 1;
+      final data = _hasSubscription
+          ? await widget.api.billingPortal()
+          : await widget.api.createCheckoutSession(seats: seats);
       final url = data['url']?.toString();
-      if (url != null && url.isNotEmpty) {
-        await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      if (url == null || url.isEmpty) {
+        _showSnack('Kunde inte öppna Stripe.', isError: true);
+        return;
       }
-    } catch (_) {
-      _showSnack(
-        'Starta först medlemskapet — sedan kan du hantera betalningen.',
-        isError: true,
-      );
+      await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      if (!_hasSubscription) {
+        _showSnack(
+          'När du betalat: dra ner för att uppdatera status.',
+        );
+      }
+    } catch (e) {
+      _showSnack(_cleanError(e), isError: true);
     } finally {
       if (mounted) setState(() => _billingBusy = false);
     }
   }
 
   Future<void> _changeSeats() async {
+    final deviceCount = (_me?['devices'] as List?)?.length ?? 0;
     final seats = await showDialog<int>(
       context: context,
       builder: (_) => _SeatsDialog(
-        initialSeats: (_me?['company']?['seats'] ?? 1).toString(),
+        initialSeats: (_me?['company']?['seats'] is num)
+            ? (_me!['company']['seats'] as num).toInt()
+            : 1,
+        deviceCount: deviceCount,
       ),
     );
     if (seats == null || seats < 1) return;
+    if (seats < deviceCount) {
+      _showSnack(
+        'Ta bort ${deviceCount - seats} telefon'
+        '${deviceCount - seats == 1 ? '' : 'er'} först.',
+        isError: true,
+      );
+      return;
+    }
     setState(() => _billingBusy = true);
     try {
-      await widget.api.updateBillingQuantity(seats);
+      final res = await widget.api.updateBillingQuantity(seats);
       await _reload();
-      _showSnack('Antal enheter uppdaterat');
+      if (res['synced'] == true) {
+        _showSnack(
+          seats == 1
+              ? '1 plats uppdaterad i Stripe'
+              : '$seats platser uppdaterade i Stripe',
+        );
+      } else if (_hasSubscription) {
+        _showSnack(
+          'Sparat lokalt — synka Stripe via Hantera betalning om beloppet ser fel ut',
+          isError: true,
+        );
+      } else {
+        _showSnack('Platser sparade (gäller när ni startar medlemskap)');
+      }
     } catch (e) {
       _showSnack(_cleanError(e), isError: true);
     } finally {
       if (mounted) setState(() => _billingBusy = false);
     }
+  }
+
+  Future<void> _openSupport() async {
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Support'),
+        content: const Text(
+          'Kontakta oss via mejl eller öppna kontaktsidan på webben.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Avbryt'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, 'web'),
+            child: const Text('Webb'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, 'mail'),
+            child: const Text('Mejla'),
+          ),
+        ],
+      ),
+    );
+    if (choice == 'mail') {
+      await launchUrl(
+        Uri.parse('mailto:hej@taxitips.se?subject=TaxiTips%20support'),
+      );
+    } else if (choice == 'web') {
+      await launchUrl(
+        Uri.parse('https://taxitips.se/#kontakt'),
+        mode: LaunchMode.externalApplication,
+      );
+    }
+  }
+
+  (Color, IconData) _statusColorAndIcon() {
+    final company = _me?['company'] as Map<String, dynamic>? ?? {};
+    final billing = _me?['billing'] as Map<String, dynamic>? ?? {};
+    final status =
+        (billing['status'] ?? company['status'])?.toString() ?? '';
+    final subStatus =
+        (billing['subscriptionStatus'] ??
+                company['subscriptionStatus'] ??
+                company['subscription_status'])
+            ?.toString() ??
+        '';
+    if (status == 'trial') {
+      return (TbColors.taxiDeep, Icons.hourglass_top_outlined);
+    }
+    if (status == 'active' || subStatus == 'active') {
+      return (TbColors.live, Icons.check_circle_outline);
+    }
+    if (status == 'past_due' || subStatus == 'past_due') {
+      return (TbColors.danger, Icons.warning_amber_outlined);
+    }
+    if (status == 'canceled' ||
+        subStatus == 'canceled' ||
+        subStatus == 'unpaid') {
+      return (TbColors.muted, Icons.cancel_outlined);
+    }
+    if (_hasSubscription) return (TbColors.live, Icons.check_circle_outline);
+    return (TbColors.muted, Icons.radio_button_unchecked);
+  }
+
+  String _statusChipLabel() {
+    final company = _me?['company'] as Map<String, dynamic>? ?? {};
+    final billing = _me?['billing'] as Map<String, dynamic>? ?? {};
+    final status =
+        (billing['status'] ?? company['status'])?.toString() ?? '';
+    final subStatus =
+        (billing['subscriptionStatus'] ??
+                company['subscriptionStatus'] ??
+                company['subscription_status'])
+            ?.toString() ??
+        '';
+    if (status == 'trial') return 'Provperiod';
+    if (status == 'active' || subStatus == 'active') return 'Aktivt';
+    if (status == 'past_due' || subStatus == 'past_due') return 'Obetalt';
+    if (status == 'canceled' ||
+        subStatus == 'canceled' ||
+        subStatus == 'unpaid') {
+      return 'Uppsagt';
+    }
+    if (_hasSubscription) return 'Aktivt';
+    return 'Ej aktivt';
+  }
+
+  List<Widget> _buildMembershipWarningBanner() {
+    final company = _me?['company'] as Map<String, dynamic>? ?? {};
+    final billing = _me?['billing'] as Map<String, dynamic>? ?? {};
+    final status =
+        (billing['status'] ?? company['status'])?.toString() ?? '';
+    final subStatus =
+        (billing['subscriptionStatus'] ??
+                company['subscriptionStatus'] ??
+                company['subscription_status'])
+            ?.toString() ??
+        '';
+    if (status == 'past_due' || subStatus == 'past_due') {
+      return [
+        const _StatusBanner(
+          message:
+              'Betalning saknas — tipsen är pausade. '
+              'Uppdatera kortuppgifterna via "Hantera / avsluta betalning".',
+          color: TbColors.danger,
+        ),
+        const SizedBox(height: 12),
+      ];
+    }
+    if (status == 'canceled' ||
+        subStatus == 'canceled' ||
+        subStatus == 'unpaid') {
+      return [
+        const _StatusBanner(
+          message:
+              'Abonnemanget är uppsagt — tipsen är pausade. '
+              'Starta ett nytt för att återaktivera.',
+          color: TbColors.muted,
+        ),
+        const SizedBox(height: 12),
+      ];
+    }
+    return const [];
+  }
+
+  String _seatsSubtitle(int used, int seats, int free) {
+    final base =
+        '$used av $seats plats${seats == 1 ? '' : 'er'} med förartelefon';
+    if (free > 0) {
+      return '$base · $free ledig${free == 1 ? '' : 'a'}';
+    }
+    return '$base · fullt';
   }
 
   @override
@@ -729,9 +997,9 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     final seats = company?['seats'] is num
         ? (company!['seats'] as num).toInt()
         : 1;
-    final freeSeats = seats - devices.length;
-    final billing = _me?['billing'] as Map<String, dynamic>? ?? {};
-    final hasSubscription = billing['subscription'] != null;
+    final freeSeats = (seats - devices.length).clamp(0, seats);
+    final (statusColor, statusIcon) = _statusColorAndIcon();
+    final fill = seats <= 0 ? 0.0 : (devices.length / seats).clamp(0.0, 1.0);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -744,46 +1012,156 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
           _StatusBanner(message: _ok!, color: TbColors.live),
           const SizedBox(height: 12),
         ],
+        ..._buildMembershipWarningBanner(),
+
+        // ── MEDLEMSKAP ─────────────────────────────────────────────────
         const SettingsGroupLabel('Medlemskap'),
         SettingsGroup(
           children: [
-            SettingsInfoRow(
-              icon: Icons.card_membership_outlined,
-              title: 'Status',
-              value: _billingStatusLabel(),
+            ListTile(
+              leading: Icon(statusIcon, color: statusColor),
+              title: const Text(
+                'Status',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: Text(_billingStatusLabel()),
+              trailing: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: statusColor.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Text(
+                  _statusChipLabel(),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: statusColor,
+                  ),
+                ),
+              ),
             ),
             SettingsNavRow(
               icon: Icons.credit_card_outlined,
-              title: hasSubscription
-                  ? 'Hantera betalning'
+              title: _hasSubscription
+                  ? 'Hantera / avsluta betalning'
                   : 'Starta medlemskap',
-              onTap: _billingBusy ? () {} : _openBillingPortal,
-            ),
-            SettingsNavRow(
-              icon: Icons.phone_android_outlined,
-              title: 'Antal bilar och telefoner',
-              subtitle: '${devices.length}/$seats bilar',
-              onTap: _billingBusy ? () {} : _changeSeats,
+              subtitle: _hasSubscription
+                  ? 'Stripe — kort, faktura, uppsägning'
+                  : 'Stripe Checkout · betala per förartelefonplats',
+              onTap: _billingBusy ? () {} : _startOrManageMembership,
             ),
           ],
         ),
+
         const SizedBox(height: 20),
-        const SettingsGroupLabel('Företag'),
+
+        // ── PLATSER ────────────────────────────────────────────────────
+        const SettingsGroupLabel('Platser'),
+        SettingsGroup(
+          children: [
+            ListTile(
+              leading: const Icon(
+                Icons.smartphone_outlined,
+                color: TbColors.muted,
+              ),
+              title: const Text(
+                'Förartelefoner i abonnemanget',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+              subtitle: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 4),
+                  Text(_seatsSubtitle(devices.length, seats, freeSeats)),
+                  const SizedBox(height: 8),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: LinearProgressIndicator(
+                      value: fill,
+                      minHeight: 6,
+                      backgroundColor: TbColors.line,
+                      color: freeSeats == 0 && devices.isNotEmpty
+                          ? TbColors.taxiDeep
+                          : TbColors.taxi,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _seatsExplainShort,
+                    style: TextStyle(
+                      color: Colors.grey.shade600,
+                      fontSize: 12,
+                      height: 1.35,
+                    ),
+                  ),
+                ],
+              ),
+              isThreeLine: true,
+              trailing: const Icon(Icons.chevron_right, size: 20),
+              onTap: _billingBusy ? null : _changeSeats,
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 20),
+
+        // ── TEAM ───────────────────────────────────────────────────────
+        const SettingsGroupLabel('Team'),
+        SettingsGroup(
+          children: [
+            SettingsNavRow(
+              icon: Icons.groups_outlined,
+              title: 'Hantera team',
+              subtitle: members.isEmpty && devices.isEmpty
+                  ? 'Bolagskod, admins och förartelefoner'
+                  : '${members.length + devices.length} i teamet · '
+                      '${freeSeats > 0 ? '$freeSeats lediga platser' : 'inga lediga platser'}',
+              onTap: () => _openTeamSheet(
+                devices,
+                members,
+                joinCode,
+                seats,
+                freeSeats,
+              ),
+            ),
+          ],
+        ),
+
+        const SizedBox(height: 20),
+
+        // ── STANDARDORTER ──────────────────────────────────────────────
+        const SettingsGroupLabel('Standardorter'),
         SettingsGroup(
           children: [
             SettingsNavRow(
               icon: BrandIcons.office(size: 24, color: TbColors.muted),
-              title: 'Orter ni kör i',
-              subtitle: _areasSummary,
+              title: 'Bolagets standardorter',
+              subtitle:
+                  '$_areasSummary · förarens filter sätts på huvudskärmen',
               onTap: _openAreasSheet,
             ),
+          ],
+        ),
+
+        const SizedBox(height: 20),
+
+        // ── SUPPORT ────────────────────────────────────────────────────
+        const SettingsGroupLabel('Support'),
+        SettingsGroup(
+          children: [
             SettingsNavRow(
-              icon: Icons.manage_accounts_outlined,
-              title: 'Hantera användare',
-              subtitle:
-                  '${members.length} admin${members.length == 1 ? '' : 'er'} · ${devices.length} förare',
-              onTap: () =>
-                  _openUsersSheet(devices, members, joinCode, freeSeats),
+              icon: Icons.support_agent_outlined,
+              title: 'Kontakta oss',
+              subtitle: 'hej@taxitips.se · taxitips.se',
+              trailingIcon: Icons.open_in_new,
+              onTap: _openSupport,
             ),
           ],
         ),
@@ -792,50 +1170,146 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
   }
 }
 
-class _SeatsDialog extends StatefulWidget {
-  const _SeatsDialog({required this.initialSeats});
+class _RoleChip extends StatelessWidget {
+  const _RoleChip({required this.label});
 
-  final String initialSeats;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.only(right: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: TbColors.midnatt.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: TbColors.line),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: TbColors.skiffer,
+        ),
+      ),
+    );
+  }
+}
+
+class _SeatsDialog extends StatefulWidget {
+  const _SeatsDialog({
+    required this.initialSeats,
+    required this.deviceCount,
+  });
+
+  final int initialSeats;
+  final int deviceCount;
 
   @override
   State<_SeatsDialog> createState() => _SeatsDialogState();
 }
 
 class _SeatsDialogState extends State<_SeatsDialog> {
-  late final TextEditingController _controller;
+  late int _seats;
 
   @override
   void initState() {
     super.initState();
-    _controller = TextEditingController(text: widget.initialSeats);
+    _seats = widget.initialSeats.clamp(1, 999);
   }
 
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
+  int get _min => widget.deviceCount < 1 ? 1 : widget.deviceCount;
+
+  void _bump(int delta) {
+    setState(() {
+      _seats = (_seats + delta).clamp(_min, 999);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    final monthlyHint = _seats * 199;
     return AlertDialog(
-      title: const Text('Antal bilar/mobiler'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          TextField(
-            controller: _controller,
-            keyboardType: TextInputType.number,
-            autofocus: true,
-            decoration: const InputDecoration(labelText: 'Antal bilar'),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Pris per månad:\n1–3 bilar: 199 kr/bil\n4–10 bilar: 179 kr/bil\n11+ bilar: 149 kr/bil',
-            style: TextStyle(color: Colors.grey.shade700, height: 1.4),
-          ),
-        ],
+      title: const Text('Antal platser'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              _seatsExplainShort,
+              style: TextStyle(color: Colors.grey.shade700, height: 1.4),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'En bil med två telefoner behöver två platser. '
+              'Ägare och admin som bara loggar in räknas inte.',
+              style: TextStyle(color: Colors.grey.shade700, height: 1.4),
+            ),
+            const SizedBox(height: 20),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton.filledTonal(
+                  onPressed: _seats > _min ? () => _bump(-1) : null,
+                  icon: const Icon(Icons.remove),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: Column(
+                    children: [
+                      Text(
+                        '$_seats',
+                        style: const TextStyle(
+                          fontSize: 36,
+                          fontWeight: FontWeight.w700,
+                          fontFamily: kDisplayFont,
+                        ),
+                      ),
+                      Text(
+                        _seats == 1 ? 'plats' : 'platser',
+                        style: TextStyle(color: Colors.grey.shade700),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton.filledTonal(
+                  onPressed: _seats < 999 ? () => _bump(1) : null,
+                  icon: const Icon(Icons.add),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Kopplade nu: ${widget.deviceCount} telefon'
+              '${widget.deviceCount == 1 ? '' : 'er'}. '
+              '${widget.deviceCount > 0 ? 'Du kan inte sänka under det.' : ''}',
+              style: TextStyle(color: Colors.grey.shade700, height: 1.35),
+            ),
+            const SizedBox(height: 12),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: TbColors.foam,
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(color: TbColors.line),
+              ),
+              child: Text(
+                'Indikativt: ca $monthlyHint kr/mån '
+                '($_seats × 199 kr) exkl. moms. '
+                'Exakt belopp bekräftas i Stripe. '
+                'Ändring gäller från nästa faktura.',
+                style: TextStyle(
+                  color: Colors.grey.shade800,
+                  height: 1.4,
+                  fontSize: 13,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
@@ -843,98 +1317,8 @@ class _SeatsDialogState extends State<_SeatsDialog> {
           child: const Text('Avbryt'),
         ),
         FilledButton(
-          onPressed: () =>
-              Navigator.pop(context, int.tryParse(_controller.text) ?? 0),
+          onPressed: () => Navigator.pop(context, _seats),
           child: const Text('Spara'),
-        ),
-      ],
-    );
-  }
-}
-
-class _MemberDialog extends StatefulWidget {
-  const _MemberDialog({required this.api});
-
-  final ApiClient api;
-
-  @override
-  State<_MemberDialog> createState() => _MemberDialogState();
-}
-
-class _MemberDialogState extends State<_MemberDialog> {
-  final _name = TextEditingController();
-  final _email = TextEditingController();
-  bool _busy = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    _name.dispose();
-    _email.dispose();
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    final email = _email.text.trim();
-    if (email.isEmpty) {
-      setState(() => _error = 'Fyll i e-post.');
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await widget.api.addMember(email: email, name: _name.text.trim());
-      if (mounted) Navigator.pop(context, true);
-    } catch (e) {
-      if (mounted) {
-        setState(() {
-          _busy = false;
-          _error = e.toString();
-        });
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Lägg till admin'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _name,
-            decoration: const InputDecoration(labelText: 'Namn (valfritt)'),
-          ),
-          const SizedBox(height: 8),
-          TextField(
-            controller: _email,
-            keyboardType: TextInputType.emailAddress,
-            autofocus: true,
-            decoration: const InputDecoration(labelText: 'E-post'),
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 8),
-            Text(
-              _error!,
-              style: const TextStyle(
-                color: TbColors.danger,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.pop(context, false),
-          child: const Text('Avbryt'),
-        ),
-        FilledButton(
-          onPressed: _busy ? null : _submit,
-          child: Text(_busy ? '…' : 'Bjud in'),
         ),
       ],
     );

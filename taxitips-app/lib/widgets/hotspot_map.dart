@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import '../severity_labels.dart';
 import '../theme.dart';
 import 'brand_icons.dart';
+import 'ferry_event_widgets.dart';
 
 class HotspotMap extends StatelessWidget {
   const HotspotMap({
@@ -22,6 +23,10 @@ class HotspotMap extends StatelessWidget {
     this.perOpportunity = false,
     this.opportunities = const [],
     this.mapController,
+    this.ferries = const [],
+    this.ferryTerminals = const [],
+    this.onSelectFerry,
+    this.onSelectEvent,
   });
 
   final List<Map<String, dynamic>> placeStats;
@@ -35,6 +40,11 @@ class HotspotMap extends StatelessWidget {
   final bool highOnly;
   final bool perOpportunity;
   final List<Map<String, dynamic>> opportunities;
+  // Färjor på väg in och deras terminaler -- se /api/ferries.
+  final List<Map<String, dynamic>> ferries;
+  final List<Map<String, dynamic>> ferryTerminals;
+  final ValueChanged<Map<String, dynamic>>? onSelectFerry;
+  final ValueChanged<Map<String, dynamic>>? onSelectEvent;
 
   // Statiska referenser så MapOptions == håller mellan rebuilds. FlutterMap
   // jämför options med ==; nya CameraFit-instanser varje poll gjorde att
@@ -68,19 +78,13 @@ class HotspotMap extends StatelessWidget {
   );
 
   static Widget _modeGlyph(String? mode) {
-    const c = TbColors.vit;
-    return switch (mode) {
-      'train' => BrandIcons.train(size: 18, color: c),
-      'metro' => const Icon(Icons.subway, size: 18, color: c),
-      'tram' => const Icon(Icons.tram, size: 18, color: c),
-      'bus' => BrandIcons.bus(size: 18, color: c),
-      _ => BrandIcons.taxi(size: 18, color: c),
-    };
+    return BrandIcons.forMode(mode, size: 18, color: TbColors.vit);
   }
 
   @override
   Widget build(BuildContext context) {
-    final markers = <Marker>[];
+    final tipMarkers = <Marker>[];
+    final userMarkers = <Marker>[];
 
     if (perOpportunity) {
       for (final o in opportunities) {
@@ -88,7 +92,7 @@ class HotspotMap extends StatelessWidget {
         final lon = (o['lon'] as num?)?.toDouble();
         if (lat == null || lon == null) continue;
         final likelihood = likelihoodForAlert(o);
-        markers.add(
+        tipMarkers.add(
           Marker(
             point: LatLng(lat, lon),
             width: 40,
@@ -121,7 +125,7 @@ class HotspotMap extends StatelessWidget {
           'medium' => CustomerLikelihood.medium,
           _ => CustomerLikelihood.low,
         };
-        markers.add(
+        tipMarkers.add(
           Marker(
             point: LatLng(lat, lon),
             width: 40,
@@ -152,16 +156,18 @@ class HotspotMap extends StatelessWidget {
       final lat = (e['lat'] as num?)?.toDouble();
       final lon = (e['lon'] as num?)?.toDouble();
       if (lat == null || lon == null) continue;
-      markers.add(
+      tipMarkers.add(
         Marker(
           point: LatLng(lat, lon),
           width: 36,
           height: 44,
           alignment: Alignment.bottomCenter,
           child: GestureDetector(
-            onTap: () => onSelectPlace?.call(
-              e['place']?.toString() ?? e['city']?.toString(),
-            ),
+            onTap: () => onSelectEvent != null
+                ? onSelectEvent!(e)
+                : onSelectPlace?.call(
+                    e['place']?.toString() ?? e['city']?.toString(),
+                  ),
             child: const _TipPin(
               likelihood: CustomerLikelihood.medium,
               fillOverride: TbColors.midnatt,
@@ -181,26 +187,70 @@ class HotspotMap extends StatelessWidget {
       );
     }
 
-    if (userLat != null && userLon != null) {
-      markers.add(
+    // Färjorna: terminalerna som små ankare, fartygen som pilar i sin kurs, och en
+    // streckad linje till terminalen för dem som är på väg in eller lägger till.
+    final terminalMarkers = <Marker>[];
+    final terminals = <String, LatLng>{};
+    for (final t in ferryTerminals) {
+      final lat = (t['lat'] as num?)?.toDouble();
+      final lon = (t['lon'] as num?)?.toDouble();
+      if (lat == null || lon == null) continue;
+      terminals[t['key']?.toString() ?? ''] = LatLng(lat, lon);
+      terminalMarkers.add(
         Marker(
-          point: LatLng(userLat!, userLon!),
+          point: LatLng(lat, lon),
           width: 22,
           height: 22,
           child: Container(
             decoration: BoxDecoration(
-              color: TbColors.guld,
+              color: TbColors.vit,
               shape: BoxShape.circle,
-              border: Border.all(color: TbColors.vit, width: 3),
-              boxShadow: const [
-                BoxShadow(
-                  blurRadius: 8,
-                  offset: Offset(0, 2),
-                  color: Color(0x66000000),
-                ),
-              ],
+              border: Border.all(color: TbColors.midnatt, width: 2),
             ),
+            child: const Icon(Icons.anchor, size: 12, color: TbColors.midnatt),
           ),
+        ),
+      );
+    }
+    final ferryMarkers = <Marker>[];
+    final ferryLines = <Polyline>[];
+    for (final f in ferries) {
+      final lat = (f['lat'] as num?)?.toDouble();
+      final lon = (f['lon'] as num?)?.toDouble();
+      if (lat == null || lon == null) continue;
+      final status = f['status']?.toString();
+      final terminal = terminals[f['terminal']?.toString() ?? ''];
+      if (terminal != null && (status == 'approaching' || status == 'docking')) {
+        ferryLines.add(
+          Polyline(
+            points: [LatLng(lat, lon), terminal],
+            color: ferryColor(status).withValues(alpha: 0.85),
+            strokeWidth: 3,
+            pattern: StrokePattern.dashed(segments: const [10, 8]),
+          ),
+        );
+      }
+      ferryMarkers.add(
+        Marker(
+          point: LatLng(lat, lon),
+          width: 36,
+          height: 36,
+          child: GestureDetector(
+            onTap: onSelectFerry == null ? null : () => onSelectFerry!(f),
+            child: FerryArrow(status: status, course: f['course'] as num?),
+          ),
+        ),
+      );
+    }
+
+    if (userLat != null && userLon != null) {
+      userMarkers.add(
+        Marker(
+          point: LatLng(userLat!, userLon!),
+          width: 56,
+          height: 56,
+          alignment: Alignment.center,
+          child: const IgnorePointer(child: _UserDot()),
         ),
       );
     }
@@ -209,17 +259,70 @@ class HotspotMap extends StatelessWidget {
       mapController: mapController,
       options: _options,
       children: [
+        // Carto basemaps vattenstämplar "API KEY REQUIRED" utan nyckel
+        // (HTTP 200 med watermark). Esri World Street Map är gratis raster
+        // utan nyckel; notera z/y/x (inte z/x/y).
         TileLayer(
-          urlTemplate: 'https://tile.openstreetmap.de/{z}/{x}/{y}.png',
-          userAgentPackageName: 'se.taxibehov.app',
+          urlTemplate:
+              'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+          userAgentPackageName: 'se.taxibehov.taxibehov_app',
+          maxNativeZoom: 19,
         ),
         SimpleAttributionWidget(
-          source: const Text('© OpenStreetMap'),
+          source: const Text('© Esri · OpenStreetMap'),
           alignment: Alignment.bottomLeft,
           backgroundColor: TbColors.vit.withValues(alpha: 0.7),
         ),
-        MarkerLayer(markers: markers),
+        if (ferryLines.isNotEmpty) PolylineLayer(polylines: ferryLines),
+        MarkerLayer(markers: tipMarkers),
+        if (terminalMarkers.isNotEmpty || ferryMarkers.isNotEmpty)
+          MarkerLayer(markers: [...terminalMarkers, ...ferryMarkers]),
+        // Egen lager ovanpå tippsen — annars täcks "du är här" av nålar.
+        if (userMarkers.isNotEmpty) MarkerLayer(markers: userMarkers),
       ],
+    );
+  }
+}
+
+/// Gul prick med vit ring — "du är här". Större än tippins så den syns
+/// ovanpå täta knippen utan att se ut som ett tips.
+class _UserDot extends StatelessWidget {
+  const _UserDot();
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: 56,
+      height: 56,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: const Color(0xFF4285F4).withValues(alpha: 0.22),
+              shape: BoxShape.circle,
+            ),
+          ),
+          Container(
+            width: 22,
+            height: 22,
+            decoration: BoxDecoration(
+              color: const Color(0xFF4285F4),
+              shape: BoxShape.circle,
+              border: Border.all(color: TbColors.vit, width: 3),
+              boxShadow: const [
+                BoxShadow(
+                  blurRadius: 10,
+                  offset: Offset(0, 2),
+                  color: Color(0x88000000),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

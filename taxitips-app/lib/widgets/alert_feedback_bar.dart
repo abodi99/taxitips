@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../analytics.dart';
 import '../api_client.dart';
 import '../config.dart';
 import '../theme.dart';
@@ -52,6 +53,7 @@ class _AlertFeedbackBarState extends State<AlertFeedbackBar> {
       _busy = null;
       if (res['error'] == null) {
         _sent.add(verdict);
+        logAnalyticsEvent('tip_feedback', params: {'verdict': verdict});
       } else {
         // Sagt rakt ut. Ett svar som inte kom fram ska inte se ut som ett
         // som gjorde det -- det var precis så den gamla vägen kunde vara

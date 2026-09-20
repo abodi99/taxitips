@@ -16,13 +16,16 @@ inte "annonserad tid").
 En taxiförare, mitt i ett pass: *"var finns det folk som behöver taxi nu,
 varför tror ni det, och är det värt att köra dit?"*
 
-Affärsmodellen är B2B: taxibolag betalar en Stripe-prenumeration, förare
-går med via en bolagskod. Ingen App Store-prenumeration, ingen IAP.
+Affärsmodellen är B2B: taxibolag betalar en Stripe-prenumeration per
+**billicens** (en registrerad bil med ett baslän). Förare ansluter sin telefon
+med en engångskod från företagets administratör -- bolagskoden ger inte längre
+åtkomst, den skickar en ansökan. Ingen App Store-prenumeration, ingen IAP.
+Se `docs/fleet-abonnemang.md`.
 
 ## 2. Var koden ligger
 
 ```
-taxitips-backend/   Django. Hämtning, klassificering, poängsättning, förar-API. Tyngdpunkten.
+taxitips-backend/   Django. Hämtning, klassificering, poängsättning, förar-API, kundlivscykel. Tyngdpunkten.
 taxitips-app/       Flutter. Förarappen (iOS/Android) plus adminläge.
 taxitips-api/       Supabase (auth, bolag, enheter, Stripe) + den GAMLA Node-workern.
 taxitips-web/       Marknadssajt + admin/bolagsportal.
@@ -36,12 +39,19 @@ portad till Django. Rör den inte utan skäl; den finns kvar för jämförelse.
 ## 3. Dataflödet, hela vägen
 
 ```
-sex källor          → source_events → klassificering → poängsättning → opportunities → /api/alerts → appen
+sju källor          → source_events → klassificering → poängsättning → opportunities → /api/alerts → appen
 (Trafikverket järnväg,  (rå payload)   taxi_relevance    scoring.py        (tipset)      core/api.py
- Trafikverket väg,                     text_scoring      thresholds.py
- SL, Västtrafik,                       mode.py           compensation.py
- Trafiklab, SMHI)                                        alternatives.py
+ Trafikverket väg,                     text_scoring      flight_scoring.py
+ SL, Västtrafik,                       mode.py           thresholds.py
+ Trafiklab, SMHI,                                        compensation.py
+ Swedavia flyg)                                          alternatives.py
 ```
+
+Swedavia är den enda källan som inte rapporterar en störning: den räknar
+ankomster. Enheten är därför ett 30-minutersfönster per flygplats, inte ett
+flyg, och klassificeringen sker i `core/flight_scoring.py` i stället för i
+text_scoring-kedjan. Se `docs/data-sources.md` för varför `DEL` inte betyder
+"försenad".
 
 Nyckelmoduler i `taxitips-backend/core/`:
 
@@ -57,7 +67,23 @@ Nyckelmoduler i `taxitips-backend/core/`:
 | `coverage.py` | Vilka län vi hämtar från, och varför inte de andra. |
 | `health.py` | Bokför varje hämtning i `SourceStatus`. |
 | `api.py` | Förar-API:t. `feed_for()` är urvalslogiken. |
+| `entitlement.py` | **Enda ingången till allt skyddat.** Delegerar till `fleet/access.py`. |
 | `repository.py` | Rå SQL-upsert. Läs kommentaren om `notified_at` innan du rör den. |
+
+Kundlivscykeln i `taxitips-backend/fleet/`:
+
+| Fil | Ansvar |
+|---|---|
+| `access.py` | **Åtkomstkontrollen.** Sex frågor per begäran, svaret bär alltid skälet. |
+| `pricing.py` | **Enda prismotorn.** Heltal ören, volymnivå, introduktion, proportionering, moms. |
+| `pairing.py` | Engångskod -> godkänd telefon. Hashade hemligheter. Spärr. |
+| `sessions.py` | Skiftbyte. En telefon per licens, en bil per telefon -- via databasen. |
+| `licensing.py` | Bilar, licenser, länsrättigheter, bilbyten. |
+| `orders.py` | Beställningar, minskningar, uppsägning, betalningsfrist. |
+| `webhook_events.py` | Stripe -> rättigheter. Ordning, dubbletter, gamla fakturor. |
+| `roles.py` | Behörigheter och tvåfaktorskravet. |
+| `risk.py` | Riskgränser. Blockerar nästa ändring, aldrig åtkomsten. |
+| `push_gate.py` | Mottagarkontroll strax före sändning. |
 
 ## 4. Kör lokalt
 
@@ -65,7 +91,7 @@ Nyckelmoduler i `taxitips-backend/core/`:
 colima start
 cd taxitips-api && supabase start                       # Postgres på 54322
 cd ../taxitips-backend && ./.venv/bin/python manage.py runserver 8000
-cd ../taxitips-pipeline-viz && node server.js           # http://localhost:4000
+cd ../taxitips-pipeline-viz && VIZ_BACKEND=http://127.0.0.1:8000 node server.js   # http://localhost:4000
 cd ../taxitips-app && flutter run --dart-define=API_BASE_URL=http://127.0.0.1:8000
 ```
 
@@ -87,7 +113,81 @@ cd taxitips-backend
 ./.venv/bin/python manage.py poll_sl --skip-sites
 ./.venv/bin/python manage.py poll_vasttrafik --skip-sites
 ./.venv/bin/python manage.py poll_trafiklab
+./.venv/bin/python manage.py poll_flights --force   # --force förbigår kvotkadensen
+./.venv/bin/python manage.py run_ais_stream         # färjor: långlivad WebSocket, Ctrl-C för att stoppa
+./.venv/bin/python manage.py poll_events            # evenemang (Ticketmaster), hela Sverige
+# PredictHQ sparas bara med en rättighetsreferens till ett skriftligt avtal (events/rights.py,
+# EVENTS_PREDICTHQ_STORE + _STORE_REFERENCE). Utan den: live i pipeline-sidan, bara med DEBUG.
+# /api/events visar bara källor med referens för visning i appen (EVENTS_*_APP_REFERENCE).
 ```
+
+`run_ais_stream` är ingen engångshämtning utan en lyssnare (AISStream.io). Den
+kräver `migrate maritime` och `AISSTREAM_API_KEY`, stöder `--duration N`,
+`--dry-run` och `-v 2`, och körs i produktion som egen Coolify-tjänst med
+`APP_ROLE=ais` -- en instans, se kommandots docstring.
+
+`run_ais_pilot` är P1-piloten för Visby och Värtahamnen: registrets färjor
+(`maritime/register.py`, bara fartyg som setts i AIS) följs hela vägen in och får en
+förutsagd kajtid (`berth_eta`, med grund: sträcka/fart eller fartygets AIS-ETA, aldrig
+en blandning) och ett separat iland-fönster. Varje anlöp sparas i `ferry_calls` med
+förutsagd mot faktisk kajtid. En egen filtrerad anslutning (`FiltersShipMMSI`) --
+räkna anslutningarna över alla miljöer, AISStream tillåter tre per konto och IP:
+
+```bash
+./.venv/bin/python manage.py run_ais_pilot --duration 900   # --dry-run skriver inga tips
+```
+
+`run_ais_stream` lyssnar på inseglingsområdena till 17 passagerarhamnar (`maritime/ports.py`);
+ankomsten avgörs i hamnrutan, och hamnar med `tips=False` visas bara på kartan. Färjor på väg in
+visas live i pipeline-sidans avsnitt 2c (`/api/pipeline/ferries`, bara med DEBUG,
+`maritime/approach.py`).
+I appen: `/api/ferries` (förarens område, samma behörighet som flödet) och `/api/events`
+(län och kommuner, `from`/`to` upp till 120 dagar, `dayCounts` per dag; förhandsvisning bara med
+DEBUG och `EVENTS_APP_PREVIEW=1`). Appens sida: `lib/screens/events_screen.dart`.
+
+Färjornas tidtabell (GTFS Sverige 3, planerad tid, ingen realtid för färjorna):
+`manage.py import_ferry_timetable --zip <sweden.zip> [--download] [--days 2]`. `--download` räknas
+mot 50 hämtningar/månad per nyckel och vägrar inom 20 h; inte schemalagt än. Turerna kopplas till AIS i
+`maritime/voyages.py` och visas på pipeline-vyns egen sida `http://localhost:4000/farjor`. Ankomsterna för
+taxiföraren görs i `maritime/relevance.py` och ligger överst på sidan: allt som är en känd ankomst visas,
+med sort (stor färja, pendelfärja, öbåt, pendelbåt, rundtur, vägfärja) och kännetecken, och föraren
+filtrerar. Bara dubbletter, sådant utanför tidsfönstret och fartyg vid kaj utan sedd ankomst tas bort. Importen räknar också `stop_has_road` (buss, spårvagn eller tåg inom 600 m);
+efter en ändring av regeln behöver importen köras om ur samma zip.
+
+Förarkartan i appen: Google Maps med plattformens trafiklager (segare vägar) och Trafikverkets
+olyckor och avstängningar (`lib/widgets/traffic_map.dart`). Kräver en nyckel med Maps SDK för
+Android och iOS: `MAPS_API_KEY=...` i `taxitips-app/android/local.properties` och i
+`taxitips-app/ios/Flutter/Maps.xcconfig` (ingen av dem i git), och bygget med
+`--dart-define=GOOGLE_MAPS=true`. Utan flaggan används flutter_map som förut; Google Maps utan
+nyckel avslutar appen på Android. Bottenpanelen visar en lista åt gången (Tips, Färjor,
+Evenemang); allt filter och område ligger bakom en knapp.
+
+Pipeline-vyn (localhost:4000) har en sida per tjänst: `/tag`, `/kollektivtrafik`, `/vag`, `/flyg`,
+`/farjor`, `/evenemang`, `/vader`, och en översikt på `/`. Varje sida visar källorna och deras
+färskhet, analysstegen med filen där de bor, hur mycket som är kvar efter varje steg, sorterna och
+poängreglerna, och vad föraren får (notis och lista, bara listan, visas inte) med varför. Ett tips
+öppnar hela kedjan: rådatan, tolkningen, poängen och notisbeslutet. Data från
+`/api/pipeline/services`, `/api/pipeline/service/<tjänst>` och `/api/pipeline/tip/<id>`
+(`core/service_view.py`), bara med DEBUG som `/api/pipeline`. Den gamla helsidan ligger på `/system`.
+
+`--duration` räknas på väggklockan: en Mac som sover stoppar den monotona klockan,
+och en körning på 3,5 h pågick annars i elva.
+
+Kombinationslagret (`combine_signals`, var 60:e sekund i beat, `core/combine.py`) visar
+samma störning från två källor som en rad och förstärker knutpunkter och ankomster i
+listan, inte i notiserna. "I tjänst" (`/api/presence`, `core/presence.py`) sparar en
+ruta på ungefär 5 km i 30 minuter och ersätter då körområdet i notisbeslutet; ingen
+historik, ingen bakgrundsplats. `manage.py calibration_report` ställer feedback,
+utkorg och AIS-anlöp mot utfall och flyttar inga trösklar.
+
+`poll_rail` hämtar störda avgångar och avgångarna vid drabbade stationer sida för sida
+(`complete` och `cancelled_trains` i `source_status.detail`). För inställda tåg utan
+ersättning frågar den ResRobot (`RESROBOT_API_KEY`, `core/sources/resrobot.py`) efter nästa
+resa mot samma slutstation: högst 20 anrop per runda och 25 000 per månad.
+
+Förarflödet (`/api/alerts`) delas i 20 s mellan förare med samma filter och avrundade
+position (`core/api.shared_feed`). En instans använder minnescache; flera repliker
+sätter `CACHE_REDIS_URL` så att de delar den.
 
 Alla stöder `--dry-run`. Utan `--skip-sites` uppdateras hållplatsregistret
 (~18 000 rader, tar en stund). Kör det efter `supabase db reset`.
@@ -100,7 +200,7 @@ Notiser testas utan Firebase-nyckel:
 ```
 
 `--dry-run` skriver ut varje kandidat med skälet den föll på
-(`region_not_chosen:sl`, `too_far`, `has_alternative`, `type_muted`) och är
+(`no_area`, `outside_area`, `unplaced_tip`, `type_off:…` -- alla i `core/notify.REASONS`) och är
 det snabbaste svaret på "varför fick föraren ingen notis?". `--simulate` kör
 samma beslut men skriver `push_delivery` och `notified_at` på riktigt, så
 appens notishistorik går att fylla utan att någon telefon väcks. Riktig
@@ -130,17 +230,43 @@ riktig event-payload mot den lokala webhooken. `.mcp.json` registrerar
 dessutom Supabase CLI:s egen MCP-server (`supabase-local`) mot den lokala
 instansen — inte att förväxla med `taxitips-selfhosted`, som är produktion.
 
+**Pipelinen på riktigt, med Redis, worker och beat.** `.env` har
+`CELERY_TASK_ALWAYS_EAGER=1` för testerna, och då kör beat varje task själv i
+stället för att lägga den i kön -- sätt 0 i skalet (skalets värde vinner över `.env`):
+
+```bash
+cd taxitips-backend && docker compose up -d redis
+export CELERY_TASK_ALWAYS_EAGER=0
+# Inga riktiga notiser till testtelefoner, ingen Genkit, ingen gallring av lokal data:
+export TAXITIPS_BEAT_DISABLE=push-cycle,review-uncertain,poll-events,poll-flights,purge-old
+./.venv/bin/celery -A config worker -l info --concurrency=2
+./.venv/bin/celery -A config beat -l info -s /tmp/celerybeat-schedule
+curl -s localhost:8000/health/pipeline        # 503 tills hjärtslag och kärnkällor är färska
+./.venv/bin/python manage.py check_pipeline   # samma kontroll som exit-kod
+```
+
+Körområden: `manage.py backfill_areas` fyller i län på befintliga tips och
+`manage.py report_area_prefs` visar hur sparade notisinställningar blir län
+(läser bara). Utan körområde skickas ingen notis (`no_area`).
+
+Drift inför lansering: backup och återställningsprov i `ops/backup/README.md`,
+Stripe-webhookens scenarier i `ops/stripe/webhook_scenarios.py`, lasttest i
+`ops/loadtest/feed_load.py`, och läget i `docs/lansering-p0.md`.
+
+Kundlivscykeln (konton, billicenser, abonnemang): **`docs/fleet-abonnemang.md`**
+-- datamodellen, affärsreglerna, utrullningsordningen och återställningen.
+Utrullningen styrs av `FLEET_ENFORCE_LICENSES`, som är AV tills
+`manage.py migrate_legacy_fleet` körts och kunderna informerats.
+
 Tester — båda ska vara gröna innan något deployas:
 
 ```bash
-cd taxitips-backend && CELERY_TASK_ALWAYS_EAGER=1 ./.venv/bin/python manage.py test   # 265
-cd taxitips-app && flutter test && flutter analyze                                     # 30
+cd taxitips-backend && CELERY_TASK_ALWAYS_EAGER=1 ./.venv/bin/python manage.py test   # 793
+cd taxitips-app && flutter test && flutter analyze                                     # 49
+cd taxitips-web && npx vite build                                                      # index + portal
 ```
 
-`flutter analyze` har tre kvarvarande `curly_braces_in_flow_control_structures`
-i `driver_screen.dart` och `hotspot_map.dart` — stilvarningar, inga buggar,
-men de kom in med varumärkespasset och bör städas så att "rent" betyder rent
-igen.
+`flutter analyze` är rent (kontrollerat 2026-09-14).
 
 API-nycklar ligger i `taxitips-backend/.env` (ogitad). `.env.example`
 listar alla och vad de gör.
@@ -227,6 +353,29 @@ Var och en av dem är skriven efter att ha gått sönder på riktigt.
     Malmöförare med "Skåne + järnväg" om Örnsköldsvik, 1 400 km bort, som
     appens egen lista aldrig visat. Notisvägen och listvägen måste hålla
     samma 150 km.
+15. **Ett flygtips räknar ankomster, aldrig resenärer.** Swedavias svar bär
+    varken flygplanstyp eller passagerarantal, så "tre plan ≈ 500 personer"
+    vore påhittat — samma regel som håller GTFS-beläggning kategorisk.
+    Nattpåslaget i `flight_scoring.py` är av samma skäl bara ett påslag:
+    vi har ingen tidtabell för Arlanda Express eller flygbussarna och får
+    därför aldrig skriva "sista tåget har gått" (invariant 2).
+16. **En bolagskod är inte en credential.** `join_device()` delade ut en
+    permanent enhetstoken ur en sexteckenskod som står på ett papper i
+    fikarummet. Den är stängd (`20260920000001`). Telefoner godkänns av en
+    administratör, för en bestämd bil, med en engångskod som gäller fem
+    minuter. Se `fleet/pairing.py`.
+17. **En aktiv telefon per billicens, en aktiv bil per telefon** -- som
+    partiella unika index i `fleet_vehicle_session`, inte som kontroller i
+    Python. Två förare som trycker "Ta över" samtidigt läser båda innan
+    någon skriver. En avslutad session återupplivas aldrig: `heartbeat()`
+    rör bara en öppen rad, annars tar en gammal telefon tillbaka bilen genom
+    en bakgrundsuppdatering.
+18. **Belopp räknas på servern, i heltal ören.** `fleet/pricing.py` är den
+    enda prismotorn. En andra i klienten kan visa rätt när fakturan blir fel.
+19. **Djangos tabeller nås aldrig via PostgREST.** Supabase ger varje ny
+    tabell rättigheter till anon och authenticated. `fleet`-migrationen 0003
+    tar tillbaka dem uttryckligen i stället för att lita på att en annan
+    migration kört först.
 
 ## 7. Fällor i datan (de dyraste)
 
@@ -244,15 +393,27 @@ Fullständig lista i `docs/api-field-inventory.md` §9.
 - **`TrackAtLocation = "x"`** betyder att stationen saknar spårnumrering.
 - **En tom källa och en död källa ser likadana ut** i `source_events`.
   Därför finns `SourceStatus` — kolla den innan du felsöker "inga tips".
+- **Swedavias `DEL` betyder "Borttagen", inte "Delayed".** Statusenum:t
+  saknar förseningsstatus helt; `DEL`/`CAN` bär noll resenärer och räknas
+  bort. Försening = `(actualUtc ?? estimatedUtc) − scheduledUtc`.
+- **Swedavias `{date}` i sökvägen är lokalt datum, inte UTC.** Ett fönster
+  som korsar midnatt kräver två hämtningar (idag + imorgon).
 
 ## 8. Var arbetet står
 
-**Klart:** pipelinen (sex källor, nationellt), förar-API:t, appen läser från
+**Klart:** pipelinen (sju källor, nationellt), förar-API:t, appen läser från
 Django, feedback (🚕/👍/👎), källhälsa, täckningsvy, nästa avgång +
 ersättningstrafik, ersättningsregler för 16 län, API-inventering,
+**kundlivscykeln** (`fleet/` -- bilar, billicenser, län som rättighet,
+parkoppling med engångskod, skiftbyte, prov, prismotor, beställningar,
+uppsägning, Stripe-synk, risk och revision; se
+`docs/fleet-abonnemang.md`), **kundportalen** (`taxitips-web/portal.html`),
 **push-pipelinen** (`core/notify.py` — fyra grindar, skäl vid varje nej),
 **favoriter** och **notishistorik** (`OpportunityFavorite`, `PushDelivery`),
-länsval i notisinställningarna.
+länsval i notisinställningarna. Inför lansering, lokalt och inte driftsatt:
+hälsa och lås, utkorg, län och kommuner, flödescache, AIS-pilot,
+kombinationslager, "i tjänst" och kalibreringsrapport -- läget och
+blockerarna står i `docs/lansering-p0.md`.
 
 **Näst på tur** — ur `docs/api-field-inventory.md`, som har mätningen bakom
 varje punkt:

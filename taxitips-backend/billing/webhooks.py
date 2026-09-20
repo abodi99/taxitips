@@ -62,5 +62,10 @@ def stripe_webhook(request):
 
     # event.data.object är en StripeObject (dict-subklass) -- dict(...) ger
     # en vanlig, JSON-serialiserbar dict att skicka som Celery-task-argument.
-    process_stripe_event.delay(event.id, event.type, dict(event.data.object))
+    # event.created följer med: fleet/webhook_events.py behöver den för att
+    # kunna kasta en händelse som kommer EFTER en nyare (Stripe lovar ingen
+    # ordning).
+    process_stripe_event.delay(
+        event.id, event.type, dict(event.data.object), event.created
+    )
     return JsonResponse({"received": True})

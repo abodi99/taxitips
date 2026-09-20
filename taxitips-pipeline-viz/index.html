@@ -88,16 +88,83 @@
     border:1px solid var(--line);border-radius:8px;padding:5px 9px;font-size:11.5px;color:var(--muted)}
   .legend{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 0;font-size:13px;align-items:center}
   .legend b{display:inline-block;width:12px;height:12px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+  /* Källfiltret. Samma prickar som legenden hade -- den ÄR legenden, nu
+     klickbar, så det inte finns två listor över källor som kan säga olika. */
+  .srcfilter{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:10px 0 12px}
+  .srcchip{display:inline-flex;align-items:center;gap:6px;padding:5px 11px;border-radius:20px;
+           border:1px solid var(--line);background:#fff;font:inherit;font-size:13px;
+           color:var(--ink);cursor:pointer;transition:opacity .12s,border-color .12s}
+  .srcchip b{width:11px;height:11px;border-radius:50%;display:inline-block;flex:none}
+  .srcchip .n{font-variant-numeric:tabular-nums;color:var(--muted);font-size:12px}
+  .srcchip:hover{border-color:var(--muted)}
+  .srcchip[aria-pressed="false"]{opacity:.4}
+  .srcchip[aria-pressed="false"] b{background:transparent!important;
+           box-shadow:inset 0 0 0 2px currentColor;color:var(--muted)}
+  .srcchip.act{border:0;background:none;padding:5px 4px;color:var(--muted);text-decoration:underline}
+  .srcchip.act:hover{color:var(--ink)}
+  .mapempty{display:flex;align-items:center;justify-content:center;height:100%;
+            color:var(--muted);font-size:14px;text-align:center;padding:0 24px}
   .lg-h{background:var(--green)}.lg-m{background:var(--amber)}.lg-l{background:var(--brown)}
   .raw{background:var(--navy);color:#dfe8f5;padding:12px 14px;border-radius:10px;font-size:12px;
        line-height:1.5;overflow:auto;max-height:280px;white-space:pre-wrap;word-break:break-word}
+  /* Evenemang (2c): kalender, lista och karta som delar samma filter. */
+  .evx{display:grid;grid-template-columns:minmax(300px,390px) 1fr;gap:14px;align-items:start}
+  @media(max-width:900px){.evx{grid-template-columns:1fr}}
+  .evx-controls{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:10px}
+  .evx-controls select,.evx-controls input[type=search]{padding:7px 10px;border:1px solid var(--line);border-radius:10px;
+    font:inherit;font-size:13px;background:#fff;color:var(--navy);min-width:0}
+  .evx-controls input[type=search]{flex:1 1 200px}
+  .evx-seg{display:inline-flex;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:#fff}
+  .evx-seg button{border:0;background:none;padding:7px 11px;font:inherit;font-size:13px;cursor:pointer;color:var(--navy)}
+  .evx-seg button+button{border-left:1px solid var(--line)}
+  .evx-seg button[aria-pressed="true"]{background:var(--navy);color:#fff}
+  .evx-cats{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:0 0 12px}
+  .evx-phq{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:center;justify-content:space-between;background:var(--foam);
+    border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:0 0 12px;font-size:13px}
+  .evx-phq-ctl{display:flex;gap:8px;align-items:center}
+  .evx-phq select{padding:6px 8px;border:1px solid var(--line);border-radius:8px;font:inherit;font-size:13px;background:#fff}
+  .evx-phq button{border:0;background:var(--navy);color:#fff;border-radius:8px;padding:7px 12px;font:inherit;font-size:13px;font-weight:700;cursor:pointer}
+  .evx-phq button:disabled{opacity:.5;cursor:default}
+  .cal-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .cal-head b{text-transform:capitalize;font-family:"Montserrat",sans-serif}
+  .cal-head button{border:1px solid var(--line);background:#fff;border-radius:8px;width:32px;height:32px;cursor:pointer;
+    font-size:16px;color:var(--navy)}
+  .cal-head button:disabled{opacity:.35;cursor:default}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:3px}
+  .cal-dow{font-size:11px;text-transform:uppercase;color:var(--muted);text-align:center;font-weight:700;padding:2px 0}
+  .cal-day{min-height:50px;border-radius:8px;border:1px solid var(--sand);background:#fff;padding:4px 5px;cursor:pointer;
+    text-align:left;font:inherit;font-size:12px;color:var(--navy);display:flex;flex-direction:column;gap:2px;align-items:flex-start}
+  .cal-day:hover:not(:disabled){border-color:var(--muted)}
+  .cal-day:disabled{cursor:default;background:transparent}
+  .cal-day.out{opacity:.4}
+  .cal-day.today{box-shadow:inset 0 0 0 2px var(--yellow)}
+  .cal-day[aria-pressed="true"]{background:var(--navy);color:#fff;border-color:var(--navy)}
+  .cal-day .n{font-size:11px;font-weight:800}
+  .cal-day .dots{display:flex;flex-wrap:wrap;gap:2px}
+  .cal-day .dots i{width:6px;height:6px;border-radius:50%;display:block}
+  .evx-list{max-height:560px;overflow:auto;margin-top:12px;border-top:1px solid var(--sand)}
+  .evx-day{position:sticky;top:0;z-index:1;background:var(--foam);font-size:12px;font-weight:700;text-transform:capitalize;
+    padding:6px 4px;border-bottom:1px solid var(--sand)}
+  .evx-item{display:grid;grid-template-columns:54px 1fr;gap:8px;padding:9px 4px;border-bottom:1px solid var(--sand);cursor:pointer}
+  .evx-item:hover,.evx-item.on{background:#FFF6E0}
+  .evx-item .t{font-variant-numeric:tabular-nums;font-weight:700;font-size:13px}
+  .evx-item .m{font-size:12px;color:var(--muted);line-height:1.4}
+  .evx-item .dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px;vertical-align:0}
+  .mapwrap .lmap.evx-map{height:700px}
+  .evx-pin{background:none;border:0}
+  .evx-pin span{display:flex;align-items:center;justify-content:center;border-radius:50%;border:2px solid #fff;color:#fff;
+    font:800 11px/1 "Inter",system-ui,sans-serif;box-shadow:0 1px 4px rgba(0,0,0,.35);box-sizing:border-box}
+  .mapwrap.full .lmap.evx-map{height:100%}
+  @media(max-width:900px){.mapwrap .lmap.evx-map{height:440px}}
 </style>
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
 </head>
 <body>
 <header>
   <h1>TaxiTips — datapipeline</h1>
+  <p style="margin-top:6px;font-size:13px;opacity:1">Vyer: <a href="/" style="color:#FCA311">Översikt</a> · <a href="/tag" style="color:#FCA311">Tåg</a> · <a href="/kollektivtrafik" style="color:#FCA311">Buss och spårvagn</a> · <a href="/vag" style="color:#FCA311">Väg</a> · <a href="/flyg" style="color:#FCA311">Flyg</a> · <a href="/farjor" style="color:#FCA311">Färjor</a> · <a href="/evenemang" style="color:#FCA311">Evenemang</a> · <a href="/vader" style="color:#FCA311">Väder</a> · <b>System</b>. Den här sidan är den gamla helsidan; varje tjänst har nu en egen sida.</p>
   <p>Vad som hämtas, hur det bearbetas, och vad en förare till slut ser. Live-data från produktion.</p>
+  <p style="margin-top:8px;font-size:13px;opacity:1">Hoppa till: <a href="#evx" style="color:#FCA311">Evenemang, karta och kalender</a> · <a href="#srcfilter" style="color:#FCA311">Kartorna över alla källor</a></p>
 </header>
 <main id="root"><p class="sub">Hämtar…</p></main>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
@@ -106,6 +173,7 @@
 const TIER_SV = {
   line_paused:'Hela linjen stoppad', vehicle_cancelled:'Enstaka avgång inställd',
   line_delayed:'Försening på linjen', vehicle_delayed:'Enstaka avgång försenad',
+  arrival_wave:'Ankomstvåg (flyg)', last_arrival:'Sista ankomsten (flyg)',
   road_accident_or_closure:'Olycka/avstängning', road_work_or_queue:'Vägarbete/kö',
   road_work:'Vägarbete', disruption_unclassified:'Osäker bedömning', ignore:'Ignoreras'
 };
@@ -113,12 +181,19 @@ const TIER_SV = {
 const SOURCE_SV = {
   trafiklab: 'Trafiklab (GTFS-RT)', trafikverket: 'Trafikverket (väg)',
   trafikverket_rail: 'Trafikverket (järnväg)', smhi: 'SMHI', sl: 'SL',
+  swedavia: 'Swedavia (flyg)',
+  aisstream: 'AISStream (fartyg)',
+  ais_passenger: 'Fartyg: passagerare (AIS)', ais_other: 'Fartyg: övriga (AIS)',
+  ais_unknown: 'Fartyg: typ okänd än (AIS)',
+  ticketmaster: 'Ticketmaster (evenemang)',
   // Nyckeln i databasen är 'vt', inte 'vasttrafik' -- kartans popup visade
   // därför den råa koden i stället för operatörens namn.
   vt: 'Västtrafik', vasttrafik: 'Västtrafik'
 };
 const TIER_MODE_SV={train:'tåg',metro:'tunnelbana',tram:'spårvagn',bus:'buss',boat:'båt',road:'väg'};
-const HIGH=['line_paused'], MED=['line_delayed','vehicle_cancelled'];
+// arrival_wave lyfts aldrig till high av poängen som vehicle_cancelled gör:
+// vi vet att planen landar, inte att någon står utan transport.
+const HIGH=['line_paused'], MED=['line_delayed','vehicle_cancelled','arrival_wave','last_arrival'];
 const NOTIFY_TIERS=['line_paused','vehicle_cancelled','road_accident_or_closure'];
 // Sätts från backendens /api/config (via /api/pipeline) så snart datan är
 // hämtad. 50 är bara vad som gäller innan svaret kommit -- inte en andra
@@ -240,16 +315,25 @@ function toggleMapFull(elId){
 
 function drawMapGeneric(elId,points,opts){
   const el=document.getElementById(elId);
-  if(!el||typeof L==='undefined'||!points.length) return;
+  if(!el||typeof L==='undefined') return;
   if(MAPS[elId]){MAPS[elId].remove();delete MAPS[elId]}
+  // Tom karta måste RITAS om som tom, inte lämnas orörd. Innan filtret fanns
+  // kunde det aldrig inträffa efter första ritningen; nu kan man släcka en
+  // källa som är ensam på en karta, och då stod den gamla kartan kvar och
+  // visade punkter man just bett att slippa se.
+  if(!points.length){
+    el.innerHTML='<div class="mapempty">Ingen av de valda källorna har någon punkt på den här kartan.</div>';
+    return;
+  }
+  el.innerHTML='';
   // scrollWheelZoom av från början så sidan inte kapas när man scrollar
   // förbi -- men på så fort man klickat i kartan, för då är avsikten att
   // titta på den. Hinten nere till vänster säger det.
   const map=L.map(elId,{scrollWheelZoom:false,maxZoom:19});
   MAPS[elId]=map;
   map.once('click',()=>{map.scrollWheelZoom.enable();const h=el.parentElement.querySelector('.maphint');if(h)h.remove()});
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-    {attribution:'&copy; OpenStreetMap',maxZoom:19,maxNativeZoom:19}).addTo(map);
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    {attribution:'&copy; Esri · OpenStreetMap',maxZoom:19,maxNativeZoom:19}).addTo(map);
   L.control.scale({imperial:false}).addTo(map);
 
   const latlngs=[];
@@ -285,6 +369,87 @@ function drawMapGeneric(elId,points,opts){
   rescale();
 }
 
+/* ---------- källfilter, delat av alla fyra kartor ---------- */
+// Avstängda källor, inte påslagna: en ny källa i pipelinen ska synas direkt
+// utan att någon kommer ihåg att lägga till den i en lista här.
+const SOURCE_OFF=new Set();
+// Fylls i av render() så filtret kan rita om utan att hämta /api/pipeline igen.
+const MAP_SETS={};
+
+// Vilken källa kommer raden från? Råa källhändelser bär `source` själva;
+// ett tips bär sin första citerade källhändelse (samma koppling som förarens
+// förklaringspanel bygger på). Saknas den är svaret "okänd", aldrig en gissning.
+function sourceOf(row){
+  return row.source || (row.sourceEvent && row.sourceEvent.source) || 'okänd';
+}
+function sourceVisible(row){ return !SOURCE_OFF.has(sourceOf(row)); }
+function visible(rows){ return (rows||[]).filter(sourceVisible); }
+
+function toggleSource(key){
+  SOURCE_OFF.has(key)?SOURCE_OFF.delete(key):SOURCE_OFF.add(key);
+  applySourceFilter();
+}
+// Dubbelklick: visa bara den här källan -- och samma dubbelklick igen tar
+// tillbaka allt, så gesten är sin egen ångra.
+function onlySource(key){
+  const all=MAP_SETS.keys||[];
+  const isolated=all.length>1 && !SOURCE_OFF.has(key)
+    && all.every(k=>k===key||SOURCE_OFF.has(k));
+  SOURCE_OFF.clear();
+  if(!isolated) for(const k of all) if(k!==key) SOURCE_OFF.add(k);
+  applySourceFilter();
+}
+function allSources(){ SOURCE_OFF.clear(); applySourceFilter(); }
+
+function renderSourceFilter(){
+  const host=document.getElementById('srcfilter');
+  if(!host) return;
+  const counts=MAP_SETS.counts||{};
+  const chips=(MAP_SETS.keys||[]).map(k=>{
+    const c=counts[k]||{raw:0,tips:0};
+    return `<button class="srcchip" data-src="${esc(k)}" aria-pressed="${!SOURCE_OFF.has(k)}"
+      title="Klicka för att släcka eller tända. Dubbelklick visar bara den här källan.">
+      <b style="background:${SOURCE_COLOR[k]||'#526078'}"></b>${esc(SOURCE_SV[k]||k)}
+      <span class="n">${c.raw} rå · ${c.tips} tips</span></button>`;
+  }).join('');
+  const off=SOURCE_OFF.size;
+  host.innerHTML=chips+(off
+    ? `<button class="srcchip act" data-act="all">Visa alla igen (${off} släckta)</button>` : '');
+}
+
+// En delegerad lyssnare på värden i stället för onclick i varje chip: nycklarna
+// kommer ur databasen och ska aldrig behöva vara säkra att klistra in i HTML.
+// Klicket fördröjs en kort stund så ett dubbelklick inte hinner rita om alla
+// fyra kartorna två gånger på vägen till att isolera en källa.
+let _srcClick=null;
+document.addEventListener('click',e=>{
+  const chip=e.target.closest('.srcfilter [data-src], .srcfilter [data-act]');
+  if(!chip) return;
+  if(chip.dataset.act==='all'){ allSources(); return; }
+  clearTimeout(_srcClick);
+  _srcClick=setTimeout(()=>toggleSource(chip.dataset.src),220);
+});
+document.addEventListener('dblclick',e=>{
+  const chip=e.target.closest('.srcfilter [data-src]');
+  if(!chip) return;
+  clearTimeout(_srcClick);
+  onlySource(chip.dataset.src);
+});
+
+function applySourceFilter(){
+  renderSourceFilter();
+  const raw=visible(MAP_SETS.raw), geo=visible(MAP_SETS.geo),
+        ai=visible(MAP_SETS.ai), driver=visible(MAP_SETS.driver);
+  drawSourceMap(raw); drawMap(geo); drawAiMap(ai); drawDriverMap(driver);
+  // Rubrikernas antal måste följa med, annars står det "3 486 källhändelser"
+  // ovanför en karta som visar tjugofyra.
+  const counts={'map-sources':raw.length,'map':geo.length,'map-ai':ai.length,'map-driver':driver.length};
+  for(const [id,n] of Object.entries(counts)){
+    const el=document.getElementById('count-'+id);
+    if(el) el.textContent=n;
+  }
+}
+
 function drawMap(points){
   drawMapGeneric('map',points,{
     radius:o=>6+Math.round((o.demand_score||0)/14),
@@ -298,8 +463,29 @@ function drawMap(points){
 // Kvalitativ skala för sex datakällor — fler urskiljbara kulörer än
 // varumärkespaletten har. Midnatt, guld och skiffer kommer därifrån;
 // resten är statusfärger som redan används i vyn.
-const SOURCE_COLOR={trafiklab:'#14213D',sl:'#E08F00',vt:'#6B4FA0',trafikverket_rail:'#1F8A5B',trafikverket:'#C0392B',smhi:'#526078'};
+const SOURCE_COLOR={trafiklab:'#14213D',sl:'#E08F00',vt:'#6B4FA0',trafikverket_rail:'#1F8A5B',trafikverket:'#C0392B',smhi:'#526078',swedavia:'#00857A',ais_passenger:'#FCA311',ais_other:'#8AA4BF',ais_unknown:'#C9CED6',ticketmaster:'#D6336C'};
+// Fartyg från AISStream på karta 8a. De är inte källhändelser -- det finns
+// ingen störning att klassa -- så popupen visar fartygets läge i stället för
+// rå JSON, och färjebedömningen när fartyget är ett passagerarfartyg.
+function shipPopupHtml(s){
+  const kn=s.sog==null?'—':s.sog.toFixed(1)+' kn';
+  let h='<b>'+esc(s.name||('MMSI '+s.mmsi))+'</b> <span class="foot">· AIS klass '+esc(s.aisClass||'?')+'</span><br>'+
+    '<span class="foot">'+esc(s.typeLabel||'Okänd typ')+(s.type!=null?' (typ '+s.type+')':'')+'</span>'+
+    '<div class="kv" style="grid-template-columns:96px 1fr;font-size:13px;margin-top:6px">'+
+    '<dt>Fart</dt><dd>'+kn+(s.cog!=null?' · kurs '+Math.round(s.cog)+'°':'')+'</dd>'+
+    '<dt>Status</dt><dd>'+esc(s.navStatus==null?'sänds inte (klass B)':((typeof NAV_SV!=='undefined'&&NAV_SV[s.navStatus])||('kod '+s.navStatus)))+'</dd>'+
+    '<dt>Storlek</dt><dd>'+(s.lengthM?s.lengthM+' m':'?')+(s.widthM?' × '+s.widthM+' m':'')+(s.draught?' · djupgående '+s.draught+' m':'')+'</dd>'+
+    '<dt>Destination</dt><dd>'+esc(s.destination||'—')+'</dd>'+
+    '<dt>Hamnruta</dt><dd>'+esc(s.port||'—')+'</dd>'+
+    '<dt>Senast hörd</dt><dd>'+(s.positionAt?new Date(s.positionAt).toLocaleTimeString('sv',{hour:'2-digit',minute:'2-digit'}):'—')+' · <code>'+esc(s.lastMessageType||'')+'</code></dd>'+
+    '<dt>Id</dt><dd>MMSI '+s.mmsi+(s.callSign?' · '+esc(s.callSign):'')+(s.imo?' · IMO '+s.imo:'')+'</dd>'+
+    '</div>';
+  if(s.ferryText) h+='<div class="foot" style="margin-top:6px"><b>Färjebedömning:</b> '+esc(s.ferryText)+'</div>';
+  return h;
+}
 function sourcePopupHtml(se){
+  if(se.ship) return shipPopupHtml(se);
+  if(se.event) return eventPopupHtml(se);
   const srcName=SOURCE_SV[se.source]||se.source||'okänd källa';
   let html='<b>'+esc(srcName)+'</b><br><code>'+esc(se.external_id||'')+'</code>'+
     '<div class="foot" style="margin-top:6px">Ännu inte sammanslaget eller klassificerat.</div>';
@@ -310,7 +496,7 @@ function sourcePopupHtml(se){
 }
 function drawSourceMap(rows){
   drawMapGeneric('map-sources',rows,{
-    radius:()=>6,
+    radius:se=>se.ship?(se.passenger?7:5):(se.event?8:6),
     color:se=>SOURCE_COLOR[se.source]||'#526078',
     popup:sourcePopupHtml,
   });
@@ -471,6 +657,601 @@ async function loadDoc(details,name,elId){
   }
 }
 
+/* ---------- 2c. färjor: egen sida ---------- */
+// Tidtabell + AIS per tur har en egen, lugnare sida. Här bara vägen dit.
+function renderFerryLink(){
+  return `<details open><summary><h2>2c · Färjor — tidtabell + AIS</h2></summary>
+  <div class="card"><p>Färjeturerna enligt tidtabellen (GTFS Sverige 3), kopplade till AIS: var färjan är, planerad och beräknad ankomst och avvikelse.
+  Egen sida: <a href="/farjor"><b>/farjor</b></a>.</p></div></details>`;
+}
+
+/* ---------- 2b. färjor (AISStream) ---------- */
+// Källan är en ström, inte en hämtning, och den ger fartyg, inte larm --
+// därför ett eget avsnitt. All logik och alla gränser kommer från backend
+// (maritime/explain.py), så sidan kan inte visa en annan regel än den som körs.
+const NAV_SV={0:'går för motor',1:'ankrad',2:'ej manöverbar',3:'begränsad manöverförmåga',5:'förtöjd',7:'fiskar',8:'seglar',15:'odefinierad'};
+const FERRY_STAGE={
+  underway:['p-med','kandidat'], slowing:['p-med','kandidat'], handled:['p-high','hanterad'],
+  still:['p-low','ligger still'], no_speed:['p-low','fart saknas'], too_short:['p-ign','för kort'],
+  unknown_length:['p-ign','längd okänd'], no_position:['p-ign','ingen position'],
+  outside:['p-ign','utanför'], silent:['p-ign','tyst']
+};
+function hhmm(iso){return iso?new Date(iso).toLocaleTimeString('sv',{hour:'2-digit',minute:'2-digit'}):'—'}
+function renderMaritime(m){
+  if(!m) return '';
+  const head=`<details open><summary><h2>2b · Färjor (AISStream) — vad som hämtas och hur det filtreras</h2></summary>`;
+  if(m.error) return head+`<div class="err"><b>Färjeblocket kunde inte byggas:</b> ${esc(m.error)}</div></details>`;
+  const st=m.status||{}, c=m.config||{};
+  let h=head+`<p class="sub">En öppen WebSocket mot AISStream.io i stället för en hämtning.
+    ${st.connected?`<b>Ansluten</b> sedan ${hhmm(st.connectedSince)}`:`<b style="color:var(--danger)">Inte ansluten</b>${st.lastError?' — '+esc(st.lastError):''}`}
+    · ${st.reconnects||0} återanslutningar · status ${hhmm(st.checkedAt)}${st.compressionEnabled===false?' · <b style="color:var(--danger)">komprimering AV</b>':(st.compressionEnabled?' · komprimering på':'')}${st.dryRun?' · <b>dry-run</b>':''}.
+    "Sedan start" nollställs när lyssnaren startas om.</p>
+  <p class="sub"><b>Alla fartyg på karta:</b> avsnitt 8a, som tre källor i filtret — passagerarfartyg, övriga och typ okänd än — som går att tända och släcka.${m.mapSummary?` Just nu ${m.mapSummary.shown} fartyg med position senaste ${m.mapSummary.windowMinutes} min: ${m.mapSummary.classA} klass A, ${m.mapSummary.classB} klass B, ${m.mapSummary.passenger} passagerarfartyg.`:''}</p>`;
+
+  /* tratten */
+  const fmax=Math.max(...m.funnel.map(f=>f.n),1);
+  h+=`<div class="card"><b>Tratten — från rå AIS till tips</b>
+  <p class="foot" style="margin:4px 0 10px">Varje rad är ett steg i filtret. Staplarna är kvadratrotsskalade; linjärt syns inte ett tips bredvid tusentals meddelanden.</p>
+  <table><tr><th>Steg</th><th style="width:28%"></th><th class="num">Antal</th><th>Vad som händer</th></tr>`;
+  for(const f of m.funnel){
+    h+=`<tr><td><b>${esc(f.label)}</b><br><span class="foot">${esc(f.scope)}</span></td>
+      <td><div class="bar"><i style="width:${f.n?Math.max(2,Math.sqrt(f.n/fmax)*100):0}%"></i></div></td>
+      <td class="num"><b>${f.n.toLocaleString('sv')}</b></td><td class="foot">${esc(f.note)}</td></tr>`;
+  }
+  h+=`</table></div>`;
+
+  /* filterreglerna */
+  const pad=n=>String(n).padStart(2,'0');
+  h+=`<div class="card"><b>Filterreglerna</b> <span class="foot">— samma konstanter som lyssnaren kör: <code>maritime/ais.py</code>, <code>maritime/tips.py</code></span>
+  <dl class="kv" style="margin-top:10px">
+    <dt>1. Inseglingsområden och hamnrutor</dt><dd>AISStream skickar bara meddelanden inifrån inseglingsområdena, ${new Set(m.ports.map(p=>JSON.stringify(p.approach))).size} rektanglar runt ${m.ports.length} hamnar. Allt utanför når aldrig backend. Ankomsten avgörs i hamnrutan; ${m.ports.filter(p=>p.tips===false).length} hamnar visas bara på kartan och ger inga tips.</dd>
+    <dt>2. Fartygstyp</dt><dd>AIS-typ <b>${esc(c.passengerTypes)}</b>, passagerarfartyg. Typen finns bara i <code>ShipStaticData</code>. Positioner från fartyg vars typ inte hörts än väntar i minnet.</dd>
+    <dt>3. Storlek</dt><dd>Minst <b>${c.minTipLengthM} m</b> (Dimension A+B) för att bli tips. Kortare passagerarfartyg sparas och visas här, men blir aldrig tips.</dd>
+    <dt>4. Ankomst</dt><dd>Under <b>${c.slowKnots} knop</b> i en hamnruta, <i>efter</i> att ha setts över <b>${c.underwayKnots} knop</b> under samma anlöp. En färja som redan låg vid kaj när lyssnaren startade räknas aldrig som ankomst.</dd>
+    <dt>5. ETA</dt><dd>Räknas bara för ett fartyg i fart i hamnrutan, från ${c.etaBehindMin} min efter till ${c.etaAheadMin} min före ETA, och ger låg säkerhet. AIS-ETA är handinmatad och gäller nästa destination.</dd>
+    <dt>6. En gång per anlöp</dt><dd>Spärren släpps när färjan går över ${c.underwayKnots} knop minst ${c.rearmAfterTriggerMin} min efter ankomsten, eller efter ${c.rearmGapHours} timmar utan meddelanden.</dd>
+    <dt>7. Poäng</dt><dd>${(c.sizeBands||[]).map(b=>`≥ ${b.minLengthM} m: <b>${b.score}</b> (${esc(b.label)})`).join(' · ')} · ankomst ${pad(c.lateFrom)}–${pad(c.lateUntil)}: <b>+${c.lateBonus}</b> · tak ${c.scoreCap}. Tipset ligger kvar ${c.tailMinutes} min, regel <code>${esc(c.ruleId)}</code>. Antal passagerare finns inte i AIS och påstås aldrig.</dd>
+  </dl></div>`;
+
+  /* hamnar + fartygstyper */
+  h+=`<div class="split"><div class="card"><b>Hamnrutorna</b>
+  <table style="margin-top:8px"><tr><th>Hamn</th><th>Marknad</th><th class="num">Nu</th><th>Ruta [lat, lon]</th></tr>`;
+  for(const p of m.ports){
+    h+=`<tr><td><b>${esc(p.name)}</b></td><td class="foot">${esc(p.region)} · ${esc(p.city)}</td>
+      <td class="num">${p.shipsNow}</td><td class="foot"><code>${p.box[0].join(', ')}</code><br><code>${p.box[1].join(', ')}</code></td></tr>`;
+  }
+  h+=`</table></div><div class="card"><b>Vad som finns i rutorna</b>
+  <p class="foot" style="margin:4px 0 8px">Alla fartyg vars typ hörts sedan start, även de som sorteras bort i steg 2. Bara den gula raden går vidare.</p>
+  <table><tr><th>AIS-typ</th><th style="width:40%"></th><th class="num">Fartyg</th></tr>`;
+  const tmax=Math.max(...m.shipTypes.map(x=>x.n),1);
+  for(const x of m.shipTypes){
+    h+=`<tr${x.passenger?' style="background:#FFF6E0"':''}><td>${x.passenger?'<b>':''}${esc(x.label)}${x.passenger?'</b>':''} <span class="foot">${esc(x.range)}</span></td>
+      <td><div class="bar"><i style="width:${x.n/tmax*100}%${x.passenger?';background:var(--yellow)':''}"></i></div></td>
+      <td class="num">${x.n}</td></tr>`;
+  }
+  if(!m.shipTypes.length) h+=`<tr><td colspan="3" class="foot">Ingen ShipStaticData hörd sedan start. Den sänds ungefär var 6:e minut.</td></tr>`;
+  h+=`</table></div></div>`;
+
+  /* fartygen */
+  h+=`<div class="card"><b>Passagerarfartygen — och varför de blir tips eller inte</b>
+  <p class="foot" style="margin:4px 0 10px">${m.vessels.length} fartyg i <code>ferry_arrivals</code>. Tipskandidater först.</p>
+  <div style="overflow-x:auto"><table>
+  <tr><th>Fartyg</th><th class="num">Längd</th><th>Hamn · senast</th><th class="num">Knop</th><th>AIS-status</th><th>Bedömning</th></tr>`;
+  for(const v of m.vessels){
+    const [cls,lbl]=FERRY_STAGE[v.verdict.stage]||['p-ign',v.verdict.stage];
+    h+=`<tr><td><b>${esc(v.name||String(v.mmsi))}</b><br><span class="foot">MMSI ${v.mmsi} · typ ${v.type??'?'}${v.destination?' · → '+esc(v.destination):''}</span></td>
+      <td class="num">${v.lengthM?v.lengthM+' m':'?'}</td>
+      <td class="foot">${esc(v.port||'—')}<br>${hhmm(v.timestamp)}</td>
+      <td class="num">${v.knots==null?'—':v.knots.toFixed(1)}</td>
+      <td class="foot">${v.navStatus==null?'—':esc(NAV_SV[v.navStatus]||('kod '+v.navStatus))}</td>
+      <td><span class="pill ${cls}">${esc(lbl)}</span><br><span class="foot">${esc(v.verdict.text)}</span></td></tr>`;
+  }
+  h+=`</table></div></div>`;
+
+  /* besluten */
+  h+=`<div class="card"><b>Senaste ankomstbesluten</b>
+  <p class="foot" style="margin:4px 0 10px">Varje gång ett passagerarfartyg saktade in efter att ha varit i fart, oavsett storlek. Senaste först.</p>
+  <table><tr><th>Tid</th><th>Fartyg</th><th>Hamn</th><th class="num">Längd</th><th>Utlösare</th><th>Utfall</th></tr>`;
+  for(const x of m.decisions){
+    const out=x.verdict==='tips'?pill('high',`tips · ${x.score} p`)
+      :x.verdict==='dry-run'?pill('medium',`dry-run · ${x.score} p`)
+      :`<span class="pill p-ign">för kort</span>`;
+    h+=`<tr><td class="foot">${hhmm(x.at)}</td><td><b>${esc(x.ship)}</b></td><td class="foot">${esc(x.port)}</td>
+      <td class="num">${x.lengthM??'?'} m</td>
+      <td class="foot">${x.trigger==='eta_soon'?'ETA inom en timme':'saktade in'}${x.knots!=null?` (${x.knots.toFixed(1)} kn)`:''}</td>
+      <td>${out}</td></tr>`;
+  }
+  if(!m.decisions.length) h+=`<tr><td colspan="6" class="foot">Inga ankomster sedan lyssnaren startade.</td></tr>`;
+  h+=`</table></div>`;
+
+  /* meddelandetyper */
+  if((m.messageTypes||[]).length){
+    h+=`<div class="card"><b>Alla ${m.messageTypes.length} meddelandetyper i AISStream</b>
+    <p class="foot" style="margin:4px 0 10px">Från AISStreams schema (<code>type-definition.yaml</code>). Prenumerationen tar de typer som beskriver fartyg; resten är fyrar, basstationer, räddningsflyg och radiotrafik, och har ingen position eller identitet för ett fartyg.</p>
+    <table><tr><th>Typ</th><th>Kategori</th><th>Prenumererad</th><th class="num">Mottagna sedan start</th><th>Används till</th></tr>`;
+    for(const t of m.messageTypes){
+      h+=`<tr${t.subscribed?'':' style="opacity:.62"'}><td><code>${esc(t.type)}</code></td><td class="foot">${esc(t.category)}</td>
+        <td>${t.subscribed?pill('high','ja'):'<span class="pill p-ign">nej</span>'}</td>
+        <td class="num">${(t.received||0).toLocaleString('sv')}</td><td class="foot">${esc(t.use)}</td></tr>`;
+    }
+    h+=`</table></div>`;
+  }
+
+  /* rådata */
+  h+=`<div class="card"><b>Rådata — exakt som AISStream skickar det</b>
+  <p class="foot" style="margin:4px 0 10px">Senaste meddelandet av varje typ, oförändrat. Fälten i tabellen är de enda som används.</p>
+  <table style="margin-bottom:12px"><tr><th>Fält</th><th>Används till</th></tr>
+  ${m.fieldsUsed.map(f=>`<tr><td><code>${esc(f.field)}</code></td><td class="foot">${esc(f.use)}</td></tr>`).join('')}</table>
+  <div class="split">`;
+  const sampleKeys=Object.keys(m.samples||{});
+  for(const k of (sampleKeys.length?sampleKeys:['PositionReport','ShipStaticData'])){
+    const sample=m.samples[k];
+    h+=`<div><b>${k}</b><div class="raw" style="margin-top:6px">${sample?esc(JSON.stringify(sample,null,2)):'Inget hört sedan start.'}</div></div>`;
+  }
+  h+=`</div></div>`;
+
+  /* tipsen */
+  h+=`<div class="card"><b>Aktiva färjetips</b> <span class="foot">— <code>opportunities</code> med <code>kind = ferry</code>, det föraren ser</span>
+  <table style="margin-top:8px"><tr><th>Tips</th><th class="num">Poäng</th><th>Säkerhet</th><th>Motivering</th><th>Går ut</th></tr>`;
+  for(const o of m.tips){
+    h+=`<tr><td><b>${esc(o.title)}</b><br><span class="foot">${esc(o.rule_id)}</span></td><td class="num">${o.demand_score}</td>
+      <td>${esc(o.confidence)}</td><td class="foot">${(o.reasons||[]).map(r=>esc(r)).join('<br>')}</td><td class="foot">${hhmm(o.end_time)}</td></tr>`;
+  }
+  if(!m.tips.length) h+=`<tr><td colspan="5" class="foot">Inga aktiva färjetips. De uppstår när en färja på minst ${c.minTipLengthM} m saktar in i en hamnruta.</td></tr>`;
+  h+=`</table></div></details>`;
+  return h;
+}
+
+/* ---------- 2c. evenemang ---------- */
+// Kalendern föraren får, med reglerna bakom den. Allt räknas i backend
+// (events/explain.py) med samma frågor som /api/events, så sidan och appen
+// kan inte visa olika kalendrar.
+const EVENT_CAT_COLOR={konsert:'#6B4FA0',teater:'#1F8A5B',humor:'#E08F00',sport:'#C0392B',familj:'#00857A',massa:'#526078',film:'#14213D',ovrigt:'#8AA4BF'};
+function eventTimeText(e){
+  const start=e.startLocal||'tid ej satt';
+  if(!e.endLocal) return start;
+  const otherDay=e.endDate&&e.endDate!==e.startDate?' '+evxShortDate(e.endDate):'';
+  return `${start}–${e.endBasis==='estimated'?'≈':''}${e.endLocal}${otherDay}`;
+}
+function eventPopupHtml(e){
+  let h='<b>'+esc(e.name)+'</b><br><span class="foot">'+esc(e.categoryLabel)+
+    (e.happening?'':' · <b style="color:var(--danger)">'+esc(e.statusLabel)+'</b>')+'</span>'+
+    '<div class="kv" style="grid-template-columns:96px 1fr;font-size:13px;margin-top:6px">'+
+    '<dt>Datum</dt><dd>'+esc(e.startDate)+'</dd>'+
+    '<dt>Tid</dt><dd>'+esc(eventTimeText(e))+'</dd>'+
+    (e.attendanceText?'<dt>Besökare</dt><dd>'+esc(e.attendanceText)+' <span class="foot">(förutsagt av PredictHQ)</span></dd>':'')+
+    '<dt>Sluttid</dt><dd>'+esc(e.endNote||'—')+'</dd>'+
+    (e.leaveUntilLocal?'<dt>Utsläpp</dt><dd>'+(e.endDate&&e.endDate!==e.startDate?esc(evxShortDate(e.endDate))+' ':'')+esc(e.endLocal)+'–'+esc(e.leaveUntilLocal)+'</dd>':'')+
+    '<dt>Plats</dt><dd>'+esc(e.venueName||'—')+(e.address&&e.address!==e.venueName?'<br><span class="foot">'+esc(e.address)+'</span>':'')+'</dd>'+
+    '<dt>Ort</dt><dd>'+esc(e.city||'—')+(e.region?' · '+esc(e.region):'')+'</dd>'+
+    '<dt>Källa</dt><dd>'+esc(e.sourceLabel||'')+(e.matchNote?'<br><span class="foot">Ihopparade: '+esc(e.matchNote)+'</span>':'')+'</dd>'+
+    '</div>';
+  const links=(e.links&&e.links.length)?e.links:(e.url?[{label:e.sourceLabel,url:e.url}]:[]);
+  if(links.length) h+='<div style="margin-top:6px">'+links.map(l=>'<a href="'+esc(l.url)+'" target="_blank" rel="noopener">Öppna hos '+esc(l.label)+' ↗</a>').join(' · ')+'</div>';
+  return h;
+}
+function renderEvents(ev){
+  if(!ev) return '';
+  const head=`<details open><summary><h2>2c · Evenemang — kalender för förare</h2></summary>`;
+  if(ev.error) return head+`<div class="err"><b>Evenemangsblocket kunde inte byggas:</b> ${esc(ev.error)}</div></details>`;
+  const st=ev.status||{}, t=ev.totals||{}, r=ev.rules||{}, eb=ev.endBasis||{};
+  let h=head+`<p class="sub">Sparad källa: Ticketmaster Discovery API, hela Sverige. PredictHQ hämtas live i kartan och kalendern nedan och sparas inte.
+    ${st.checkedAt?`Hämtat ${hhmm(st.checkedAt)}`:'<b>Aldrig hämtat</b> — kör <code>manage.py poll_events</code>'}${st.calls!=null?` · ${st.calls} anrop`:''}${st.rateLimitAvailable!=null?` · ${Number(st.rateLimitAvailable).toLocaleString('sv')} kvar av dygnets kvot`:''}${st.message?` · <span style="color:var(--danger)">${esc(st.message)}</span>`:''}.
+    Evenemangen syns också på kartan i avsnitt 8a, som källan <i>Ticketmaster</i>.</p>
+  <div class="warn" style="margin-bottom:14px"><b>Licens innan betalande kunder ser detta.</b> ${(ev.terms||[]).map(t=>`<br><b>${esc(t.label)}:</b> ${(t.items||[]).map(x=>esc(x)).join(' ')}`).join('')}</div>
+  <div class="flow">
+    <div class="stage accent"><h3>Kommande 30 dagar</h3><div class="big">${t.upcoming30||0}</div><div class="note">Det föraren ser. ${t.stored||0} lagrade totalt.</div></div>
+    <div class="stage accent-g"><h3>Sluttid från källan</h3><div class="big">${eb.source||0}</div><div class="note">${eb.estimated||0} uppskattade, ${eb.unknown||0} utan sluttid.</div></div>
+    <div class="stage accent-y"><h3>Starttid ej satt</h3><div class="big">${ev.timeUnknown||0}</div><div class="note">Ticketmaster anger bara datum (TBA). Visas utan tid.</div></div>
+    <div class="stage"><h3>Dolda</h3><div class="big">${t.hidden||0}</div><div class="note">Tilläggsposter vars huvudevenemang redan finns i kalendern. ${t.missing||0} försvunna ur källan.</div></div>
+  </div>`;
+
+  h+=`<div class="card" id="evx" style="margin-top:14px"><b>Karta och kalender</b>
+  <p class="foot" style="margin:4px 0 12px">Klicka på en dag för att se bara den, och på ett evenemang för att hitta det på kartan. Färgen är kategorin. ≈ = uppskattad sluttid. Blekt = inställt eller uppskjutet.</p>
+  <div class="evx-phq" id="evx-phq"></div>
+  <div class="evx-controls">
+    <div class="evx-seg" id="evx-period" role="group" aria-label="Period">
+      <button type="button" data-period="7">7 dagar</button><button type="button" data-period="30">30 dagar</button><button type="button" data-period="all">Allt (${r.horizonDays||'?'} dagar)</button>
+    </div>
+    <div class="evx-seg" id="evx-size" role="group" aria-label="Storlek"><button type="button" data-size="all">Alla storlekar</button><button type="button" data-size="relevant">1 000+ eller okänd</button><button type="button" data-size="large">5 000+</button></div>
+    <select id="evx-city" aria-label="Ort"><option value="">Alla orter</option></select>
+    <input type="search" id="evx-q" placeholder="Sök artist, arena eller ort" aria-label="Sök evenemang">
+    <span class="foot" id="evx-count"></span>
+  </div>
+  <div class="evx-cats" id="evx-cats"></div>
+  <div class="evx">
+    <div><div class="cal" id="evx-cal"></div><div class="evx-list" id="evx-list"></div></div>
+    <div class="card mapwrap" style="padding:0;overflow:hidden;margin:0"><button class="mapbtn" onclick="toggleMapFull('events-map')">⛶ Helskärm</button><div class="maphint">Klicka i kartan för att zooma med scroll</div><div id="events-map" class="lmap evx-map"></div></div>
+  </div></div>`;
+
+  const dur=(r.durations||[]).map(x=>`${esc(x.label)} ${Math.floor(x.minutes/60)} h ${String(x.minutes%60).padStart(2,'0')}`).join(' · ');
+  h+=`<div class="card" style="margin-top:14px"><b>Så bearbetas evenemangen</b> <span class="foot">— <code>events/timing.py</code>, <code>events/ingest.py</code></span>
+  <dl class="kv" style="margin-top:10px">
+    <dt>1. Hämtning</dt><dd>Hela Sverige (<code>countryCode=SE</code>), från ${r.lookbackHours} h bakåt till ${r.horizonDays} dagar framåt, var ${r.cadenceHours}:e timme. 30-dagarsfönster som delas när ett fönster har 1000 träffar — Ticketmaster lämnar aldrig ut träff nummer 1000. Högst 5 anrop per sekund.</dd>
+    <dt>2. Sluttid</dt><dd>Källans <code>dates.end.dateTime</code> när den finns. <code>end.localTime</code> används inte: den är en kopia av starttiden. Annars uppskattad per kategori: ${dur}. Okalibrerat.</dd>
+    <dt>3. Utsläpp</dt><dd>Från sluttiden till ${r.leaveWindowMin} min efter — när publiken lämnar lokalen.</dd>
+    <dt>4. Tilläggsposter</dt><dd>Känns igen på namnet (<code>${esc(r.addonPattern)}</code>) men döljs <b>bara</b> när huvudevenemanget finns samma dag på samma plats. För de stora arenakonserterna är Platinum-biljetterna ofta den enda posten hos Ticketmaster — då visas den, med "Platinum Tickets" borttaget ur namnet.</dd>
+    <dt>5. Status</dt><dd>Inställda och uppskjutna visas men markeras: där står ingen publik.</dd>
+    <dt>6. Lagring</dt><dd>Försvinner ett evenemang ur källan döljs det direkt och raderas efter ${r.missingRetentionHours} h. Passerade raderas ${r.pastRetentionHours} h efter slut.</dd>
+    <dt>7. PredictHQ live</dt><dd>Hämtas när sidan visas, högst ${(ev.predicthqLive||{}).maxDays||30} dagar framåt, och sparas aldrig — varken i databasen eller som källstatus. Förarappen får inte PredictHQ förrän ett avtal finns.</dd>
+    <dt>8. Storlek</dt><dd>PredictHQ:s förutsagda antal besökare, alltid avrundat. Stort: ${((r.sizeThresholds||{}).large||5000).toLocaleString('sv')}+. Medel: ${((r.sizeThresholds||{}).relevant||1000).toLocaleString('sv')}+. Ticketmaster har ingen prognos, så där är storleken okänd — och okänd räknas som relevant.</dd>
+    <dt>9. Dubbletter</dt><dd>Ett PredictHQ- och ett Ticketmaster-evenemang räknas som samma när de ligger inom ${r.duplicateMaxMeters||400} m, högst ${r.duplicateMaxStartGapMin||90} min isär och har liknande namn. Då visas PredictHQ-raden, med Ticketmasters biljettlänk.</dd>
+  </dl></div>`;
+
+  const cmax=Math.max(...(ev.byCity||[]).map(x=>x.n),1), kmax=Math.max(...(ev.byCategory||[]).map(x=>x.n),1);
+  h+=`<div class="split"><div class="card"><b>Per ort, kommande 30 dagar</b><table style="margin-top:8px">`;
+  for(const x of ev.byCity||[]) h+=`<tr><td>${esc(x.city||'—')}</td><td style="width:45%"><div class="bar"><i style="width:${x.n/cmax*100}%"></i></div></td><td class="num">${x.n}</td></tr>`;
+  if(!(ev.byCity||[]).length) h+=`<tr><td class="foot">Inga evenemang.</td></tr>`;
+  h+=`</table></div><div class="card"><b>Per kategori</b><table style="margin-top:8px">`;
+  for(const x of ev.byCategory||[]){
+    const col=EVENT_CAT_COLOR[x.category]||'#526078';
+    h+=`<tr><td><b style="display:inline-block;width:10px;height:10px;border-radius:50%;background:${col};margin-right:6px"></b>${esc(x.label)}</td><td style="width:45%"><div class="bar"><i style="width:${x.n/kmax*100}%;background:${col}"></i></div></td><td class="num">${x.n}</td></tr>`;
+  }
+  h+=`</table></div></div>`;
+
+  if((ev.hiddenEvents||[]).length){
+    h+=`<div class="card"><b>Dolda — och varför</b><table style="margin-top:8px"><tr><th>Datum</th><th>Namn</th><th>Skäl</th></tr>`;
+    for(const x of ev.hiddenEvents) h+=`<tr><td class="foot">${esc(x.startDate)}</td><td>${esc(x.name)}<br><span class="foot">${esc(x.city||'')}</span></td><td class="foot">${esc(x.reason)}</td></tr>`;
+    h+=`</table></div>`;
+  }
+  return h+`</details>`;
+}
+
+/* ---------- 2c+. evenemangskarta och kalender ---------- */
+// Kalender, lista och karta över events.calendar som följer samma filter.
+// Tillståndet ligger utanför render() så att auto-uppdateringen inte
+// nollställer vald dag, kategori, sökning eller kartans vy.
+const EVENTS_UI={catOff:new Set(),city:'',q:'',period:'30',day:null,month:null,selectedId:null,
+  map:null,layer:null,markers:new Map(),view:null,data:[],timer:null,
+  size:'relevant',tm:[],phq:null,phqError:'',phqLoading:false,phqRequested:false,phqDays:14,live:null,thresholds:null};
+
+function evxToday(){ return new Date().toLocaleDateString('sv-SE'); }
+function evxAddDays(iso,n){ const d=new Date(iso+'T12:00:00'); d.setDate(d.getDate()+n); return d.toLocaleDateString('sv-SE'); }
+function evxDayLabel(iso){ return new Date(iso+'T12:00:00').toLocaleDateString('sv',{weekday:'long',day:'numeric',month:'long'}); }
+function evxShiftMonth(ym,n){ const [y,m]=ym.split('-').map(Number); const d=new Date(y,m-1+n,1);
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+function evxLastMonth(){ return EVENTS_UI.data.reduce((a,e)=>e.startDate>a?e.startDate:a,evxToday()).slice(0,7); }
+function evxCatLabel(c){ const e=EVENTS_UI.data.find(x=>x.category===c); return e?e.categoryLabel:c; }
+function evxColor(c){ return EVENT_CAT_COLOR[c]||'#526078'; }
+
+// Kalendern ignorerar perioden (annars vore nästa månad alltid tom), och
+// kategorichipsen ignorerar kategorifiltret (annars kan man inte tända igen).
+function evxMatch(e,{cat=true,period=true,day=true}={}){
+  const ui=EVENTS_UI;
+  // Storlek finns bara för PredictHQ-rader; okänd storlek räknas som relevant.
+  const th=ui.thresholds||{relevant:1000,large:5000};
+  if(ui.size==='relevant'&&e.attendance!=null&&e.attendance<th.relevant) return false;
+  if(ui.size==='large'&&!(e.attendance>=th.large)) return false;
+  if(cat&&ui.catOff.has(e.category)) return false;
+  if(ui.city&&e.city!==ui.city) return false;
+  if(ui.q&&!`${e.name} ${e.venueName} ${e.city} ${e.categoryLabel}`.toLowerCase().includes(ui.q)) return false;
+  if(day&&ui.day) return e.startDate===ui.day;
+  if(period&&ui.period!=='all'&&e.startDate>evxAddDays(evxToday(),Number(ui.period))) return false;
+  return true;
+}
+function evxShown(){ return EVENTS_UI.data.filter(e=>evxMatch(e)); }
+
+function evxDrawCats(){
+  const host=document.getElementById('evx-cats'); if(!host) return;
+  const counts={};
+  for(const e of EVENTS_UI.data) if(evxMatch(e,{cat:false})) counts[e.category]=(counts[e.category]||0)+1;
+  const keys=Object.keys(counts).sort((a,b)=>counts[b]-counts[a]);
+  host.innerHTML=keys.map(k=>`<button type="button" class="srcchip" data-cat="${esc(k)}" aria-pressed="${!EVENTS_UI.catOff.has(k)}"
+      title="Klicka för att släcka eller tända kategorin."><b style="background:${evxColor(k)}"></b>${esc(evxCatLabel(k))}<span class="n">${counts[k]}</span></button>`).join('')
+    +(EVENTS_UI.catOff.size?`<button type="button" class="srcchip act" data-cat-act="all">Visa alla kategorier</button>`:'');
+}
+
+function evxDrawCalendar(){
+  const host=document.getElementById('evx-cal'); if(!host) return;
+  const ui=EVENTS_UI, today=evxToday(), byDay=new Map();
+  for(const e of ui.data){
+    if(!evxMatch(e,{period:false,day:false})) continue;
+    if(!byDay.has(e.startDate)) byDay.set(e.startDate,[]);
+    byDay.get(e.startDate).push(e);
+  }
+  const [y,m]=ui.month.split('-').map(Number);
+  const first=new Date(y,m-1,1), offset=(first.getDay()+6)%7, days=new Date(y,m,0).getDate();
+  const cells=Math.ceil((offset+days)/7)*7;
+  let h=`<div class="cal-head"><button type="button" data-evx="prev" aria-label="Föregående månad"${ui.month<=today.slice(0,7)?' disabled':''}>‹</button>
+    <b>${esc(first.toLocaleDateString('sv',{month:'long',year:'numeric'}))}</b>
+    <button type="button" data-evx="next" aria-label="Nästa månad"${ui.month>=evxLastMonth()?' disabled':''}>›</button></div><div class="cal-grid">`;
+  for(const d of ['mån','tis','ons','tor','fre','lör','sön']) h+=`<div class="cal-dow">${d}</div>`;
+  for(let i=0;i<cells;i++){
+    const date=new Date(y,m-1,1+i-offset), iso=date.toLocaleDateString('sv-SE');
+    const evs=byDay.get(iso)||[], cats=[...new Set(evs.map(e=>e.category))].slice(0,8);
+    const cls=['cal-day']; if(date.getMonth()!==m-1) cls.push('out'); if(iso===today) cls.push('today');
+    h+=`<button type="button" class="${cls.join(' ')}" data-evx-day="${iso}" aria-pressed="${ui.day===iso}"${evs.length||ui.day===iso?'':' disabled'}
+        aria-label="${esc(evxDayLabel(iso))}: ${evs.length} evenemang"><span>${date.getDate()}</span>${evs.length?`<span class="n">${evs.length}</span><span class="dots">${cats.map(c=>`<i style="background:${evxColor(c)}"></i>`).join('')}</span>`:''}</button>`;
+  }
+  host.innerHTML=h+'</div>';
+}
+
+function evxDrawList(){
+  const host=document.getElementById('evx-list'); if(!host) return;
+  const ui=EVENTS_UI, rows=evxShown();
+  const count=document.getElementById('evx-count');
+  if(count) count.textContent=`${rows.length} evenemang${ui.day?' · '+evxDayLabel(ui.day):''}`;
+  if(!rows.length){ host.innerHTML='<p class="foot" style="padding:14px 4px">Inga evenemang med de här filtren.</p>'; return; }
+  let h='', day='';
+  for(const e of rows.slice(0,500)){
+    if(e.startDate!==day){ day=e.startDate; h+=`<div class="evx-day">${esc(evxDayLabel(day))}</div>`; }
+    const est=e.endBasis==='estimated'?'≈':'';
+    h+=`<div class="evx-item${ui.selectedId===e.id?' on':''}" data-evx-id="${esc(e.id)}"${e.happening?'':' style="opacity:.55"'}>
+      <div class="t">${esc(e.startLocal||'––:––')}<div class="m">${e.endLocal?est+esc(e.endLocal)+(e.endDate&&e.endDate!==e.startDate?'<br>'+esc(evxShortDate(e.endDate)):''):''}</div></div>
+      <div><span class="dot" style="background:${evxColor(e.category)}"></span><b>${esc(e.name)}</b>
+        <div class="m">${esc(e.venueName||'')}${e.city?' · '+esc(e.city):''} · ${esc(e.categoryLabel)}${e.happening?'':' · <b style="color:var(--danger)">'+esc(e.statusLabel)+'</b>'}</div>
+        <div class="m">${e.attendanceText?`<b style="color:var(--navy)">${esc(e.attendanceText)}</b> · `:''}${esc(e.sourceLabel||'')}</div>
+        ${e.leaveUntilLocal?`<div class="m">Utsläpp ${e.endDate&&e.endDate!==e.startDate?esc(evxShortDate(e.endDate))+' ':''}${est}${esc(e.endLocal)}–${esc(e.leaveUntilLocal)}</div>`:(e.timeKnown?'':'<div class="m">Starttiden är inte satt än</div>')}
+      </div></div>`;
+  }
+  host.innerHTML=h;
+}
+
+// Rutnät för sammanslagning, i grader, per zoomnivå. Utzoomat blir evenemang i
+// samma område en siffra; inzoomat är det en markör per plats. Utan det blev
+// södra Sverige en enda klump när PredictHQ:s hundratals evenemang kom in.
+function evxCell(zoom){
+  if(zoom<=5) return 1;
+  if(zoom===6) return 0.5;
+  if(zoom===7) return 0.25;
+  if(zoom===8) return 0.12;
+  if(zoom<=10) return 0.05;
+  if(zoom<=12) return 0.01;
+  return 0;
+}
+function evxDrawMap(fit){
+  const el=document.getElementById('events-map');
+  if(!el||typeof L==='undefined') return;
+  const ui=EVENTS_UI;
+  if(!ui.map||ui.map.getContainer()!==el){
+    if(MAPS['events-map']){ try{MAPS['events-map'].remove()}catch(_){} delete MAPS['events-map']; }
+    const map=L.map(el,{scrollWheelZoom:false,maxZoom:19});
+    MAPS['events-map']=map; ui.map=map; ui.layer=L.layerGroup().addTo(map);
+    L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+      {attribution:'&copy; Esri · OpenStreetMap',maxZoom:19,maxNativeZoom:19}).addTo(map);
+    L.control.scale({imperial:false}).addTo(map);
+    map.once('click',()=>{map.scrollWheelZoom.enable();const hint=el.parentElement.querySelector('.maphint');if(hint)hint.remove()});
+    if(ui.view&&!fit) map.setView(ui.view.center,ui.view.zoom); else map.setView([62.2,15.6],5);
+    map.on('moveend',()=>{ui.view={center:map.getCenter(),zoom:map.getZoom()}});
+    map.on('zoomend',()=>{ if(!ui.drawing) evxDrawMap(false); });
+  }
+  const rows=evxShown().filter(e=>e.lat!=null&&e.lon!=null);
+  ui.drawing=true;
+  try{
+    if(fit&&rows.length) ui.map.fitBounds(L.latLngBounds(rows.map(e=>[e.lat,e.lon])).pad(0.15),{maxZoom:14,animate:false});
+  } finally { ui.drawing=false; }
+  ui.layer.clearLayers(); ui.markers=new Map();
+  // Longitud i dubbla steg: en grad öst-väst är ungefär hälften så lång som en
+  // grad nord-syd på Sveriges breddgrader, så rutorna blir ungefär kvadratiska.
+  const cell=evxCell(ui.map.getZoom()), groups=new Map();
+  for(const e of rows){
+    const key=cell?`${Math.floor(e.lat/cell)}:${Math.floor(e.lon/(cell*2))}`:`${e.lat.toFixed(4)},${e.lon.toFixed(4)}`;
+    if(!groups.has(key)) groups.set(key,[]);
+    groups.get(key).push(e);
+  }
+  for(const evs of groups.values()){
+    const lat=evs.reduce((s,e)=>s+e.lat,0)/evs.length, lon=evs.reduce((s,e)=>s+e.lon,0)/evs.length;
+    const places=new Set(evs.map(e=>e.lat.toFixed(4)+','+e.lon.toFixed(4))).size;
+    const cats=[...new Set(evs.map(e=>e.category))];
+    const color=cats.length===1?evxColor(cats[0]):'#14213D';
+    const selected=evs.some(e=>e.id===ui.selectedId);
+    const maxAttendance=Math.max(0,...evs.map(e=>e.attendance||0));
+    const byCount=evs.length>1?Math.min(44,20+Math.round(Math.sqrt(evs.length)*4)):16;
+    const byAttendance=places===1&&maxAttendance?Math.min(34,14+Math.round(Math.sqrt(maxAttendance)/10)):0;
+    const size=Math.max(byCount,byAttendance);
+    const faded=evs.every(e=>!e.happening);
+    const icon=L.divIcon({className:'evx-pin',iconSize:[size,size],iconAnchor:[size/2,size/2],popupAnchor:[0,-size/2],
+      html:`<span style="width:${size}px;height:${size}px;background:${color};${selected?'box-shadow:0 0 0 3px #FCA311,0 1px 4px rgba(0,0,0,.35);':''}${faded?'opacity:.45;':''}">${evs.length>1?evs.length:''}</span>`});
+    const title=places>1?`${evs.length} evenemang på ${places} platser`:(evs.length>1?`${evs[0].venueName}: ${evs.length} evenemang`:evs[0].name);
+    const marker=L.marker([lat,lon],{icon,riseOnHover:true,zIndexOffset:selected?1000:evs.length,title})
+      .addTo(ui.layer).bindPopup(()=>evxGroupPopup(evs,places),{maxWidth:440,minWidth:280});
+    marker.on('click',()=>{ if(evs.length===1) evxSelect(evs[0].id,{fromMap:true}); });
+    for(const e of evs) ui.markers.set(e.id,marker);
+  }
+}
+
+function evxShortDate(iso){ return new Date(iso+'T12:00:00').toLocaleDateString('sv',{day:'numeric',month:'short'}); }
+
+function evxGroupPopup(evs,places){
+  if(evs.length===1) return eventPopupHtml(evs[0]);
+  const ui=EVENTS_UI, first=evs[0], sel=evs.find(e=>e.id===ui.selectedId);
+  let h=places>1
+    ?`<b>${evs.length} evenemang på ${places} platser</b><br><span class="foot">Zooma in för att se platserna var för sig.</span>`
+    :`<b>${esc(first.venueName||'')}</b><br><span class="foot">${esc(first.address||'')}${first.city?' · '+esc(first.city):''} · ${evs.length} evenemang i urvalet</span>`;
+  if(sel) h+=`<div style="margin-top:8px;padding-top:8px;border-top:1px solid #D9DCE0">${eventPopupHtml(sel)}</div>`;
+  const sorted=[...evs].sort((a,b)=>a.startDate.localeCompare(b.startDate)||String(a.startAt||'~').localeCompare(String(b.startAt||'~')));
+  // onclick, inte den delegerade lyssnaren: Leaflet stoppar klick i en popup
+  // från att bubbla vidare till dokumentet.
+  h+='<div style="margin-top:8px;max-height:230px;overflow:auto">'+sorted.slice(0,80).map(e=>
+    `<div data-evx-pop="${esc(e.id)}" onclick="evxSelect(this.dataset.evxPop)" style="padding:5px 0;border-top:1px solid #E7EBF1;cursor:pointer${e.id===ui.selectedId?';font-weight:700':''}${e.happening?'':';opacity:.55'}">`+
+    `<span style="font-variant-numeric:tabular-nums;color:#526078">${esc(evxShortDate(e.startDate))} ${esc(e.startLocal||'––:––')}</span> · `+
+    `${e.attendanceText?'<b>'+esc(e.attendanceText.replace(' besökare',''))+'</b> · ':''}${esc(e.name)}`+
+    `${places>1?' <span style="color:#526078">· '+esc(e.venueName||'')+'</span>':''}</div>`).join('')+
+    (evs.length>80?`<div class="foot">… och ${evs.length-80} till</div>`:'')+'</div>';
+  return h;
+}
+
+function evxSelect(id,{fromMap=false}={}){
+  const ui=EVENTS_UI;
+  ui.selectedId=(!fromMap&&ui.selectedId===id)?null:id;
+  document.querySelectorAll('#evx-list .evx-item').forEach(n=>n.classList.toggle('on',n.dataset.evxId===ui.selectedId));
+  if(fromMap){
+    // Popupen öppnas redan av klicket; att rita om markörerna nu skulle stänga den.
+    const item=document.querySelector(`#evx-list [data-evx-id="${CSS.escape(id)}"]`);
+    if(item) item.scrollIntoView({block:'nearest',behavior:'smooth'});
+    return;
+  }
+  const target=ui.data.find(e=>e.id===id);
+  if(!ui.map||!ui.selectedId||!target||target.lat==null){ evxDrawMap(false); return; }
+  ui.map.closePopup();
+  // Kartan ritas om när flygningen landar (zoomen ändrar rutnätet), så markören
+  // måste slås upp på nytt -- den som fanns före flygningen är redan borttagen.
+  const open=()=>{ const marker=ui.markers.get(id); if(marker&&!marker.isPopupOpen()) marker.openPopup(); };
+  ui.map.once('moveend',()=>{ evxDrawMap(false); setTimeout(open,60); });
+  ui.map.flyTo([target.lat,target.lon],Math.max(ui.map.getZoom(),14),{duration:.5});
+  setTimeout(()=>{ evxDrawMap(false); open(); },900);
+}
+
+// PredictHQ live: hämtas när sidan visas och ligger bara i sidans minne. Deras
+// villkor förbjuder lagring, så backend sparar inget (events/live.py), och sidan
+// hämtar inte om vid auto-uppdateringen -- bara när man ber om det.
+function evxMerged(){
+  const ui=EVENTS_UI;
+  if(!ui.phq||!ui.phq.events) return ui.tm;
+  const paired=new Set(ui.phq.events.map(e=>e.ticketmasterId).filter(Boolean));
+  return ui.phq.events.concat(ui.tm.filter(e=>!paired.has(e.id))).sort((a,b)=>
+    a.startDate.localeCompare(b.startDate)||String(a.startAt||'~').localeCompare(String(b.startAt||'~'))||a.name.localeCompare(b.name,'sv'));
+}
+function evxLoadPhq(){
+  const ui=EVENTS_UI;
+  if(ui.phqLoading) return;
+  ui.phqRequested=true; ui.phqLoading=true; ui.phqError=''; evxDrawPhq();
+  fetch(`/api/pipeline/predicthq?days=${encodeURIComponent(ui.phqDays)}`)
+    .then(r=>r.json().catch(()=>({error:`HTTP ${r.status}`})))
+    .then(body=>{
+      if(body.error){ ui.phqError=body.error; return; }
+      ui.phq=body; ui.data=evxMerged(); ui.selectedId=null; evxRefresh(true);
+    })
+    .catch(err=>{ ui.phqError=String(err); })
+    .finally(()=>{ ui.phqLoading=false; evxDrawPhq(); });
+}
+function evxDrawPhq(){
+  const host=document.getElementById('evx-phq'); if(!host) return;
+  const ui=EVENTS_UI, live=ui.live||{};
+  const options=[7,14,30].filter(n=>n<=(live.maxDays||30))
+    .map(n=>`<option value="${n}"${n===ui.phqDays?' selected':''}>${n} dagar</option>`).join('');
+  let text;
+  if(!live.available) text='<b>PredictHQ live är av.</b> Kräver DEBUG och PREDICTHQ_ACCESS_TOKEN i backend.';
+  else if(ui.phqLoading) text='<b>Hämtar PredictHQ live…</b> ungefär fyra sekunder per två veckor.';
+  else if(ui.phqError) text=`<b style="color:var(--danger)">PredictHQ svarade inte:</b> ${esc(ui.phqError)}`;
+  else if(ui.phq){
+    const p=ui.phq;
+    text=`<b>PredictHQ live:</b> ${p.events.length} evenemang de närmaste ${p.days} dagarna, ${p.matchedTicketmaster} ihopparade med Ticketmaster · ${p.calls} anrop på ${(p.durationMs/1000).toFixed(1)} s · hämtat ${hhmm(p.fetchedAt)}${p.overflow?' · <b style="color:var(--danger)">kapat av abonnemanget</b>':''} · <b>sparas inte</b>`;
+  } else text='PredictHQ är inte hämtat.';
+  host.innerHTML=`<div>${text}</div>`
+    +(live.available?`<div class="evx-phq-ctl"><select id="evx-phq-days" aria-label="Period för PredictHQ">${options}</select><button type="button" data-phq="load"${ui.phqLoading?' disabled':''}>${ui.phq?'Hämta igen':'Hämta PredictHQ'}</button></div>`:'')
+    +`<div class="foot" style="width:100%;margin:0">${esc(ui.phq?'Evenemangsdata från PredictHQ och Ticketmaster':'Evenemangsdata från Ticketmaster')}</div>`;
+}
+
+function evxRefresh(fit){
+  const ui=EVENTS_UI;
+  document.querySelectorAll('#evx-period [data-period]').forEach(b=>
+    b.setAttribute('aria-pressed',String(!ui.day&&b.dataset.period===ui.period)));
+  document.querySelectorAll('#evx-size [data-size]').forEach(b=>
+    b.setAttribute('aria-pressed',String(b.dataset.size===ui.size)));
+  evxDrawPhq(); evxDrawCats(); evxDrawCalendar(); evxDrawList(); evxDrawMap(fit);
+}
+
+// Anropas av render() efter att sidan ritats: containrarna är nya varje gång.
+function wireEventsUi(ev){
+  const ui=EVENTS_UI;
+  if(!document.getElementById('evx')) return;
+  ui.tm=(ev&&ev.calendar)||[];
+  ui.thresholds=(ev&&ev.rules&&ev.rules.sizeThresholds)||ui.thresholds;
+  ui.live=(ev&&ev.predicthqLive)||null;
+  ui.data=evxMerged();
+  const today=evxToday();
+  if(!ui.month||ui.month<today.slice(0,7)) ui.month=today.slice(0,7);
+  if(ui.day&&!ui.data.some(e=>e.startDate===ui.day)) ui.day=null;
+  if(ui.selectedId&&!ui.data.some(e=>e.id===ui.selectedId)) ui.selectedId=null;
+  const cities=[...new Set(ui.data.map(e=>e.city).filter(Boolean))].sort((a,b)=>a.localeCompare(b,'sv'));
+  if(ui.city&&!cities.includes(ui.city)) ui.city='';
+  const sel=document.getElementById('evx-city');
+  if(sel) sel.innerHTML='<option value="">Alla orter</option>'+cities.map(c=>
+    `<option value="${esc(c)}"${c===ui.city?' selected':''}>${esc(c)} (${ui.data.filter(e=>e.city===c).length})</option>`).join('');
+  const q=document.getElementById('evx-q'); if(q) q.value=ui.q;
+  evxRefresh(!ui.view);
+  // En gång per sidladdning. Auto-uppdateringen ritar om utan att hämta PredictHQ igen.
+  if(ui.live&&ui.live.available&&!ui.phqRequested){ ui.phqDays=ui.live.defaultDays||14; evxLoadPhq(); }
+}
+
+document.addEventListener('click',e=>{
+  const b=e.target.closest('#evx [data-period],#evx [data-evx],#evx [data-evx-day],#evx [data-evx-id],#evx [data-cat],#evx [data-cat-act],#evx [data-size],#evx [data-phq]');
+  if(!b) return;
+  const ui=EVENTS_UI;
+  if(b.dataset.period){ ui.period=b.dataset.period; ui.day=null; ui.selectedId=null; evxRefresh(true); }
+  else if(b.dataset.evx){ ui.month=evxShiftMonth(ui.month,b.dataset.evx==='next'?1:-1); evxDrawCalendar(); }
+  else if(b.dataset.evxDay){ ui.day=ui.day===b.dataset.evxDay?null:b.dataset.evxDay; ui.selectedId=null; evxRefresh(true); }
+  else if(b.dataset.evxId){ evxSelect(b.dataset.evxId); }
+  else if(b.dataset.cat){ ui.catOff.has(b.dataset.cat)?ui.catOff.delete(b.dataset.cat):ui.catOff.add(b.dataset.cat); evxRefresh(true); }
+  else if(b.dataset.catAct==='all'){ ui.catOff.clear(); evxRefresh(true); }
+  else if(b.dataset.size){ ui.size=b.dataset.size; ui.selectedId=null; evxRefresh(true); }
+  else if(b.dataset.phq==='load'){ evxLoadPhq(); }
+});
+document.addEventListener('input',e=>{
+  if(e.target.id!=='evx-q') return;
+  EVENTS_UI.q=e.target.value.trim().toLowerCase();
+  clearTimeout(EVENTS_UI.timer);
+  EVENTS_UI.timer=setTimeout(()=>{EVENTS_UI.selectedId=null;evxRefresh(true)},180);
+});
+document.addEventListener('change',e=>{
+  if(e.target.id==='evx-phq-days'){ EVENTS_UI.phqDays=Number(e.target.value); return; }
+  if(e.target.id!=='evx-city') return;
+  EVENTS_UI.city=e.target.value; EVENTS_UI.day=null; EVENTS_UI.selectedId=null; evxRefresh(true);
+});
+// En Leaflet-karta i en hopfälld <details> har storlek noll. Rita om när den fälls ut.
+document.addEventListener('toggle',e=>{
+  if(EVENTS_UI.map&&e.target.contains&&e.target.contains(document.getElementById('events-map')))
+    setTimeout(()=>EVENTS_UI.map.invalidateSize(),60);
+},true);
+
+/* ---------- 0b. Lanseringsläge (P0/P1) ---------- */
+function renderLaunch(L){
+  if(!L) return '';
+  const pill=(ok,yes,no)=>`<span class="pill ${ok?'p-high':'p-low'}">${esc(ok?yes:no)}</span>`;
+  const time=v=>v?new Date(v).toLocaleTimeString('sv',{hour:'2-digit',minute:'2-digit'}):'—';
+  const h=L.health||{}, o=L.outbox||{}, a=L.areas||{}, p=L.pilot||{}, ps=p.status||{}, sec=L.security||{};
+  const srcRows=(h.sources||[]).map(s=>`<tr><td>${esc(s.source)}</td><td>${s.core?'kärna':'tillägg'}</td>
+    <td>${pill(!s.stale,'färsk','inaktuell')}</td><td>${s.lastSuccessAgeMinutes==null?'aldrig':s.lastSuccessAgeMinutes+' min sedan'}</td>
+    <td>${s.maxAgeMinutes} min</td><td>${s.consecutiveFailures||0}</td></tr>`).join('');
+  const reasons=Object.entries(o.reasons||{}).sort((x,y)=>y[1]-x[1]).map(([k,n])=>`<code>${esc(k)}</code> ${n}`).join(' · ')||'—';
+  const counties=(a.byCounty||[]).slice(0,12).map(c=>`${esc(c.name)} ${c.n}`).join(' · ');
+  const calls=(p.calls||[]).map(c=>`<tr><td>${esc(c.ship)}</td><td>${esc(c.terminal)}</td><td>${time(c.berthEta)}</td>
+    <td>${esc(c.basis||'')}</td><td>${c.distanceKm??'—'}</td><td>${time(c.arrivedAt)}</td></tr>`).join('');
+  const rights=(L.eventRights||[]).map(r=>`<tr><td>${esc(r.source)}</td><td>${pill(r.mayStore,'får lagras','lagras inte')}</td>
+    <td>${pill(r.mayShowInApp,'visas i appen','visas inte')}</td>
+    <td class="foot">${esc(r.mayStore?r.storeReference:r.storeRefusal)}${r.mayShowInApp?'':' · '+esc(r.appRefusal)}</td></tr>`).join('');
+  return `<details open><summary><h2>0b · Lanseringsläge — P0 och P1, lokalt</h2></summary>
+  <p class="sub">Läst ur samma kod som driften: <code>/health/pipeline</code>, notisbeslutet, körområdena, AIS-piloten och rättighetsspärren. Allt här körs lokalt — inget är driftsatt.</p>
+  <div class="card"><h3>Pipelinens hälsa ${pill(h.ok,'frisk','inte frisk')}</h3>
+    <p class="foot">Hjärtslag från worker: ${h.heartbeatAgeSeconds==null?'saknas':h.heartbeatAgeSeconds+' s sedan'}${(h.problems||[]).length?' · problem: '+h.problems.map(esc).join(', '):''}</p>
+    <table><tr><th>Källa</th><th>Roll</th><th>Läge</th><th>Senast lyckad</th><th>Gräns</th><th>Fel i rad</th></tr>${srcRows}</table></div>
+  <div class="card"><h3>Notiser — utkorg och beslut</h3>
+    <p>Utkorgen: ${Object.entries(o.byStatus||{}).map(([k,n])=>`${esc(k)} ${n}`).join(' · ')||'tom'}.<br>
+    Just nu ${o.candidates||0} kandidater och ${o.wouldSend||0} notiser som skulle skickas. Varför inte: ${reasons}.</p>
+    <p class="foot">Skäl i klartext finns i <code>core/notify.REASONS</code>; <code>push_cycle --dry-run</code> visar dem per enhet.</p></div>
+  <div class="card"><h3>Körområden — län och kommuner (SCB)</h3>
+    <p>${a.withCounty||0} av ${a.active||0} aktiva tips har län, ${a.withMunicipality||0} har kommun.</p>
+    <p class="foot">${counties||'—'}</p></div>
+  <div class="card"><h3>Järnväg — inställda tåg och nästa resa ${pill((L.rail||{}).complete!==false,'komplett hämtning','ofullständig')}</h3>
+    <p>${(L.rail||{}).cancelled_trains??'—'} inställda tåg (unika) de närmaste ${(L.rail||{}).window_hours??'?'} timmarna och ${(L.rail||{}).delayed_departures??0} avgångar 30+ min försenade → ${(L.rail||{}).alerts??'—'} tips, varav ${(L.rail||{}).cancelled_alerts??'—'} inställda.</p>
+    <p class="foot">Ett tips per tåg vid dess första stopp och en störning per station; tipset syns 90 min före avgång. Sajter som räknar hela dygnet, med passerade tåg, visar högre tal. ${(L.rail||{}).rows??'—'} rader på ${(L.rail||{}).pages??'—'} sidor.<br>
+    ResRobot (nästa resa mot samma slutstation): ${(L.rail||{}).resrobot?.calls??0} av ${(L.rail||{}).resrobot?.budget??'—'} anrop ${esc((L.rail||{}).resrobot?.month||'')} · ${(L.rail||{}).resrobot?.stops??0} hållplatser kända · senaste rundan ${esc(JSON.stringify((L.rail||{}).resrobot?.run||{}))}</p></div>
+  <div class="card"><h3>Kalibrering — mot utfall, senaste ${L.calibration?.window?.days??'?'} dygnen</h3>
+    <p>${((L.calibration||{}).notes||[]).map(esc).join('<br>')||'—'}</p>
+    <p class="foot">Feedback per regel: ${((L.calibration||{}).feedback||[]).map(r=>`<code>${esc(r.rule)}</code> 👍 ${r.fare} 👎 ${r.empty}${r.fareRate==null?'':` (${r.fareRate})`}`).join(' · ')||'ingen'}<br>
+    Utkorgen: ${Object.entries(((L.calibration||{}).push||{}).byStatus||{}).map(([k,n])=>`${esc(k)} ${n}`).join(' · ')||'tom'} ·
+    AIS-anlöp: ${((L.calibration||{}).ferry||[]).map(r=>`${esc(r.terminal)} ${r.arrived}/${r.calls}`).join(' · ')||'inga'}</p>
+    <p class="foot">Rapporten flyttar inga trösklar. <code>manage.py calibration_report</code> visar samma sak i terminalen.</p></div>
+  <div class="card"><h3>I tjänst — notiser nära föraren</h3>
+    <p>${L.presence?.onDuty??0} förare i tjänst just nu.</p>
+    <p class="foot">Grov ruta (≈ 5 km), gäller ${L.presence?.ttlMinutes??'?'} min efter senaste uppdatering, radie ${L.presence?.radiusKm??'?'} km. En rad per enhet, ingen historik, ingen bakgrundsspårning. Rutorna visas aldrig, bara antalet.</p></div>
+  <div class="card"><h3>Kombinationslagret</h3>
+    <p>${Object.entries((L.combinations||{}).byRule||{}).map(([k,n])=>`<code>${esc(k)}</code> ${n}`).join(' · ')||'Inga överlapp just nu.'}</p>
+    <p class="foot">${((L.combinations||{}).examples||[]).map(c=>`<code>${esc(c.rule)}</code> ${esc(c.reason)}${c.boost?` (+${c.boost})`:''}`).join('<br>')}</p>
+    <p class="foot">Dubbletter visas som en rad och påslag höjer ordningen i förarens lista. Notiserna påverkas inte förrän påslagen kalibrerats.</p></div>
+  <div class="card"><h3>AIS-pilot — Visby och Värtahamnen ${pill(ps.connected,'ansluten','inte ansluten')}</h3>
+    <p class="foot">Följer ${(ps.register||[]).map(esc).join(', ')||'—'} · meddelanden ${esc(JSON.stringify(ps.counts||{}))} · senast mottaget ${time(ps.lastSuccessAt)}</p>
+    ${calls?`<table><tr><th>Fartyg</th><th>Terminal</th><th>Kajtid</th><th>Grund</th><th>Km kvar</th><th>Vid kaj</th></tr>${calls}</table>`
+      :'<p class="foot">Inga anlöp ännu: inget registerfartyg har närmat sig en pilotterminal under körningen.</p>'}</div>
+  <div class="card"><h3>Evenemang — rättighetsspärren</h3>
+    <table><tr><th>Källa</th><th>Lagring</th><th>Förarappen</th><th>Grund</th></tr>${rights}</table></div>
+  <div class="card"><h3>Flöde och säkerhet</h3>
+    <p class="foot">Delad flödescache ${L.feed?.cacheSeconds??'?'} s · högst ${L.feed?.contextLimit??'?'} väghändelser per svar ·
+    anon kan läsa <code>push_delivery</code> lokalt: ${sec.anonCanReadPushDelivery==null?'okänt':(sec.anonCanReadPushDelivery?'<b>ja</b>':'nej')}</p></div>
+  </details>`;
+}
+
 function render(d,ops){
   if(d.error){document.getElementById('root').innerHTML='<div class="err"><b>Fel:</b> '+esc(d.error)+'</div>';return}
   const t=d.totals, active=d.active;
@@ -495,6 +1276,25 @@ function render(d,ops){
   const pushable=active.filter(o=>NOTIFY_TIERS.includes(o.severity_tier)&&(o.demand_score||0)>=NOTIFY_FLOOR);
 
   let html='';
+
+  /* ---------- 0. FCM test (DEBUG) ---------- */
+  html+=`<details open><summary><h2>0 · Skicka FCM-testnotis</h2></summary>
+  <p class="sub">Lokal utvecklingsyta. Listar enheter från Django och skickar via samma FCM-väg som <code>push_cycle</code>. Kräver <code>FIREBASE_SERVICE_ACCOUNT_JSON</code> och att telefonen sparat en push-token.</p>
+  <div class="card" id="fcm-panel">
+    <p class="foot" id="fcm-status">Hämtar enheter…</p>
+    <div id="fcm-form" style="display:none">
+      <label style="display:block;font-weight:700;margin:8px 0 4px">Enhet</label>
+      <select id="fcm-device" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px"></select>
+      <label style="display:block;font-weight:700;margin:12px 0 4px">Titel</label>
+      <input id="fcm-title" value="TaxiTips test" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px">
+      <label style="display:block;font-weight:700;margin:12px 0 4px">Text</label>
+      <input id="fcm-body" value="Testnotis från pipeline-viz" style="width:100%;padding:8px;border:1px solid var(--line);border-radius:8px">
+      <button type="button" id="fcm-send" style="margin-top:14px;background:var(--navy);color:#fff;border:0;border-radius:10px;padding:10px 16px;font-weight:700;cursor:pointer">Skicka notis</button>
+      <pre id="fcm-result" style="margin-top:12px;display:none"></pre>
+    </div>
+  </div></details>`;
+
+  html+=renderLaunch(d.launch);
 
   /* ---------- 1. flow ---------- */
   html+=`<details open><summary><h2>1 · Flödet i stort</h2></summary>
@@ -522,7 +1322,7 @@ function render(d,ops){
   };
   const broken=sources.filter(x=>x.state==='fel'||x.state==='saknas');
   html+=`<details open><summary><h2>2 · Datakällor — vad de gav senast</h2></summary>
-  <p class="sub">Sex källor. Raden visar den senaste hämtningen, inte vad källan brukar ge.</p>`;
+  <p class="sub">${sources.length} källor. Raden visar den senaste hämtningen, inte vad källan brukar ge.</p>`;
   if(broken.length){
     html+=`<div class="err" style="margin-bottom:12px"><b>${broken.length} av ${sources.length} källor levererar inte just nu.</b>
     En källa som slutat svara ser i databasen ut precis som en lugn trafikdag — samma tomma tabell. Det är därför den här raden finns.</div>`;
@@ -535,7 +1335,7 @@ function render(d,ops){
     html+=`<tr>
       <td><b>${esc(x.label)}</b><br><span class="foot">${esc(x.key)}</span></td>
       <td class="foot">${esc(x.what)}</td>
-      <td><span class="pill ${cls}">${esc(x.state)}</span><br><span class="foot">${esc(txt)}</span></td>
+      <td><span class="pill ${cls}">${esc(x.state)}</span><br><span class="foot">${esc(txt)}${x.consecutiveFailures?` · ${x.consecutiveFailures} fel i rad`:''}${x.maxAgeMinutes!=null?` · senast lyckad ${x.lastSuccessAgeMinutes==null?'aldrig':x.lastSuccessAgeMinutes+' min sedan'} (gräns ${x.maxAgeMinutes} min)`:''}</span></td>
       <td class="num">${x.events||0}</td>
       <td class="num">${x.written||0}</td>
       <td class="num">${(x.storedEvents||0).toLocaleString('sv')}</td>
@@ -550,6 +1350,10 @@ function render(d,ops){
     och ${(t.railStations||0).toLocaleString('sv')} järnvägsstationer. Utan dem faller tips vars text namnger en lokal hållplats tillbaka på ortens centrum.</p>
   <p class="foot"><b>GTFS statisk tidtabell:</b> ${(t.gtfsStops||0).toLocaleString('sv')} hållplatser, ${(t.gtfsDepartures||0).toLocaleString('sv')} avgångar — ${t.gtfsDepartures?'ansluten':'<b>inte hämtad än</b>, vilket är varför Nästa avgång bara finns för tåg (se 5b)'}.</p>
   </div></details>`;
+
+  html+=renderMaritime(d.maritime);
+  html+=renderFerryLink();
+  html+=renderEvents(d.events);
 
   /* ---------- 3. processing ---------- */
   html+=`<details open><summary><h2>3 · Bearbetningen, steg för steg</h2></summary>
@@ -771,7 +1575,18 @@ function render(d,ops){
   }
 
   /* ---------- 5.5 four pipeline-stage maps ---------- */
-  const rawGeo=(d.rawSourceEvents||[]).filter(se=>se.lat!=null&&se.lon!=null);
+  // Fartygen (AISStream) är inte källhändelser men hör hemma på samma karta.
+  // Två egna källor, så passagerarfartyg och övrig trafik kan tändas och
+  // släckas var för sig i filtret -- se maritime/explain.py:s `map`.
+  const shipGeo=((d.maritime&&d.maritime.map)||[]).map(s=>({...s,ship:true,
+    // Typen sänds bara var sjätte minut. Ett fartyg vars typ inte hörts än är
+    // inte "övrigt" -- det är okänt, och får ett eget lager som krymper.
+    source:s.passenger?'ais_passenger':(s.type==null?'ais_unknown':'ais_other'),
+    external_id:s.name||String(s.mmsi)}));
+  // Evenemangen: samma karta, egen källa i filtret. Popupen visar tid,
+  // sluttid och utsläppsfönster i stället för rå JSON.
+  const eventGeo=((d.events&&d.events.map)||[]).map(e=>({...e,event:true,source:'ticketmaster',external_id:e.name}));
+  const rawGeo=(d.rawSourceEvents||[]).filter(se=>se.lat!=null&&se.lon!=null).concat(shipGeo,eventGeo);
   const geo=active.filter(o=>o.lat!=null&&o.lon!=null&&o.severity_tier!=='ignore'&&(o.demand_score||0)>0);
   const aiGeo=active.filter(o=>o.lat!=null&&o.lon!=null&&(o.confidence==='low'||o.aiReview));
   const driverGeo=active.filter(o=>o.lat!=null&&o.lon!=null&&NOTIFY_TIERS.includes(o.severity_tier)&&(o.demand_score||0)>=NOTIFY_FLOOR);
@@ -779,18 +1594,15 @@ function render(d,ops){
   html+=`<h2>8 · Fyra kartor, fyra steg i pipelinen</h2>
   <p class="sub">Samma data, sedd vid varje steg i bearbetningen — från rå källdata till det en förare faktiskt ser. Klicka på en punkt på vilken karta som helst för källan och den rå API-responsen bakom den.</p>
 
+  <p class="sub" style="margin-bottom:0"><b>Filtrera på källa.</b> Klicka för att släcka eller tända en källa, dubbelklicka för att se bara den. Filtret gäller alla fyra kartorna samtidigt, så man kan följa en enskild källa hela vägen genom pipelinen. Siffrorna är rå källhändelser respektive klassade tips med koordinat.</p>
+  <div class="srcfilter" id="srcfilter"></div>
+
   <h3 style="margin:20px 0 4px;font-size:15px">8a · Rådata, en färg per källa</h3>
-  <p class="sub">${rawGeo.length} källhändelser med koordinat, innan något är sammanslaget eller klassificerat.</p>
+  <p class="sub"><span id="count-map-sources">${rawGeo.length}</span> punkter med koordinat, innan något är sammanslaget eller klassificerat. Fartygen från AISStream ligger här som tre egna källor — <i>passagerare</i>, <i>övriga</i> och <i>typ okänd än</i> (typen sänds bara var sjätte minut) — med position den senaste timmen.</p>
   <div class="card mapwrap" style="padding:0;overflow:hidden"><button class="mapbtn" onclick="toggleMapFull('map-sources')">⛶ Helskärm</button><div class="maphint">Klicka i kartan för att zooma med scroll</div><div id="map-sources" class="lmap"></div></div>
-  <div class="legend">
-    <span><b style="background:${SOURCE_COLOR.trafiklab}"></b>Trafiklab</span>
-    <span><b style="background:${SOURCE_COLOR.sl}"></b>SL</span>
-    <span><b style="background:${SOURCE_COLOR.vt}"></b>Västtrafik</span>
-    <span><b style="background:${SOURCE_COLOR.trafikverket_rail}"></b>Trafikverket (järnväg)</span>
-  </div>
 
   <h3 style="margin:20px 0 4px;font-size:15px">8b · Efter sammanslagning och klassificering</h3>
-  <p class="sub">${geo.length} klassade störningar med koordinat, från Skåne i söder till Västernorrland i norr. Färgen är samma skala som i appen: grön = troligt att det finns kunder, gul = möjligt, grå = osannolikt.</p>
+  <p class="sub"><span id="count-map">${geo.length}</span> klassade störningar med koordinat, från Skåne i söder till Västernorrland i norr. Färgen är samma skala som i appen: grön = troligt att det finns kunder, gul = möjligt, grå = osannolikt.</p>
   <div class="card mapwrap" style="padding:0;overflow:hidden"><button class="mapbtn" onclick="toggleMapFull('map')">⛶ Helskärm</button><div class="maphint">Klicka i kartan för att zooma med scroll</div><div id="map" class="lmap"></div></div>
   <div class="legend">
     <span><b class="lg-h"></b>Troligt (hela linjen stoppad, eller stark inställning)</span>
@@ -804,7 +1616,7 @@ function render(d,ops){
   Det är det starkaste enskilda argumentet för att låta en språkmodell läsa texten — se avsnitt 12.</div>
 
   <h3 style="margin:20px 0 4px;font-size:15px">8c · Efter Genkit-granskning</h3>
-  <p class="sub">${aiGeo.length} tips som antingen redan granskats eller fortfarande väntar på granskning (confidence=low). Grön = Genkit sänkte poängen, blå = granskad men oförändrad, gul = väntar fortfarande.</p>
+  <p class="sub"><span id="count-map-ai">${aiGeo.length}</span> tips som antingen redan granskats eller fortfarande väntar på granskning (confidence=low). Grön = Genkit sänkte poängen, blå = granskad men oförändrad, gul = väntar fortfarande.</p>
   <div class="card mapwrap" style="padding:0;overflow:hidden"><button class="mapbtn" onclick="toggleMapFull('map-ai')">⛶ Helskärm</button><div class="maphint">Klicka i kartan för att zooma med scroll</div><div id="map-ai" class="lmap"></div></div>
   <div class="legend">
     <span><b style="background:${AI_COLOR.lowered}"></b>Sänkt av Genkit</span>
@@ -813,7 +1625,7 @@ function render(d,ops){
   </div>
 
   <h3 style="margin:20px 0 4px;font-size:15px">8d · Vad föraren faktiskt ser</h3>
-  <p class="sub">${driverGeo.length} av ${geo.length} klassade tips klarar den faktiska tröskeln för att visas/pusha (${NOTIFY_TIERS.map(t=>TIER_SV[t]||t).join(', ')}, poäng ≥ ${NOTIFY_FLOOR}) — resten finns i systemet men syns aldrig för en förare.</p>
+  <p class="sub"><span id="count-map-driver">${driverGeo.length}</span> av ${geo.length} klassade tips klarar den faktiska tröskeln för att visas/pusha (${NOTIFY_TIERS.map(t=>TIER_SV[t]||t).join(', ')}, poäng ≥ ${NOTIFY_FLOOR}) — resten finns i systemet men syns aldrig för en förare.</p>
   <div class="card mapwrap" style="padding:0;overflow:hidden"><button class="mapbtn" onclick="toggleMapFull('map-driver')">⛶ Helskärm</button><div class="maphint">Klicka i kartan för att zooma med scroll</div><div id="map-driver" class="lmap"></div></div>
   <p class="foot"><b>Att läsa av:</b> punkterna klumpar ihop sig kring stationerna (Malmö C, Lund C, Helsingborg C, Kristianstad C) eftersom platsen oftast härleds från stationsnamnet i texten, inte från en exakt koordinat i larmet. Därför ligger flera störningar på exakt samma punkt.</p>`;
 
@@ -947,11 +1759,73 @@ function render(d,ops){
   html+=renderOperativeEvents(ops);
 
   document.getElementById('root').innerHTML=html;
-  drawSourceMap(rawGeo);
-  drawMap(geo);
-  drawAiMap(aiGeo);
-  drawDriverMap(driverGeo);
+
+  // Källfiltret arbetar på de här fyra mängderna. Nycklarna kommer ur datan,
+  // inte ur en handskriven lista: en källa som slutat leverera ska försvinna
+  // ur filtret av sig själv, och en ny ska dyka upp utan kodändring.
+  MAP_SETS.raw=rawGeo; MAP_SETS.geo=geo; MAP_SETS.ai=aiGeo; MAP_SETS.driver=driverGeo;
+  const counts={};
+  for(const r of rawGeo){ const k=sourceOf(r); (counts[k]=counts[k]||{raw:0,tips:0}).raw++; }
+  for(const o of geo){ const k=sourceOf(o); (counts[k]=counts[k]||{raw:0,tips:0}).tips++; }
+  MAP_SETS.counts=counts;
+  MAP_SETS.keys=Object.keys(counts).sort((a,b)=>
+    (counts[b].raw+counts[b].tips)-(counts[a].raw+counts[a].tips));
+  // Behåll valet över en omritning (auto-uppdateringen), men släpp källor
+  // som inte längre finns i datan.
+  for(const k of [...SOURCE_OFF]) if(!counts[k]) SOURCE_OFF.delete(k);
+  applySourceFilter();
+  wireFcmPanel();
+  wireEventsUi(d.events);
+}
+
+function wireFcmPanel(){
+  const status=document.getElementById('fcm-status');
+  const form=document.getElementById('fcm-form');
+  const sel=document.getElementById('fcm-device');
+  const result=document.getElementById('fcm-result');
+  const btn=document.getElementById('fcm-send');
+  if(!status||!form||!sel||!btn) return;
+
+  fetch('/api/dev/devices').then(r=>r.json()).then(d=>{
+    if(d.error){
+      status.textContent='Kunde inte lista enheter: '+d.error+(d.hint?' — '+d.hint:'');
+      return;
+    }
+    const devices=d.devices||[];
+    if(!devices.length){
+      status.textContent='Inga enheter i databasen. Logga in / koppla telefon lokalt först.';
+      return;
+    }
+    const withPush=devices.filter(x=>x.has_push).length;
+    status.textContent=devices.length+' enheter · '+withPush+' med FCM-token';
+    sel.innerHTML=devices.map(x=>{
+      const mark=x.has_push?'✓ push':'saknar push';
+      return `<option value="${esc(x.id)}" ${x.has_push?'':'disabled'}>${esc(x.label||x.kind||x.id)} (${mark})</option>`;
+    }).join('');
+    form.style.display='block';
+  }).catch(e=>{ status.textContent='Fel: '+e.message; });
+
+  btn.onclick=async()=>{
+    result.style.display='block';
+    result.textContent='Skickar…';
+    try{
+      const res=await fetch('/api/dev/push',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({
+          device_id:sel.value,
+          title:document.getElementById('fcm-title').value,
+          body:document.getElementById('fcm-body').value,
+        }),
+      });
+      const data=await res.json();
+      result.textContent=JSON.stringify(data,null,2);
+    }catch(e){
+      result.textContent=String(e.message||e);
+    }
+  };
 }
 </script>
 </body>
 </html>
+

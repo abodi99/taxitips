@@ -1,0 +1,312 @@
+/* Kundportalen. Samma varumärkestokens som marknadssajten (brand.css) --
+   inget nytt designsystem, bara de mönster en tabell- och formulärtung vy
+   behöver och landningssidan inte har. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body.portal {
+  margin: 0;
+  background: var(--ljusgra);
+  color: var(--ink);
+  font-family: var(--font-body);
+  line-height: 1.5;
+}
+
+.skip-link {
+  position: absolute;
+  left: -9999px;
+}
+.skip-link:focus {
+  left: 1rem;
+  top: 1rem;
+  z-index: 10;
+  background: var(--vit);
+  padding: 0.6rem 1rem;
+  border-radius: var(--radius);
+}
+
+/* Fokus ska synas. Ett osynligt fokus gör formuläret obrukbart med tangentbord. */
+:focus-visible {
+  outline: 3px solid var(--guld);
+  outline-offset: 2px;
+}
+
+.portal-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.9rem 1.25rem;
+  background: var(--midnatt);
+  color: var(--vit);
+}
+.portal-nav-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.portal-who {
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.82);
+}
+
+.portal-main {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 4rem;
+}
+
+h1,
+h2,
+h3 {
+  font-family: var(--font-display);
+  line-height: 1.25;
+  margin: 0 0 0.5rem;
+}
+h1 {
+  font-size: 1.6rem;
+}
+h2 {
+  font-size: 1.25rem;
+}
+h3 {
+  font-size: 1rem;
+}
+.muted {
+  color: var(--ink-soft);
+}
+.error {
+  color: var(--danger);
+  font-weight: 500;
+}
+.ok {
+  color: var(--ok);
+}
+
+.card {
+  background: var(--vit);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  margin-bottom: 1rem;
+}
+.login-card {
+  max-width: 420px;
+  margin: 3rem auto;
+}
+
+label {
+  display: block;
+  font-weight: 600;
+  font-size: 0.9rem;
+  margin: 0.85rem 0 0.3rem;
+}
+input,
+select {
+  width: 100%;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  font: inherit;
+  background: var(--vit);
+  color: var(--ink);
+}
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.55rem 1rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid transparent;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px; /* tumstorlek: portalen används också på telefon */
+}
+.btn-primary {
+  background: var(--guld);
+  color: var(--midnatt);
+}
+.btn-primary:hover {
+  background: var(--guld-ljus);
+}
+.btn-ghost {
+  background: transparent;
+  border-color: currentColor;
+  color: inherit;
+}
+.btn-quiet {
+  background: var(--ljusgra-djup);
+  color: var(--ink);
+}
+.btn-danger {
+  background: transparent;
+  border-color: var(--danger);
+  color: var(--danger);
+}
+.btn[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 1rem 0 1.25rem;
+}
+.tab {
+  padding: 0.5rem 0.9rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-strong);
+  background: var(--vit);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  min-height: 44px;
+}
+.tab[aria-selected="true"] {
+  background: var(--midnatt);
+  color: var(--vit);
+  border-color: var(--midnatt);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+th,
+td {
+  text-align: left;
+  padding: 0.55rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+  vertical-align: top;
+}
+th {
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+
+.pill {
+  display: inline-block;
+  padding: 0.15rem 0.6rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: var(--ljusgra-djup);
+}
+.pill-ok {
+  background: rgba(31, 138, 91, 0.14);
+  color: var(--ok);
+}
+.pill-warn {
+  background: rgba(224, 143, 0, 0.16);
+  color: var(--guld-djup);
+}
+.pill-danger {
+  background: rgba(192, 57, 43, 0.12);
+  color: var(--danger);
+}
+
+.grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+.stat {
+  background: var(--vit);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+}
+.stat b {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+}
+
+.code-dialog {
+  border: none;
+  border-radius: var(--radius);
+  padding: 1.5rem;
+  max-width: 400px;
+}
+.code-dialog::backdrop {
+  background: rgba(13, 23, 41, 0.55);
+}
+.code {
+  font-family: var(--font-mono);
+  font-size: 2rem;
+  letter-spacing: 0.18em;
+  text-align: center;
+  margin: 1rem 0;
+  padding: 0.75rem;
+  background: var(--ljusgra);
+  border-radius: 10px;
+}
+
+.notice {
+  border-left: 4px solid var(--guld);
+  background: var(--vit);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 0.8rem 1rem;
+  margin-bottom: 1rem;
+}
+.notice-danger {
+  border-left-color: var(--danger);
+}
+
+.quote-lines {
+  margin: 0.75rem 0;
+  font-size: 0.95rem;
+}
+.quote-total {
+  font-weight: 700;
+  border-top: 1px solid var(--line-strong);
+  padding-top: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+@media (max-width: 640px) {
+  table,
+  thead,
+  tbody,
+  th,
+  td,
+  tr {
+    display: block;
+  }
+  thead {
+    display: none;
+  }
+  tr {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    margin-bottom: 0.75rem;
+    padding: 0.5rem;
+  }
+  td {
+    border: none;
+    padding: 0.3rem 0.2rem;
+  }
+  td::before {
+    content: attr(data-label) ": ";
+    font-weight: 600;
+    color: var(--ink-soft);
+  }
+}

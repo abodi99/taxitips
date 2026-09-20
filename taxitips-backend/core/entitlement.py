@@ -64,6 +64,17 @@ class Entitlement:
     reason: str
     company_id: str | None = None
     device_id: str | None = None
+    # Sedan licensmodellen (fleet-appen): vilka län åtkomsten omfattar, vilken
+    # licens och session den hänger på, och om telefonen behöver välja bil.
+    # `unrestricted` skiljer "inga län" från "ingen länsbegränsning" -- ett
+    # företag som ännu inte migrerats har det senare, och en tom lista hade
+    # annars gett det ett tomt flöde som ser ut som "inga störningar just nu".
+    counties: tuple[str, ...] = ()
+    unrestricted: bool = True
+    license_id: str | None = None
+    session_id: str | None = None
+    needs_session: bool = False
+    detail: dict | None = None
 
     def __bool__(self) -> bool:
         return self.ok
@@ -218,10 +229,47 @@ def entitlement_for_user_id(user_id: str | None) -> Entitlement:
 
 def entitlement_for_request(request) -> Entitlement:
     """
-    Läser förartoken och/eller Supabase-JWT ur requesten.
+    Åtkomsten för den här begäran -- den enda ingången för allt skyddat.
 
-    Device-token först, samma ordning som SQL-funktionens coalesce: appens
-    vanligaste anrop är förarens, och den vägen kostar en fråga.
+    Sedan licensmodellen delegerar den till `fleet.access.resolve`, som utöver
+    bolagets status också kontrollerar godkänd telefon, billicens, AKTUELL
+    aktiv bilsession och länsrättighet. Att låta den ligga kvar här, med
+    samma namn och returform, är det som gör att lista, karta, detaljer,
+    historik, favoriter, notisinställningar, färjor och evenemang fick samma
+    grind utan att åtta vyer skrevs om -- och att ingen framtida vy kan råka
+    hamna utanför den (§3).
+
+    Funktionerna nedanför (`entitlement_for_device_token`,
+    `entitlement_for_user_id`) finns kvar som den rena bolagskontrollen, utan
+    licens och session. De används av push-steget, som har sin egen ordning.
+
+    Importen ligger i funktionen: fleet.access läser `verify_supabase_jwt`
+    härifrån, och en import på modulnivå hade blivit cirkulär.
+    """
+    from fleet.access import resolve
+
+    access = resolve(request)
+    return Entitlement(
+        ok=access.ok,
+        reason=access.reason,
+        company_id=access.company_id,
+        device_id=access.device_id,
+        counties=access.counties,
+        unrestricted=access.unrestricted,
+        license_id=access.license_id,
+        session_id=access.session_id,
+        needs_session=access.needs_session,
+        detail=access.as_dict(),
+    )
+
+
+def company_entitlement_for_request(request) -> Entitlement:
+    """
+    Den GAMLA kontrollen: bara bolagets status, utan licens och session.
+
+    Kvar för push-steget och för felsökning ("är det bolaget eller sessionen
+    som saknas?"). Använd `entitlement_for_request` för allt som lämnar ut
+    data till en klient.
     """
     token = request.headers.get("X-Device-Token") or request.GET.get("device_token")
     result = entitlement_for_device_token(token)

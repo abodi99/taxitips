@@ -56,6 +56,13 @@ class Assessment:
     rule_id: str
 
 
+def _next_text(alert: RailAlert) -> str:
+    """"nästa resa mot X" när ResRobot svarat, annars "nästa avgång" från stationen."""
+    if alert.alternative_basis == "resrobot":
+        return f"nästa resa mot {alert.destination}" if alert.destination else "nästa resa"
+    return "nästa avgång"
+
+
 def classify(alert: RailAlert) -> Assessment:
     """
     RailAlert -> tier, poäng, konfidens och motivering.
@@ -98,7 +105,7 @@ def classify(alert: RailAlert) -> Assessment:
         # Det HÄR är fallet som saknades. Resenärerna väntar en kvart --
         # de tar inte taxi. Ett tips här är inte fel, men det ska inte
         # konkurrera med en verkligt strandsatt perrong.
-        reasons.append(f"nästa avgång om {alert.next_departure_minutes} min")
+        reasons.append(f"{_next_text(alert)} om {alert.next_departure_minutes} min")
         return _finish(
             SeverityTier.VEHICLE_CANCELLED, 55, Confidence.HIGH,
             reasons, alert, "train.vehicle_cancelled.alternative_soon",
@@ -112,7 +119,7 @@ def classify(alert: RailAlert) -> Assessment:
         )
 
     if alert.next_departure_minutes is not None:
-        reasons.append(f"nästa avgång först om {alert.next_departure_minutes} min")
+        reasons.append(f"{_next_text(alert)} först om {alert.next_departure_minutes} min")
         return _finish(
             SeverityTier.LINE_PAUSED, 78, Confidence.HIGH,
             reasons, alert, "train.line_paused.long_gap",

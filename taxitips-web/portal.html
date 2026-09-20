@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Taxi Tips — Kundportal</title>
+  <meta name="description" content="Hantera bilar, telefoner, län och abonnemang." />
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/brand.css" />
+  <link rel="stylesheet" href="/src/portal.css" />
+</head>
+<body class="portal">
+  <a class="skip-link" href="#innehall">Hoppa till innehåll</a>
+
+  <header class="portal-nav">
+    <a class="brand-logo" href="/"><img src="/brand/logo-on-dark.svg" alt="Taxi Tips" height="26" /></a>
+    <div class="portal-nav-right">
+      <span id="whoami" class="portal-who"></span>
+      <button id="logout" class="btn btn-ghost" type="button" hidden>Logga ut</button>
+    </div>
+  </header>
+
+  <main id="innehall" class="portal-main">
+    <!-- Inloggning -->
+    <section id="login" class="card login-card" hidden>
+      <h1>Logga in</h1>
+      <p class="muted">Kontoret loggar in med e-post. Förare använder appen och
+        behöver inget konto.</p>
+      <form id="loginForm" novalidate>
+        <label for="email">E-post</label>
+        <input id="email" name="email" type="email" autocomplete="username" required />
+        <label for="password">Lösenord</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required />
+        <p id="loginError" class="error" role="alert" hidden></p>
+        <button class="btn btn-primary" type="submit">Logga in</button>
+      </form>
+    </section>
+
+    <!-- Portalen -->
+    <div id="app" hidden>
+      <nav class="tabs" role="tablist" aria-label="Portalens vyer">
+        <button class="tab" role="tab" data-view="oversikt" aria-selected="true">Översikt</button>
+        <button class="tab" role="tab" data-view="bilar" aria-selected="false">Bilar och telefoner</button>
+        <button class="tab" role="tab" data-view="lan" aria-selected="false">Län och filter</button>
+        <button class="tab" role="tab" data-view="abonnemang" aria-selected="false">Abonnemang och fakturor</button>
+        <button class="tab" role="tab" data-view="foretag" aria-selected="false">Företag och behörigheter</button>
+      </nav>
+
+      <p id="globalError" class="error" role="alert" hidden></p>
+      <div id="view" class="view" role="tabpanel" aria-live="polite"></div>
+    </div>
+  </main>
+
+  <!-- Anslutningskoden visas en gång, i en dialog som går att stänga med Esc. -->
+  <dialog id="codeDialog" class="code-dialog">
+    <h2>Anslutningskod</h2>
+    <p class="muted" id="codeFor"></p>
+    <p class="code" id="codeValue"></p>
+    <p class="muted">Gäller i fem minuter. Föraren skriver in den i appen under
+      <em>Anslut telefonen</em>. Koden visas bara en gång.</p>
+    <form method="dialog"><button class="btn btn-primary">Klar</button></form>
+  </dialog>
+
+  <script type="module" src="/src/portal/main.js"></script>
+</body>
+</html>

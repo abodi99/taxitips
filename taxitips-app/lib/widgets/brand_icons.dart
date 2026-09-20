@@ -79,4 +79,24 @@ class BrandIcons {
   /// Tåg — järnvägstrafik.
   static Widget train({double size = 24, Color color = TbColors.midnatt}) =>
       _icon('train', size: size, color: color);
+
+  /// Ikon per färdsätt/källa — samma glyph på kort, karta och filter.
+  static Widget forMode(
+    String? mode, {
+    double size = 18,
+    Color color = TbColors.midnatt,
+  }) {
+    return switch (mode) {
+      'train' || 'rail' => train(size: size, color: color),
+      'metro' => Icon(Icons.subway, size: size, color: color),
+      'tram' => Icon(Icons.tram, size: size, color: color),
+      'bus' => bus(size: size, color: color),
+      'boat' => Icon(Icons.directions_boat, size: size, color: color),
+      'flight' => Icon(Icons.flight, size: size, color: color),
+      'road' => trafficAlert(size: size, color: color),
+      'ferry' => Icon(Icons.anchor, size: size, color: color),
+      'events' => Icon(Icons.event, size: size, color: color),
+      _ => taxi(size: size, color: color),
+    };
+  }
 }

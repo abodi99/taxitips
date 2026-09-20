@@ -58,33 +58,71 @@ class BackendApi {
     if (res.statusCode >= 400) {
       throw ApiException(
         res.statusCode,
-        body['error']?.toString() ?? 'Backend svarade ${res.statusCode}',
+        // `message` är fleet-API:ts form, `error` den äldre. Båda finns i
+        // produktion just nu.
+        body['message']?.toString() ??
+            body['error']?.toString() ??
+            'Backend svarade ${res.statusCode}',
+        reason: body['reason']?.toString(),
+        detail: body['detail'] is Map
+            ? Map<String, dynamic>.from(body['detail'] as Map)
+            : null,
       );
     }
     return body;
   }
 
+  // Senaste flödet och dess ETag för samma anrop (filter + avrundad position).
+  // Svarar servern 304 har ingenting ändrats, och det sparade svaret gäller.
+  String? _alertsKey;
+  String? _alertsEtag;
+  Map<String, dynamic>? _alertsBody;
+
   Future<Map<String, dynamic>> alerts({
     double? lat,
     double? lon,
     bool includeAll = false,
+    List<String>? regions,
+    List<String>? counties,
+    List<String>? municipalities,
     String? deviceToken,
     String? accessToken,
   }) async {
     final uri = Uri.parse('$baseUrl/api/alerts').replace(
       queryParameters: {
-        if (lat != null) 'lat': '$lat',
-        if (lon != null) 'lon': '$lon',
         if (includeAll) 'all': '1',
+        if (regions != null && regions.isNotEmpty)
+          'regions': (List<String>.from(regions)..sort()).join(','),
+        if (counties != null && counties.isNotEmpty)
+          'counties': (List<String>.from(counties)..sort()).join(','),
+        if (municipalities != null && municipalities.isNotEmpty)
+          'municipalities': (List<String>.from(municipalities)..sort()).join(','),
       },
     );
+    // Positionen går i en header, avrundad till två decimaler (ungefär en
+    // kilometer). I URL:en hamnar den i åtkomstloggar hos varje proxy på vägen.
+    final position = (lat != null && lon != null)
+        ? '${lat.toStringAsFixed(2)},${lon.toStringAsFixed(2)}'
+        : null;
+    final key = '$uri|${position ?? ''}';
     final res = await _client
         .get(
           uri,
-          headers: _headers(deviceToken: deviceToken, accessToken: accessToken),
+          headers: {
+            ..._headers(deviceToken: deviceToken, accessToken: accessToken),
+            'X-TT-Position': ?position,
+            if (key == _alertsKey && _alertsEtag != null)
+              'If-None-Match': _alertsEtag!,
+          },
         )
         .timeout(_timeout);
+    if (res.statusCode == 304 && key == _alertsKey && _alertsBody != null) {
+      return _alertsBody!;
+    }
     final body = await _decode(res, 'alerts');
+    _alertsKey = key;
+    _alertsEtag = res.headers['etag'];
+    _alertsBody = body;
     // `entitled: false` är inte ett fel -- det är svaret "du ser inga tips,
     // och här är varför". Loggas, men bubblar inte upp som en krasch: en
     // förare som inte hunnit få sitt bolag aktiverat ska se en tom lista,
@@ -208,6 +246,8 @@ class BackendApi {
   Future<Map<String, dynamic>> saveNotifyPrefs({
     bool? enabled,
     List<String>? regions,
+    List<String>? counties,
+    List<String>? municipalities,
     List<String>? cities,
     Map<String, bool>? types,
     String? deviceToken,
@@ -220,6 +260,8 @@ class BackendApi {
           body: jsonEncode({
             'enabled': ?enabled,
             'regions': ?regions,
+            'counties': ?counties,
+            'municipalities': ?municipalities,
             'cities': ?cities,
             'types': ?types,
           }),
@@ -228,10 +270,219 @@ class BackendApi {
     return _decode(res, 'saveNotifyPrefs');
   }
 
+  /// "I tjänst" på eller av. Positionen går i headern, avrundad som för
+  /// flödet; servern sparar bara rutan (ungefär 5 km) i 30 minuter och svarar
+  /// aldrig med den. Se core/presence.py.
+  Future<Map<String, dynamic>> setPresence({
+    required bool on,
+    double? lat,
+    double? lon,
+    String? deviceToken,
+    String? accessToken,
+  }) async {
+    final position = (on && lat != null && lon != null)
+        ? '${lat.toStringAsFixed(2)},${lon.toStringAsFixed(2)}'
+        : null;
+    final res = await _client
+        .post(
+          Uri.parse('$baseUrl/api/presence'),
+          headers: {
+            ..._headers(deviceToken: deviceToken, accessToken: accessToken),
+            'X-TT-Position': ?position,
+          },
+          body: jsonEncode({'on': on}),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'setPresence');
+  }
+
+  String? _position(double? lat, double? lon) => (lat != null && lon != null)
+      ? '${lat.toStringAsFixed(2)},${lon.toStringAsFixed(2)}'
+      : null;
+
+  Map<String, String> _areaQuery(List<String>? counties, List<String>? municipalities) => {
+    if (counties != null && counties.isNotEmpty)
+      'counties': (List<String>.from(counties)..sort()).join(','),
+    if (municipalities != null && municipalities.isNotEmpty)
+      'municipalities': (List<String>.from(municipalities)..sort()).join(','),
+  };
+
+  /// Färjor på väg in, som lägger till eller ligger vid kaj i förarens område.
+  /// Positionen går i headern, som för flödet. Se maritime/views.py.
+  Future<Map<String, dynamic>> ferries({
+    double? lat,
+    double? lon,
+    List<String>? counties,
+    List<String>? municipalities,
+    String? deviceToken,
+    String? accessToken,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/ferries')
+        .replace(queryParameters: _areaQuery(counties, municipalities));
+    final res = await _client
+        .get(
+          uri,
+          headers: {
+            ..._headers(deviceToken: deviceToken, accessToken: accessToken),
+            'X-TT-Position': ?_position(lat, lon),
+          },
+        )
+        .timeout(_timeout);
+    return _decode(res, 'ferries');
+  }
+
+  /// Kommande evenemang i förarens område. Se events/api.py.
+  Future<Map<String, dynamic>> events({
+    double? lat,
+    double? lon,
+    List<String>? counties,
+    List<String>? municipalities,
+    int days = 14,
+    String? from,
+    String? to,
+    String? deviceToken,
+    String? accessToken,
+  }) async {
+    // En dag eller period (YYYY-MM-DD) när den finns, annars `days` från i dag.
+    final uri = Uri.parse('$baseUrl/api/events').replace(queryParameters: {
+      if (from != null) 'from': from else 'days': '$days',
+      'to': ?to,
+      ..._areaQuery(counties, municipalities),
+    });
+    final res = await _client
+        .get(
+          uri,
+          headers: {
+            ..._headers(deviceToken: deviceToken, accessToken: accessToken),
+            'X-TT-Position': ?_position(lat, lon),
+          },
+        )
+        .timeout(_timeout);
+    return _decode(res, 'events');
+  }
+
   Future<Map<String, dynamic>> config() async {
     final res = await _client
         .get(Uri.parse('$baseUrl/api/config'), headers: _headers())
         .timeout(_timeout);
     return _decode(res, 'config');
+  }
+
+  Future<Map<String, dynamic>> deviceSession({
+    required String installationId,
+    String? pushToken,
+    String? label,
+    String? platform,
+    String? deviceToken,
+    String? accessToken,
+  }) async {
+    final res = await _client
+        .post(
+          Uri.parse('$baseUrl/api/device/session'),
+          headers: _headers(deviceToken: deviceToken, accessToken: accessToken),
+          body: jsonEncode({
+            'installation_id': installationId,
+            'push_token': ?pushToken,
+            'label': ?label,
+            'platform': ?platform,
+          }),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'deviceSession');
+  }
+
+  // --- Kundlivscykeln: parkoppling, bilval och skiftbyte -------------------
+  //
+  // Förarens tre vägar mot /api/fleet/. De bär `X-Device-Token` (utom `pair`,
+  // som är det anrop som SKAPAR den) och svarar med samma form som resten av
+  // API:t: `ok` plus ett maskinläsbart `reason` och ett svenskt `message` vid
+  // ett nej.
+
+  /// Löser in administratörens engångskod. Svarar med hemligheten EN gång --
+  /// anroparen måste lägga den i säker lagring direkt (se DeviceCredentialStore).
+  Future<Map<String, dynamic>> pair({
+    required String code,
+    required String installationId,
+    String? label,
+    String? platform,
+    String? pushToken,
+  }) async {
+    final res = await _client
+        .post(
+          Uri.parse('$baseUrl/api/fleet/pair'),
+          headers: _headers(),
+          body: jsonEncode({
+            'code': code,
+            'installation_id': installationId,
+            'label': ?label,
+            'platform': ?platform,
+            'push_token': ?pushToken,
+          }),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'pair');
+  }
+
+  /// Vad den här telefonen får: godkända bilar, vem som har dem just nu, och
+  /// vilken bil telefonen själv kör.
+  Future<Map<String, dynamic>> fleetStatus({String? deviceToken}) async {
+    final res = await _client
+        .get(
+          Uri.parse('$baseUrl/api/fleet/me'),
+          headers: _headers(deviceToken: deviceToken),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'fleetStatus');
+  }
+
+  /// Tar bilen. Utan `force` svarar servern `takeover_required` när någon
+  /// annan har den -- appen frågar då föraren, och `force: true` är svaret på
+  /// den frågan, inte ett sätt att hoppa över den.
+  Future<Map<String, dynamic>> startVehicleSession({
+    required String licenseId,
+    required String deviceToken,
+    bool force = false,
+  }) async {
+    final res = await _client
+        .post(
+          Uri.parse('$baseUrl/api/fleet/session'),
+          headers: _headers(deviceToken: deviceToken),
+          body: jsonEncode({'license_id': licenseId, 'force': force}),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'startVehicleSession');
+  }
+
+  Future<Map<String, dynamic>> endVehicleSession({
+    required String deviceToken,
+  }) async {
+    final res = await _client
+        .post(
+          Uri.parse('$baseUrl/api/fleet/session/end'),
+          headers: _headers(deviceToken: deviceToken),
+          body: jsonEncode(const {}),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'endVehicleSession');
+  }
+
+  /// Bolagskoden. Skapar en ANSÖKAN -- ingen token, ingen åtkomst.
+  Future<Map<String, dynamic>> joinRequest({
+    required String joinCode,
+    required String installationId,
+    String? label,
+  }) async {
+    final res = await _client
+        .post(
+          Uri.parse('$baseUrl/api/fleet/join-request'),
+          headers: _headers(),
+          body: jsonEncode({
+            'join_code': joinCode,
+            'installation_id': installationId,
+            'label': ?label,
+          }),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'joinRequest');
   }
 }

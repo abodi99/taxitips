@@ -18,7 +18,10 @@ import logging
 import time
 from contextlib import contextmanager
 
+from django.db.models import F
 from django.utils import timezone
+
+from core import thresholds
 
 log = logging.getLogger(__name__)
 
@@ -32,6 +35,10 @@ class PollResult:
         self.note = ""
         # Per delkälla, när källan har flera (Trafiklabs operatörer).
         self.detail: dict = {}
+        # False när rundan gick igenom utan att hämta något, t.ex. för att
+        # nyckeln saknas. Det är inget fel -- men det får inte räknas som en
+        # lyckad hämtning, annars ser en källa utan nyckel färsk ut.
+        self.fetched = True
 
 
 @contextmanager
@@ -43,38 +50,57 @@ def polling(source: str):
     terminalen och i Celery. Det som ändras är att felet också blir
     läsbart för den som tittar på pipelinen i efterhand.
     """
-    from core.models import SourceStatus
-
     started = time.monotonic()
     result = PollResult()
     try:
         yield result
     except Exception as exc:
-        SourceStatus.objects.update_or_create(
-            source=source,
-            defaults={
-                "ok": False,
-                # Trafikverkets och Trafiklabs felmeddelanden är långa och
-                # upprepar sig per region. Det som betyder något (statuskod
-                # och orsak) står först.
-                "message": f"{type(exc).__name__}: {exc}"[:500],
-                "events": result.events,
-                "written": result.written,
-                "detail": result.detail,
-                "duration_ms": int((time.monotonic() - started) * 1000),
-                "checked_at": timezone.now(),
-            },
+        record(
+            source, ok=False, message=f"{type(exc).__name__}: {exc}", result=result,
+            duration_ms=int((time.monotonic() - started) * 1000),
         )
         raise
+    record(
+        source, ok=True, message=result.note, result=result,
+        duration_ms=int((time.monotonic() - started) * 1000),
+    )
+
+
+def record(source: str, *, ok: bool, message: str, result: PollResult, duration_ms: int, now=None) -> None:
+    """Senaste försöket skrivs alltid; senaste lyckade bara när rundan hämtade."""
+    from core.models import SourceStatus
+
+    now = now or timezone.now()
+    defaults = {
+        "ok": ok,
+        # Trafikverkets och Trafiklabs felmeddelanden är långa och upprepar
+        # sig per region. Det som betyder något (statuskod och orsak) står först.
+        "message": message[:500],
+        "events": result.events,
+        "written": result.written,
+        "detail": result.detail,
+        "duration_ms": duration_ms,
+        "checked_at": now,
+    }
+    if ok and result.fetched:
+        defaults.update(last_success_at=now, consecutive_failures=0)
+    SourceStatus.objects.update_or_create(source=source, defaults=defaults)
+    if not ok:
+        SourceStatus.objects.filter(source=source).update(consecutive_failures=F("consecutive_failures") + 1)
+
+
+def beat_heartbeat(worker: str = "", now=None) -> None:
+    """
+    Beat schemalägger `heartbeat_task`, en worker kör den. En färsk rad bevisar
+    att beat, Redis och minst en worker lever. Se core/pipeline_health.py.
+    """
+    from core.models import SourceStatus
+
+    now = now or timezone.now()
     SourceStatus.objects.update_or_create(
-        source=source,
+        source=thresholds.HEARTBEAT_SOURCE,
         defaults={
-            "ok": True,
-            "message": result.note,
-            "events": result.events,
-            "written": result.written,
-            "detail": result.detail,
-            "duration_ms": int((time.monotonic() - started) * 1000),
-            "checked_at": timezone.now(),
+            "ok": True, "message": "", "detail": {"worker": worker}, "checked_at": now,
+            "last_success_at": now, "consecutive_failures": 0,
         },
     )

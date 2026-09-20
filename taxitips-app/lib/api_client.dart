@@ -6,6 +6,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'backend_api.dart';
 import 'config.dart';
+import 'device_credential.dart';
 import 'severity_labels.dart';
 
 const _taxiAreaCatalog = [
@@ -45,9 +46,19 @@ const _taxiAreaCatalog = [
 ];
 
 class ApiException implements Exception {
-  ApiException(this.status, this.message);
+  ApiException(this.status, this.message, {this.reason, this.detail});
   final int status;
   final String message;
+
+  /// Maskinläsbart skäl från backend (`takeover_required`, `not_approved`,
+  /// `review_required` …). Finns för att appen ska kunna grena på ett stabilt
+  /// värde i stället för på den svenska texten -- en omformulering i backend
+  /// ska inte kunna slå sönder en dialogruta.
+  final String? reason;
+
+  /// Extra fält backend skickade med felet, t.ex. vem som har bilen.
+  final Map<String, dynamic>? detail;
+
   @override
   String toString() => message;
 }
@@ -69,6 +80,21 @@ class ApiClient {
       ? BackendApi()
       : null;
 
+  /// Kundlivscykeln finns bara i Django-backenden. Utan den konfigurerad
+  /// säger vi det rakt ut i stället för att tyst falla tillbaka på den gamla
+  /// bolagskodsvägen -- det var den som skulle bort.
+  BackendApi get _fleet {
+    final backend = _backend;
+    if (backend == null) {
+      throw ApiException(
+        503,
+        'API_BASE_URL är inte satt. Parkoppling och bilval kräver '
+        'TaxiTips-backenden.',
+      );
+    }
+    return backend;
+  }
+
   /// Åtkomsttoken för en inloggad ägare/administratör. Föraren har ingen --
   /// den vägen bär `deviceToken` i stället, och backend godtar båda.
   String? get _accessToken {
@@ -81,9 +107,16 @@ class ApiClient {
 
   String? sessionToken;
   String? deviceToken;
+  String? installationId;
 
   static const _sessionKey = 'tb_session';
-  static const _deviceKey = 'tb_device';
+  // Den gamla nyckeln 'tb_device' läses och rensas numera av
+  // DeviceCredentialStore, som flyttar hemligheten in i säker lagring första
+  // gången appen startar efter uppdateringen. Inget här skriver till den.
+
+  /// Enhetens hemlighet i plattformens säkra lagring. Se device_credential.dart.
+  final DeviceCredentialStore credentials = DeviceCredentialStore();
+  static const _installationKey = 'tb_installation_id';
   static const _emailKey = 'tb_email';
   static const _passwordKey = 'tb_password';
 
@@ -133,13 +166,40 @@ class ApiClient {
       // Allow UI to boot; screens will surface config errors.
     }
     final prefs = await SharedPreferences.getInstance();
-    deviceToken = prefs.getString(_deviceKey);
+    // Hemligheten läses ur säker lagring; finns den bara på den gamla platsen
+    // flyttas den dit i samma anrop.
+    deviceToken = await credentials.read();
+    installationId = prefs.getString(_installationKey);
+    if (installationId == null || installationId!.isEmpty) {
+      installationId = _newInstallationId();
+      await prefs.setString(_installationKey, installationId!);
+    }
     try {
       sessionToken = _sb.auth.currentSession?.accessToken;
     } catch (_) {
       sessionToken = null;
     }
     if (sessionToken == null) await prefs.remove(_sessionKey);
+  }
+
+  String _newInstallationId() {
+    final r = Random.secure();
+    final bytes = List<int>.generate(16, (_) => r.nextInt(256));
+    // UUID-ish without importing extra packages.
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    String h(int b) => b.toRadixString(16).padLeft(2, '0');
+    final s = bytes.map(h).join();
+    return '${s.substring(0, 8)}-${s.substring(8, 12)}-'
+        '${s.substring(12, 16)}-${s.substring(16, 20)}-${s.substring(20)}';
+  }
+
+  Future<String> ensureInstallationId() async {
+    if (installationId != null && installationId!.isNotEmpty) {
+      return installationId!;
+    }
+    await loadTokens();
+    return installationId!;
   }
 
   Future<void> saveSession(String? token) async {
@@ -152,14 +212,13 @@ class ApiClient {
     }
   }
 
-  Future<void> saveDevice(String? token) async {
+  Future<void> saveDevice(String? token, {String scheme = 'hashed_v1'}) async {
     deviceToken = token;
-    final prefs = await SharedPreferences.getInstance();
     if (token == null) {
-      await prefs.remove(_deviceKey);
-    } else {
-      await prefs.setString(_deviceKey, token);
+      await credentials.clear();
+      return;
     }
+    await credentials.write(token, scheme: scheme);
   }
 
   Future<void> clearDevice() async => saveDevice(null);
@@ -203,6 +262,8 @@ class ApiClient {
       }
       await saveSession(accessToken);
       await saveCredentials(email, password);
+      // Koppla telefonen till kontot + FCM sker i registerForPush efter
+      // login (main/login_screen). Här räcker sessionen.
 
       // Auth is enough to consider login successful; profile/company bootstrap
       // can fail in environments where those tables are not yet provisioned.
@@ -349,6 +410,7 @@ class ApiClient {
       Map<String, dynamic>? company;
       String? role;
       List devices = const [];
+      List members = const [];
       if (memberships.isNotEmpty) {
         final m = Map<String, dynamic>.from(memberships.first as Map);
         role = m['role']?.toString();
@@ -371,8 +433,39 @@ class ApiClient {
           } on PostgrestException {
             devices = const [];
           }
+          try {
+            // profiles har namn men inte e-post (e-post bor i auth.users).
+            // Visa det vi kan; inbjudan av nya admins sker via webbportalen.
+            final rows = await _sb
+                .from('company_members')
+                .select('role, status, user_id, user:profiles(id, name)')
+                .eq('company_id', company['id'])
+                .eq('status', 'active');
+            members = (rows as List).map((row) {
+              final r = Map<String, dynamic>.from(row as Map);
+              final u = r['user'] is Map
+                  ? Map<String, dynamic>.from(r['user'] as Map)
+                  : <String, dynamic>{};
+              final uid = r['user_id']?.toString() ?? u['id']?.toString();
+              return {
+                'userId': uid,
+                'role': r['role'],
+                'status': r['status'],
+                'name': u['name']?.toString() ?? '',
+                // Endast inloggad användare har e-post tillgänglig från klienten.
+                'email': uid == user.id ? (user.email ?? '') : '',
+              };
+            }).toList();
+          } on PostgrestException {
+            members = const [];
+          }
         }
       }
+
+      final status = company?['status']?.toString() ?? '';
+      final subStatus = company?['subscription_status']?.toString() ?? '';
+      final subId = company?['stripe_subscription_id']?.toString();
+      final hasSubscription = subId != null && subId.isNotEmpty;
 
       return {
         'user': {'id': user.id, 'email': user.email, 'name': profile?['name']},
@@ -384,9 +477,20 @@ class ApiClient {
                 'watchedAreas': company['watched_areas'] ?? [],
                 'joinCode': company['join_code'],
                 'orgNumber': company['org_number'],
+                'subscriptionStatus': subStatus,
+                'stripeSubscriptionId': subId,
+                'stripeCustomerId': company['stripe_customer_id'],
               },
+        'billing': {
+          'hasSubscription': hasSubscription,
+          'subscriptionId': subId,
+          'subscriptionStatus': subStatus,
+          'status': status,
+          'seats': company?['seats'],
+        },
         'role': role,
         'devices': devices,
+        'members': members,
         'isOwner': profile?['is_platform_owner'] == true,
       };
     } catch (e, st) {
@@ -469,19 +573,79 @@ class ApiClient {
     return {'joinCode': code};
   }
 
-  Future<Map<String, dynamic>> joinWithCode({
+  /// Parkopplar telefonen med administratörens engångskod.
+  ///
+  /// Ersätter `join_device`-RPC:n, som delade ut en permanent enhetstoken
+  /// direkt ur företagets statiska bolagskod. Koden står på ett papper i
+  /// fikarummet; den som läste den fick betald data tills någon bytte kod --
+  /// och bytet låste ut alla förare på en gång. Se supabase-migrationen
+  /// 20260920000001_join_code_is_not_a_credential.sql.
+  ///
+  /// Hemligheten i svaret lämnar servern EN gång och läggs direkt i säker
+  /// lagring.
+  Future<Map<String, dynamic>> pairWithCode({
+    required String code,
+    String label = 'Förare',
+    String? platform,
+    String? pushToken,
+  }) async {
+    final installation = await ensureInstallationId();
+    final data = await _fleet.pair(
+      code: code,
+      installationId: installation,
+      label: label,
+      platform: platform,
+      pushToken: pushToken,
+    );
+    final secret = data['deviceToken']?.toString();
+    if (secret == null || secret.isEmpty) {
+      throw ApiException(500, 'Servern gav ingen enhetsnyckel.');
+    }
+    await saveDevice(secret);
+    return data;
+  }
+
+  /// Bolagskoden hittar företaget och lägger en ANSÖKAN. Ingen token, ingen
+  /// åtkomst, ingen administratörsbehörighet.
+  Future<Map<String, dynamic>> requestJoin({
     required String joinCode,
     String label = 'Förare',
-    String kind = 'driver',
   }) async {
-    await ensureInitialized();
-    final data = await _sb.rpc(
-      'join_device',
-      params: {'p_join_code': joinCode, 'p_label': label},
+    final installation = await ensureInstallationId();
+    return _fleet.joinRequest(
+      joinCode: joinCode,
+      installationId: installation,
+      label: label,
     );
-    final map = Map<String, dynamic>.from(data as Map);
-    await saveDevice(map['token']?.toString());
-    return map;
+  }
+
+  /// Vilka bilar telefonen får köra, vem som har dem, och vilken den kör nu.
+  Future<Map<String, dynamic>> fleetStatus() async {
+    if (deviceToken == null) await loadTokens();
+    return _fleet.fleetStatus(deviceToken: deviceToken);
+  }
+
+  /// Tar bilen. `force: false` först -- servern svarar `takeover_required`
+  /// när någon annan har den, och då frågar appen föraren.
+  Future<Map<String, dynamic>> startVehicleSession({
+    required String licenseId,
+    bool force = false,
+  }) async {
+    if (deviceToken == null) await loadTokens();
+    final token = deviceToken;
+    if (token == null) throw ApiException(401, 'Telefonen är inte parkopplad.');
+    return _fleet.startVehicleSession(
+      licenseId: licenseId,
+      deviceToken: token,
+      force: force,
+    );
+  }
+
+  Future<Map<String, dynamic>> endVehicleSession() async {
+    if (deviceToken == null) await loadTokens();
+    final token = deviceToken;
+    if (token == null) return {'ok': true};
+    return _fleet.endVehicleSession(deviceToken: token);
   }
 
   Future<Map<String, dynamic>> createTransferCode(String deviceId) async {
@@ -583,16 +747,56 @@ class ApiClient {
   Future<Map<String, dynamic>> registerPushToken({
     required String fcmToken,
     String platform = 'web',
+    String label = 'App',
   }) async {
     await ensureInitialized();
-    if (deviceToken == null) throw ApiException(401, 'Ingen enhet');
+    final installId = await ensureInstallationId();
+    final backend = _backend;
+    if (backend != null) {
+      final body = await backend.deviceSession(
+        installationId: installId,
+        pushToken: fcmToken.isEmpty ? null : fcmToken,
+        label: label,
+        platform: platform,
+        // Förartoken om den finns; annars JWT → owner_app-enhet.
+        deviceToken: deviceToken,
+        accessToken: _accessToken,
+      );
+      final token = body['device_token']?.toString();
+      // Ägare utan tidigare förartoken får installation_id som deviceToken
+      // så notisprefs och X-Device-Token fungerar vidare i sessionen.
+      if ((deviceToken == null || deviceToken!.isEmpty) &&
+          token != null &&
+          token.isNotEmpty) {
+        await saveDevice(token);
+      }
+      return body;
+    }
+    // Fallback utan Django: gamla Supabase-uppdateringen kräver deviceToken.
+    if (deviceToken == null) {
+      throw ApiException(401, 'Ingen enhet — logga in via backend för push');
+    }
+    if (fcmToken.isEmpty) {
+      return {'ok': true, 'linked': 'no_backend_no_fcm'};
+    }
     final meDev = await getDeviceMe();
     final device = meDev['device'] as Map? ?? {};
     await _sb
         .from('devices')
-        .update({'push_token': fcmToken})
+        .update({
+          'push_token': fcmToken,
+          'last_seen_at': DateTime.now().toUtc().toIso8601String(),
+        })
         .eq('id', device['id']);
     return {'ok': true};
+  }
+
+  /// Koppla installation till inloggat konto utan att kräva FCM-token.
+  Future<Map<String, dynamic>> linkDeviceSession({
+    String platform = 'web',
+    String label = 'App',
+  }) async {
+    return registerPushToken(fcmToken: '', platform: platform, label: label);
   }
 
   /// Cities a driver can pick for notifications when their company hasn't
@@ -635,11 +839,28 @@ class ApiClient {
               ?.map((e) => e.toString())
               .toList() ??
           skaneAreaFallback;
+      final byRegionRaw = body['citiesByRegion'];
+      final citiesByRegion = <String, List<String>>{};
+      if (byRegionRaw is Map) {
+        for (final e in byRegionRaw.entries) {
+          final list = e.value;
+          if (list is! List) continue;
+          citiesByRegion[e.key.toString()] =
+              list.map((c) => c.toString()).toList();
+        }
+      }
       return {
         'prefs': Map<String, dynamic>.from((body['prefs'] as Map?) ?? {}),
         'companyAreas': areas,
         'areaCatalog': areas,
+        // Orter per län -- samma källa som push-steget. Tom map = äldre
+        // backend; då faller UI tillbaka till den platta areaCatalog.
+        'citiesByRegion': citiesByRegion,
         'regionCatalog': (body['regionCatalog'] as List?) ?? const [],
+        // Alla 21 län med namn, för notisinställningarnas sammanfattning.
+        'countyCatalog': (body['countyCatalog'] as List?) ?? const [],
+        // Kommunerna per län (SCB-kod), för att förfina ett valt län.
+        'municipalityCatalog': (body['municipalityCatalog'] as Map?) ?? const {},
         'uncoveredCounties': (body['uncoveredCounties'] as List?) ?? const [],
         // true = inloggad ägare utan parad telefon. Katalogerna går att
         // visa, men det finns ingen enhet att spara för -- och det är ett
@@ -672,10 +893,112 @@ class ApiClient {
     };
   }
 
+  static const _onDutyKey = 'tb_on_duty';
+  bool? _onDuty;
+  DateTime? _presenceSentAt;
+
+  /// Hur ofta en öppen app förnyar "I tjänst". Servern låter rutan gälla i
+  /// 30 minuter, så en förare som stänger appen faller tillbaka på körområdet.
+  static const presenceInterval = Duration(minutes: 5);
+
+  Future<bool> onDuty() async {
+    if (_onDuty != null) return _onDuty!;
+    final prefs = await SharedPreferences.getInstance();
+    _onDuty = prefs.getBool(_onDutyKey) ?? false;
+    return _onDuty!;
+  }
+
+  /// Slår på eller av "I tjänst". Kräver Django-backenden och en parad telefon.
+  Future<void> setOnDuty(bool on, {double? lat, double? lon}) async {
+    final backend = _backend;
+    if (backend == null) {
+      throw Exception('I tjänst kräver den nya backenden');
+    }
+    await backend.setPresence(
+      on: on,
+      lat: lat,
+      lon: lon,
+      deviceToken: deviceToken,
+      accessToken: _accessToken,
+    );
+    _onDuty = on;
+    _presenceSentAt = on ? DateTime.now() : null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_onDutyKey, on);
+  }
+
+  /// Förnyar "I tjänst" högst var femte minut. Anropas bara från skärmens
+  /// hämtning, som inte körs i bakgrunden -- ingen bakgrundsspårning.
+  Future<void> refreshPresence({double? lat, double? lon}) async {
+    final backend = _backend;
+    if (backend == null || lat == null || lon == null) return;
+    if (!await onDuty()) return;
+    final sent = _presenceSentAt;
+    if (sent != null && DateTime.now().difference(sent) < presenceInterval) {
+      return;
+    }
+    try {
+      await backend.setPresence(
+        on: true,
+        lat: lat,
+        lon: lon,
+        deviceToken: deviceToken,
+        accessToken: _accessToken,
+      );
+      _presenceSentAt = DateTime.now();
+    } catch (_) {
+      // Utan förnyelse går rutan ut, och körområdet gäller igen.
+    }
+  }
+
+  /// Färjor i förarens område (Django-backenden). Utan den: inga färjor.
+  Future<Map<String, dynamic>> ferries({
+    double? lat,
+    double? lon,
+    List<String>? counties,
+    List<String>? municipalities,
+  }) async {
+    final backend = _backend;
+    if (backend == null) return const {'ferries': [], 'terminals': []};
+    return backend.ferries(
+      lat: lat,
+      lon: lon,
+      counties: counties,
+      municipalities: municipalities,
+      deviceToken: deviceToken,
+      accessToken: _accessToken,
+    );
+  }
+
+  /// Kommande evenemang i förarens område (Django-backenden).
+  Future<Map<String, dynamic>> events({
+    double? lat,
+    double? lon,
+    List<String>? counties,
+    List<String>? municipalities,
+    String? from,
+    String? to,
+  }) async {
+    final backend = _backend;
+    if (backend == null) return const {'events': []};
+    return backend.events(
+      lat: lat,
+      lon: lon,
+      counties: counties,
+      municipalities: municipalities,
+      from: from,
+      to: to,
+      deviceToken: deviceToken,
+      accessToken: _accessToken,
+    );
+  }
+
   Future<Map<String, dynamic>> saveNotifyPrefs({
     bool? enabled,
     List<String>? cities,
     List<String>? regions,
+    List<String>? counties,
+    List<String>? municipalities,
     Map<String, bool>? types,
   }) async {
     final backend = _backend;
@@ -684,6 +1007,8 @@ class ApiClient {
         enabled: enabled,
         cities: cities,
         regions: regions,
+        counties: counties,
+        municipalities: municipalities,
         types: types,
         deviceToken: deviceToken,
         accessToken: _accessToken,
@@ -699,6 +1024,8 @@ class ApiClient {
     if (enabled != null) current['enabled'] = enabled;
     if (cities != null) current['cities'] = cities;
     if (regions != null) current['regions'] = regions;
+    if (counties != null) current['counties'] = counties;
+    if (municipalities != null) current['municipalities'] = municipalities;
     if (types != null) current['types'] = types;
     await _sb
         .from('devices')
@@ -889,6 +1216,9 @@ class ApiClient {
       'kind': m['kind'],
       'mode': m['mode'],
       'region': m['region'],
+      'county': m['county'],
+      'countyName': m['countyName'],
+      'municipality': m['municipality'],
       'severity_tier': m['severity_tier'],
       'confidence': m['confidence'],
       'level': m['level'],
@@ -927,6 +1257,9 @@ class ApiClient {
     bool demo = false,
     double? userLat,
     double? userLon,
+    List<String>? regions,
+    List<String>? counties,
+    List<String>? municipalities,
   }) async {
     try {
       await ensureInitialized();
@@ -940,18 +1273,35 @@ class ApiClient {
       // dålig, vilket är när en förare oftast tittar på den.
       List favoriteRows = const [];
       var source = 'trafiklab';
+      var needsArea = false;
       final backend = _backend;
       if (backend != null) {
         // Django äger både marknadsurvalet och bedömningen. Den äldre
         // RPC-vägen har andra trösklar och kan innehålla inaktuella alerts,
         // så ett backendfel får inte tyst ersättas med felaktiga taxitips.
+        // Valda län skickas med så GPS-bubblan inte kapar Stockholm/Göteborg
+        // innan listfiltret får se dem.
         final body = await backend.alerts(
           lat: lat,
           lon: lon,
+          regions: regions,
+          counties: counties,
+          municipalities: municipalities,
           deviceToken: deviceToken,
           accessToken: _accessToken,
         );
         rows = (body['alerts'] as List?) ?? const [];
+        // Väghändelser ligger i `context` (kapade, låga poäng) — de är
+        // sammanhang för vägen dit, inte skäl att köra någonstans. Appen
+        // tar med dem så föraren kan filtrera in/ut väg; sorteringen håller
+        // dem längst ner eftersom poängen är ≤15.
+        final contextRows = (body['context'] as List?) ?? const [];
+        if (contextRows.isNotEmpty) {
+          rows = [...rows, ...contextRows];
+        }
+        // Varken plats eller körområde: servern skickar ingen rikstäckande
+        // lista, och skärmen ber föraren välja län.
+        needsArea = body['needsArea'] == true;
         favoriteRows = (body['favorites'] as List?) ?? const [];
         source = 'django';
       } else {
@@ -982,6 +1332,7 @@ class ApiClient {
         'demo': demo,
         'updatedAt': now.millisecondsSinceEpoch,
         'source': source,
+        'needsArea': needsArea,
       };
     } on PostgrestException catch (e) {
       // Some environments are not provisioned with the alerts table yet.
@@ -1185,29 +1536,25 @@ class ApiClient {
     final meData = await me();
     final company = meData['company'] as Map<String, dynamic>?;
     if (company == null) throw ApiException(400, 'Inget bolag');
-    try {
-      final res = await _invokeFunction(
-        'update-subscription-quantity',
-        body: {'seats': seats},
-      );
-      return {'quantity': seats, 'synced': res['synced'] == true};
-    } catch (_) {
-      return {'quantity': seats, 'synced': false};
-    }
+    final res = await _invokeFunction(
+      'update-subscription-quantity',
+      body: {'seats': seats},
+    );
+    return {
+      'quantity': res['quantity'] ?? seats,
+      'synced': res['synced'] == true,
+    };
   }
 
   Future<Map<String, dynamic>> listMembers() async {
-    await ensureInitialized();
     final meData = await me();
-    final company = meData['company'] as Map<String, dynamic>?;
-    if (company == null) return {'members': []};
-    final rows = await _sb
-        .from('company_members')
-        .select('role, status, user:profiles(id, email, name)')
-        .eq('company_id', company['id']);
-    return {'members': rows};
+    return {
+      'members': (meData['members'] as List?) ?? const [],
+    };
   }
 
+  /// Inbjudan av ny admin kräver Auth Admin (skapas på webbportalen).
+  /// Klienten kan inte skapa auth-användare med anon-nyckeln.
   Future<Map<String, dynamic>> addMember({
     required String email,
     String name = '',
@@ -1215,7 +1562,9 @@ class ApiClient {
   }) async {
     throw ApiException(
       501,
-      'Bjud in medlem via Supabase Auth invite (edge) — använd Studio tills vidare',
+      'Bjud in kollegor via webbportalen (taxitips.se) — '
+      'appen kan ta bort admins och hantera förartelefoner, '
+      'men nya inloggningar skapas med e-postinbjudan där.',
     );
   }
 

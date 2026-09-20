@@ -263,6 +263,31 @@ async function fetchOperativeEvents() {
 }
 
 const server = http.createServer(async (req, res) => {
+  // Proxy DEBUG-endpoints till Django (enhetslista, test-FCM, PredictHQ live).
+  // PredictHQ bär query-strängen (?days=14), därav startsWith i stället för likhet.
+  if (BACKEND && (req.url === "/api/dev/devices" || req.url === "/api/dev/push"
+      || req.url.startsWith("/api/pipeline/predicthq") || req.url === "/api/pipeline/ferries"
+      || req.url === "/api/pipeline/services" || req.url.startsWith("/api/pipeline/service/")
+      || req.url.startsWith("/api/pipeline/tip/") || req.url.startsWith("/api/pipeline/airport-delays"))) {
+    try {
+      const upstream = await fetch(`${BACKEND}${req.url}`, {
+        method: req.method,
+        headers: { "Content-Type": "application/json" },
+        body: req.method === "POST" ? await readBody(req) : undefined,
+      });
+      const body = await upstream.text();
+      res.writeHead(upstream.status, {
+        "Content-Type": "application/json; charset=utf-8",
+      });
+      return res.end(body);
+    } catch (err) {
+      res.writeHead(502, { "Content-Type": "application/json; charset=utf-8" });
+      return res.end(JSON.stringify({
+        error: `Nådde inte backend på ${BACKEND}: ${err.message}`,
+      }));
+    }
+  }
+
   if (req.url === "/api/pipeline" && BACKEND) {
     try {
       const upstream = await fetch(`${BACKEND}/api/pipeline`);
@@ -329,6 +354,25 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  // En sida per tjänst. Färjorna har egen sida (tidtabell + AIS), övriga delar
+  // service.html och läser tjänsten ur sökvägen. Den gamla helsidan ligger på /system.
+  const page = req.url.split("?")[0];
+  const PAGES = {
+    "/": "overview.html",
+    "/farjor": "ferries.html",
+    "/system": "index.html",
+    "/tag": "service.html",
+    "/kollektivtrafik": "service.html",
+    "/vag": "service.html",
+    "/flyg": "service.html",
+    "/vader": "service.html",
+    "/evenemang": "service.html",
+  };
+  if (PAGES[page]) {
+    res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+    return res.end(fs.readFileSync(path.join(__dirname, PAGES[page])));
+  }
+
   const file = path.join(__dirname, "index.html");
   res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
   res.end(fs.readFileSync(file));
@@ -336,6 +380,20 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, "127.0.0.1", () => {
   console.log(`\n  TaxiTips pipeline viewer\n  http://localhost:${PORT}\n`);
-  console.log(`  Reading from: ${SUPABASE_URL}`);
-  console.log(`  Credentials:  ${SERVICE_KEY ? "found" : "MISSING -- set VIZ_SERVICE_KEY"}\n`);
+  if (BACKEND) {
+    console.log(`  Pipeline data: Django ${BACKEND}`);
+  } else {
+    console.log(`  Reading from: ${SUPABASE_URL}`);
+    console.log(`  Credentials:  ${SERVICE_KEY ? "found" : "MISSING -- set VIZ_SERVICE_KEY"}`);
+  }
+  console.log("");
 });
+
+function readBody(req) {
+  return new Promise((resolve, reject) => {
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}

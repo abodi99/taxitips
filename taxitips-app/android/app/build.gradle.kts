@@ -1,8 +1,21 @@
+import java.util.Properties
+
+// Google Maps-nyckeln: android/local.properties (MAPS_API_KEY=...) eller miljövariabeln
+// MAPS_API_KEY. Aldrig i git. Utan nyckel byggs appen ändå; kartan i appen använder då
+// flutter_map (se lib/widgets/traffic_map.dart och --dart-define=GOOGLE_MAPS=true).
+val mapsApiKey: String = run {
+    val props = Properties()
+    val file = rootProject.file("local.properties")
+    if (file.exists()) file.inputStream().use { props.load(it) }
+    props.getProperty("MAPS_API_KEY") ?: System.getenv("MAPS_API_KEY") ?: ""
+}
+
 plugins {
     id("com.android.application")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
     id("com.google.gms.google-services")
+    id("com.google.firebase.crashlytics")
 }
 
 android {
@@ -24,6 +37,7 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        manifestPlaceholders["MAPS_API_KEY"] = mapsApiKey
     }
 
     buildTypes {

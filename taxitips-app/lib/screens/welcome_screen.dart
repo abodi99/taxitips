@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -71,7 +72,11 @@ class WelcomeScreen extends StatelessWidget {
                           child: const Text('Logga in'),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      // Bolagskonto och abonnemang tecknas på webben, inte i
+                      // mobilappen: föraren ansluter med bolagskod. Ett köp i
+                      // appen utanför App Store/Google Play stoppas i granskningen.
+                      if (kIsWeb) const SizedBox(width: 12),
+                      if (kIsWeb)
                       Expanded(
                         child: OutlinedButton(
                           onPressed: onSignup,

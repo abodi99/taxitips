@@ -106,4 +106,25 @@ void main() {
       expect(compensationLabel(1500), 'Taxi ersätts · upp till 1500 kr');
     });
   });
+
+  group('alertFilterMode', () {
+    test('mode vinner över kind', () {
+      expect(
+        alertFilterMode({'mode': 'tram', 'kind': 'transit'}),
+        'tram',
+      );
+    });
+
+    test('rail normaliseras till train', () {
+      expect(alertFilterMode({'mode': 'rail'}), 'train');
+    });
+
+    test('väg utan mode faller tillbaka till kind', () {
+      expect(alertFilterMode({'kind': 'road'}), 'road');
+    });
+
+    test('okänd kollektivtrafik blir bus så den går att stänga av', () {
+      expect(alertFilterMode({'kind': 'transit'}), 'bus');
+    });
+  });
 }

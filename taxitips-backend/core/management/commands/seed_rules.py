@@ -37,6 +37,20 @@ RULES = [
     dict(tier=SeverityTier.IGNORE, mode="", condition="",
          cap=0, confidence=Confidence.MEDIUM,
          note="Brus: hiss ur funktion, stängd toalett, cykelplatser."),
+    # Flyg har ingen motsvarighet i scoring.js -- källan fanns inte då. Taket
+    # håller ankomstvågen under en verkligt stoppad linje: att många landar
+    # samtidigt är en stark efterfrågesignal, men till skillnad från ett
+    # stoppat tåg vet vi inte att någon faktiskt står utan transport.
+    dict(tier=SeverityTier.ARRIVAL_WAVE, mode=TransportMode.FLIGHT, condition="",
+         cap=80, confidence=Confidence.MEDIUM,
+         note="Ankomstvåg: N landningar i samma halvtimme, sen kväll. "
+              "Tröskel per flygplats i core/thresholds.py:AIRPORTS."),
+    # Lägre tak än vågen: ett plan är färre resenärer än åtta. Att det ändå
+    # är ett tips beror på att ingen lämnar flygplatsen efter det.
+    dict(tier=SeverityTier.LAST_ARRIVAL, mode=TransportMode.FLIGHT, condition="",
+         cap=65, confidence=Confidence.MEDIUM,
+         note="Sista ankomsten: inget mer plan landar inom två timmar. "
+              "Gäller de åtta små flygplatserna, där en våg aldrig uppstår."),
 ]
 
 

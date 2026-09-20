@@ -25,6 +25,7 @@ import requests
 
 from core.geo import CITY_COORDS, REGION_ANCHOR, haversine_km
 from core.market import configured_regions, is_national_scope
+from core.time_limits import reraise_time_limit
 
 log = logging.getLogger(__name__)
 
@@ -120,6 +121,7 @@ def fetch_region_weather() -> list[dict]:
             if summary:
                 out.append(summary)
         except Exception as exc:
+            reraise_time_limit(exc)
             log.warning("smhi: %s misslyckades: %s", point["point"], exc)
     return out
 

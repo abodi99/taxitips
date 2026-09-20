@@ -28,3 +28,7 @@ google-auth==2.57.1
 
 # Produktion: Coolify kör gunicorn, inte manage.py runserver.
 gunicorn==23.0.0
+
+# AISStream.io (fartygspositioner) -- maritime/management/commands/run_ais_stream.py.
+# Fanns redan transitivt via genkit; låst här eftersom vi importerar den direkt.
+websockets==16.1.1

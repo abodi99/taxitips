@@ -1,8 +1,12 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import 'analytics.dart';
 import 'api_client.dart';
+import 'crashlytics.dart';
 import 'push_service.dart';
 import 'screens/driver_screen.dart';
 import 'screens/join_screen.dart';
@@ -11,10 +15,12 @@ import 'screens/settings_screen.dart';
 import 'screens/signup_screen.dart';
 import 'theme.dart';
 import 'screens/welcome_screen.dart';
+import 'widgets/force_upgrade_overlay.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initFirebaseSafe();
+  await initCrashlyticsSafe();
   await initAnalyticsSafe();
   final api = ApiClient();
   await api.ensureInitialized();
@@ -44,6 +50,7 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
     _route = AppRoute.welcome;
     widget.api.listenForAuthSignIn(() {
       if (!mounted) return;
+      registerForPush(widget.api);
       if (_route == AppRoute.welcome ||
           _route == AppRoute.login ||
           _route == AppRoute.signup) {
@@ -75,6 +82,8 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
       try {
         await widget.api.me();
         _route = AppRoute.shell;
+        // Befintlig session: koppla enhet + uppdatera last_seen / FCM.
+        unawaited(registerForPush(widget.api));
         if (uri.path.contains('driver')) {
           // Keep the driver view as the only main destination.
         }
@@ -84,6 +93,8 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
       }
     } else if (widget.api.deviceToken != null) {
       _route = AppRoute.shell;
+      // FCM-permission får inte blockera boot (hänger ofta på webben).
+      unawaited(registerForPush(widget.api));
     }
     if (mounted) setState(() => _booting = false);
   }
@@ -99,10 +110,17 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
   Widget build(BuildContext context) {
     final observer = analyticsObserver();
     return MaterialApp(
-      title: 'Taxi Tips',
+      title: 'Taxitips',
       theme: buildTaxiTheme(),
+      // Svenska för datumväljare och andra Material-texter.
+      locale: const Locale('sv'),
+      supportedLocales: const [Locale('sv'), Locale('en')],
+      localizationsDelegates: GlobalMaterialLocalizations.delegates,
       debugShowCheckedModeBanner: false,
       navigatorObservers: [?observer],
+      builder: (context, child) => ForceUpgradeOverlay(
+        child: child ?? const SizedBox.shrink(),
+      ),
       home: _booting
           ? const _SplashScreen()
           : switch (_route) {
@@ -120,7 +138,8 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
               ),
               AppRoute.signup => SignupScreen(
                 api: widget.api,
-                onDone: () {
+                onDone: () async {
+                  await registerForPush(widget.api);
                   _goShell();
                 },
                 onLogin: () => setState(() => _route = AppRoute.welcome),
@@ -128,7 +147,10 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
               ),
               AppRoute.join => JoinScreen(
                 api: widget.api,
-                onJoined: _goShell,
+                onJoined: () async {
+                  await registerForPush(widget.api);
+                  _goShell();
+                },
                 onBack: () => setState(() => _route = AppRoute.welcome),
               ),
               AppRoute.shell => _AppShell(

@@ -333,6 +333,17 @@ def _apply(
             )
         updates["reasons"] = reasons
         updates["confidence"] = Confidence.MEDIUM
+        # Höjde modellen tipset -- poäng, typ eller bort med alternativet -- får
+        # höjningen synas i listan men aldrig ensam väcka en telefon.
+        raised = (
+            final > rule
+            or "severity_tier" in updates
+            or (updates.get("has_alternative") is False and opportunity.has_alternative)
+        )
+        if raised:
+            from django.utils import timezone
+
+            updates["ai_adjusted_at"] = timezone.now()
         Opportunity.objects.filter(pk=opportunity.pk).update(**updates)
         log.info(
             "genkit: %s rule=%s model=%s final=%s tier=%s (%s)",

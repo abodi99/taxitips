@@ -24,6 +24,14 @@ class SeverityTier(models.TextChoices):
     VEHICLE_CANCELLED = "vehicle_cancelled", "Enstaka avgång inställd"
     LINE_DELAYED = "line_delayed", "Försening på linjen"
     VEHICLE_DELAYED = "vehicle_delayed", "Enstaka avgång försenad"
+    # Inte en störning utan en anhopning: många landar samtidigt när tåg och
+    # buss tunnats ut. Egen tier därför att ingen befintlig beskriver den --
+    # "disruption_unclassified" hade gjort tipset oförklarligt för föraren.
+    ARRIVAL_WAVE = "arrival_wave", "Ankomstvåg"
+    # Ett enda plan, men inget mer landar på flera timmar. På en liten
+    # flygplats är det hela kvällens underlag -- se core/thresholds.py:s
+    # RULE_LAST_ARRIVAL för mätningen bakom uppdelningen.
+    LAST_ARRIVAL = "last_arrival", "Sista ankomsten"
     ROAD_ACCIDENT_OR_CLOSURE = "road_accident_or_closure", "Olycka/avstängning"
     ROAD_WORK_OR_QUEUE = "road_work_or_queue", "Vägarbete/kö"
     ROAD_WORK = "road_work", "Vägarbete"
@@ -44,6 +52,7 @@ class TransportMode(models.TextChoices):
     BUS = "bus", "Buss"
     ROAD = "road", "Väg"
     BOAT = "boat", "Båt"
+    FLIGHT = "flight", "Flyg"
     UNKNOWN = "unknown", "Okänt"
 
 
@@ -248,6 +257,18 @@ class Opportunity(models.Model):
             "matchat ingen marknad alls -- tipset hade försvunnit tyst."
         ),
     )
+    # Länet tipset ligger i (SCB-kod) och länen det räknas till, inklusive
+    # grannlän inom core/areas.AREA_BUFFER_KM. Räknas vid skrivning ur
+    # koordinaten, eller ur marknaden när koordinat saknas. Förarens
+    # körområde matchas mot area_codes -- se core/areas.py.
+    county_code = models.CharField(max_length=2, null=True, blank=True, db_index=True)
+    municipality_code = models.CharField(max_length=4, null=True, blank=True, db_index=True)
+    area_codes = models.JSONField(default=list, blank=True)
+    # Satt när språkmodellen höjt tipset (poäng, typ eller bort med alternativet).
+    # En sådan höjning får synas i listan men aldrig ensam väcka en telefon: notisen
+    # kräver att regelverket själv gör tipset notisvärt. Pipelinens nästa skrivning
+    # med regelvärdena nollställer den. Se core/genkit.py och core/notify.decide.
+    ai_adjusted_at = models.DateTimeField(null=True, blank=True)
 
     start_time = models.DateTimeField(null=True, blank=True)
     end_time = models.DateTimeField(null=True, blank=True, db_index=True)
@@ -538,6 +559,11 @@ class SourceStatus(models.Model):
         ),
     )
     checked_at = models.DateTimeField()
+    # checked_at flyttas av varje försök, även ett misslyckat. Utan en egen
+    # tid för senaste lyckade hämtning ser en källa som felat i ett dygn
+    # lika färsk ut som en som svarade nyss. Se core/pipeline_health.py.
+    last_success_at = models.DateTimeField(null=True, blank=True)
+    consecutive_failures = models.IntegerField(default=0)
 
     class Meta:
         db_table = "source_status"
@@ -598,11 +624,37 @@ class PushDelivery(models.Model):
     error = models.TextField(blank=True)
     created_at = models.DateTimeField(db_default=models.functions.Now())
 
+    # Utkorgen (P0-B3). Raden skrivs som `pending` innan något skickas, så att en
+    # worker som dör mitt i en cykel varken tappar notisen eller skickar den två
+    # gånger: unikheten nedan är leveransnyckeln, och `next_attempt_at` är både
+    # nästa försök och lånet medan raden skickas. Se core/notify.run_push_cycle.
+    class Status(models.TextChoices):
+        PENDING = "pending", "Väntar"
+        SENDING = "sending", "Skickas"
+        SENT = "sent", "Skickad"
+        FAILED = "failed", "Misslyckad"
+        EXPIRED = "expired", "Utgången"
+        # Mottagaren tappade åtkomsten mellan köandet och sändningen:
+        # spärrad telefon, övertagen bil, utgången period eller ett län
+        # licensen inte täcker. Egen status och inte "failed" -- det var
+        # inget som gick fel, och skillnaden syns i notishistoriken.
+        SUPPRESSED = "suppressed", "Undertryckt (ingen åtkomst)"
+
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.SENT)
+    attempts = models.IntegerField(default=0)
+    next_attempt_at = models.DateTimeField(null=True, blank=True)
+    # Efter den här tiden är notisen inte längre värd att väcka någon för.
+    expires_at = models.DateTimeField(null=True, blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+
     class Meta:
         db_table = "push_delivery"
         verbose_name_plural = "push deliveries"
         ordering = ["-created_at"]
-        indexes = [models.Index(fields=["device_token", "-created_at"])]
+        indexes = [
+            models.Index(fields=["device_token", "-created_at"]),
+            models.Index(fields=["status", "next_attempt_at"], name="push_delivery_status_due_idx"),
+        ]
         constraints = [
             # Samma tips, samma enhet, en gång. Skyddar mot en cykel som
             # hinner skicka men dör innan notified_at hunnit skrivas --
@@ -668,3 +720,47 @@ class OpportunityFavorite(models.Model):
 
     def __str__(self) -> str:
         return f"★ {self.opportunity_external_id}"
+
+
+class Combination(models.Model):
+    """
+    Ett påslag från kombinationslagret -- se core/combine.py.
+
+    Härlett: räknas om från de aktiva tipsen varje minut och ersätter förra körningens
+    rader. Förarflödet läser raderna (en dubblett blir en rad, ett påslag höjer
+    ordningen); notisbeslutet gör det inte.
+    """
+
+    rule_id = models.CharField(max_length=40)
+    effect = models.CharField(max_length=10, help_text="merge = dubblett, visas som en rad; boost = höjer ordningen.")
+    primary_external_id = models.TextField(db_index=True)
+    member_external_ids = models.JSONField(default=list)
+    boost = models.IntegerField(default=0)
+    reason = models.TextField()
+    computed_at = models.DateTimeField()
+    expires_at = models.DateTimeField(db_index=True)
+
+    class Meta:
+        db_table = "opportunity_combinations"
+
+    def __str__(self) -> str:
+        return f"{self.rule_id}: {self.primary_external_id}"
+
+
+class DevicePresence(models.Model):
+    """
+    "I tjänst": rutan (≈ 5 km) en förare befinner sig i -- se core/presence.py.
+
+    En rad per enhet, som skrivs över: ingen historik. Gäller till `expires_at`
+    (30 min efter senaste uppdatering) och gallras sedan. Ingen främmande nyckel:
+    `devices` ägs av Supabase.
+    """
+
+    device_id = models.UUIDField(primary_key=True)
+    cell_lat = models.FloatField()
+    cell_lon = models.FloatField()
+    updated_at = models.DateTimeField()
+    expires_at = models.DateTimeField(db_index=True)
+
+    class Meta:
+        db_table = "device_presence"

@@ -14,7 +14,7 @@ from datetime import datetime, timedelta, timezone
 
 from django.test import TestCase
 
-from core.alternatives import alternative_from_text, human_gap, travel_options
+from core.alternatives import alternative_from_text, human_gap, route_note, travel_options
 
 NOW = datetime(2026, 9, 8, 10, 0, tzinfo=timezone.utc)
 
@@ -117,3 +117,29 @@ class HumanGapTests(TestCase):
         self.assertEqual(human_gap(45), "45 min")
         self.assertEqual(human_gap(60), "1 tim")
         self.assertEqual(human_gap(322), "5 tim 22 min")
+
+
+class RouteTests(TestCase):
+    """ResRobots resa syns även när den inte räknas som ett alternativ."""
+
+    def test_the_planner_route_is_the_next_departure_line(self):
+        now = datetime.now(timezone.utc)
+        out = travel_options(
+            next_departure_at=now + timedelta(minutes=37), next_departure_minutes=37, is_last_departure=False,
+            has_alternative=False, alternative_note="Nästa resa mot Stockholm C: Regional tåg 178 14:09", now=now,
+        )
+        self.assertTrue(out["summary"].startswith("Nästa resa mot Stockholm C: Regional tåg 178 14:09 (om "))
+        self.assertEqual((out["route"], out["planner"]), ("Nästa resa mot Stockholm C: Regional tåg 178 14:09", "ResRobot"))
+
+    def test_a_replacement_note_is_not_a_route(self):
+        now = datetime.now(timezone.utc)
+        out = travel_options(next_departure_at=None, next_departure_minutes=None, is_last_departure=False,
+                             has_alternative=True, alternative_note="Buss ersätter", now=now)
+        self.assertEqual((out["summary"], out["planner"]), ("Buss ersätter", None))
+
+    def test_the_route_says_how_many_changes(self):
+        self.assertEqual(route_note("Nässjö C", "Länstrafik tåg 3493", "22:58", 1),
+                         "Nästa resa mot Nässjö C: Länstrafik tåg 3493 22:58, 1 byte")
+        self.assertEqual(route_note("Göteborg C", "Länstrafik tåg 3493", "22:58"),
+                         "Nästa resa mot Göteborg C: Länstrafik tåg 3493 22:58")
+

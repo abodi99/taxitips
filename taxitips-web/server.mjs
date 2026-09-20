@@ -263,6 +263,19 @@ function serveStatic(req, res) {
   }
   fs.readFile(filePath, (err, data) => {
     if (err) {
+      // Snygga sökvägar utan ändelse: /portal -> portal.html. Samma regel som
+      // nginx.conf:s `try_files $uri.html`. Utan den föll /portal igenom till
+      // index.html-fallbacken nedan och visade marknadssidan i stället för
+      // portalen -- en 200 med fel innehåll, vilket är svårare att upptäcka
+      // än en 404.
+      if (!path.extname(filePath)) {
+        const asHtml = `${filePath}.html`;
+        if (asHtml.startsWith(DIST) && fs.existsSync(asHtml)) {
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(fs.readFileSync(asHtml));
+          return;
+        }
+      }
       // SPA-ish fallback for pretty paths
       const html = path.join(DIST, "index.html");
       fs.readFile(html, (err2, indexData) => {

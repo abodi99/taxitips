@@ -325,3 +325,83 @@ class NewFieldsTests(TestCase):
         alert = self.normalize({}, others=[bus])
         self.assertTrue(alert.next_departure_is_bus)
         self.assertIn("Nästa avgång är en buss", alert.description)
+
+
+class CompleteFetchTests(TestCase):
+    """
+    Pollen hämtade alla avgångar i landet med limit 4000; dagtid finns 14 000-15 000.
+    Nu: störda avgångar och avgångar vid drabbade stationer, sida för sida.
+    """
+
+    def rail(self, disrupted, station_rows):
+        import re
+
+        from core.sources.trafikverket_rail import TrafikverketRail
+
+        rail = TrafikverketRail("key")
+        rail.queries = []
+
+        def fake_query(xml):
+            rail.queries.append(xml)
+            skip = int(re.search(r'skip="(\d+)"', xml).group(1))
+            size = int(re.search(r'limit="(\d+)"', xml).group(1))
+            if 'name="Canceled"' in xml:
+                rows = disrupted
+            else:
+                wanted = set(re.findall(r'name="LocationSignature" value="([^"]+)"', xml))
+                rows = [r for r in station_rows if r["LocationSignature"] in wanted]
+            return {"TrainAnnouncement": rows[skip:skip + size]}
+
+        rail._query = fake_query
+        return rail
+
+    @staticmethod
+    def row(train, sig, clock, **extra):
+        return {
+            "ActivityId": f"{train}-{sig}", "AdvertisedTrainIdent": train, "LocationSignature": sig,
+            "AdvertisedTimeAtLocation": f"2026-09-15T{clock}:00.000+02:00",
+            "ScheduledDepartureDateTime": "2026-09-15T00:00:00.000+02:00", **extra,
+        }
+
+    def test_every_page_is_read(self):
+        from unittest.mock import patch
+
+        from core.sources import trafikverket_rail as tvr
+
+        disrupted = [self.row(str(7000 + i), f"S{i}", "08:00", Canceled=True) for i in range(5)]
+        with patch.object(tvr, "PAGE_SIZE", 2):
+            rail = self.rail(disrupted, [])
+            rows = rail._departures()
+        self.assertEqual(sum(1 for r in rows if r.get("Canceled")), 5)
+        self.assertEqual((rail.last_stats["cancelled_trains"], rail.last_stats["complete"]), (5, True))
+
+    def test_a_page_cap_is_reported_not_hidden(self):
+        from unittest.mock import patch
+
+        from core.sources import trafikverket_rail as tvr
+
+        disrupted = [self.row(str(7000 + i), f"S{i}", "08:00", Canceled=True) for i in range(3)]
+        with patch.object(tvr, "PAGE_SIZE", 2), patch.object(tvr, "MAX_PAGES", 1):
+            rail = self.rail(disrupted, [])
+            rail._departures()
+        self.assertFalse(rail.last_stats["complete"])
+
+    def test_station_departures_are_fetched_only_where_a_tip_can_arise(self):
+        disrupted = [
+            self.row("7182", "Lle", "22:18", Canceled=True),
+            self.row("7182", "Bdn", "23:08", Canceled=True),  # längre ner på linjen: inget eget tips
+            self.row("90", "Mot", "21:00", EstimatedTimeAtLocation="2026-09-15T21:05:00.000+02:00"),  # 5 min
+        ]
+        station_rows = [self.row("7184", "Lle", "22:40"), self.row("7186", "Bdn", "23:30"), self.row("91", "Mot", "21:30")]
+        rail = self.rail(disrupted, station_rows)
+        rows = rail._departures()
+        station_queries = [q for q in rail.queries if 'name="Canceled"' not in q]
+        self.assertEqual(len(station_queries), 1)
+        self.assertIn('value="Lle"', station_queries[0])
+        self.assertNotIn('value="Bdn"', station_queries[0])
+        self.assertEqual(
+            (rail.last_stats["tip_stations"], rail.last_stats["cancelled_trains"], rail.last_stats["cancelled_departures"]),
+            (1, 1, 2),
+        )
+        (only,) = build_alerts(rows, {"Lle": Station("Lle", "Luleå")}, NOW)
+        self.assertEqual((only.station, only.next_departure_minutes), ("Luleå", 22))

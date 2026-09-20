@@ -17,6 +17,8 @@ from zoneinfo import ZoneInfo
 
 import requests
 
+from core.time_limits import reraise_time_limit
+
 DEVIATIONS_URL = "https://deviations.integration.sl.se/v1/messages"
 # expand=true är bärande, inte en optimering: deviations refererar
 # stop_areas, men en vanlig /sites-respons är nyckad på SITE-id -- ett annat
@@ -418,7 +420,8 @@ def enrich_next_departures(
                     return filled
                 try:
                     cache[site_id] = fetch(site_id)
-                except Exception:
+                except Exception as exc:
+                    reraise_time_limit(exc)
                     # En hållplats som inte svarar får inte stoppa cykeln --
                     # tipset skrivs ändå, bara utan avgångsbesked.
                     cache[site_id] = []

@@ -24,3 +24,22 @@ def health(request):
             status=503,
         )
     return JsonResponse({"ok": True, "service": "taxitips-backend", "db_host": db_host})
+
+
+def pipeline_health(request):
+    """
+    Pipelinens hälsa för övervakning utifrån: 503 när beat stått still eller en
+    kärnkälla inte hämtat inom sin gräns. Se core/pipeline_health.py.
+
+    Kopplas inte som healthcheck för webbcontainern: en stillastående beat är
+    inget fel i webbprocessen, och att starta om den hjälper inte.
+    """
+    from core.pipeline_health import evaluate
+
+    try:
+        report = evaluate()
+    except Exception as exc:
+        report = {"ok": False, "problems": ["database"], "error": type(exc).__name__}
+    response = JsonResponse(report, status=200 if report["ok"] else 503)
+    response["Cache-Control"] = "no-store"
+    return response

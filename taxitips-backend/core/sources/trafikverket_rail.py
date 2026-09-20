@@ -23,8 +23,12 @@ import logging
 import re
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone as dt_timezone
+from xml.sax.saxutils import quoteattr
+from zoneinfo import ZoneInfo
 
 import requests
+
+from core.time_limits import reraise_time_limit
 
 log = logging.getLogger(__name__)
 
@@ -46,6 +50,31 @@ VISIBLE_BEFORE = timedelta(minutes=90)
 # En försening av den här storleken strandsätter folk som en inställd
 # avgång; under den väntar man på perrongen.
 SERIOUS_DELAY_MIN = 30
+
+# Sidstorlek och tak för TrainAnnouncement. Dagtid ligger 14 000-15 000
+# annonserade avgångar i åttatimmarsfönstret (mätt 2026-09-15). Den gamla frågan
+# hämtade alla med limit 4000 och fick de första 4 000 i odefinierad ordning: en
+# natt syntes 13 av 77 kommande inställda tåg.
+PAGE_SIZE = 4000
+MAX_PAGES = 10
+# Stationer per fråga om avgångar vid drabbade stationer.
+STATION_CHUNK = 40
+LOCAL_TZ = ZoneInfo("Europe/Stockholm")
+
+DEPARTURE_INCLUDES = "".join(
+    f"<INCLUDE>{name}</INCLUDE>"
+    for name in (
+        "ActivityId", "AdvertisedTrainIdent", "LocationSignature", "AdvertisedTimeAtLocation",
+        "ScheduledDepartureDateTime", "EstimatedTimeAtLocation", "Canceled", "ToLocation", "Deviation",
+        # OtherInformation bär "Buss ers. Floda - Alingsås." på 11% av avgångarna.
+        # TrackAtLocation och ProductInformation är 100% ifyllda även på inställda
+        # avgångar -- "Pågatåg 1612 från Helsingborg C, spår 3" är mer värt för en
+        # förare än "Skånetrafiken 1612". TypeOfTraffic skiljer bussavgångar från
+        # tågavgångar i samma flöde. Se docs/api-field-inventory.md, förslag 6, 8 och 9.
+        "OtherInformation", "TrackAtLocation", "ProductInformation", "TypeOfTraffic",
+        "Operator", "InformationOwner", "WebLink", "WebLinkName",
+    )
+)
 
 # Hur länge en strandsatt perrong räknas som en möjlighet.
 PLATFORM_LIFETIME = timedelta(hours=1)
@@ -132,6 +161,15 @@ class RailAlert:
     web_link: str = ""
     web_link_name: str = ""
     routes: list[str] = field(default_factory=list)
+    # Stationens och slutstationens signatur -- nycklarna för ResRobot-uppslaget.
+    station_signature: str = ""
+    destination_signature: str = ""
+    # Varifrån "nästa avgång" kommer: "station" (nästa tåg från samma station, oavsett
+    # riktning) eller "resrobot" (nästa resa mot samma slutstation, se
+    # core/sources/resrobot.py). `alternative` är ResRobot-svaret som sparas i rådatan.
+    alternative_basis: str = "station"
+    alternative_label: str = ""
+    alternative: dict | None = None
 
 
 def parse_point(wkt: str | None) -> tuple[float, float] | None:
@@ -176,6 +214,8 @@ class TrafikverketRail:
         self.session = session or requests.Session()
         self._stations: dict[str, Station] | None = None
         self._replacements: dict[tuple[str, str], dict] | None = None
+        # Vad senaste hämtningen såg: unika inställda tåg, sidor, komplett. Se _departures.
+        self.last_stats: dict = {}
 
     # -- API ---------------------------------------------------------------
     def _query(self, xml: str) -> dict:
@@ -244,56 +284,87 @@ class TrafikverketRail:
                 "</QUERY>"
             )
             self._replacements = build_replacement_index(block.get("ReplacementTraffic", []))
-        except Exception:
+        except Exception as exc:
+            reraise_time_limit(exc)
             log.exception("trafikverket-rail: kunde inte hämta ReplacementTraffic, faller tillbaka på textmatchning")
             self._replacements = {}
         return self._replacements
 
     def _departures(self) -> list[dict]:
         """
-        Alla annonserade avgångar i fönstret -- inte bara de störda.
+        Störda avgångar i fönstret, plus alla avgångar vid de stationer där en
+        störning blir ett tips.
 
-        Hela listan behövs: för att veta om ett inställt tåg har en
-        ersättare om 10 minuter måste man se de avgångar som INTE är
-        inställda. Det är den signalen som saknas i Node-versionen.
+        Hela avgångslistan behövs vid de stationerna: för att veta om ett inställt
+        tåg har en ersättare om tio minuter måste man se de avgångar som INTE är
+        inställda. Men bara där. Förut hämtades varje annonserad avgång i landet i
+        en fråga med limit 4000 -- se PAGE_SIZE.
+
+        Två frågor, båda sidindelade i stabil ordning (ActivityId):
+
+        1. Inställda eller med beräknad tid (en försening har alltid
+           EstimatedTimeAtLocation). En vardag 07-15: 272 inställda och 3 031
+           beräknade rader.
+        2. Alla avgångar vid stationerna där en störning blir ett tips, STATION_CHUNK
+           stationer åt gången. Samma fönster: 3 014 rader vid 103 stationer.
         """
-        block = self._query(
-            '<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo"'
-            ' schemaversion="1.9" limit="4000">'
-            "<FILTER><AND>"
-            '<EQ name="ActivityType" value="Avgang"/>'
-            '<EQ name="Advertised" value="true"/>'
-            '<GT name="AdvertisedTimeAtLocation" value="$now"/>'
-            f'<LT name="AdvertisedTimeAtLocation" value="$dateadd({WINDOW_HOURS}:00:00)"/>'
-            "</AND></FILTER>"
-            "<INCLUDE>AdvertisedTrainIdent</INCLUDE>"
-            "<INCLUDE>LocationSignature</INCLUDE>"
-            "<INCLUDE>AdvertisedTimeAtLocation</INCLUDE>"
-            "<INCLUDE>EstimatedTimeAtLocation</INCLUDE>"
-            "<INCLUDE>Canceled</INCLUDE>"
-            "<INCLUDE>ToLocation</INCLUDE>"
-            "<INCLUDE>Deviation</INCLUDE>"
-            # OtherInformation bär "Buss ers. Floda - Alingsås." på 11% av
-            # avgångarna och lästes inte alls. TrackAtLocation och
-            # ProductInformation är 100% ifyllda även på inställda avgångar
-            # -- "Pågatåg 1612 från Helsingborg C, spår 3" är mer värt för
-            # en förare än "Skånetrafiken 1612". TypeOfTraffic skiljer
-            # bussavgångar från tågavgångar i samma flöde. Se
-            # docs/api-field-inventory.md, förslag 6, 8 och 9.
-            "<INCLUDE>OtherInformation</INCLUDE>"
-            "<INCLUDE>TrackAtLocation</INCLUDE>"
-            "<INCLUDE>ProductInformation</INCLUDE>"
-            "<INCLUDE>TypeOfTraffic</INCLUDE>"
-            "<INCLUDE>Operator</INCLUDE>"
-            "<INCLUDE>InformationOwner</INCLUDE>"
-            "<INCLUDE>WebLink</INCLUDE>"
-            "<INCLUDE>WebLinkName</INCLUDE>"
-            "</QUERY>"
+        disrupted, complete, pages = self._query_all(
+            '<OR><EQ name="Canceled" value="true"/>'
+            '<EXISTS name="EstimatedTimeAtLocation" value="true"/></OR>'
         )
-        return block.get("TrainAnnouncement", [])
+        affected = sorted(tip_stations(disrupted))
+        rows = list(disrupted)
+        for start in range(0, len(affected), STATION_CHUNK):
+            chunk = affected[start:start + STATION_CHUNK]
+            station_rows, chunk_complete, chunk_pages = self._query_all(
+                "<OR>" + "".join(f'<EQ name="LocationSignature" value={quoteattr(sig)}/>' for sig in chunk) + "</OR>"
+            )
+            rows.extend(station_rows)
+            complete = complete and chunk_complete
+            pages += chunk_pages
+        rows = unique_announcements(rows)
+        cancelled = [d for d in rows if d.get("Canceled") is True]
+        self.last_stats = {
+            "window_hours": WINDOW_HOURS,
+            "cancelled_trains": len({train_key(d) for d in cancelled}),
+            "cancelled_departures": len(cancelled),
+            "delayed_departures": sum(
+                1 for d in rows if d.get("Canceled") is not True and minutes_late(d) >= SERIOUS_DELAY_MIN
+            ),
+            "tip_stations": len(affected),
+            "rows": len(rows),
+            "pages": pages,
+            "complete": complete,
+        }
+        if not complete:
+            log.warning("trafikverket-rail: ofullständig hämtning, sidtaket nåddes efter %d sidor", pages)
+        return rows
+
+    def _query_all(self, condition: str) -> tuple[list[dict], bool, int]:
+        """Avgångar i fönstret som uppfyller `condition`, sida för sida tills en sida är kort."""
+        rows: list[dict] = []
+        for page in range(MAX_PAGES):
+            block = self._query(
+                '<QUERY objecttype="TrainAnnouncement" namespace="rail.trafficinfo"'
+                f' schemaversion="1.9" limit="{PAGE_SIZE}" skip="{page * PAGE_SIZE}" orderby="ActivityId">'
+                "<FILTER><AND>"
+                '<EQ name="ActivityType" value="Avgang"/>'
+                '<EQ name="Advertised" value="true"/>'
+                '<GT name="AdvertisedTimeAtLocation" value="$now"/>'
+                f'<LT name="AdvertisedTimeAtLocation" value="$dateadd({WINDOW_HOURS}:00:00)"/>'
+                f"{condition}"
+                "</AND></FILTER>"
+                f"{DEPARTURE_INCLUDES}"
+                "</QUERY>"
+            )
+            batch = block.get("TrainAnnouncement", [])
+            rows.extend(batch)
+            if len(batch) < PAGE_SIZE:
+                return rows, True, page + 1
+        return rows, False, MAX_PAGES
 
     # -- normalisering -----------------------------------------------------
-    def fetch(self, now: datetime | None = None) -> list[RailAlert]:
+    def fetch(self, now: datetime | None = None, alternative_for=None) -> list[RailAlert]:
         if not self.api_key or self.api_key == "mock":
             log.info("trafikverket-rail: ingen nyckel, hoppar över")
             return []
@@ -302,12 +373,75 @@ class TrafikverketRail:
         stations = self.stations()
         replacements = self.replacement_traffic()
         departures = self._departures()
-        return build_alerts(departures, stations, now, replacement_index=replacements)
+        alerts = build_alerts(
+            departures, stations, now, replacement_index=replacements, alternative_for=alternative_for,
+        )
+        self.last_stats.update({"alerts": len(alerts), "cancelled_alerts": sum(1 for a in alerts if a.cancelled)})
+        return alerts
+
+
+def train_key(dep: dict) -> tuple[str, str]:
+    """Ett tåg är tågnummer och avgångsdag: samma nummer går igen nästa dag."""
+    return str(dep.get("AdvertisedTrainIdent") or ""), str(dep.get("ScheduledDepartureDateTime") or "")[:10]
+
+
+def unique_announcements(rows: list[dict]) -> list[dict]:
+    """En rad per annons, även när två frågor (eller två sidor) gav samma."""
+    seen: set = set()
+    out = []
+    for row in rows:
+        key = row.get("ActivityId") or (
+            row.get("AdvertisedTrainIdent"), row.get("LocationSignature"), row.get("AdvertisedTimeAtLocation")
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(row)
+    return out
+
+
+def first_cancelled_stops(departures: list[dict]) -> dict[str, str]:
+    """
+    Tåg -> tidpunkten för dess första inställda stopp i fönstret.
+
+    Ett inställt tåg annonseras vid varje stopp det skulle betjänat -- tåg 7182 gav
+    fem nästan identiska tips ner för Norrbottensbanan. Behåll tågets FÖRSTA stopp:
+    där står den fullaste perrongen, och passagerare längre ner på linjen klev
+    oftast aldrig på.
+    """
+    first_stop: dict[str, str] = {}
+    for dep in departures:
+        if dep.get("Canceled") is not True:
+            continue
+        train = dep.get("AdvertisedTrainIdent")
+        when = dep.get("AdvertisedTimeAtLocation")
+        if not train or not when:
+            continue
+        if train not in first_stop or when < first_stop[train]:
+            first_stop[train] = when
+    return first_stop
+
+
+def tip_stations(disrupted: list[dict]) -> set[str]:
+    """Stationerna där en störning blir ett tips: ett inställt tågs första stopp, eller 30+ min försening."""
+    first_stop = first_cancelled_stops(disrupted)
+    out: set[str] = set()
+    for dep in disrupted:
+        sig = dep.get("LocationSignature")
+        if not sig:
+            continue
+        if dep.get("Canceled") is True:
+            if first_stop.get(dep.get("AdvertisedTrainIdent")) == dep.get("AdvertisedTimeAtLocation"):
+                out.add(sig)
+        elif minutes_late(dep) >= SERIOUS_DELAY_MIN:
+            out.add(sig)
+    return out
 
 
 def build_alerts(
     departures: list[dict], stations: dict[str, Station], now: datetime,
     replacement_index: dict[tuple[str, str], dict] | None = None,
+    alternative_for=None,
 ) -> list[RailAlert]:
     """
     Ren funktion: avgångar -> störningar. Testbar utan nätverk.
@@ -326,20 +460,7 @@ def build_alerts(
         if d.get("Canceled") is True or minutes_late(d) >= SERIOUS_DELAY_MIN
     ]
 
-    # Ett inställt tåg annonseras vid varje stopp det skulle betjänat -- tåg
-    # 7182 gav fem nästan identiska tips ner för Norrbottensbanan. Behåll
-    # tågets FÖRSTA stopp: där står den fullaste perrongen, och passagerare
-    # längre ner på linjen klev oftast aldrig på.
-    first_stop: dict[str, str] = {}
-    for dep in disrupted:
-        if dep.get("Canceled") is not True:
-            continue
-        train = dep.get("AdvertisedTrainIdent")
-        when = dep.get("AdvertisedTimeAtLocation")
-        if not train or not when:
-            continue
-        if train not in first_stop or when < first_stop[train]:
-            first_stop[train] = when
+    first_stop = first_cancelled_stops(disrupted)
 
     # En störning per station: inställd slår försenad, annars tidigast.
     best: dict[str, dict] = {}
@@ -362,8 +483,15 @@ def build_alerts(
         ):
             best[sig] = dep
 
+    cancelled_trains = {
+        str(d.get("AdvertisedTrainIdent")) for d in departures
+        if d.get("Canceled") is True and d.get("AdvertisedTrainIdent")
+    }
     return [
-        _normalize(dep, stations.get(sig), by_station.get(sig, []), now, stations, replacement_index)
+        _normalize(
+            dep, stations.get(sig), by_station.get(sig, []), now, stations, replacement_index,
+            alternative_for, cancelled_trains,
+        )
         for sig, dep in best.items()
     ]
 
@@ -375,6 +503,8 @@ def _normalize(
     now: datetime,
     stations: dict[str, Station] | None = None,
     replacement_index: dict[tuple[str, str], dict] | None = None,
+    alternative_for=None,
+    cancelled_trains: set[str] | frozenset = frozenset(),
 ) -> RailAlert:
     sig = dep.get("LocationSignature", "")
     train = str(dep.get("AdvertisedTrainIdent") or "")
@@ -398,6 +528,22 @@ def _normalize(
     # Fjärde signalen, och den starkaste: operatören säger rakt ut om
     # ersättningstrafik är insatt.
     replacement, note, replacement_mode, replacement_coords = _replacement(dep, replacement_index)
+
+    # Nästa resa mot samma slutstation (ResRobot) i stället för nästa tåg från
+    # stationen oavsett riktning -- bara för ett inställt tåg utan insatt ersättning,
+    # och bara när anroparen skickat med ett uppslag. Utan svar gäller stationens.
+    basis, alternative_label, alternative = "station", "", None
+    if cancelled and not replacement and alternative_for is not None and to_sig:
+        alternative = alternative_for(
+            f"tvr:{sig}:{train}:{dep.get('AdvertisedTimeAtLocation')}", sig, to_sig, when, cancelled_trains,
+        )
+        departs = _parse_time((alternative or {}).get("departs_at"))
+        if departs is not None:
+            next_minutes = max(0, round((departs - when).total_seconds() / 60))
+            next_at, next_is_bus, is_last = departs, alternative.get("mode") == "buss", False
+            basis, alternative_label = "resrobot", str(alternative.get("label") or "")
+        else:
+            alternative = None
 
     # Vilket bolag som kör, och vilket namn resenären känner igen. SJ,
     # Öresundståg, Snälltåget m.fl. är inte utbytbara för en förare -- olika
@@ -428,6 +574,11 @@ def _normalize(
             description += f" Spår {track}."
         if replacement:
             description += f" {note}."
+        elif basis == "resrobot":
+            description += (
+                f" Nästa resa mot {to or 'slutstationen'}: {alternative_label} "
+                f"{next_at.astimezone(LOCAL_TZ).strftime('%H:%M')}, om {_human_gap(next_minutes)}."
+            )
         elif next_minutes is not None:
             what = "Nästa avgång är en buss och går" if next_is_bus else "Nästa avgång går"
             description += f" {what} om {_human_gap(next_minutes)}."
@@ -452,6 +603,11 @@ def _normalize(
         # Station + tåg + avgångstid är stabilt mellan pollningar, så
         # upserten uppdaterar samma rad i stället för att duplicera.
         external_id=f"tvr:{sig}:{train}:{dep.get('AdvertisedTimeAtLocation')}",
+        station_signature=sig,
+        destination_signature=to_sig or "",
+        alternative_basis=basis,
+        alternative_label=alternative_label,
+        alternative=alternative,
         header=header,
         description=description,
         station=name,

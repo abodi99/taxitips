@@ -11,7 +11,7 @@ from datetime import timedelta
 from django.test import TestCase
 from django.utils import timezone
 
-from core.models import Confidence, Opportunity, ScoringRule, SeverityTier
+from core.models import Confidence, Opportunity, ScoringRule, SeverityTier, SourceEvent
 from core.repository import purge_old, upsert_opportunities, upsert_source_events
 
 
@@ -148,3 +148,104 @@ class ScoringRuleTests(TestCase):
         self.assertEqual(rule.apply(50), 100, "aldrig över 100")
         rule = ScoringRule(tier=SeverityTier.IGNORE, cap=-5)
         self.assertEqual(rule.apply(50), 0, "aldrig under 0")
+
+
+class UnchangedRowTests(TestCase):
+    """En pollrunda utan ändringar skriver ingenting: updated_at står still och antalet är noll."""
+
+    def test_unchanged_opportunity_is_not_rewritten(self):
+        row = opportunity_row()
+        self.assertEqual(upsert_opportunities([dict(row)]), 1)
+        first = Opportunity.objects.get(external_id=row["external_id"])
+        self.assertEqual(upsert_opportunities([dict(row)]), 0)
+        again = Opportunity.objects.get(external_id=row["external_id"])
+        self.assertEqual(again.updated_at, first.updated_at)
+
+    def test_only_changed_rows_are_counted(self):
+        row, other = opportunity_row(), opportunity_row("tvr:Mot:8781:x")
+        upsert_opportunities([dict(row), dict(other)])
+        self.assertEqual(upsert_opportunities([dict(row, demand_score=40), dict(other)]), 1)
+        self.assertEqual(Opportunity.objects.get(external_id=row["external_id"]).demand_score, 40)
+
+    def test_unchanged_source_event_still_returns_its_id(self):
+        row = {
+            "source": "sl", "external_id": "sl:1", "mode": "metro", "active_from": None,
+            "active_to": None, "raw": '{"header": "Tunnelbanan stoppad"}', "lat": None, "lon": None,
+        }
+        first = upsert_source_events([dict(row)])
+        self.assertEqual(upsert_source_events([dict(row)]), first)
+
+    def test_changed_source_event_moves_fetched_at_and_unchanged_does_not(self):
+        row = {
+            "source": "smhi", "external_id": "smhi:Göteborg", "mode": "", "active_from": None,
+            "active_to": None, "raw": '{"wind_gust_ms": 9.0}', "lat": None, "lon": None,
+        }
+        upsert_source_events([dict(row)])
+        old = timezone.now() - timedelta(days=11)
+        SourceEvent.objects.filter(external_id="smhi:Göteborg").update(fetched_at=old)
+        upsert_source_events([dict(row)])
+        self.assertEqual(SourceEvent.objects.get(external_id="smhi:Göteborg").fetched_at, old)
+        upsert_source_events([dict(row, raw='{"wind_gust_ms": 16.3}')])
+        self.assertGreater(SourceEvent.objects.get(external_id="smhi:Göteborg").fetched_at, old)
+
+
+class PurgeBatchTests(TestCase):
+    """Gallringen går i batchar och tar ändå allt som är äldre än gränsen."""
+
+    def test_deletes_everything_older_across_several_batches(self):
+        old = timezone.now() - timedelta(days=10)
+        upsert_opportunities([
+            opportunity_row(f"old:{i}", start_time=old, end_time=old) for i in range(7)
+        ])
+        upsert_opportunities([opportunity_row("new:1")])
+        result = purge_old(days=7, batch_size=3)
+        self.assertEqual(result["opportunities"], 7)
+        self.assertEqual(list(Opportunity.objects.values_list("external_id", flat=True)), ["new:1"])
+
+    def test_keeps_source_events_a_remaining_tip_cites(self):
+        import json
+
+        from core.models import SourceEvent
+
+        old = timezone.now() - timedelta(days=10)
+        ids = upsert_source_events([
+            {
+                "source": "sl", "external_id": f"sl:{i}", "mode": "bus", "active_from": old,
+                "active_to": old, "raw": "{}", "lat": None, "lon": None,
+            }
+            for i in range(4)
+        ])
+        upsert_opportunities([opportunity_row("new:1", source_event_ids=json.dumps([ids["sl:0"]]))])
+        result = purge_old(days=7, batch_size=2)
+        self.assertEqual(result["source_events"], 3)
+        self.assertEqual(list(SourceEvent.objects.values_list("external_id", flat=True)), ["sl:0"])
+
+
+class AreaOnWriteTests(TestCase):
+    """Varje tips får sitt län och sitt körområde när det skrivs, oavsett källa."""
+
+    def test_coordinates_decide_the_county(self):
+        upsert_opportunities([opportunity_row()])  # Motala
+        tip = Opportunity.objects.get(external_id="tvr:Mot:8780:x")
+        self.assertEqual(tip.county_code, "05")
+        self.assertIn("05", tip.area_codes)
+
+    def test_without_coordinates_the_market_decides(self):
+        upsert_opportunities([opportunity_row("vt:1", lat=None, lon=None, region="vt")])
+        tip = Opportunity.objects.get(external_id="vt:1")
+        self.assertEqual((tip.county_code, tip.area_codes), ("14", ["14"]))
+
+    def test_an_unplaceable_tip_has_no_area(self):
+        upsert_opportunities([opportunity_row("rail:1", lat=None, lon=None, region="rail")])
+        tip = Opportunity.objects.get(external_id="rail:1")
+        self.assertEqual((tip.county_code, tip.area_codes), (None, []))
+
+
+class CountyCatalogTests(TestCase):
+    def test_every_county_is_selectable_and_says_what_is_missing(self):
+        from core.coverage import county_catalog
+
+        catalog = {c["code"]: c for c in county_catalog()}
+        self.assertEqual(len(catalog), 21)
+        self.assertIsNone(catalog["25"]["transit"])  # Norrbotten
+        self.assertEqual(catalog["14"]["transit"], "Västtrafik")

@@ -49,6 +49,9 @@ class Device(models.Model):
     push_token = models.TextField(null=True)
     notify_prefs = models.JSONField(default=dict)
     created_at = models.DateTimeField(null=True)
+    # Expand 20260910000001: inloggat konto + senast sedd (push/session).
+    user_id = models.UUIDField(null=True)
+    last_seen_at = models.DateTimeField(null=True)
 
     class Meta:
         app_label = "billing"

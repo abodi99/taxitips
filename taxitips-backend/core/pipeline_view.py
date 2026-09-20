@@ -41,6 +41,9 @@ EXPECTED_SOURCES = [
     ("vt", "Västtrafik", "Göteborg: spårvagn, buss, båt, tåg"),
     ("trafikverket", "Trafikverket väg", "Olyckor, avstängningar, köer och vägarbeten"),
     ("smhi", "SMHI väder", "Nederbörd och vind -- skärper en signal, skapar aldrig en"),
+    ("swedavia", "Swedavia FlightInfo", "Flyg: ankomstvågor på ARN/GOT/MMX sent på kvällen"),
+    ("aisstream", "AISStream fartyg", "Färjor: passagerarfartyg som lägger till i åtta hamnar (WebSocket)"),
+    ("ticketmaster", "Ticketmaster evenemang", "Konserter, teater och sport i hela Sverige, med plats och sluttid"),
 ]
 
 # Probe-positioner för avsnitt 7. Tre marknader med olika egenskaper: Skåne
@@ -70,14 +73,27 @@ def _source_health(now) -> list[dict]:
     # region-nyckeln per källa: rail-tips skrivs som "rail", vägtips saknar
     # region, SL/VT skriver sin egen. Bara en etikett i vyn, ingen logik.
     region_key = {"trafikverket_rail": "rail", "sl": "sl", "vt": "vt"}
+    # Swedavia passar inte i region_key: samma källa skriver tre olika
+    # regioner (ARN->sl, GOT->vt, MMX->skane), så den räknas på `kind` i
+    # stället -- "flight" skrivs inte av någon annan källa.
+    flight_tips = Opportunity.objects.filter(kind="flight", end_time__gt=now).count()
+    # Samma sak för färjorna: aisstream skriver sl, vt, skane, blekinge och gotland.
+    ferry_tips = Opportunity.objects.filter(kind="ferry", end_time__gt=now).count()
 
     out = []
     for key, label, what in EXPECTED_SOURCES:
         st = statuses.get(key)
         rows = stored.get(key)
-        age = None
+        from core import thresholds
+
+        age = success_age = None
         if st:
             age = int((now - st.checked_at).total_seconds() // 60)
+            if st.last_success_at:
+                success_age = int((now - st.last_success_at).total_seconds() // 60)
+        # Färskheten räknas från senaste LYCKADE hämtning mot källans gräns:
+        # checked_at flyttas även av ett fel. Se core/pipeline_health.py.
+        max_age = thresholds.SOURCE_MAX_AGE_MINUTES.get(key)
 
         if st and not st.ok:
             state = "fel"
@@ -85,9 +101,14 @@ def _source_health(now) -> list[dict]:
             state = "saknas"
         elif age is None:
             state = "okänd"
-        elif age <= 10:
+        elif max_age is None:
+            state = "färsk" if age <= 10 else "gammal" if age <= 120 else "inaktuell"
+        elif success_age is None:
+            # Körd men aldrig hämtad, t.ex. utan nyckel.
+            state = "inaktuell"
+        elif success_age <= max_age:
             state = "färsk"
-        elif age <= 120:
+        elif success_age <= 3 * max_age:
             state = "gammal"
         else:
             state = "inaktuell"
@@ -104,9 +125,23 @@ def _source_health(now) -> list[dict]:
             "durationMs": st.duration_ms if st else 0,
             "checkedAt": st.checked_at.isoformat() if st else None,
             "ageMinutes": age,
+            "lastSuccessAt": st.last_success_at.isoformat() if st and st.last_success_at else None,
+            "lastSuccessAgeMinutes": success_age,
+            "maxAgeMinutes": max_age,
+            "consecutiveFailures": st.consecutive_failures if st else 0,
+            "core": key in thresholds.CORE_SOURCES,
             "storedEvents": (rows or {}).get("n", 0),
             "lastEvent": (rows or {}).get("last").isoformat() if (rows or {}).get("last") else None,
-            "activeTips": tips.get(region_key.get(key)) if key in region_key else None,
+            "activeTips": (
+                flight_tips if key == "swedavia"
+                else ferry_tips if key == "aisstream"
+                else tips.get(region_key.get(key)) if key in region_key
+                else None
+            ),
+            # Källans egen bokföring: per-operatör för Trafiklab, kvoträknaren
+            # och kadensen per flygplats för Swedavia. Utan den syns aldrig
+            # att en källa håller på att slå i sitt anropstak.
+            "detail": (st.detail or {}) if st else {},
         })
     return out
 
@@ -238,12 +273,152 @@ def _register_counts() -> dict:
     return counts
 
 
+def _events(now) -> dict:
+    """Evenemang: kalendern, reglerna och licensvillkoren -- se events/explain.py."""
+    from events.explain import build
+
+    return build(now)
+
+
+def _maritime(now) -> dict:
+    """AISStream: tratten, filterreglerna och varje fartygs bedömning -- se maritime/explain.py."""
+    from maritime.explain import build
+
+    return build(now)
+
+
 def _iso(dt):
     return dt.isoformat() if dt else None
 
 
+def _rail_launch() -> dict:
+    row = SourceStatus.objects.filter(source="trafikverket_rail").first()
+    detail = (row.detail or {}) if row else {}
+    keys = ("window_hours", "cancelled_trains", "cancelled_departures", "delayed_departures", "tip_stations",
+            "alerts", "cancelled_alerts", "rows", "pages", "complete")
+    robot = detail.get("resrobot") or {}
+    return {
+        **{key: detail.get(key) for key in keys},
+        "resrobot": {
+            "month": robot.get("month"), "calls": robot.get("calls"), "budget": robot.get("budget"),
+            "run": robot.get("run"), "stops": len(robot.get("stops") or {}),
+        },
+    }
+
+
+def _launch(now) -> dict:
+    """
+    Avsnitt 0b: P0/P1-läget, läst ur samma kod som driften använder -- hälsan som
+    /health/pipeline, notisbeslutet som push_cycle --dry-run, körområdena som flödet,
+    AIS-pilotens anlöp och evenemangens rättighetsspärr. Ingen egen logik här.
+    """
+    from collections import Counter
+
+    from django.db import connection
+
+    from core import api as driver_api, areas, calibration, notify, pipeline_health, presence as presence_rules
+    from core.models import Combination, DevicePresence, PushDelivery
+    from events import ingest as event_ingest
+    from events.rights import rights_for
+    from maritime.models import FerryCall
+
+    active = Opportunity.objects.filter(end_time__gt=now)
+    by_county = dict(
+        active.exclude(county_code__isnull=True)
+        .values_list("county_code").annotate(n=Count("id")).values_list("county_code", "n")
+    )
+    plan = notify.plan_cycle(now=now)
+    reasons = Counter(r["reason"].split(":")[0] for item in plan for r in item["rejected"])
+
+    pilot_row = SourceStatus.objects.filter(source="aisstream_pilot").first()
+    pilot_status = {}
+    if pilot_row:
+        pilot_status = {
+            **(pilot_row.detail or {}),
+            "ok": pilot_row.ok,
+            "lastSuccessAt": _iso(pilot_row.last_success_at),
+            "checkedAt": _iso(pilot_row.checked_at),
+        }
+
+    anon_reads_push = None
+    try:
+        with connection.cursor() as cur:
+            cur.execute("select has_table_privilege('anon', 'public.push_delivery', 'SELECT')")
+            anon_reads_push = bool(cur.fetchone()[0])
+    except Exception:
+        pass
+
+    return {
+        "health": pipeline_health.evaluate(now),
+        "outbox": {
+            "byStatus": dict(
+                PushDelivery.objects.values_list("status").annotate(n=Count("id")).values_list("status", "n")
+            ),
+            "candidates": len(plan),
+            "wouldSend": sum(len(item["recipients"]) for item in plan),
+            "reasons": dict(reasons),
+        },
+        "areas": {
+            "active": active.count(),
+            "withCounty": sum(by_county.values()),
+            "withMunicipality": active.exclude(municipality_code__isnull=True).count(),
+            "byCounty": [
+                {"code": code, "name": areas.COUNTY_NAMES.get(code, code), "n": n}
+                for code, n in sorted(by_county.items(), key=lambda kv: -kv[1])
+            ],
+        },
+        "pilot": {
+            "status": pilot_status,
+            "calls": [
+                {
+                    "ship": call.ship_name or str(call.mmsi),
+                    "terminal": call.terminal,
+                    "berthEta": _iso(call.berth_eta),
+                    "firstBerthEta": _iso(call.first_berth_eta),
+                    "basis": call.eta_basis,
+                    "distanceKm": call.distance_km,
+                    "arrivedAt": _iso(call.arrived_at),
+                }
+                for call in FerryCall.objects.order_by("-started_at")[:10]
+            ],
+        },
+        "combinations": {
+            "byRule": dict(
+                Combination.objects.filter(expires_at__gt=now)
+                .values_list("rule_id").annotate(n=Count("id")).values_list("rule_id", "n")
+            ),
+            "examples": [
+                {"rule": c.rule_id, "reason": c.reason, "members": len(c.member_external_ids), "boost": c.boost}
+                for c in Combination.objects.filter(expires_at__gt=now).order_by("rule_id", "-boost")[:8]
+            ],
+        },
+        "calibration": calibration.build(now),
+        # Järnvägens fullständighet och nästa resa -- se _departures och core/sources/resrobot.py.
+        "rail": _rail_launch(),
+        # Bara antal: rutorna själva visas aldrig.
+        "presence": {
+            "onDuty": DevicePresence.objects.filter(expires_at__gt=now).count(),
+            "ttlMinutes": int(presence_rules.TTL.total_seconds() // 60),
+            "radiusKm": presence_rules.RADIUS_KM,
+        },
+        "eventRights": [rights_for(source).as_dict() for source in event_ingest.SOURCES],
+        "feed": {
+            "cacheSeconds": driver_api.FEED_CACHE_SECONDS,
+            "contextLimit": thresholds.FEED_CONTEXT_LIMIT,
+        },
+        "security": {"anonCanReadPushDelivery": anon_reads_push},
+    }
+
+
 def pipeline(request):
-    """Samma form som viz/server.js:s /api/pipeline."""
+    """
+    Samma form som viz/server.js:s /api/pipeline. Bara med DEBUG: svaret innehåller alla aktiva
+    tips och rå källdata, utan inloggning (CLAUDE.md, regel 1).
+    """
+    from django.conf import settings
+
+    if not settings.DEBUG:
+        return JsonResponse({"error": "not_found"}, status=404)
     now = timezone.now()
     active = list(Opportunity.objects.filter(end_time__gt=now))
 
@@ -369,6 +544,13 @@ def pipeline(request):
         # en egen kopia av 50:an. Se core/thresholds.py.
         "config": thresholds.as_config(),
         "sources": _source_health(now),
+        # P0/P1-läget i ett block -- se _launch.
+        "launch": _launch(now),
+        # Färjorna har egen struktur (ström, inte hämtning; fartyg, inte larm)
+        # och får därför ett eget block i stället för att tryckas in i tipslistan.
+        "maritime": _maritime(now),
+        # Evenemangskalendern -- se events/explain.py.
+        "events": _events(now),
         # Län för län: hämtas det något där, och om inte -- är det för att
         # källan saknas eller för att det är lugnt? Se core/coverage.py.
         "coverage": coverage_rows(now),

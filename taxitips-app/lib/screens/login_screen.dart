@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../api_client.dart';
+import '../push_service.dart';
 import '../theme.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -84,6 +85,7 @@ class _LoginScreenState extends State<LoginScreen> {
     });
     try {
       await widget.api.login(email: email, password: password);
+      await registerForPush(widget.api);
       widget.onLoggedIn();
     } catch (e) {
       setState(() => _error = e.toString());
@@ -202,10 +204,12 @@ class _LoginScreenState extends State<LoginScreen> {
                           onPressed: _busy ? null : _submit,
                           child: Text(_busy ? 'Loggar in…' : 'Logga in'),
                         ),
-                        TextButton(
-                          onPressed: widget.onSignup,
-                          child: const Text('Skapa företagskonto'),
-                        ),
+                        // Bara på webben -- se welcome_screen.dart.
+                        if (kIsWeb)
+                          TextButton(
+                            onPressed: widget.onSignup,
+                            child: const Text('Skapa företagskonto'),
+                          ),
                         const SizedBox(height: 4),
                         Row(
                           children: [

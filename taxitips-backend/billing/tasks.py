@@ -43,9 +43,18 @@ _PUSH_TITLES = {
 
 
 @shared_task(name="billing.tasks.process_stripe_event")
-def process_stripe_event(event_id: str, event_type: str, object_payload: dict) -> None:
+def process_stripe_event(
+    event_id: str, event_type: str, object_payload: dict, event_created=None
+) -> None:
     try:
         _handle_event(event_type, object_payload)
+        # Kundlivscykeln: abonnemang, beställningar, betalningsfrist och
+        # väntande ändringar. Ligger i fleet/webhook_events.py och inte här,
+        # eftersom den här modulen är en 1:1-port av edge-funktionen och ska
+        # gå att jämföra rad för rad med den.
+        from fleet import webhook_events
+
+        webhook_events.handle(event_type, object_payload, event_created=event_created)
     except Exception as exc:
         log.exception("billing: %s misslyckades för %s", event_type, event_id)
         ProcessedWebhookEvent.objects.filter(stripe_event_id=event_id).update(

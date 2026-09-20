@@ -69,8 +69,15 @@ class Command(BaseCommand):
         fetched = fetch_road_situations(key, counties)
         alerts = fetched["alerts"]
         status.events = len(alerts)
+        status.detail = {
+            "situations": fetched["situations"],
+            "pages": fetched["pages"],
+            "complete": fetched["complete"],
+        }
+        if not fetched["complete"]:
+            status.note = f"kapad efter {fetched['pages']} sidor: svaret är ett urval"
         self.stdout.write(
-            f"{fetched['situations']} situationer → {len(alerts)} avvikelser "
+            f"{fetched['situations']} situationer på {fetched['pages']} sidor → {len(alerts)} avvikelser "
             f"({len(counties or configured_counties())} län)"
         )
         if not alerts:

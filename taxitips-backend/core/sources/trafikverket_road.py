@@ -235,31 +235,74 @@ def normalize_situation(situation: dict) -> list[dict]:
     return out
 
 
+# Sidstorlek och säkerhetstak för vägpollen. Mätt 2026-09-13: 3 486
+# situationer i hela landet, fyra sidor om 1 000 utan dubbletter, med och utan
+# orderby. Taket finns så att en ändrad källa aldrig ger en oändlig loop.
+PAGE_SIZE = 1000
+MAX_PAGES = 20
+
+
 def fetch_road_situations(api_key: str, counties: list[str] | None = None) -> dict:
     """
-    Hämtar Situation för de konfigurerade länen.
+    Hämtar alla Situation för de konfigurerade länen, en sida i taget.
 
-    Länsfiltret är ett OR, så `limit` kapar HELA landet, inte per län --
-    och vilka rader som överlever är odefinierat. Vid limit=100 över 21 län
-    gav det färre nationella larm än Skåne ensamt (mätt: 127 mot 176).
-    Taket skalar därför med antalet län.
+    Tidigare hämtades en enda sida med limit=min(100 × län, 2000). Länsfiltret
+    är ett OR, så taket kapade hela landet, och vilka rader som överlevde var
+    odefinierat: 2 000 av 3 496 hämtades 2026-09-13. Nu följs `skip` i stabil
+    ordning (Id) tills en sida är kortare än PAGE_SIZE.
+
+    `complete` är False bara när MAX_PAGES nåddes. Då är svaret ett urval, och
+    ingenting får tolkas som borta ur källan. Ett fel på en senare sida fäller
+    hela rundan: befintliga tips ligger kvar tills de löper ut.
     """
     counties = counties or configured_counties()
     if not counties:
         counties = [COUNTY["skane"]]
-    limit = min(100 * len(counties), 2000)
     county_filter = "".join(
         f'<EQ name="Deviation.CountyNo" value="{c}" />' for c in counties
     )
+
+    situations: list[dict] = []
+    seen: set[str] = set()
+    pages = 0
+    complete = False
+    while pages < MAX_PAGES:
+        batch = _fetch_page(api_key, county_filter, skip=pages * PAGE_SIZE)
+        pages += 1
+        for sit in batch:
+            # En situation som publiceras mellan två sidor flyttar de andra ett
+            # steg, så samma Id kan komma på två sidor.
+            key = sit.get("Id")
+            if key in seen:
+                continue
+            if key:
+                seen.add(key)
+            situations.append(sit)
+        if len(batch) < PAGE_SIZE:
+            complete = True
+            break
+
+    alerts: list[dict] = []
+    for sit in situations:
+        alerts.extend(normalize_situation(sit))
+    return {
+        "alerts": alerts,
+        "counties": counties,
+        "situations": len(situations),
+        "pages": pages,
+        "complete": complete,
+    }
+
+
+def _fetch_page(api_key: str, county_filter: str, *, skip: int) -> list[dict]:
     body = (
         "<REQUEST>"
         f'<LOGIN authenticationkey="{api_key}" />'
         f'<QUERY objecttype="Situation" namespace="road.trafficinfo" '
-        f'schemaversion="1.6" limit="{limit}">'
+        f'schemaversion="1.6" limit="{PAGE_SIZE}" skip="{skip}" orderby="Id">'
         f"<FILTER><OR>{county_filter}</OR></FILTER>"
         "</QUERY></REQUEST>"
     )
-
     res = requests.post(
         TRAFIKVERKET_URL,
         data=body.encode("utf-8"),
@@ -271,12 +314,5 @@ def fetch_road_situations(api_key: str, counties: list[str] | None = None) -> di
     if not res.ok or block.get("ERROR"):
         message = (block.get("ERROR") or {}).get("MESSAGE") or str(payload)[:200]
         raise RuntimeError(f"Trafikverket {res.status_code}: {message}")
-
     situations = block.get("Situation") or []
-    if isinstance(situations, dict):
-        situations = [situations]
-
-    alerts: list[dict] = []
-    for sit in situations:
-        alerts.extend(normalize_situation(sit))
-    return {"alerts": alerts, "counties": counties, "situations": len(situations)}
+    return [situations] if isinstance(situations, dict) else situations

@@ -123,7 +123,7 @@ send pipeline, duplicate Stripe handlers.
 
 **Push**: FCM token registration exists client-side ([push_service.dart](taxitips-app/lib/push_service.dart)) and tokens are stored on `devices.push_token`. That's it — see gap below.
 
-**Web** (`taxitips-web`): this is **not** just marketing pages as the briefing assumed. It includes `admin.html`/`admin.js`, `dashboard.html`/`dashboard.js`, `portal.css` — a real company/admin portal alongside the marketing site (`index.html`, `pricing.html`, `join.html`). Worth re-scoping the briefing's "web = marketing only" assumption.
+**Web** (`taxitips-web`): as of 2026-09, this **is** marketing-only again. The user decided to stop managing companies/billing/admin from the web — `admin.html`/`admin.js`, `dashboard.html`/`dashboard.js`, and `portal.css` were removed. All company/account/billing management is intended to live in the Flutter app's admin-mode; a separate superadmin panel for the user personally is planned later but not built yet. `login.html` is now a static "open the app" page (no Supabase login form), and `signup.html`'s success state points to the app instead of a web dashboard or Stripe checkout redirect. `verify.html`/`reset.html`/`claim.html` remain as Supabase Auth/device-claim redirect targets. `app.html` (the driver PWA/Leaflet map) is unaffected — it's product, not admin.
 
 ---
 
@@ -210,6 +210,6 @@ Registration-only. Token capture, storage, and refresh work. There is no code pa
 
 ## 8. Repo/doc discrepancies worth flagging
 
-- Briefing assumes `/web` is "minimal, marketing only" — actual `taxitips-web` includes a real admin/dashboard portal (`admin.html`, `dashboard.html`, `portal.css`, `admin.js`, `dashboard.js`). Subagent scoping for `flutter-ui` vs a possible future `web-portal` split should account for this.
+- ~~Briefing assumes `/web` is "minimal, marketing only"~~ — resolved 2026-09: the admin/dashboard portal (`admin.html`, `dashboard.html`, `portal.css`, `admin.js`, `dashboard.js`) was removed by user decision; `taxitips-web` is marketing/funnel-only again, matching the briefing's original scoping. Company/billing management is intended to live in `taxitips-app`'s admin-mode instead — worth confirming that mode actually covers what the removed web portal used to do (seat/plan changes, Stripe portal link, company member management) before calling this migration complete.
 - `taxitips-app/lib/api_client_http_legacy.dart` exists alongside the current Supabase-based `api_client.dart` — dead code candidate, not investigated further; flag for cleanup once confirmed unused.
 - `.playwright-mcp/` logs are committed under `taxitips-app/` (untracked currently, per git status) — likely scratch output from an earlier session, not project source.

@@ -52,15 +52,24 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
+import hashlib
+from collections import Counter
+from datetime import timedelta
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from core import thresholds
+from core import areas, presence as presence_rules, thresholds
 from core.coverage import RAIL_REGION_KEY, notify_region_catalog
-from core.geo import REGION_ANCHOR, haversine_km, resolve_place_coords
+from core.geo import (
+    REGION_ANCHOR,
+    REGION_CITIES,
+    haversine_km,
+    resolve_place_coords,
+)
 from core.models import Opportunity, PushDelivery
+from core.time_limits import reraise_time_limit
 
 log = logging.getLogger(__name__)
 
@@ -146,6 +155,17 @@ def default_prefs() -> dict:
         "regions": [],
         "cities": [],
     }
+
+
+def cities_by_region() -> dict[str, list[str]]:
+    """
+    Orter man kan kryssa i under varje län i notisinställningarna.
+
+    Samma källa som push-steget förstår: REGION_CITIES i geo.py. Appen
+    visar bara orter för de län föraren valt -- annars hade Skåne-orter
+    kunnat väljas under Stockholm och sett ut som ett filter.
+    """
+    return {key: list(cities) for key, cities in REGION_CITIES.items()}
 
 
 # --- Grind 2 och 3: förarens egna val ------------------------------------
@@ -269,6 +289,34 @@ def within_reach(lat, lon, chosen_regions: list | None) -> bool:
     )
 
 
+def list_matches_regions(
+    region: str | None,
+    lat,
+    lon,
+    chosen_regions: list | None,
+) -> bool:
+    """
+    Hör tipset till de valda länen? Samma regel som appens
+    `_matchesSelectedRegions` och som pushens geografi när `rail` lagts till.
+
+    Marknadsnyckel (skane/sl/vt/…) matchar rakt av. Järnväg (`rail`), väg
+    (`trafikverket`) och okända/null-regioner filtreras på 150 km mot länens
+    ankare -- annars syns Örnsköldsvik när föraren valt Skåne (invariant 14).
+
+    Används av `feed_for` när föraren valt län i listfiltret, så en Malmö-
+    GPS inte tyst kapar Stockholm/Göteborg innan klientfiltret hinner se dem.
+    """
+    if not chosen_regions:
+        return True
+    chosen = {str(r) for r in chosen_regions}
+    r = (str(region).strip() if region is not None else "") or None
+    if r and r not in ("rail", "trafikverket") and r in REGION_ANCHOR:
+        return r in chosen
+    if lat is None or lon is None:
+        return r is not None and r in chosen
+    return within_reach(lat, lon, list(chosen))
+
+
 @dataclass(frozen=True)
 class Match:
     """Utfallet för en enhet, med skälet kvar -- ett tyst nej går inte att felsöka."""
@@ -280,14 +328,47 @@ class Match:
         return self.ok
 
 
-def match_device(prefs: dict | None, opportunity) -> Match:
-    """
-    Ska den här enheten få den här notisen? Grind 2 och 3.
+# Varje nej har en kod, och varje kod står här. `push_cycle --dry-run`, simuleringen
+# och utskicket använder samma decide(), så ett nej i torrkörningen är samma nej
+# som i telefonen.
+REASONS: dict[str, str] = {
+    "match": "skickas",
+    "not_notify_worthy": "tipset är inte notisvärt: typ, poäng under golvet eller känt alternativ",
+    "ai_only": "bara språkmodellens höjning gör tipset notisvärt, inte regelverket",
+    "notifications_off": "föraren har stängt av notiser",
+    "type_off": "föraren har stängt av den här händelsetypen",
+    "no_area": "föraren har inte valt något körområde",
+    "unplaced_tip": "tipset går inte att placera i ett län",
+    "outside_area": "tipset ligger utanför förarens körområde",
+    "city_not_chosen": "tipset nämner ingen av förarens valda orter",
+    "near_driver": "föraren är i tjänst och tipset ligger inom radien från förarens ruta",
+    "too_far_from_driver": "föraren är i tjänst och tipset ligger utanför radien från förarens ruta",
+}
 
-    Grind 1 (`thresholds.is_notify_worthy`) kontrolleras av anroparen, som
-    kör den som ett SQL-filter över hela tabellen -- men kontrolleras även
-    här, som skyddsräcke: den dagen någon anropar match_device() från ett
-    nytt ställe ska den inte kunna släppa igenom en svag signal.
+
+def decide(prefs: dict | None, opportunity, presence=None) -> Match:
+    """
+    Ska den här enheten få den här notisen? Det enda notisbeslutet.
+
+    Grindarna i ordning; den första som säger nej ger orsakskoden:
+
+    1. `not_notify_worthy` -- thresholds.is_notify_worthy. Anroparen filtrerar
+       redan i SQL (candidates), men kontrollen står kvar som skyddsräcke.
+    2. `notifications_off`
+    3. `type_off:<tier>`
+    4. `no_area` -- inget körområde valt. Ingen rikstäckande standardnotis: en
+       förare som inte sagt var hen kör väcks inte av något i andra änden av
+       landet. Tidigare släpptes allt igenom när inga län var valda.
+    5. `unplaced_tip` -- tipset saknar län. En notis kräver att vi vet var.
+    6. `outside_area` -- tipsets län (med grannlän inom bufferten) delar inget
+       län med förarens körområde. Ersätter marknadsnyckeln och 150 km-radien
+       från länets ankarort.
+    7. `city_not_chosen` -- ortsfiltret, som tidigare.
+
+    Är föraren "i tjänst" (`presence`, en gällande ruta från core/presence.py)
+    ersätter rutan steg 4-7: tipset måste ha koordinater (`unplaced_tip`) och ligga
+    inom presence.RADIUS_KM från rutans mitt (`near_driver`, annars
+    `too_far_from_driver`). Utan gällande ruta räknas notisen på körområdet.
     """
     if not thresholds.is_notify_worthy(
         getattr(opportunity, "severity_tier", None),
@@ -295,20 +376,49 @@ def match_device(prefs: dict | None, opportunity) -> Match:
         getattr(opportunity, "has_alternative", False),
     ):
         return Match(False, "not_notify_worthy")
+    if getattr(opportunity, "ai_adjusted_at", None) is not None:
+        # Modellen fick höja tipset i listan, men en notis kräver regelverkets egen
+        # bedömning. Nästa pollrunda skriver regelvärdena och tar bort markeringen.
+        return Match(False, "ai_only")
 
     prefs = prefs if isinstance(prefs, dict) else {}
     if prefs.get("enabled") is False:
         return Match(False, "notifications_off")
     if not type_enabled(prefs.get("types"), opportunity.severity_tier):
         return Match(False, f"type_off:{opportunity.severity_tier}")
-    if not region_matches(opportunity.region, prefs.get("regions")):
-        return Match(False, f"region_not_chosen:{opportunity.region}")
+    if presence is not None:
+        lat, lon = getattr(opportunity, "lat", None), getattr(opportunity, "lon", None)
+        if lat is None or lon is None:
+            return Match(False, "unplaced_tip")
+        if presence_rules.distance_km(presence, lat, lon) > presence_rules.RADIUS_KM:
+            return Match(False, "too_far_from_driver")
+        return Match(True, "near_driver")
+    # Län och kommuner i samma lista; en vald kommun ersätter sitt län.
+    area = areas.device_area_codes(prefs)
+    if not area:
+        return Match(False, "no_area")
+    tip_area = tip_area_codes(opportunity)
+    if not tip_area:
+        return Match(False, "unplaced_tip")
+    if not set(tip_area) & set(area):
+        return Match(False, "outside_area")
     if not places_match_cities(opportunity.places, prefs.get("cities")):
         return Match(False, "city_not_chosen")
-    if not within_reach(opportunity.lat, opportunity.lon, prefs.get("regions")):
-        return Match(False, "too_far")
     return Match(True, "match")
 
+
+def tip_area_codes(opportunity) -> list[str]:
+    """Länen tipset hör till. Sparade vid skrivning; räknas här för äldre rader."""
+    stored = getattr(opportunity, "area_codes", None)
+    if stored:
+        return list(stored)
+    return areas.area_for(
+        getattr(opportunity, "lat", None), getattr(opportunity, "lon", None), getattr(opportunity, "region", None)
+    )[1]
+
+
+# Äldre namn, kvar för anropare utanför modulen.
+match_device = decide
 
 # --- Texten på låsskärmen ------------------------------------------------
 
@@ -392,6 +502,10 @@ def snapshot_of(opportunity) -> dict:
         "lon": opportunity.lon,
         "reasons": opportunity.reasons,
         "rule_id": opportunity.rule_id,
+        # Länskoderna följer med, så att mottagarkontrollen strax före
+        # sändningen (fleet/push_gate.py) kan pröva tipsets län mot licensens
+        # utan att slå upp ett tips som kan ha gallrats bort.
+        "area_codes": list(opportunity.area_codes or []),
         "start_time": opportunity.start_time.isoformat() if opportunity.start_time else None,
         "end_time": opportunity.end_time.isoformat() if opportunity.end_time else None,
     }
@@ -425,6 +539,8 @@ def candidates(now=None, limit: int = 200) -> list[Opportunity]:
             # match_device kontrollerar den igen per enhet -- den här raden
             # är till för att cykeln inte ska hämta rader den ändå kastar.
             has_alternative=False,
+            # Höjt av språkmodellen: aldrig ensam grund för en notis (se decide).
+            ai_adjusted_at__isnull=True,
         ).order_by("-demand_score")[:limit]
     )
 
@@ -470,10 +586,11 @@ def plan_cycle(now=None, require_token: bool = False) -> list[dict]:
     # matchat?", och lokalt har ingen enhet en FCM-token. Ett tomt svar hade
     # sett ut som att filtren var fel, inte som att telefonerna saknas.
     devices = _devices(require_token=require_token)
+    on_duty = presence_rules.fresh([d.id for d in devices], now or timezone.now())
     for opportunity in candidates(now=now):
         recipients, rejected = [], []
         for device in devices:
-            match = match_device(device.notify_prefs, opportunity)
+            match = decide(device.notify_prefs, opportunity, on_duty.get(str(device.id)))
             entry = {"device_id": str(device.id), "label": device.label, "reason": match.reason}
             (recipients if match.ok else rejected).append(entry)
         plan.append(
@@ -493,132 +610,245 @@ def plan_cycle(now=None, require_token: bool = False) -> list[dict]:
     return plan
 
 
+# Utkorgen. En notis som inte nått fram inom PUSH_TTL är inte längre värd att
+# väcka någon för; tipsets egen sluttid gäller om den kommer först.
+PUSH_TTL = timedelta(minutes=30)
+PUSH_MAX_ATTEMPTS = 4
+# Väntan före försök 2, 3 och 4. Cykeln går var 30:e sekund.
+PUSH_RETRY_BACKOFF = (timedelta(seconds=30), timedelta(minutes=2), timedelta(minutes=5))
+# Hur länge en rad får ligga som `sending` innan en annan cykel tar över den. En
+# worker som dödas mitt i en sändning lämnar raden så; efter lånet skickas den
+# igen, och collapse key gör att telefonen visar den en gång.
+SEND_LEASE = timedelta(minutes=5)
+SEND_BATCH = 500
+
+
 def run_push_cycle(now=None, sender=None, simulate: bool = False) -> dict:
     """
-    Skicka notiserna för den här cykeln. Kastar aldrig.
+    Skicka notiserna för den här cykeln.
 
-    `sender` injiceras i testerna (och kan pekas om mot en annan transport)
-    -- signaturen är billing.fcm.send_push:s, minus de två första
-    argumenten som cykeln själv håller.
+    Två steg, med utkorgen `push_delivery` emellan:
 
-    `simulate=True` kör HELA vägen -- urval, matchning per enhet, bokföring
-    i push_delivery, notified_at -- men skickar ingenting. Det gör
-    notishistoriken och favoritlistan möjliga att prova lokalt utan ett
-    Firebase-konto, på samma sätt som `simulate_stripe_event` gör
-    faktureringsvägen provbar utan ett Stripe-konto. Det som simuleras är
-    bara transporten; besluten är de riktiga.
+    1. **Köa.** Varje ny kandidat prövas mot varje enhet med decide(). En träff
+       blir en rad med status `pending`; unikheten (enhet, tips) är
+       leveransnyckeln, så en cykel som körs två gånger köar inget dubbelt.
+       Därefter sätts `notified_at`, oavsett hur många som matchade.
+    2. **Skicka.** Mogna rader tas med ett lån (`sending`) och skickas.
+       Tillfälliga fel försöks igen med växande väntan inom notisens
+       livslängd; en död token nollas; det som inte hunnit fram före
+       `expires_at` markeras `expired` i stället för att väcka någon för sent.
+
+    `sender` injiceras i testerna (och kan pekas om mot en annan transport) --
+    signaturen är billing.fcm.send_push:s minus de två första argumenten.
+    `simulate=True` kör hela vägen men skickar ingenting: besluten och raderna
+    är riktiga, bara transporten simuleras.
     """
-    from billing.fcm import get_access_token, load_service_account, send_push
+    from billing import fcm
 
     now = now or timezone.now()
     rows = candidates(now=now)
-    if not rows:
+    has_due = _due(now).exists()
+    if not rows and not has_due:
         return {"sent": 0, "candidates": 0}
 
     if simulate and sender is None:
-        def simulated_sender(*, token, title, body, data):
+        def simulated_sender(**_message):
             return {"ok": True, "simulated": True}
 
         sender = simulated_sender
 
     devices = _devices(require_token=not simulate)
-    if not devices:
+    if not devices and not has_due:
         # Inga enheter att skicka till. Tipsen lämnas OMARKERADE: markerade
         # hade den första föraren som installerar appen tyst gått miste om
         # allt som hände dessförinnan.
         return {"sent": 0, "candidates": len(rows), "skipped": "no_devices"}
 
     if sender is None:
-        service_account = load_service_account(settings.FIREBASE_SERVICE_ACCOUNT_JSON)
+        service_account = fcm.load_service_account(settings.FIREBASE_SERVICE_ACCOUNT_JSON)
         if not service_account:
             log.warning("notify: FIREBASE_SERVICE_ACCOUNT_JSON saknas, hoppar över push")
             return {"sent": 0, "candidates": len(rows), "skipped": "no_service_account"}
         try:
-            access_token = get_access_token(service_account)
+            access_token = fcm.get_access_token(service_account)
         except Exception as exc:
-            log.warning("notify: fcm-auth misslyckades: %s", exc)
+            reraise_time_limit(exc)
+            log.warning("notify: fcm-auth misslyckades: %s", type(exc).__name__)
             return {"sent": 0, "candidates": len(rows), "error": "auth_failed"}
 
-        def fcm_sender(*, token, title, body, data):
-            return send_push(
-                service_account, access_token, token=token, title=title, body=body, data=data
-            )
+        def fcm_sender(**message):
+            return fcm.send_push(service_account, access_token, **message)
 
         sender = fcm_sender
 
-    sent = failed = 0
+    queued = _enqueue(rows, devices, now) if devices else 0
+    counts = _send_due(sender, devices, now)
+    return {
+        "sent": counts["sent"],
+        "failed": counts["failed"],
+        "retrying": counts["retry"],
+        "expired": counts["expired"],
+        "queued": queued,
+        "candidates": len(rows),
+        "devices": len(devices),
+    }
+
+
+def _due(now):
+    return PushDelivery.objects.filter(
+        status__in=(PushDelivery.Status.PENDING, PushDelivery.Status.SENDING),
+        next_attempt_at__lte=now,
+    )
+
+
+def _enqueue(rows, devices, now) -> int:
+    queued = 0
+    on_duty = presence_rules.fresh([d.id for d in devices], now)
     for opportunity in rows:
         title = push_title(opportunity)
         body = push_body(opportunity)
         snapshot = snapshot_of(opportunity)
-        for device in devices:
-            if not match_device(device.notify_prefs, opportunity):
-                continue
-            if PushDelivery.objects.filter(
-                device_id=device.id, opportunity_external_id=opportunity.external_id
-            ).exists():
-                continue
-
-            try:
-                result = sender(
-                    token=device.push_token or "",
-                    title=title,
-                    body=body,
-                    data={
-                        "opportunity_id": str(opportunity.id),
-                        "severity_tier": opportunity.severity_tier or "",
-                        "demand_score": opportunity.demand_score,
+        expires = now + PUSH_TTL
+        if opportunity.end_time and opportunity.end_time < expires:
+            expires = opportunity.end_time
+        with transaction.atomic():
+            for device in devices:
+                if not decide(device.notify_prefs, opportunity, on_duty.get(str(device.id))):
+                    continue
+                _, created = PushDelivery.objects.get_or_create(
+                    device_id=device.id,
+                    opportunity_external_id=opportunity.external_id,
+                    defaults={
+                        "opportunity": opportunity,
+                        "device_token": device.token or "",
+                        "title": title,
+                        "body": body,
+                        "snapshot": snapshot,
+                        "ok": False,
+                        "status": PushDelivery.Status.PENDING,
+                        "next_attempt_at": now,
+                        "expires_at": expires,
                     },
                 )
-            except Exception as exc:  # en enhets fel stoppar aldrig batchen
-                log.warning("notify: sändning kastade för enhet %s: %s", device.id, exc)
-                result = {"ok": False, "status": None, "body": str(exc)[:200]}
-
-            _record(device, opportunity, title, body, snapshot, result)
-            if result.get("ok"):
-                sent += 1
-            else:
-                failed += 1
-                if result.get("status") in (400, 404):
-                    # Token död (appen avinstallerad, token roterad utan att
-                    # en registrering hunnit landa). Nolla den, annars frågas
-                    # enheten varje cykel om en sändning som aldrig kan gå.
-                    from billing.models import Device
-
-                    Device.objects.filter(id=device.id).update(push_token=None)
-
-        # notified_at sätts oavsett hur många som matchade -- även noll.
-        # Tipset har passerat sin notisstund; att lämna det omarkerat hade
-        # gjort att en förare som ändrar sina inställningar i morgon får en
-        # notis om gårdagens störning.
-        #
-        # update(), aldrig save(): save() skriver hela raden och skulle
-        # skriva över det pipelinen just räknat fram. Se repository.py.
-        Opportunity.objects.filter(pk=opportunity.pk).update(notified_at=now)
-
-    return {"sent": sent, "failed": failed, "candidates": len(rows), "devices": len(devices)}
+                queued += created
+            # notified_at sätts oavsett hur många som matchade -- även noll.
+            # Tipset har passerat sin notisstund; att lämna det omarkerat hade
+            # gjort att en förare som ändrar sina inställningar i morgon får en
+            # notis om gårdagens störning.
+            #
+            # update(), aldrig save(): save() skriver hela raden och skulle
+            # skriva över det pipelinen just räknat fram. Se repository.py.
+            Opportunity.objects.filter(pk=opportunity.pk).update(notified_at=now)
+    return queued
 
 
-def _record(device, opportunity, title, body, snapshot, result) -> None:
-    """
-    Bokför sändningen. En krock på unikheten är inte ett fel -- det betyder
-    att en parallell cykel hann först, och då är raden redan skriven.
-    """
-    try:
-        with transaction.atomic():
-            PushDelivery.objects.create(
-                opportunity=opportunity,
-                opportunity_external_id=opportunity.external_id,
-                device_id=device.id,
-                device_token=device.token or "",
-                title=title,
-                body=body,
-                snapshot=snapshot,
-                ok=bool(result.get("ok")),
-                error="" if result.get("ok") else str(result.get("body") or "")[:300],
+def _claim(now) -> list[PushDelivery]:
+    """Ta mogna rader med ett lån. SKIP LOCKED: två cykler tar aldrig samma rad."""
+    with transaction.atomic():
+        claimed = list(
+            _due(now).select_for_update(skip_locked=True).order_by("next_attempt_at")[:SEND_BATCH]
+        )
+        PushDelivery.objects.filter(id__in=[d.id for d in claimed]).update(
+            status=PushDelivery.Status.SENDING, next_attempt_at=now + SEND_LEASE,
+        )
+    return claimed
+
+
+def _send_due(sender, devices, now) -> Counter:
+    from billing import fcm
+
+    by_id = {str(device.id): device for device in devices}
+    counts: Counter = Counter()
+    for delivery in _claim(now):
+        if delivery.expires_at and delivery.expires_at <= now:
+            _finish(delivery, PushDelivery.Status.EXPIRED, error="hann inte fram inom notisens livslängd")
+            counts["expired"] += 1
+            continue
+        device = by_id.get(str(delivery.device_id))
+        if device is None:
+            # Enheten har ingen token längre, eller bolaget är inte aktivt.
+            _finish(delivery, PushDelivery.Status.FAILED, error="enheten tar inte längre emot notiser")
+            counts["failed"] += 1
+            continue
+
+        # Mottagaren kontrolleras HÄR, inte bara när notisen köades. Mellan de
+        # två kan telefonen ha spärrats, bilen tagits över eller perioden löpt
+        # ut, och kön bär en titel som beskriver ett skyddat tips (§3).
+        from fleet.push_gate import can_receive
+
+        verdict_access = can_receive(device, delivery.snapshot or {}, now=now)
+        if not verdict_access.ok:
+            _finish(
+                delivery, PushDelivery.Status.SUPPRESSED,
+                error=f"mottagaren saknar åtkomst: {verdict_access.reason}",
             )
-    except IntegrityError:
-        pass
+            counts["suppressed"] += 1
+            continue
+
+        snapshot = delivery.snapshot or {}
+        try:
+            result = sender(
+                token=device.push_token or "",
+                title=delivery.title,
+                body=delivery.body,
+                data={
+                    "opportunity_id": snapshot.get("id") or "",
+                    "severity_tier": snapshot.get("severity_tier") or "",
+                    "demand_score": snapshot.get("demand_score") or 0,
+                },
+                collapse_key=collapse_key(delivery.opportunity_external_id),
+                ttl_seconds=int((delivery.expires_at - now).total_seconds()) if delivery.expires_at else None,
+            )
+        except Exception as exc:  # en enhets fel stoppar aldrig batchen
+            reraise_time_limit(exc)
+            # Bara typen i loggen: meddelandet kan bära anropets detaljer.
+            log.warning("notify: sändning kastade för enhet %s: %s", delivery.device_id, type(exc).__name__)
+            result = {"ok": False, "status": None, "body": str(exc)[:200]}
+
+        verdict = fcm.outcome(result)
+        attempts = delivery.attempts + 1
+        error = "" if result.get("ok") else str(result.get("body") or "")[:300]
+        if verdict == "sent":
+            _finish(delivery, PushDelivery.Status.SENT, attempts=attempts, ok=True, sent_at=now)
+            counts["sent"] += 1
+        elif verdict == "retry" and attempts < PUSH_MAX_ATTEMPTS:
+            PushDelivery.objects.filter(pk=delivery.pk).update(
+                status=PushDelivery.Status.PENDING,
+                attempts=attempts,
+                next_attempt_at=now + PUSH_RETRY_BACKOFF[min(attempts, len(PUSH_RETRY_BACKOFF)) - 1],
+                error=error,
+            )
+            counts["retry"] += 1
+        else:
+            if verdict == "dead_token":
+                # Appen avinstallerad eller token roterad. Nolla den, annars
+                # frågas enheten varje cykel om en sändning som aldrig kan gå.
+                clear_push_token(delivery.device_id)
+            _finish(delivery, PushDelivery.Status.FAILED, attempts=attempts, error=error)
+            counts["failed"] += 1
+    return counts
+
+
+def _finish(delivery, status, *, attempts=None, ok=False, sent_at=None, error="") -> None:
+    PushDelivery.objects.filter(pk=delivery.pk).update(
+        status=status,
+        ok=ok,
+        sent_at=sent_at,
+        error=error[:300],
+        attempts=delivery.attempts if attempts is None else attempts,
+        next_attempt_at=None,
+    )
+
+
+def collapse_key(external_id: str) -> str:
+    """Samma tips ger samma nyckel: en omsänd notis ersätter den förra på telefonen."""
+    return hashlib.sha1(external_id.encode("utf-8")).hexdigest()
+
+
+def clear_push_token(device_id) -> None:
+    from billing.models import Device
+
+    Device.objects.filter(id=device_id).update(push_token=None)
 
 
 def region_catalog() -> list[dict]:
@@ -629,6 +859,9 @@ def region_catalog() -> list[dict]:
 __all__ = [
     "RAIL_REGION_KEY",
     "TYPE_CATALOG",
+    "REASONS",
+    "collapse_key",
+    "decide",
     "default_prefs",
     "match_device",
     "places_match_cities",
@@ -637,6 +870,7 @@ __all__ = [
     "push_title",
     "region_catalog",
     "region_matches",
+    "list_matches_regions",
     "within_reach",
     "run_push_cycle",
     "snapshot_of",

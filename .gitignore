@@ -11,3 +11,11 @@ taxitips-app/.flutter-plugins-dependencies
 taxitips-app/.playwright-mcp/
 taxitips-api/supabase/.branches/
 taxitips-api/supabase/.temp/
+
+# Leadlistor med namn, adress, telefon, e-post och styrelsenamn (3 677 poster).
+# Personuppgifter hör inte hemma i git-historiken -- den går inte att gallra.
+# Filerna ligger kvar lokalt och ingår inte i något byggkontext.
+ops/crm/
+
+# Felsökningslogg från Firebase CLI. Brus, inte källkod.
+firebase-debug.log

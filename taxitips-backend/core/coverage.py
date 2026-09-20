@@ -39,7 +39,7 @@ COUNTIES: list[tuple[str, str | None, str]] = [
     # Västtrafik har en egen adapter (core/sources/vasttrafik.py) därför att
     # operatörskoden `vt` 404:ar hos Trafiklab -- Sveriges andra stad hade
     # annars saknat kollektivtrafikdata helt.
-    ("Västra Götaland", "vt-adapter", "vastragotaland"),
+    ("Västra Götaland (Göteborg)", "vt-adapter", "vastragotaland"),
     ("Värmland", "varm", "varmland"),
     ("Örebro", "orebro", "orebro"),
     ("Västmanland", "vastmanland", "vastmanland"),
@@ -181,3 +181,45 @@ def notify_region_catalog() -> list[dict]:
 def uncovered_counties() -> list[str]:
     """Län utan kollektivtrafikkälla -- visas som en förklaring, inte som val."""
     return [label for label, operator, _ in COUNTIES if operator is None]
+
+
+# Vägens länsnyckel i COUNTIES -> SCB:s länskod (core/areas.py).
+_SCB_CODE = {
+    "stockholm": "01", "uppsala": "03", "sodermanland": "04", "ostergotland": "05",
+    "jonkoping": "06", "kronoberg": "07", "kalmar": "08", "gotland": "09",
+    "blekinge": "10", "skane": "12", "halland": "13", "vastragotaland": "14",
+    "varmland": "17", "orebro": "18", "vastmanland": "19", "dalarna": "20",
+    "gavleborg": "21", "vasternorrland": "22", "jamtland": "23",
+    "vasterbotten": "24", "norrbotten": "25",
+}
+
+
+def county_catalog() -> list[dict]:
+    """
+    Alla 21 län att välja körområde bland, med vad vi hämtar kollektivtrafik från.
+
+    notify_region_catalog() erbjöd bara län med kollektivtrafikkälla, så
+    Norrbotten, Västerbotten, Jämtland, Halland och Sörmland gick inte att välja
+    trots att andra källor kan ha tips där. Ett län utan kollektivtrafikkälla
+    väljs nu med öppna ögon: `transit` är None och `note` säger det.
+    """
+    from core.areas import COUNTY_NAMES
+
+    out = []
+    for _label, operator, road_key in COUNTIES:
+        code = _SCB_CODE[road_key]
+        if operator == "vt-adapter":
+            transit = "Västtrafik"
+        elif operator == "sl":
+            transit = "SL"
+        elif operator:
+            transit = f"Trafiklab ({operator})"
+        else:
+            transit = None
+        out.append({
+            "code": code,
+            "name": COUNTY_NAMES[code],
+            "transit": transit,
+            "note": "" if transit else "Ingen kollektivtrafikkälla i länet.",
+        })
+    return sorted(out, key=lambda c: c["code"])

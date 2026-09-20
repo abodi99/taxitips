@@ -91,20 +91,21 @@ class SmartAlertCard extends StatelessWidget {
     final isFavorite = alert['is_favorite'] == true;
 
     return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      elevation: isActive ? 1 : 0,
-      color: isActive ? null : Colors.grey.shade50,
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      elevation: isActive ? 2 : 0,
+      shadowColor: Colors.black38,
+      color: isActive ? Colors.white : Colors.grey.shade50,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         side: isActive
-            ? BorderSide.none
+            ? BorderSide(color: Colors.grey.shade200)
             : BorderSide(color: Colors.grey.shade300),
       ),
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -124,22 +125,35 @@ class SmartAlertCard extends StatelessWidget {
                         // states it (SL reports metro/tram/bus outright), so
                         // prefer it and fall back to the coarse transit/road
                         // split for sources that don't.
-                        if (kind == 'transit' || kind == 'road')
-                          switch (alert['mode']?.toString()) {
-                            'train' => BrandIcons.train(size: 15, color: TbColors.muted),
-                            'metro' => const Icon(Icons.subway, size: 15, color: TbColors.muted),
-                            'tram' => const Icon(Icons.tram, size: 15, color: TbColors.muted),
-                            'bus' => BrandIcons.bus(size: 15, color: TbColors.muted),
-                            _ => kind == 'transit'
-                                ? BrandIcons.train(size: 15, color: TbColors.muted)
-                                : BrandIcons.taxi(size: 15, color: TbColors.muted),
-                          },
+                        if (kind == 'transit' ||
+                            kind == 'road' ||
+                            kind == 'flight' ||
+                            alert['mode'] != null)
+                          BrandIcons.forMode(
+                            alert['mode']?.toString() ??
+                                (kind == 'road'
+                                    ? 'road'
+                                    : kind == 'flight'
+                                    ? 'flight'
+                                    : null),
+                            size: 15,
+                            color: TbColors.muted,
+                          ),
                         if (severityTierShortLabels.containsKey(severityTier))
                           Text(
                             severityTierShortLabels[severityTier]!,
                             style: const TextStyle(
-                              fontSize: 12,
+                              fontSize: 14,
                               fontWeight: FontWeight.w700,
+                              color: TbColors.muted,
+                            ),
+                          ),
+                        if ((alert['countyName']?.toString() ?? '').isNotEmpty)
+                          Text(
+                            alert['countyName'].toString(),
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w600,
                               color: TbColors.muted,
                             ),
                           ),
@@ -168,7 +182,7 @@ class SmartAlertCard extends StatelessWidget {
                                     alert['compensation_per_person'] as bool?,
                               ),
                               style: const TextStyle(
-                                fontSize: 10,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w700,
                                 color: TbColors.live,
                               ),
@@ -183,14 +197,12 @@ class SmartAlertCard extends StatelessWidget {
                             decoration: BoxDecoration(
                               color: TbColors.sand,
                               borderRadius: BorderRadius.circular(6),
-                              border: Border.all(
-                                color: TbColors.line,
-                              ),
+                              border: Border.all(color: TbColors.line),
                             ),
                             child: const Text(
                               'osäker',
                               style: TextStyle(
-                                fontSize: 10,
+                                fontSize: 12,
                                 fontWeight: FontWeight.w700,
                                 color: TbColors.muted,
                               ),
@@ -200,6 +212,26 @@ class SmartAlertCard extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
+                  if (alert['worth_it_score'] != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      margin: const EdgeInsets.only(right: 6),
+                      decoration: BoxDecoration(
+                        color: TbColors.taxiDeep,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        '${(alert['worth_it_score'] as num).round()} p',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
                   LikelihoodBadge(
                     likelihood: likelihood,
                     distanceKm: (alert['distance_km'] as num?)?.toDouble(),
@@ -234,7 +266,7 @@ class SmartAlertCard extends StatelessWidget {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
                 style: const TextStyle(
-                  fontSize: 19,
+                  fontSize: 20,
                   fontWeight: FontWeight.bold,
                 ),
               ),
@@ -246,7 +278,7 @@ class SmartAlertCard extends StatelessWidget {
                   Text(
                     timeLeft,
                     style: TextStyle(
-                      fontSize: 13,
+                      fontSize: 15,
                       color: Colors.grey.shade700,
                       fontWeight: FontWeight.w600,
                     ),
@@ -258,12 +290,15 @@ class SmartAlertCard extends StatelessWidget {
                   if (alert['start_time'] != null) ...[
                     Text(
                       '  ·  ',
-                      style: TextStyle(fontSize: 13, color: Colors.grey.shade400),
+                      style: TextStyle(
+                        fontSize: 15,
+                        color: Colors.grey.shade400,
+                      ),
                     ),
                     Text(
                       dateTimeLabel(alert['start_time']?.toString()),
                       style: TextStyle(
-                        fontSize: 13,
+                        fontSize: 15,
                         color: Colors.grey.shade700,
                         fontWeight: FontWeight.w600,
                       ),
@@ -282,20 +317,37 @@ class SmartAlertCard extends StatelessWidget {
                     travel.isLastDeparture
                         ? Icon(Icons.last_page, size: 15, color: travelColor)
                         : travel.hasAlternative
-                            ? BrandIcons.bus(size: 15, color: travelColor)
-                            : Icon(Icons.schedule_send, size: 15, color: travelColor),
+                        ? BrandIcons.bus(size: 15, color: travelColor)
+                        : Icon(
+                            Icons.schedule_send,
+                            size: 15,
+                            color: travelColor,
+                          ),
                     const SizedBox(width: 5),
                     Expanded(
-                      child: Text(
-                        travel.summary!,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13,
-                          height: 1.25,
-                          fontWeight: FontWeight.w700,
-                          color: travelColor,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            travel.summary!,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 15,
+                              height: 1.25,
+                              fontWeight: FontWeight.w700,
+                              color: travelColor,
+                            ),
+                          ),
+                          if (travel.planner != null)
+                            Text(
+                              'Enligt reseplaneraren ${travel.planner}',
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: TbColors.muted,
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ],
@@ -308,7 +360,7 @@ class SmartAlertCard extends StatelessWidget {
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 13.5,
+                    fontSize: 15.5,
                     color: Colors.grey.shade800,
                     height: 1.3,
                   ),

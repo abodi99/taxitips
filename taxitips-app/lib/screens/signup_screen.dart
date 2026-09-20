@@ -69,13 +69,18 @@ class _SignupScreenState extends State<SignupScreen> {
     try {
       final p = await widget.api.pricing();
       final seats = int.tryParse(_seats.text) ?? 1;
-      final unit = seats >= (p['fleetMin'] as num? ?? 5)
-          ? (p['fleetPerDevice'] as num? ?? 79)
-          : (p['perDevice'] as num? ?? 99);
+      // En plats = en förartelefon. Priset kommer från Stripe-planen;
+      // fallback 199 kr om plans-listan saknas.
+      final plans = p['plans'] as List?;
+      final unitOre = plans != null && plans.isNotEmpty
+          ? ((plans.first as Map)['unitAmount'] as num? ?? 19900)
+          : 19900;
+      final unit = (unitOre / 100).round();
       if (!mounted) return;
       setState(() {
         _priceHint =
-            '$seats enhet${seats == 1 ? '' : 'er'} · $unit kr/enhet/mån · ${unit * seats} kr/mån via Stripe';
+            '$seats plats${seats == 1 ? '' : 'er'} (förartelefoner) · '
+            '$unit kr/plats/mån · ca ${unit * seats} kr/mån via Stripe';
       });
     } catch (_) {}
   }
@@ -207,7 +212,10 @@ class _SignupScreenState extends State<SignupScreen> {
                 icon: const Icon(Icons.arrow_back),
               ),
             ),
-      body: Center(
+      body: SafeArea(
+        // Top inset only when there is no AppBar (AppBar handles it otherwise).
+        top: widget.onBack == null,
+        child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 480),
           child: Card(
@@ -275,7 +283,10 @@ class _SignupScreenState extends State<SignupScreen> {
                   TextField(
                     controller: _seats,
                     decoration: const InputDecoration(
-                      labelText: 'Antal telefoner/enheter',
+                      labelText: 'Antal platser (förartelefoner)',
+                      helperText:
+                          'En plats = en telefon som kan vara kopplad samtidigt. '
+                          'Inte antal bilar.',
                     ),
                     keyboardType: TextInputType.number,
                     onChanged: (_) => _loadPricing(),
@@ -311,6 +322,7 @@ class _SignupScreenState extends State<SignupScreen> {
           ),
         ),
       ),
+    ),  // SafeArea
     );
   }
 }

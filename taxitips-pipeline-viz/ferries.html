@@ -1,0 +1,656 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TaxiTips — färjor</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+  :root{--navy:#14213D;--foam:#F5F7FA;--sand:#E7EBF1;--yellow:#FCA311;--yellow-soft:#FFF4DE;--green:#17694A;--green-soft:#E3F4EA;
+        --amber:#8A5300;--amber-soft:#FFF1D6;--danger:#A93226;--danger-soft:#FDE8E6;--blue:#155a9c;--blue-soft:#E3EEFB;
+        --muted:#4A5770;--line:#D9DCE0;--card:#fff}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.45 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--foam);color:var(--navy)}
+  header{background:var(--navy);color:#fff;padding:12px 20px;display:flex;gap:22px;align-items:center;flex-wrap:wrap}
+  header h1{font-size:17px;margin:0;letter-spacing:.2px}
+  nav a{color:#c9d1e0;text-decoration:none;margin-right:14px;font-weight:700;padding-bottom:3px;white-space:nowrap;line-height:2}
+  nav a.on{color:#fff;border-bottom:2px solid var(--yellow)}
+  .status{margin-left:auto;font-size:12.5px;color:#c9d1e0}
+  main{max-width:1500px;margin:0 auto;padding:18px 20px 48px}
+  h2{font-size:20px;margin:0 0 4px}
+  h3{font-size:15px;margin:0 0 6px}
+  .lead{color:var(--muted);margin:0 0 14px;max-width:900px}
+  .foot{color:var(--muted);font-size:12.5px}
+  .err{color:var(--danger)}
+  .section{margin-bottom:28px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+
+  /* För taxiföraren */
+  .summary{display:flex;gap:8px;flex-wrap:wrap;margin:0 0 12px}
+  .chip{border:1px solid var(--line);background:#fff;border-radius:20px;padding:5px 12px;font:inherit;font-weight:700;font-size:13px;cursor:pointer;color:var(--navy)}
+  .chip.on{background:var(--yellow);border-color:var(--yellow)}
+  .chip .n{color:var(--muted);font-weight:600;margin-left:4px}
+  .chip.on .n{color:var(--navy)}
+  input[type=search]{padding:6px 10px;border:1px solid var(--line);border-radius:8px;min-width:210px;font:inherit;margin-left:auto}
+  .grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.05fr);gap:16px;align-items:start}
+  @media (max-width:1050px){.grid{grid-template-columns:1fr}}
+  .list{display:flex;flex-direction:column;gap:6px}
+  .bucket{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:10px 2px 2px}
+  .bucket:first-child{margin-top:0}
+  .arr{display:grid;grid-template-columns:78px minmax(0,1fr);gap:12px;width:100%;text-align:left;background:#fff;border:1px solid var(--line);
+       border-radius:12px;padding:10px 12px;cursor:pointer;font:inherit;color:inherit}
+  .arr:hover{border-color:#aab3c2}
+  .arr.sel{border-color:var(--navy);box-shadow:inset 5px 0 0 var(--yellow)}
+  .arr:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+  .when{border-radius:9px;padding:6px 4px;text-align:center;background:var(--sand)}
+  .when b{display:block;font-size:19px;line-height:1.1;font-variant-numeric:tabular-nums}
+  .when span{font-size:11.5px;color:var(--muted)}
+  .when.now{background:var(--green-soft)} .when.now b{color:var(--green)}
+  .when.soon{background:var(--yellow-soft)}
+  .to{font-size:15px;font-weight:800}
+  .to small{font-weight:600;color:var(--muted);font-size:12.5px}
+  .from{color:var(--muted);font-size:13px;margin:1px 0 5px}
+  .badges{display:flex;gap:5px;flex-wrap:wrap}
+  .pill{display:inline-block;padding:1px 8px;border-radius:12px;font-size:12px;font-weight:800;white-space:nowrap}
+  .p-ok{background:var(--green-soft);color:var(--green)} .p-late{background:var(--danger-soft);color:var(--danger)}
+  .p-warn{background:var(--amber-soft);color:var(--amber)} .p-early{background:var(--blue-soft);color:var(--blue)}
+  .p-none{background:var(--sand);color:var(--muted)} .p-big{background:var(--navy);color:#fff} .p-island{background:#DDE7F3;color:var(--navy)}
+  .p-pendulum{background:var(--blue-soft);color:var(--blue)}
+  .p-commuter{background:#EDE7F6;color:#4B2A85} .p-loop{background:#FCE7F0;color:#8A1F4E} .p-road{background:var(--sand);color:var(--navy)}
+  .filters{display:flex;flex-direction:column;gap:8px;margin:0 0 12px}
+  .frow{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+  .frow .lbl{font-size:12px;font-weight:800;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);min-width:64px}
+  .chip.off{color:var(--muted);background:#fff;text-decoration:line-through;text-decoration-color:#aab3c2}
+  .chip.preset{border-color:var(--navy)}
+  .showing{font-size:13px;color:var(--muted)}
+  .kinds{display:flex;flex-direction:column;gap:4px;margin-top:10px}
+  .kinds .bar i{background:var(--navy)}
+  .empty{padding:18px;text-align:center;color:var(--muted)}
+  #map{height:640px;border-radius:10px}
+  .mapcard{position:sticky;top:12px}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:12px;color:var(--muted);margin-top:8px}
+  .legend i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:5px;vertical-align:-1px}
+  .pin{width:26px;height:26px;border-radius:50% 50% 50% 0;transform:rotate(-45deg);background:var(--yellow);border:2px solid var(--navy);
+       display:flex;align-items:center;justify-content:center}
+  .pin b{transform:rotate(45deg);font-size:11px;color:var(--navy)}
+  .pin.sel{background:var(--navy)} .pin.sel b{color:#fff}
+  .pin.quiet{background:#fff;border-color:#8792a6;width:20px;height:20px}
+  .pin.quiet b{color:#8792a6;font-size:10px}
+  .ports{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:8px;margin-top:18px}
+  .port{text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;cursor:pointer;font:inherit;color:inherit}
+  .port:hover{border-color:#aab3c2}
+  .port:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+  .port b{display:block;font-size:14px}
+  .port .foot{display:block;margin-top:4px}
+
+  /* Så gjordes urvalet */
+  .thinking{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin:0 0 14px}
+  .thinking .card p{margin:0;color:var(--muted);font-size:13px}
+  .thinking .q{font-weight:800;margin-bottom:4px}
+  .thinking .k{display:inline-block;width:22px;height:22px;border-radius:50%;background:var(--navy);color:#fff;text-align:center;
+               font-weight:800;font-size:12px;line-height:22px;margin-right:6px}
+  .funnel{display:flex;flex-direction:column;gap:4px}
+  .step{display:grid;grid-template-columns:minmax(0,1fr) 170px 64px;gap:10px;align-items:center;padding:7px 10px;border-radius:8px;
+        width:100%;background:none;border:0;font:inherit;color:inherit;text-align:left}
+  button.step{cursor:pointer} button.step:hover{background:var(--foam)}
+  button.step:disabled{cursor:default;opacity:.55} button.step:disabled:hover{background:none}
+  .step .bar{height:10px;border-radius:5px;background:var(--sand);overflow:hidden}
+  .step .bar i{display:block;height:100%;background:var(--danger)}
+  .step .num{font-weight:800;text-align:right;font-variant-numeric:tabular-nums}
+  .step.total{background:var(--sand);font-weight:800}
+  .step.total .bar i{background:var(--navy)}
+  .step.kept{background:var(--green-soft);font-weight:800}
+  .step.kept .bar i{background:var(--green)}
+  .examples{margin:0 10px 6px;padding:8px 12px;background:var(--foam);border-radius:8px;font-size:13px}
+  .examples li{margin:3px 0}
+  @media (max-width:640px){.step{grid-template-columns:minmax(0,1fr) 54px}.step .bar{display:none}}
+
+  /* Detaljpanel */
+  /* Till vänster över listan, så att kartan med vald tur syns bredvid. */
+  .drawer{position:fixed;top:0;left:0;height:100%;width:min(480px,100%);background:#fff;box-shadow:8px 0 30px rgba(20,33,61,.18);
+          transform:translateX(-105%);transition:transform .2s ease;z-index:2000;overflow:auto;padding:18px 20px 30px}
+  .drawer.open{transform:none}
+  @media (max-width:1050px){.drawer{left:auto;right:0;box-shadow:-8px 0 30px rgba(20,33,61,.18);transform:translateX(105%)}}
+  @media (max-width:700px){.drawer{top:auto;bottom:0;height:82vh;width:100%;border-radius:16px 16px 0 0;transform:translateY(105%)}}
+  .drawer .close{position:sticky;top:0;float:right;border:0;background:var(--sand);border-radius:50%;width:32px;height:32px;
+                 font-size:18px;cursor:pointer;color:var(--navy)}
+  .drawer h2{font-size:18px;margin:0 40px 2px 0}
+  .drawer h4{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:18px 0 6px}
+  .dir{background:var(--yellow-soft);border-radius:10px;padding:10px 12px;margin:10px 0 0;font-weight:600}
+  .kv{display:grid;grid-template-columns:150px minmax(0,1fr);gap:4px 10px;font-size:13.5px}
+  .kv dt{color:var(--muted)} .kv dd{margin:0;font-weight:600}
+  .drawer ul{margin:4px 0 0 18px;padding:0} .drawer li{margin:4px 0}
+  .drawer a.go{display:inline-block;margin-top:14px;background:var(--navy);color:#fff;text-decoration:none;font-weight:800;
+               padding:8px 14px;border-radius:9px}
+
+  /* Teknisk vy */
+  details{margin-top:12px} summary{cursor:pointer;font-weight:800;font-size:15px;padding:6px 0}
+  details .card{margin-top:6px}
+  .board{max-height:560px;overflow:auto}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{text-align:left;color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.05em;
+     padding:6px;border-bottom:1px solid var(--line);position:sticky;top:0;background:#fff;z-index:1}
+  td{padding:7px 6px;border-bottom:1px solid var(--sand);vertical-align:top}
+  tr.row{cursor:pointer} tr.row:hover{background:var(--foam)}
+  .time{font-weight:800;font-variant-numeric:tabular-nums}
+  .techbar{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px;align-items:center}
+  ol,ul{margin:6px 0 6px 20px;padding:0} li{margin:5px 0}
+  .tag{display:inline-block;font-size:11px;font-weight:800;padding:1px 7px;border-radius:6px;margin-right:6px}
+  .t-done{background:var(--green-soft);color:var(--green)} .t-next{background:var(--amber-soft);color:var(--amber)} .t-idea{background:var(--sand);color:var(--muted)}
+</style>
+</head>
+<body>
+<header>
+  <h1>TaxiTips</h1>
+  <nav><a href="/">Översikt</a><a href="/tag">Tåg</a><a href="/kollektivtrafik">Buss och spårvagn</a><a href="/vag">Väg</a><a href="/flyg">Flyg</a><a href="/farjor" class="on">Färjor</a><a href="/evenemang">Evenemang</a><a href="/vader">Väder</a><a href="/system">System</a></nav>
+  <div class="status" id="status">Hämtar…</div>
+</header>
+<main>
+
+  <section class="section" id="taxi">
+    <h2>För taxiföraren</h2>
+    <p class="lead">Alla färjor och båtar som <b>kommer in</b> till en svensk hamn de närmaste 3 timmarna. Varje rad säger
+      <b>vart</b> den ska, <b>varifrån</b> den kommer, <b>när</b> du ska vara där och vilken <b>sort</b> det är. Sorten säger varför
+      den oftare eller mer sällan ger körningar, men du väljer själv vad som ska synas. Klicka på en ankomst, eller på en
+      punkt på kartan, för att se allt vi vet om den.</p>
+    <div class="filters" id="chips"></div>
+    <div class="grid">
+      <div class="list" id="list"></div>
+      <section class="card mapcard">
+        <div id="map"></div>
+        <div class="legend">
+          <span><i style="background:var(--yellow);border:2px solid var(--navy)"></i>hämtplats (antal ankomster)</span>
+          <span><i style="background:#1F8A5B"></i>fartyg i tid</span>
+          <span><i style="background:#C0392B"></i>fartyg sent</span>
+          <span><i style="background:#6b7a93"></i>fartyg utan tidtabell</span>
+          <span><i style="background:#fff;border:2px solid #8792a6"></i>hamn utan ankomst just nu</span>
+        </div>
+        <p class="foot" style="margin:6px 0 0">Pilen är fartyget (AIS) och pekar dit det är på väg; den streckade linjen går till hämtplatsen.
+          Ankomster utan AIS-position syns bara som hämtplats.</p>
+      </section>
+    </div>
+    <h3 style="margin-top:22px">Hamnarna</h3>
+    <p class="foot" style="margin:0">De 17 passagerarhamnar som AIS bevakar, även när inget är på väg in. Klicka för att se vad som
+      händer där och varför det inte finns någon ankomst just nu.</p>
+    <div class="ports" id="ports"></div>
+  </section>
+
+  <section class="section" id="how">
+    <h2>Så sorteras ankomsterna</h2>
+    <p class="lead">Principen: visa så mycket som möjligt och låt föraren avgöra. Bara tre saker tas bort, och bara för att de inte
+      är en ankomst vi vet om. Resten visas med en sort och kännetecken som du filtrerar på. Klicka på en rad för att se exempel.</p>
+    <div class="thinking">
+      <div class="card"><div class="q"><span class="k">1</span>Kommer folk hit?</div>
+        <p>Bara ankomster till en svensk hamn. En avgång är ingen hämtning, så turer <i>från</i> Sverige är aldrig med.</p></div>
+      <div class="card"><div class="q"><span class="k">2</span>Allt visas, du väljer</div>
+        <p>Vägfärjor, pendelbåtar och rundturer tas inte bort. De får en sort som säger varför de oftare eller mer sällan ger körningar, och du väljer vad som ska synas.</p></div>
+      <div class="card"><div class="q"><span class="k">3</span>Kan taxin stå där?</div>
+        <p>Bryggor utan buss, spårvagn eller tåg inom 600 m markeras "ingen bilväg": troligen en bilfri ö. De visas, men kolla att taxin når fram.</p></div>
+      <div class="card"><div class="q"><span class="k">4</span>När ska jag vara där?</div>
+        <p id="pickupRule">Stora fartyg: 10–45 min efter att de lagt till. Öbåtar: 0–15 min. Sen färja flyttar fönstret lika mycket.</p></div>
+    </div>
+    <div class="card"><div class="funnel" id="funnel"></div></div>
+    <h3 style="margin-top:18px">Sorterna</h3>
+    <p class="foot" style="margin:0">Klicka på en sort för att visa bara den i listan ovan.</p>
+    <div class="card kinds" id="kinds"></div>
+    <p class="foot" style="margin-top:8px">Antal passagerare finns inte i någon källa och påstås aldrig. Fartygets längd (AIS) är det enda storleksmåttet.</p>
+  </section>
+
+  <details id="tech">
+    <summary>Teknisk vy: alla pågående färjeturer och AIS-kopplingen</summary>
+    <div class="card">
+      <p class="foot" style="margin-top:0">Varje tur som pågår enligt tidtabellen (Trafiklab, GTFS Sverige 3), kopplad till fartyget
+        som AIS ser på rätt plats. Här syns allt, före urvalet ovan. Klicka på en rad för detaljer.</p>
+      <div class="techbar" id="techChips"></div>
+      <div class="board"><table id="board"></table></div>
+    </div>
+  </details>
+
+  <details>
+    <summary>Så kopplas tidtabell och AIS</summary>
+    <div class="card" id="rules"></div>
+  </details>
+
+  <details>
+    <summary>Utveckla vidare</summary>
+    <div class="card">
+      <ul>
+        <li><span class="tag t-done">klart</span>Urval för taxiföraren med regler som redovisar vad de tar bort; tidtabellen kopplad till AIS med beräknad ankomst och avvikelse.</li>
+        <li><span class="tag t-next">nästa</span><b>Mät felet.</b> Spara varje kopplad tur och när färjan faktiskt lade till, och ersätt farledsfaktorn 1,15 med en uppmätt faktor per linje. Samma data visar om hämtningsfönstren (10–45 och 0–15 min) stämmer.</li>
+        <li><span class="tag t-next">nästa</span><b>Schemalägg importen</b> en gång per dygn i en miljö. Nyckeln får 50 hämtningar i månaden, delat mellan miljöer.</li>
+        <li><span class="tag t-next">nästa</span><b>Fast koppling linje → fartyg.</b> När samma fartyg kört samma linje flera gånger kan kopplingen gå på identitet i stället för närmaste position.</li>
+        <li><span class="tag t-idea">idé</span><b>Varifrån utrikesfärjorna kommer.</b> Ett handhållet register fartyg → linje (med källa) skulle ge "från Rostock" i stället för "ursprung okänt".</li>
+        <li><span class="tag t-idea">idé</span><b>I förarappen:</b> samma kort som ovan, filtrerat på förarens län och avstånd, och en notis när ett stort fartyg är sent eller kommer nattetid.</li>
+      </ul>
+    </div>
+  </details>
+</main>
+
+<aside class="drawer" id="drawer" aria-hidden="true" aria-labelledby="drawerTitle" role="dialog">
+  <button class="close" id="drawerClose" aria-label="Stäng">×</button>
+  <div id="drawerBody"></div>
+</aside>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<script>
+const S={data:null,kinds:null,hideNoRoad:false,onlyLate:false,onlyAis:false,q:'',selected:null,openRule:null,techFilter:'all',map:null,layer:null,selLayer:null,markers:{}};
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const hhmm=iso=>iso?new Date(iso).toLocaleTimeString('sv',{hour:'2-digit',minute:'2-digit'}):'—';
+const km=v=>v==null?'—':v<1?Math.max(10,Math.round(v*100)*10)+' m':(v<10?Number(v).toFixed(1).replace('.',','):String(Math.round(v)))+' km';
+const knots=v=>v==null?'fart saknas':Number(v).toFixed(1).replace('.',',')+' knop';
+const COLORS={ok:'#1F8A5B',warn:'#B86E00',late:'#C0392B',early:'#1971c2',none:'#6b7a93'};
+const taxi=()=>(S.data&&S.data.taxi)||{items:[],funnel:{steps:[]},summary:{},rules:{}};
+const voyages=()=>(S.data&&S.data.voyages)||{trips:[],summary:{},rules:{}};
+
+// ---------- För taxiföraren ----------
+function when(item){
+  const now=Date.now(),exp=+new Date(item.expectedAt),from=+new Date(item.pickupFrom),until=+new Date(item.pickupUntil);
+  if(now>=from&&now<=until) return {big:'nu',small:'till '+hhmm(item.pickupUntil),tone:'now',bucket:'now'};
+  if(exp<=now) return {big:'framme',small:'från '+hhmm(item.pickupFrom),tone:'soon',bucket:'now'};
+  const m=Math.max(1,Math.round((exp-now)/60000));
+  const big=m<60?`${m} min`:`${Math.floor(m/60)} h ${String(m%60).padStart(2,'0')}`;
+  return {big,small:hhmm(item.expectedAt),tone:m<=30?'soon':'later',bucket:m<=30?'30':m<=60?'60':'later'};
+}
+const BUCKETS=[['now','Hämtning pågår eller färjan är framme'],['30','Inom 30 minuter'],['60','Inom en timme'],['later','Om 1–3 timmar']];
+
+function delayPill(item){
+  const d=item.delayMinutes;
+  if(!item.vessel) return '<span class="pill p-none">tidtabell, ingen AIS</span>';
+  if(item.international) return '<span class="pill p-none">bara AIS</span>';
+  if(d==null) return '<span class="pill p-ok">framme enligt AIS</span>';
+  if(d>10) return `<span class="pill p-late">+${d} min sen</span>`;
+  if(d>5) return `<span class="pill p-warn">+${d} min sen</span>`;
+  if(d<-5) return `<span class="pill p-early">${-d} min tidig</span>`;
+  return '<span class="pill p-ok">i tid enligt AIS</span>';
+}
+function tone(item){
+  if(!item.vessel||item.international) return 'none';
+  const d=item.delayMinutes; if(d==null) return 'ok';
+  return d>10?'late':d>5?'warn':d<-5?'early':'ok';
+}
+const kindPill=item=>`<span class="pill p-${item.kind}">${esc(item.kindLabel)}${item.vessel&&item.vessel.lengthM?` · ${item.vessel.lengthM} m`:''}</span>`;
+const TRAIT_PILL={no_road:['p-warn','ingen bilväg inom 600 m'],transit_both:['p-none','buss/spårvagn i båda ändar']};
+const traitPills=item=>(item.traits||[]).filter(t=>TRAIT_PILL[t]).map(t=>`<span class="pill ${TRAIT_PILL[t][0]}">${TRAIT_PILL[t][1]}</span>`).join('');
+const fromText=item=>item.from?'från '+item.from:'ursprung okänt: inte i svensk tidtabell (utrikesfärja eller kryssning)';
+
+// Filtren: föraren väljer sorter och kännetecken. Sparas i webbläsaren, bara som bekvämlighet.
+const SUGGESTED=['big','pendulum','island'];
+function saveFilter(){
+  try{ localStorage.setItem('farjor-filter',JSON.stringify({kinds:[...S.kinds],hideNoRoad:S.hideNoRoad,onlyLate:S.onlyLate,onlyAis:S.onlyAis})); }catch(e){}
+}
+function loadFilter(){
+  const all=(taxi().kinds||[]).map(k=>k.kind);
+  S.kinds=new Set(all);
+  try{
+    const f=JSON.parse(localStorage.getItem('farjor-filter')||'null');
+    if(f){ S.kinds=new Set(f.kinds.filter(k=>all.includes(k))); S.hideNoRoad=!!f.hideNoRoad; S.onlyLate=!!f.onlyLate; S.onlyAis=!!f.onlyAis; }
+  }catch(e){}
+}
+function preset(name){
+  const all=(taxi().kinds||[]).map(k=>k.kind);
+  S.kinds=new Set(name==='suggest'?SUGGESTED:all); S.hideNoRoad=name==='suggest'; S.onlyLate=false; S.onlyAis=false;
+  saveFilter(); renderTaxi();
+}
+const matchesText=i=>!S.q||[i.terminal.name,i.from,i.agency,i.vessel&&i.vessel.name,i.aisDestination,i.kindLabel].join(' ').toLowerCase().includes(S.q);
+function passesExtras(i){
+  if(S.hideNoRoad&&(i.traits||[]).includes('no_road')) return false;
+  if(S.onlyLate&&!((i.delayMinutes||0)>5)) return false;
+  if(S.onlyAis&&!i.vessel) return false;
+  return matchesText(i);
+}
+function visible(){ return taxi().items.filter(i=>S.kinds.has(i.kind)&&passesExtras(i)); }
+const isPreset=name=>{
+  const want=name==='suggest'?SUGGESTED:(taxi().kinds||[]).map(k=>k.kind);
+  return S.kinds.size===want.length&&want.every(k=>S.kinds.has(k))&&S.hideNoRoad===(name==='suggest')&&!S.onlyLate&&!S.onlyAis;
+};
+
+function renderChips(){
+  const t=taxi(), items=t.items, removed=t.summary.removed||0;
+  const extras=items.filter(passesExtras);
+  const kindChips=(t.kinds||[]).map(k=>{
+    const n=extras.filter(i=>i.kind===k.kind).length;
+    return `<button class="chip ${S.kinds.has(k.kind)?'on':'off'}" data-kind="${k.kind}" title="${esc(k.explain)}" aria-pressed="${S.kinds.has(k.kind)}">${esc(k.label)}<span class="n">${n}</span></button>`;
+  }).join('');
+  const toggle=(key,label,n)=>`<button class="chip${S[key]?' on':''}" data-t="${key}" aria-pressed="${S[key]}">${label}<span class="n">${n}</span></button>`;
+  document.getElementById('chips').innerHTML=`
+    <div class="frow"><span class="lbl">Visa</span>
+      <button class="chip preset${isPreset('all')?' on':''}" data-p="all">Allt</button>
+      <button class="chip preset${isPreset('suggest')?' on':''}" data-p="suggest" title="Stora färjor, pendelfärjan och öbåtar till bryggor med bilväg">Förslag: där taxi oftast behövs</button>
+      <span class="showing">visar ${visible().length} av ${items.length} ankomster · <a href="#how">${removed} borttagna</a></span></div>
+    <div class="frow"><span class="lbl">Sort</span>${kindChips}</div>
+    <div class="frow"><span class="lbl">Mer</span>
+      ${toggle('hideNoRoad','Dölj utan bilväg',items.filter(i=>(i.traits||[]).includes('no_road')).length)}
+      ${toggle('onlyLate','Bara sena enligt AIS',items.filter(i=>(i.delayMinutes||0)>5).length)}
+      ${toggle('onlyAis','Bara med AIS-position',items.filter(i=>!!i.vessel).length)}
+      <input type="search" id="q" placeholder="Sök hamn, fartyg, rederi" value="${esc(S.q)}" aria-label="Sök"></div>`;
+  document.querySelectorAll('#chips [data-p]').forEach(b=>b.onclick=()=>preset(b.dataset.p));
+  document.querySelectorAll('#chips [data-kind]').forEach(b=>b.onclick=()=>{
+    const k=b.dataset.kind; S.kinds.has(k)?S.kinds.delete(k):S.kinds.add(k); saveFilter(); renderTaxi();});
+  document.querySelectorAll('#chips [data-t]').forEach(b=>b.onclick=()=>{S[b.dataset.t]=!S[b.dataset.t]; saveFilter(); renderTaxi();});
+  const q=document.getElementById('q');
+  q.oninput=()=>{S.q=q.value.trim().toLowerCase();renderList();renderMap();
+    const sh=document.querySelector('#chips .showing'); if(sh) sh.firstChild.textContent=`visar ${visible().length} av ${items.length} ankomster · `;};
+}
+
+function renderList(){
+  const items=visible();
+  const groups={};
+  for(const i of items){ const w=when(i); (groups[w.bucket]=groups[w.bucket]||[]).push([i,w]); }
+  const html=BUCKETS.filter(([k])=>groups[k]).map(([k,label])=>`<div class="bucket">${label}</div>`+groups[k].map(([i,w])=>`
+    <button class="arr${S.selected===i.id?' sel':''}" data-id="${esc(i.id)}">
+      <div class="when ${w.tone}"><b>${w.big}</b><span>${w.small}</span></div>
+      <div>
+        <div class="to">Till ${esc(i.terminal.name)}</div>
+        <div class="from">${esc(fromText(i))}${i.vessel?` · <b>${esc(i.vessel.name)}</b>`:''}</div>
+        <div class="badges">${kindPill(i)}${traitPills(i)}${delayPill(i)}<span class="pill p-none">stå där ${hhmm(i.pickupFrom)}–${hhmm(i.pickupUntil)}</span></div>
+      </div>
+    </button>`).join('')).join('');
+  document.getElementById('list').innerHTML=html||`<div class="card empty">Inga ankomster med de här filtren just nu.
+    <button class="chip" onclick="preset('all')">Visa allt</button></div>`;
+  document.querySelectorAll('#list .arr').forEach(b=>b.onclick=()=>select(b.dataset.id,true));
+}
+
+// ---------- Karta ----------
+function arrow(color,course){
+  const shape=course==null?'<circle cx="11" cy="11" r="6"/>':'<path d="M11 2 L18 19 L11 15 L4 19 Z"/>';
+  return L.divIcon({className:'',iconSize:[22,22],iconAnchor:[11,11],
+    html:`<svg width="22" height="22" viewBox="0 0 22 22" style="transform:rotate(${course??0}deg)"><g fill="${color}" stroke="#fff" stroke-width="1.5">${shape}</g></svg>`});
+}
+const pin=(n,sel)=>L.divIcon({className:'',iconSize:[26,26],iconAnchor:[13,26],html:`<div class="pin${sel?' sel':''}"><b>${n}</b></div>`});
+const quietPin=()=>L.divIcon({className:'',iconSize:[20,20],iconAnchor:[10,20],html:'<div class="pin quiet"><b>0</b></div>'});
+const termKey=t=>`${t.name}|${t.lat.toFixed(4)}|${t.lon.toFixed(4)}`;
+
+function initMap(){
+  S.map=L.map('map',{scrollWheelZoom:false,maxZoom:16});
+  L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+    {attribution:'&copy; Esri · OpenStreetMap',maxZoom:16}).addTo(S.map);
+  L.control.scale({imperial:false}).addTo(S.map);
+  S.map.once('click',()=>S.map.scrollWheelZoom.enable());
+  S.map.fitBounds([[55.2,10.9],[64.0,21.0]]);
+  S.layer=L.layerGroup().addTo(S.map);
+  S.selLayer=L.layerGroup().addTo(S.map);
+}
+
+function renderMap(fit){
+  if(!S.map) initMap();
+  S.layer.clearLayers(); S.markers={};
+  const items=visible(), sel=items.find(i=>i.id===S.selected);
+  const terms={};
+  for(const i of items){ const k=termKey(i.terminal); (terms[k]=terms[k]||{t:i.terminal,items:[]}).items.push(i); }
+  for(const {t,items:its} of Object.values(terms)){
+    const isSel=sel&&termKey(sel.terminal)===termKey(t);
+    const m=L.marker([t.lat,t.lon],{icon:pin(its.length,isSel),zIndexOffset:isSel?900:300,title:t.name})
+      .bindTooltip(`<b>${esc(t.name)}</b><br>${its.map(i=>`${hhmm(i.expectedAt)} ${esc(fromText(i))}`).join('<br>')}`,{direction:'top',offset:[0,-24]})
+      .on('click',()=>select(its[0].id,false)).addTo(S.layer);
+    for(const i of its) S.markers['t:'+i.id]=m;
+  }
+  for(const p of taxi().ports||[]){
+    if(p.arrivals.length) continue;
+    L.marker([p.lat,p.lon],{icon:quietPin(),zIndexOffset:100,title:p.name})
+      .bindTooltip(`<b>${esc(p.name)}</b><br>ingen ankomst just nu`,{direction:'top',offset:[0,-18]})
+      .on('click',()=>openPort(p.key)).addTo(S.layer);
+  }
+  for(const i of items){
+    if(!i.vessel||i.vessel.lat==null) continue;
+    const c=COLORS[tone(i)], p=[i.vessel.lat,i.vessel.lon];
+    L.polyline([p,[i.terminal.lat,i.terminal.lon]],{color:c,weight:2,dashArray:'6 6',opacity:.75,interactive:false}).addTo(S.layer);
+    S.markers['v:'+i.id]=L.marker(p,{icon:arrow(c,i.vessel.course),zIndexOffset:600,title:i.vessel.name})
+      .bindTooltip(`<b>${esc(i.vessel.name)}</b> → ${esc(i.terminal.name)}<br>ankomst ${hhmm(i.expectedAt)}`,{direction:'top'})
+      .on('click',()=>select(i.id,false)).addTo(S.layer);
+  }
+  renderSelection(fit);
+}
+
+function renderSelection(fit){
+  S.selLayer.clearLayers();
+  const i=taxi().items.find(x=>x.id===S.selected);
+  if(!i) return;
+  const pts=[[i.terminal.lat,i.terminal.lon]];
+  if(i.origin){
+    L.polyline([[i.origin.lat,i.origin.lon],[i.terminal.lat,i.terminal.lon]],{color:'#14213D',weight:3,opacity:.55}).addTo(S.selLayer);
+    L.circleMarker([i.origin.lat,i.origin.lon],{radius:6,color:'#14213D',weight:2,fillColor:'#fff',fillOpacity:1})
+      .bindTooltip('Avgick från '+esc(i.origin.name),{direction:'top'}).addTo(S.selLayer);
+    pts.push([i.origin.lat,i.origin.lon]);
+  }
+  if(i.vessel&&i.vessel.lat!=null) pts.push([i.vessel.lat,i.vessel.lon]);
+  L.circleMarker([i.terminal.lat,i.terminal.lon],{radius:18,color:'#FCA311',weight:3,fill:false,interactive:false}).addTo(S.selLayer);
+  if(!fit) return;
+  if(pts.length>1) S.map.fitBounds(pts,{padding:[50,50],maxZoom:12}); else S.map.setView(pts[0],12);
+}
+
+// ---------- Hamnarna ----------
+function renderPorts(){
+  const ports=taxi().ports||[];
+  document.getElementById('ports').innerHTML=ports.map(p=>{
+    const n=p.arrivals.length;
+    const state=n?`<span class="pill p-ok">${n} ${n===1?'ankomst':'ankomster'} · nästa ${hhmm(p.next.at)}</span>`
+                 :'<span class="pill p-none">ingen ankomst just nu</span>';
+    const line=n?esc(p.next.headline):esc(p.notes[0]||'');
+    return `<button class="port" data-k="${esc(p.key)}"><b>${esc(p.name)}</b>${state}<span class="foot">${line}</span></button>`;
+  }).join('');
+  document.querySelectorAll('#ports .port').forEach(b=>b.onclick=()=>openPort(b.dataset.k));
+}
+
+function openPort(key){
+  const p=(taxi().ports||[]).find(x=>x.key===key); if(!p) return;
+  S.selected=null; renderMap();
+  S.map.setView([p.lat,p.lon],11);
+  const its=taxi().items.filter(i=>p.arrivals.includes(i.id));
+  openDrawer(`
+    <h2 id="drawerTitle">${esc(p.name)}</h2>
+    <div class="foot">${p.pendulum?'Pendelfärja, går hela dagen':'Passagerarhamn med AIS-bevakning'}</div>
+    <div class="dir"${its.length?'':' style="background:var(--sand)"'}>${its.length?`${its.length} ${its.length===1?'ankomst':'ankomster'} de närmaste 3 timmarna`:'Ingen ankomst att hämta just nu'}</div>
+    ${its.length?`<h4>Ankomster</h4>${its.map(i=>`<button class="chip" style="display:block;margin:4px 0" onclick="select('${esc(i.id)}',false)">${hhmm(i.expectedAt)} · ${esc(i.headline)}</button>`).join('')}`:''}
+    <h4>Just nu i hamnen</h4>
+    <ul>${p.notes.map(n=>`<li>${esc(n)}</li>`).join('')}</ul>
+    <h4>AIS-bevakningen</h4>
+    <p class="foot" style="margin:0">Inseglingsområdet når ungefär ${p.reachKm} km ut: ett fartyg i 18 knop syns cirka ${p.reachMinutes} min före ankomst.
+      Fartyg längre bort syns inte, så en färja som kommer om två timmar finns inte här än om den inte står i tidtabellen.</p>
+    ${p.note?`<h4>Om hamnen</h4><p class="foot" style="margin:0">${esc(p.note)}</p>`:''}`);
+}
+
+// ---------- Detaljpanel ----------
+function select(id,fromList){
+  S.selected=id;
+  document.querySelectorAll('#list .arr').forEach(b=>b.classList.toggle('sel',b.dataset.id===id));
+  renderMap(true);
+  const i=taxi().items.find(x=>x.id===id);
+  if(i) openDrawer(itemDetail(i));
+  if(!fromList){ const b=document.querySelector(`#list .arr[data-id="${CSS.escape(id)}"]`); if(b) b.scrollIntoView({block:'nearest'}); }
+}
+
+function kv(rows){ return `<dl class="kv">${rows.filter(r=>r[1]!=null&&r[1]!=='').map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`; }
+
+function itemDetail(i){
+  const v=i.vessel, w=when(i);
+  const delay=i.delayMinutes==null?(v&&!i.international?'framme, när den lade till vet vi inte':'—')
+    :(i.delayMinutes>0?`+${i.delayMinutes} min`:i.delayMinutes<0?`${i.delayMinutes} min`:'i tid');
+  return `
+    <h2 id="drawerTitle">Till ${esc(i.terminal.name)}</h2>
+    <div class="foot">${esc(fromText(i))}</div>
+    <div class="dir">${esc(i.direction||'')}</div>
+    <div class="badges" style="margin-top:10px">${kindPill(i)}${traitPills(i)}${delayPill(i)}<span class="pill p-none">källa: ${esc(i.source)}</span></div>
+
+    <h4>Sort</h4>
+    <p style="margin:0"><b>${esc(i.kindLabel)}.</b> ${esc(((taxi().kinds||[]).find(k=>k.kind===i.kind)||{}).explain||'')}</p>
+    ${(i.traits||[]).length?`<ul>${i.traits.map(t=>`<li>${esc((taxi().traits||{})[t]||t)}</li>`).join('')}</ul>`:''}
+    <p class="foot" style="margin:6px 0 0">Du avgör om den är värd att köra till.</p>
+
+    <h4>Var och när</h4>
+    ${kv([
+      ['Hämtplats',`<b>${esc(i.terminal.name)}</b>`],
+      ['Stå där',`<b>${hhmm(i.pickupFrom)}–${hhmm(i.pickupUntil)}</b> (${w.big==='nu'?'pågår nu':w.big==='framme'?'färjan är framme':'om '+w.big})`],
+      ['Planerad avgång',i.plannedDeparture?`${hhmm(i.plannedDeparture)} från ${esc(i.from)}`:null],
+      ['Planerad ankomst',i.plannedAt?hhmm(i.plannedAt)+' (tidtabellen)':'finns inte i svensk tidtabell'],
+      ['Förväntad ankomst',`${hhmm(i.expectedAt)} <span class="foot">(${esc(i.expectedBasis)})</span>`],
+      ['Avvikelse',i.international?null:delay],
+      ['Överfart',i.crossingKm!=null?km(i.crossingKm)+' fågelvägen':null],
+      ['Rederi · linje',i.agency?esc(i.agency)+(i.route?' · '+esc(i.route):''):null],
+    ])}
+
+    <h4>Om ankomsten</h4>
+    <ul>${i.why.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+
+    <h4>Så räknades tiden</h4>
+    <ul>${i.calc.map(x=>`<li>${esc(x)}</li>`).join('')}</ul>
+
+    <h4>Fartyget (AIS)</h4>
+    ${v?kv([
+      ['Namn',`<b>${esc(v.name)}</b>`],
+      ['MMSI',v.mmsi!=null?esc(v.mmsi):null],
+      ['Längd',v.lengthM?v.lengthM+' m':'okänd'],
+      ['Fart · kurs',`${knots(v.knots)}${v.course!=null?' · '+Math.round(v.course)+'°':''}`],
+      ['Kvar till hamnen',i.remainingKm!=null?km(i.remainingKm):null],
+      ['Från förväntad position',i.matchKm!=null?km(i.matchKm)+' (hur säker kopplingen är)':null],
+      ['Positionens ålder',v.ageSeconds!=null?Math.round(v.ageSeconds/60)+' min':null],
+      ['Destination i AIS',i.aisDestination?`${esc(i.aisDestination)} <span class="foot">(fritext från besättningen)</span>`:null],
+    ]):'<p class="foot">Ingen AIS-position kopplad till turen: antingen utanför AIS-områdena, eller inget passagerarfartyg där tidtabellen säger att färjan ska vara. Tiden är tidtabellens.</p>'}
+    ${i.portNote?`<h4>Om hamnen</h4><p class="foot" style="margin:0">${esc(i.portNote)}</p>`:''}
+    <a class="go" target="_blank" rel="noopener" href="https://www.google.com/maps/dir/?api=1&destination=${i.terminal.lat},${i.terminal.lon}">Vägbeskrivning till hämtplatsen</a>`;
+}
+
+function tripDetail(r){
+  const v=r.vessel;
+  return `
+    <h2 id="drawerTitle">${esc(r.from)} → ${esc(r.to)}</h2>
+    <div class="foot">${esc(r.agency)}${r.route?' · '+esc(r.route):''} · teknisk vy, före urvalet</div>
+    <h4>Tidtabellen</h4>
+    ${kv([['Planerad avgång',hhmm(r.plannedDeparture)],['Planerad ankomst',hhmm(r.plannedArrival)],
+          ['Läge',{before:'före avgång',enroute:'på väg',arrived:'framme enligt tidtabellen'}[r.phase]||r.phase],
+          ['Anlöp',r.stops>2?`${r.stops-2} mellanhamnar`:'direkt']])}
+    <h4>AIS-kopplingen</h4>
+    ${v?kv([['Fartyg',`<b>${esc(v.name)}</b>${v.lengthM?' · '+v.lengthM+' m':''}`],['Från förväntad position',km(r.matchKm)],
+            ['Kvar',km(r.remainingKm)],['Fart',knots(v.knots)],['Beräknad ankomst',`${hhmm(r.aisEta)} <span class="foot">(${esc(r.etaBasis||'')})</span>`],
+            ['Avvikelse',r.delayMinutes==null?'—':(r.delayMinutes>0?'+':'')+r.delayMinutes+' min']])
+      :`<p class="foot">${r.status==='no_coverage'?'Utanför AIS-områdena: ingen position.':'Inget passagerarfartyg där tidtabellen säger att färjan ska vara.'}</p>`}
+    <h4>Med i urvalet för taxiföraren?</h4>
+    ${decisionText(r)}`;
+}
+
+function decisionText(r){
+  const d=(taxi().decisions||{})[r.key];
+  if(!d) return '<p class="foot" style="margin:0">Okänt: turen fanns inte med när urvalet räknades. Den dyker upp vid nästa uppdatering.</p>';
+  if(d.kept) return `<div class="dir" style="background:var(--green-soft)">Ja. ${esc(d.label)}.</div>
+    <button class="chip" style="margin-top:8px" onclick="select('${esc(d.detail)}',false)">Visa ankomsten</button>`;
+  const step=((taxi().funnel||{}).steps||[]).findIndex(s=>s.rule===d.rule);
+  return `<div class="dir" style="background:var(--danger-soft)">Nej. ${esc(d.label)}.</div>
+    ${kv([['Regel',step>=0?`nr ${step+1} av ${taxi().funnel.steps.length} i urvalet`:'före reglerna'],['Varför just den',esc(d.detail)]])}
+    <p class="foot">Bara sådant som inte är en känd ankomst tas bort. ${step>=0?'<a href="#how" onclick="closeDrawer()">Se alla regler</a>.':''}</p>`;
+}
+
+function openDrawer(html){
+  const d=document.getElementById('drawer');
+  document.getElementById('drawerBody').innerHTML=html;
+  d.classList.add('open'); d.setAttribute('aria-hidden','false'); d.scrollTop=0;
+}
+function closeDrawer(){
+  const d=document.getElementById('drawer'); d.classList.remove('open'); d.setAttribute('aria-hidden','true');
+}
+document.getElementById('drawerClose').onclick=closeDrawer;
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeDrawer(); });
+
+// ---------- Så gjordes urvalet ----------
+function renderFunnel(){
+  const t=taxi(), f=t.funnel||{steps:[]}, start=f.start||0;
+  const r=t.rules||{};
+  if(r.pickupBig) document.getElementById('pickupRule').textContent=
+    `Stora fartyg: ${r.pickupBig[0]}–${r.pickupBig[1]} min efter att de lagt till. Övriga: ${r.pickupSmall[0]}–${r.pickupSmall[1]} min. En sen färja flyttar fönstret lika mycket.`;
+  let left=start;
+  const bar=(n,cls)=>`<div class="bar"><i style="width:${start?Math.max(n?1.5:0,100*n/start):0}%"></i></div>`;
+  let html=`<div class="step total"><div>Ankomster de närmaste ${r.windowHours||3} timmarna (och de senaste 45 min): tidtabellen plus stora fartyg som bara AIS ser</div>${bar(start)}<div class="num">${start}</div></div>`;
+  for(const s of f.steps){
+    left-=s.removed;
+    html+=`<button class="step" data-rule="${s.rule}" ${s.removed?'':'disabled'} aria-expanded="${S.openRule===s.rule}">
+      <div>${S.openRule===s.rule?'▾':'▸'} ${esc(s.label)}<div class="foot">kvar efter regeln: ${left}</div></div>${bar(s.removed)}<div class="num">−${s.removed}</div></button>`;
+    if(S.openRule===s.rule&&s.examples.length) html+=`<div class="examples"><b>Vanligast bland de ${s.removed} borttagna</b>:<ul>${
+      s.examples.map(e=>`<li>${esc(e.title)}${e.count>1?` <b>×${e.count}</b>`:''}${e.detail?` <span class="foot">· ${esc(e.detail)}</span>`:''}</li>`).join('')}</ul></div>`;
+  }
+  html+=`<div class="step kept"><div>Visas för föraren</div>${bar(f.kept)}<div class="num">${f.kept}</div></div>`;
+  document.getElementById('funnel').innerHTML=html;
+  const counts=(t.summary||{}).kinds||{};
+  document.getElementById('kinds').innerHTML=(t.kinds||[]).map(k=>`
+    <button class="step" data-only="${k.kind}"><div><span class="pill p-${k.kind}">${esc(k.label)}</span>
+      <div class="foot" style="margin-top:3px">${esc(k.explain)}</div></div>${bar(counts[k.kind]||0)}<div class="num">${counts[k.kind]||0}</div></button>`).join('');
+  document.querySelectorAll('#kinds [data-only]').forEach(b=>b.onclick=()=>{
+    S.kinds=new Set([b.dataset.only]); S.hideNoRoad=false; S.onlyLate=false; S.onlyAis=false; saveFilter(); renderTaxi();
+    document.getElementById('taxi').scrollIntoView({behavior:'smooth'});});
+  document.querySelectorAll('#funnel button.step').forEach(b=>b.onclick=()=>{S.openRule=S.openRule===b.dataset.rule?null:b.dataset.rule;renderFunnel();});
+}
+
+// ---------- Teknisk vy ----------
+const TECH=[['all','Alla turer'],['matched','Med AIS'],['late','Sena'],['no_match','Utan AIS-träff'],['no_coverage','Utanför AIS']];
+function techPasses(r){
+  const f=S.techFilter;
+  if(f==='all') return true;
+  if(f==='late') return r.status==='matched'&&r.delayMinutes!=null&&r.delayMinutes>5;
+  return r.status===f;
+}
+function techPill(r){
+  if(r.status==='no_coverage') return '<span class="pill p-none">utanför AIS</span>';
+  if(r.status==='no_match') return '<span class="pill p-none">ingen AIS-träff</span>';
+  const d=r.delayMinutes;
+  if(d==null) return '<span class="pill p-ok">framme</span>';
+  if(d>10) return `<span class="pill p-late">+${d} min</span>`;
+  if(d>5) return `<span class="pill p-warn">+${d} min</span>`;
+  if(d<-5) return `<span class="pill p-early">${d} min</span>`;
+  return '<span class="pill p-ok">i tid</span>';
+}
+function renderTech(){
+  const v=voyages(), trips=v.trips||[];
+  document.getElementById('techChips').innerHTML=TECH.map(([k,l])=>{
+    const keep=S.techFilter; S.techFilter=k; const n=trips.filter(techPasses).length; S.techFilter=keep;
+    return `<button class="chip${S.techFilter===k?' on':''}" data-f="${k}">${l}<span class="n">${n}</span></button>`;}).join('');
+  document.querySelectorAll('#techChips .chip').forEach(b=>b.onclick=()=>{S.techFilter=b.dataset.f;renderTech();});
+  const rows=trips.filter(techPasses);
+  document.getElementById('board').innerHTML=`<tr><th>Planerad</th><th>Till</th><th>Rederi · linje</th><th>Fartyg (AIS)</th><th>Beräknad</th><th>Avvikelse</th></tr>`+
+    (rows.map((r,n)=>`<tr class="row" data-n="${trips.indexOf(r)}">
+      <td class="time">${hhmm(r.plannedArrival)}</td>
+      <td><b>${esc(r.to)}</b><div class="foot">från ${esc(r.from)}</div></td>
+      <td class="foot">${esc(r.agency)}${r.route?' · '+esc(r.route):''}</td>
+      <td>${r.vessel?`<b>${esc(r.vessel.name)}</b><div class="foot">${km(r.matchKm)} från förväntad position</div>`:'<span class="foot">—</span>'}</td>
+      <td class="time">${r.aisEta?hhmm(r.aisEta):'—'}</td><td>${techPill(r)}</td></tr>`).join('')
+     ||'<tr><td colspan="6" class="foot">Inga turer i det här urvalet.</td></tr>');
+  document.querySelectorAll('#board tr.row').forEach(tr=>tr.onclick=()=>openDrawer(tripDetail(trips[+tr.dataset.n])));
+}
+
+function renderRules(){
+  const r=voyages().rules||{}, tt=(S.data&&S.data.timetable)||{};
+  document.getElementById('rules').innerHTML=`
+    <p style="margin-top:0"><b>Källor.</b> Tidtabellen: GTFS Sverige 3 via Trafiklab, ${tt.importedAt?'importerad '+new Date(tt.importedAt).toLocaleString('sv'):'inte importerad'}; planerade tider, ingen realtid för färjorna. Positioner: AIS via AISStream, bara inom prenumerationens inseglingsområden. Tidtabellen anger inget fartyg, så kopplingen är en slutsats.</p>
+    <ol>
+      <li><b>Förväntad position.</b> Rak linje mellan senaste och nästa hamn, i proportion till tiden enligt tidtabellen.</li>
+      <li><b>Kandidater.</b> Passagerarfartyg (AIS-typ 60–69, eller okänd typ med klass A-transponder) med position högst ${r.maxAgeMinutes} min gammal. Fartyg på 100 m eller mer kopplas bara till Gotlandsfärjorna, aldrig till en skärgårdstur.
+        Före avgång: vid avgångshamnen. På väg: inom ${r.minToleranceKm} km eller ${Math.round((r.toleranceShare||0)*100)} % av sträckan från förväntad position, och kursen högst ${r.courseTol}° från nästa hamn om fartyget rör sig. Framme: vid ankomsthamnen.</li>
+      <li><b>Koppling.</b> Närmast först; ett fartyg per tur och en tur per fartyg.</li>
+      <li><b>Beräknad ankomst.</b> Sträcka kvar hamn för hamn × ${r.routeFactor} (farleden är längre än fågelvägen) / farten, plus tidtabellens uppehåll. Ligger färjan redan vid kaj efter planerad tid visas "framme" utan avvikelse, eftersom vi inte vet när den lade till.</li>
+      <li><b>Avvikelse</b> = beräknad minus planerad ankomst. Sen = mer än ${r.lateMinutes} min.</li>
+    </ol>`;
+}
+
+// ---------- Laddning ----------
+function renderTaxi(){ renderChips(); renderList(); renderMap(); renderPorts(); }
+function renderAll(){ renderTaxi(); renderFunnel(); renderTech(); renderRules(); }
+
+async function load(){
+  try{
+    const res=await fetch('/api/pipeline/ferries');
+    const d=await res.json();
+    if(!res.ok||d.error) throw new Error(d.error||('HTTP '+res.status));
+    S.data=d;
+    if(!S.kinds) loadFilter();
+    const st=d.stream;
+    document.getElementById('status').textContent=
+      `AIS ${st?(st.connected?'ansluten':'inte ansluten'):'ingen status'} · uppdaterad ${hhmm(d.generatedAt)}`;
+    renderAll();
+    const drawerOpen=document.getElementById('drawer').classList.contains('open');
+    const i=taxi().items.find(x=>x.id===S.selected);
+    if(drawerOpen&&i) document.getElementById('drawerBody').innerHTML=itemDetail(i);
+  }catch(err){
+    document.getElementById('status').innerHTML=`<span class="err">Kunde inte hämta: ${esc(err.message)}</span>`;
+  }
+}
+setInterval(()=>{ if(document.visibilityState==='visible') load(); },20000);
+load();
+</script>
+</body>
+</html>

@@ -4,9 +4,31 @@ import 'package:flutter/services.dart';
 import '../api_client.dart';
 import '../theme.dart';
 
-/// Förare registrerar telefon med bolagskod, eller byter telefon med byteskod.
+/// Förarens parkoppling: administratörens engångskod, eller bolagskoden som
+/// ansökan.
+///
+/// **Vad som ändrats och varför.** Skärmen tog tidigare emot bolagskoden och
+/// anropade `join_device`, som delade ut en permanent enhetstoken direkt.
+/// Koden står på ett papper i fikarummet och syns i administratörsvyn, så den
+/// som läste den fick betald data tills någon bytte kod -- och bytet låste ut
+/// alla förare samtidigt.
+///
+/// Nu gäller två vägar:
+///
+/// * **Anslutningskod** (åtta tecken, giltig fem minuter). Administratören
+///   väljer bil och skapar koden. Telefonen blir godkänd för just den bilen.
+/// * **Bolagskod**, som bara skickar en ansökan. Ingen åtkomst, ingen token --
+///   administratören svarar med en anslutningskod.
+///
+/// Byteskoden är borttagen: den gav en ny enhetstoken utan att någon godkände
+/// telefonen för en bil.
 class JoinScreen extends StatefulWidget {
-  const JoinScreen({super.key, required this.api, required this.onJoined, required this.onBack});
+  const JoinScreen({
+    super.key,
+    required this.api,
+    required this.onJoined,
+    required this.onBack,
+  });
 
   final ApiClient api;
   final VoidCallback onJoined;
@@ -19,9 +41,10 @@ class JoinScreen extends StatefulWidget {
 class _JoinScreenState extends State<JoinScreen> {
   final _code = TextEditingController();
   final _label = TextEditingController();
-  bool _transferMode = false;
+  bool _requestMode = false;
   bool _busy = false;
   String? _error;
+  String? _notice;
 
   @override
   void dispose() {
@@ -34,20 +57,29 @@ class _JoinScreenState extends State<JoinScreen> {
     setState(() {
       _busy = true;
       _error = null;
+      _notice = null;
     });
     try {
-      if (_transferMode) {
-        await widget.api.transferWithCode(
-          transferCode: _code.text.trim(),
-          label: _label.text.trim().isEmpty ? null : _label.text.trim(),
-        );
-      } else {
-        await widget.api.joinWithCode(
+      final label = _label.text.trim().isEmpty ? 'Förare' : _label.text.trim();
+      if (_requestMode) {
+        final result = await widget.api.requestJoin(
           joinCode: _code.text.trim(),
-          label: _label.text.trim().isEmpty ? 'Förare' : _label.text.trim(),
+          label: label,
         );
+        if (!mounted) return;
+        setState(() {
+          _notice =
+              result['message']?.toString() ??
+              'Ansökan skickad. Din administratör godkänner telefonen med en '
+                  'anslutningskod.';
+          _code.clear();
+        });
+      } else {
+        await widget.api.pairWithCode(code: _code.text.trim(), label: label);
+        widget.onJoined();
       }
-      widget.onJoined();
+    } on ApiException catch (e) {
+      setState(() => _error = e.message);
     } catch (e) {
       setState(() => _error = e.toString());
     } finally {
@@ -62,8 +94,11 @@ class _JoinScreenState extends State<JoinScreen> {
       appBar: AppBar(
         backgroundColor: TbColors.asphalt,
         foregroundColor: TbColors.foam,
-        title: Text(_transferMode ? 'Byt telefon' : 'Registrera telefon'),
-        leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: widget.onBack),
+        title: Text(_requestMode ? 'Be om åtkomst' : 'Anslut telefonen'),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: widget.onBack,
+        ),
       ),
       body: SafeArea(
         child: Center(
@@ -81,59 +116,75 @@ class _JoinScreenState extends State<JoinScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     Text(
-                      _transferMode
-                          ? 'Ange byteskoden från kontoret (eller din gamla telefon). Gäller 30 min.'
-                          : 'Ange bolagskoden från kontoret. Telefonen kopplas in själv.',
+                      _requestMode
+                          ? 'Ange bolagskoden. Vi skickar en ansökan till din '
+                                'administratör, som godkänner telefonen med en '
+                                'anslutningskod. Bolagskoden ger ingen åtkomst i sig.'
+                          : 'Ange anslutningskoden du fått av din administratör. '
+                                'Den gäller i fem minuter och kopplar telefonen '
+                                'till en bestämd bil.',
                       style: TextStyle(color: Colors.grey.shade800, height: 1.35),
                     ),
                     const SizedBox(height: 16),
                     TextField(
                       controller: _code,
-                      textCapitalization: _transferMode ? TextCapitalization.none : TextCapitalization.characters,
-                      keyboardType: _transferMode ? TextInputType.number : TextInputType.text,
+                      autocorrect: false,
+                      textCapitalization: TextCapitalization.characters,
                       inputFormatters: [
-                        if (_transferMode) FilteringTextInputFormatter.digitsOnly,
-                        LengthLimitingTextInputFormatter(8),
+                        UpperCaseTextFormatter(),
+                        LengthLimitingTextInputFormatter(12),
                       ],
                       decoration: InputDecoration(
-                        labelText: _transferMode ? 'Byteskod (6 siffror)' : 'Bolagskod',
+                        labelText: _requestMode ? 'Bolagskod' : 'Anslutningskod',
+                        hintText: _requestMode ? 'ABC123' : 'ABCD2345',
                         border: const OutlineInputBorder(),
-                        hintText: _transferMode ? '123456' : 'AB12CD',
                       ),
-                      style: const TextStyle(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 4,
-                      ),
-                      textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 12),
                     TextField(
                       controller: _label,
                       decoration: const InputDecoration(
-                        labelText: 'Ditt namn / bil (valfritt)',
+                        labelText: 'Namn på telefonen (valfritt)',
+                        hintText: 'Nattbil, Anna, Bil 3 …',
                         border: OutlineInputBorder(),
                       ),
                     ),
                     if (_error != null) ...[
                       const SizedBox(height: 12),
-                      Text(_error!, style: const TextStyle(color: TbColors.danger, fontWeight: FontWeight.w700)),
+                      Text(
+                        _error!,
+                        style: const TextStyle(color: Color(0xFFB3261E)),
+                      ),
                     ],
-                    const SizedBox(height: 18),
+                    if (_notice != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        _notice!,
+                        style: const TextStyle(color: Color(0xFF1B5E20)),
+                      ),
+                    ],
+                    const SizedBox(height: 16),
                     FilledButton(
                       onPressed: _busy ? null : _submit,
-                      child: Text(_busy ? 'Kopplar…' : (_transferMode ? 'Byt till den här telefonen' : 'Registrera den här telefonen')),
+                      child: Text(
+                        _busy
+                            ? 'Vänta …'
+                            : (_requestMode ? 'Skicka ansökan' : 'Anslut'),
+                      ),
                     ),
+                    const SizedBox(height: 8),
                     TextButton(
                       onPressed: _busy
                           ? null
                           : () => setState(() {
-                                _transferMode = !_transferMode;
-                                _error = null;
-                                _code.clear();
-                              }),
+                              _requestMode = !_requestMode;
+                              _error = null;
+                              _notice = null;
+                            }),
                       child: Text(
-                        _transferMode ? 'Har bolagskod i stället?' : 'Byter du telefon? Ange byteskod',
+                        _requestMode
+                            ? 'Jag har en anslutningskod'
+                            : 'Jag har bara bolagskoden',
                       ),
                     ),
                   ],
@@ -145,4 +196,17 @@ class _JoinScreenState extends State<JoinScreen> {
       ),
     );
   }
+}
+
+/// Koderna skrivs med versaler. Att rätta det åt föraren är billigare än ett
+/// felmeddelande om en kod som egentligen var rätt.
+class UpperCaseTextFormatter extends TextInputFormatter {
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) => TextEditingValue(
+    text: newValue.text.toUpperCase(),
+    selection: newValue.selection,
+  );
 }

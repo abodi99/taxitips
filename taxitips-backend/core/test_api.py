@@ -24,6 +24,7 @@ import time
 import uuid
 from datetime import timedelta
 
+from django.core.cache import cache
 from django.db import connection
 from django.test import Client, TestCase, override_settings
 from django.utils import timezone
@@ -88,6 +89,8 @@ class ApiTestCase(TestCase):
         super().tearDownClass()
 
     def setUp(self):
+        # Flödescachen lever i processen; ett test får inte se förra testets svar.
+        cache.clear()
         self.client = Client()
         self.company = Company.objects.create(
             id=uuid.uuid4(), name="Taxi Demo AB", join_code=str(uuid.uuid4())[:8],
@@ -268,6 +271,45 @@ class MarketHorizonTests(ApiTestCase):
         self.assertEqual(len(body["alerts"]), 1)
         self.assertGreater(body["alerts"][0]["distance_km"], 200)
 
+    def test_selected_regions_expand_market_past_gps_bubble(self):
+        # Malmö-GPS + filter Stockholm/Göteborg måste nå tips där -- annars
+        # ser föraren "ingenting" trots att datan finns (listfilter-buggen).
+        opportunity(
+            title="SL-stopp",
+            lat=59.3293,
+            lon=18.0686,
+            region="sl",
+        )
+        opportunity(
+            title="Västtrafik-stopp",
+            lat=57.7089,
+            lon=11.9746,
+            region="vt",
+        )
+        opportunity(title="Skånelokalt", lat=55.6092, lon=13.0007, region="skane")
+        body = self.get_alerts(regions="sl,vt")
+        titles = {a["title"] for a in body["alerts"]}
+        self.assertEqual(titles, {"SL-stopp", "Västtrafik-stopp"})
+        # Avståndsbadgen räknas fortfarande från telefonens GPS (Malmö).
+        by_title = {a["title"]: a for a in body["alerts"]}
+        self.assertGreater(by_title["SL-stopp"]["distance_km"], 400)
+
+    def test_selected_regions_include_nearby_rail_not_distant(self):
+        opportunity(
+            title="Tåg Stockholm",
+            lat=59.3300,
+            lon=18.0600,
+            region="rail",
+        )
+        opportunity(
+            title="Tåg Örnsköldsvik",
+            lat=63.2909,
+            lon=18.7153,
+            region="rail",
+        )
+        titles = {a["title"] for a in self.get_alerts(regions="sl")["alerts"]}
+        self.assertEqual(titles, {"Tåg Stockholm"})
+
     def test_opportunity_without_coordinates_falls_back_to_region(self):
         opportunity(title="Skånetips utan koordinat", lat=None, lon=None, region="skane")
         opportunity(title="Stockholmstips utan koordinat", lat=None, lon=None, region="sl")
@@ -385,6 +427,7 @@ class LevelTests(ApiTestCase):
         for tier, score, level, notify in cases:
             with self.subTest(f"{tier}/{score}"):
                 Opportunity.objects.all().delete()
+                cache.clear()  # nytt tips i samma test: flödescachen får inte svara med det förra
                 opportunity(severity_tier=tier, demand_score=score)
                 alert = self.get_alerts()["alerts"][0]
                 self.assertEqual(alert["level"], level)
@@ -473,3 +516,118 @@ class DetailTests(ApiTestCase):
         o = opportunity()
         res = self.client.get(f"/api/opportunities/{o.id}", headers={"x-device-token": "nope"})
         self.assertEqual(res.status_code, 403)
+
+
+class AreaFeedTests(ApiTestCase):
+    """P0-B2: utan position och körområde finns ingen rikstäckande lista."""
+
+    def alerts_without_position(self, **params):
+        return self.client.get("/api/alerts", params, headers={"x-device-token": DEVICE_TOKEN}).json()
+
+    def test_no_position_and_no_area_asks_for_an_area(self):
+        opportunity(title="Skånetips")
+        opportunity(title="Stockholmstips", lat=59.3293, lon=18.0686, region="sl")
+        body = self.alerts_without_position()
+        self.assertTrue(body["needsArea"])
+        self.assertEqual(body["alerts"], [])
+
+    def test_chosen_counties_decide_without_position(self):
+        opportunity(title="Skånetips")
+        opportunity(title="Stockholmstips", lat=59.3293, lon=18.0686, region="sl")
+        body = self.alerts_without_position(counties="01")
+        self.assertFalse(body["needsArea"])
+        self.assertEqual([a["title"] for a in body["alerts"]], ["Stockholmstips"])
+
+    def test_the_saved_notification_area_is_used_when_the_app_sends_none(self):
+        Device.objects.filter(id=self.device.id).update(notify_prefs={"regions": ["skane"]})
+        opportunity(title="Skånetips")
+        opportunity(title="Stockholmstips", lat=59.3293, lon=18.0686, region="sl")
+        body = self.alerts_without_position()
+        self.assertEqual([a["title"] for a in body["alerts"]], ["Skånetips"])
+
+    def test_norrbotten_can_be_chosen(self):
+        opportunity(title="Kiruna", lat=67.8558, lon=20.2253, region=None)
+        body = self.alerts_without_position(counties="25")
+        self.assertEqual([a["title"] for a in body["alerts"]], ["Kiruna"])
+
+
+class EtagTests(ApiTestCase):
+    """P0-C1: ett oförändrat flöde svarar 304 utan kropp; en ändring ger ny ETag."""
+
+    def get(self, **headers):
+        return self.client.get("/api/alerts", MALMO, headers={"x-device-token": DEVICE_TOKEN, **headers})
+
+    def test_an_unchanged_feed_answers_304(self):
+        opportunity(title="Tips")
+        etag = self.get()["ETag"]
+        again = self.get(**{"If-None-Match": etag})
+        self.assertEqual(again.status_code, 304)
+        self.assertEqual(again.content, b"")
+        self.assertEqual(again["ETag"], etag)
+
+    def test_a_changed_tip_changes_the_etag(self):
+        tip = opportunity(title="Tips")
+        etag = self.get()["ETag"]
+        Opportunity.objects.filter(pk=tip.pk).update(title="Nytt läge")
+        cache.clear()  # cachefönstret har gått
+        again = self.get(**{"If-None-Match": etag})
+        self.assertEqual(again.status_code, 200)
+        self.assertNotEqual(again["ETag"], etag)
+
+    def test_the_prefilter_never_drops_what_the_feed_would_show(self):
+        opportunity(title="Nära", lat=55.6092, lon=13.0007)
+        opportunity(title="Utan koordinat", lat=None, lon=None, region="skane")
+        opportunity(title="Långt bort", lat=59.3293, lon=18.0686, region="sl")
+        titles = {a["title"] for a in self.get().json()["alerts"]}
+        self.assertEqual(titles, {"Nära", "Utan koordinat"})
+
+
+class ContextLimitTests(ApiTestCase):
+    """C1: väghändelserna kapas i svaret; totalen följer med."""
+
+    def test_road_context_is_capped_in_the_response(self):
+        from core import thresholds
+
+        for i in range(thresholds.FEED_CONTEXT_LIMIT + 5):
+            opportunity(title=f"Väg {i}", kind="road", mode="road", demand_score=10)
+        body = self.get_alerts()
+        self.assertEqual(len(body["context"]), thresholds.FEED_CONTEXT_LIMIT)
+        self.assertEqual(body["contextTotal"], thresholds.FEED_CONTEXT_LIMIT + 5)
+
+
+class SharedFeedCacheTests(ApiTestCase):
+    """P1: flödet räknas en gång per filter inom cachefönstret, och filter blandas aldrig."""
+
+    def test_the_same_filter_is_computed_once(self):
+        from unittest import mock
+
+        from core import api
+
+        opportunity(title="Tips")
+        with mock.patch.object(api, "feed_for", wraps=api.feed_for) as computed:
+            first = self.get_alerts()
+            second = self.get_alerts()
+        self.assertEqual(computed.call_count, 1)
+        self.assertEqual(first["alerts"], second["alerts"])
+
+    def test_different_counties_are_never_mixed(self):
+        opportunity(title="Skånetips")
+        opportunity(title="Stockholmstips", lat=59.3293, lon=18.0686, region="sl")
+        headers = {"x-device-token": DEVICE_TOKEN}
+        skane = self.client.get("/api/alerts", {"counties": "12"}, headers=headers).json()
+        stockholm = self.client.get("/api/alerts", {"counties": "01"}, headers=headers).json()
+        self.assertEqual([a["title"] for a in skane["alerts"]], ["Skånetips"])
+        self.assertEqual([a["title"] for a in stockholm["alerts"]], ["Stockholmstips"])
+
+
+class MunicipalityFeedTests(ApiTestCase):
+    """P1: en vald kommun förfinar länet -- Södertälje syns inte för den som valt Stockholms kommun."""
+
+    def test_the_feed_follows_the_chosen_municipality(self):
+        opportunity(title="Stockholm", lat=59.3326, lon=18.0649, region="sl")
+        opportunity(title="Södertälje", lat=59.1955, lon=17.6253, region="sl")
+        headers = {"x-device-token": DEVICE_TOKEN}
+        county = self.client.get("/api/alerts", {"counties": "01"}, headers=headers).json()
+        municipality = self.client.get("/api/alerts", {"counties": "01", "municipalities": "0180"}, headers=headers).json()
+        self.assertEqual({a["title"] for a in county["alerts"]}, {"Stockholm", "Södertälje"})
+        self.assertEqual([a["title"] for a in municipality["alerts"]], ["Stockholm"])

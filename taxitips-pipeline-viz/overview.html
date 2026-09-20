@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>TaxiTips — översikt</title>
+<style>
+  :root{--navy:#14213D;--foam:#F5F7FA;--sand:#E7EBF1;--yellow:#FCA311;--yellow-soft:#FFF4DE;--green:#17694A;--green-soft:#E3F4EA;
+        --amber:#8A5300;--amber-soft:#FFF1D6;--danger:#A93226;--danger-soft:#FDE8E6;--blue:#155a9c;--blue-soft:#E3EEFB;
+        --muted:#4A5770;--line:#D9DCE0;--card:#fff}
+  *{box-sizing:border-box}
+  body{margin:0;font:14px/1.5 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--foam);color:var(--navy)}
+  header{background:var(--navy);color:#fff;padding:12px 20px;display:flex;gap:18px;align-items:center;flex-wrap:wrap}
+  header .brand{font-size:17px;font-weight:800}
+  nav a{color:#c9d1e0;text-decoration:none;margin-right:14px;font-weight:700;padding-bottom:3px;white-space:nowrap;line-height:2}
+  nav a.on{color:#fff;border-bottom:2px solid var(--yellow)}
+  .status{margin-left:auto;font-size:12.5px;color:#c9d1e0}
+  main{max-width:1400px;margin:0 auto;padding:22px 20px 60px}
+  h1{font-size:26px;margin:0 0 4px}
+  .lead{color:var(--muted);margin:0 0 20px;max-width:900px}
+  .flow{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 22px;font-size:13px}
+  .flow span{background:#fff;border:1px solid var(--line);border-radius:8px;padding:5px 10px;font-weight:700}
+  .flow i{font-style:normal;color:var(--muted)}
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px}
+  a.svc{display:flex;flex-direction:column;gap:8px;background:#fff;border:1px solid var(--line);border-radius:14px;padding:14px 16px;
+        color:inherit;text-decoration:none}
+  a.svc:hover{border-color:#8792a6}
+  a.svc:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+  .svc h2{font-size:18px;margin:0;display:flex;justify-content:space-between;align-items:center;gap:8px}
+  .svc .q{color:var(--muted);font-style:italic;font-size:13.5px}
+  .svc .get{background:var(--yellow-soft);border-radius:8px;padding:8px 10px;font-size:13px}
+  .svc .get b{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em}
+  .nums{display:flex;gap:14px;flex-wrap:wrap}
+  .nums div b{display:block;font-size:22px;line-height:1.1;font-variant-numeric:tabular-nums}
+  .nums div span{font-size:12px;color:var(--muted)}
+  .pill{display:inline-block;padding:1px 8px;border-radius:12px;font-size:12px;font-weight:800;white-space:nowrap}
+  .t-färsk{background:var(--green-soft);color:var(--green)} .t-gammal{background:var(--amber-soft);color:var(--amber)}
+  .t-fel,.t-inaktuell{background:var(--danger-soft);color:var(--danger)} .t-saknas,.t-okänd{background:var(--sand);color:var(--muted)}
+  .foot{color:var(--muted);font-size:12.5px}
+  .err{color:var(--danger)}
+</style>
+</head>
+<body>
+<header>
+  <span class="brand">TaxiTips</span>
+  <nav id="nav"></nav>
+  <div class="status" id="status">Hämtar…</div>
+</header>
+<main>
+  <h1>Pipelinen, tjänst för tjänst</h1>
+  <p class="lead">Varje tjänst har en egen sida som visar samma fyra saker: vad som hämtas, hur det analyseras steg för steg,
+    vilka regler som slår till, och vad föraren till slut får och varför. Välj en tjänst nedan.</p>
+  <div class="flow"><span>Källa</span><i>→</i><span>Tolkning</span><i>→</i><span>Sort och poäng</span><i>→</i>
+    <span>Förarens lista</span><i>→</i><span>Notis</span></div>
+  <div class="grid" id="cards"></div>
+  <p class="foot" style="margin-top:18px">Den gamla helsidan med lanseringsläge, FCM-test, täckning och ersättningsregler ligger under
+    <a href="/system">System</a>.</p>
+</main>
+<script>
+const PAGES=[['/','Översikt'],['/tag','Tåg'],['/kollektivtrafik','Buss och spårvagn'],['/vag','Väg'],['/flyg','Flyg'],
+             ['/farjor','Färjor'],['/evenemang','Evenemang'],['/vader','Väder'],['/system','System']];
+document.getElementById('nav').innerHTML=PAGES.map(([h,l])=>`<a href="${h}"${h==='/'?' class="on"':''}>${l}</a>`).join('');
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const fmtN=n=>n==null?'—':Number(n).toLocaleString('sv');
+const ORDER=['tag','kollektivtrafik','vag','flyg','farjor','evenemang','vader'];
+const HREF={tag:'/tag',kollektivtrafik:'/kollektivtrafik',vag:'/vag',flyg:'/flyg',farjor:'/farjor',evenemang:'/evenemang',vader:'/vader'};
+
+function card(s){
+  const src=(s.sources||[])[0], c=s.counts||{};
+  const nums=s.key==='evenemang'
+    ?[[c.active,'kommande'],[c.upcoming30,'inom 30 dagar']]
+    :s.key==='farjor'
+    ?[[c.active,'ankomster 3 h'],[c.big,'stora fartyg'],[c.suggest,'i förslaget']]
+    :s.key==='vader'
+    ?[[c.active,'tips med väderskäl'],[c.notify,'ger notis']]
+    :[[c.notify,'ger notis'],[c.list,'bara i listan'],[c.hidden,'visas inte']];
+  return `<a class="svc" href="${HREF[s.key]}">
+    <h2>${esc(s.title)}${src?`<span class="pill t-${esc(src.state)}" title="${esc(src.label)}">${esc(src.state)}</span>`:''}</h2>
+    <div class="q">${esc(s.question)}</div>
+    <div class="nums">${nums.map(([n,l])=>`<div><b>${fmtN(n)}</b><span>${l}</span></div>`).join('')}</div>
+    <div class="get"><b>Föraren får</b>${esc(s.deliver)}</div></a>`;
+}
+
+async function load(){
+  try{
+    const [svc,fer]=await Promise.all([
+      fetch('/api/pipeline/services').then(r=>r.json()),
+      fetch('/api/pipeline/ferries').then(r=>r.json()).catch(()=>null)]);
+    if(svc.error) throw new Error(svc.error);
+    const list=[...svc.services];
+    if(fer&&fer.taxi){
+      const t=fer.taxi, k=t.summary.kinds||{};
+      list.push({key:'farjor',title:'Färjor',question:'Var kliver många av en färja eller båt de närmaste timmarna, och när ska jag stå där?',
+        deliver:'Varje ankomst till en svensk hamn med vart, varifrån, när och vilken sort. Du väljer själv vilka sorter som ska synas.',
+        sources:[{label:'AISStream',state:fer.stream&&fer.stream.connected?'färsk':'okänd'}],
+        counts:{active:t.summary.arrivals,big:(k.big||0)+(k.pendulum||0),
+                suggest:t.items.filter(i=>['big','pendulum','island'].includes(i.kind)&&!(i.traits||[]).includes('no_road')).length}});
+    }
+    list.sort((a,b)=>ORDER.indexOf(a.key)-ORDER.indexOf(b.key));
+    document.getElementById('cards').innerHTML=list.map(card).join('');
+    document.getElementById('status').textContent='uppdaterad '+new Date(svc.generatedAt).toLocaleTimeString('sv',{hour:'2-digit',minute:'2-digit'});
+  }catch(e){ document.getElementById('status').innerHTML=`<span class="err">Kunde inte hämta: ${esc(e.message)}</span>`; }
+}
+setInterval(()=>{ if(document.visibilityState==='visible') load(); },60000);
+load();
+</script>
+</body>
+</html>
