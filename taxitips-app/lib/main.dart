@@ -135,6 +135,8 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
               AppRoute.welcome => WelcomeScreen(
                 onLogin: () => setState(() => _route = AppRoute.login),
                 onSignup: () => setState(() => _route = AppRoute.signup),
+                onJoinPhone: () => setState(() => _route = AppRoute.join),
+                onDemo: () => setState(() => _route = AppRoute.demo),
               ),
               AppRoute.signup => SignupScreen(
                 api: widget.api,

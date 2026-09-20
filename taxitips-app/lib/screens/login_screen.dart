@@ -125,19 +125,21 @@ class _LoginScreenState extends State<LoginScreen> {
       );
     }
     return Scaffold(
-      backgroundColor: TbColors.asphalt,
+      backgroundColor: TbColors.navy,
       appBar: AppBar(
-        backgroundColor: TbColors.asphalt,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         leading: IconButton(
           tooltip: 'Tillbaka',
           onPressed: widget.onBack,
-          icon: const Icon(Icons.arrow_back),
+          icon: const Icon(Icons.arrow_back, color: TbColors.foam),
         ),
       ),
+      extendBodyBehindAppBar: true,
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.all(24),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
               child: Column(
@@ -145,137 +147,181 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   SvgPicture.asset(
                     'assets/brand/logo-on-dark.svg',
-                    width: 320,
-                    height: 93,
+                    width: 240,
+                    height: 70,
                     fit: BoxFit.contain,
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 24),
                   const Text(
-                    'Rätt plats. Rätt tid.\nKontor: logga in · Förare: bolagskod',
+                    'Logga in till kontoret',
                     textAlign: TextAlign.center,
-                    style: TextStyle(color: TbColors.foam, height: 1.4),
-                  ),
-                  const SizedBox(height: 28),
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
+                    style: TextStyle(
+                      fontFamily: kDisplayFont,
                       color: TbColors.foam,
-                      borderRadius: BorderRadius.circular(16),
+                      fontSize: 26,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 20,
+                          offset: Offset(0, 8),
+                        ),
+                      ],
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const Text(
-                          'Kontor',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 18,
-                          ),
-                        ),
-                        const SizedBox(height: 14),
                         TextField(
                           controller: _email,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'E-post',
+                            prefixIcon: const Icon(Icons.email_outlined),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                           keyboardType: TextInputType.emailAddress,
                         ),
-                        const SizedBox(height: 12),
+                        const SizedBox(height: 16),
                         TextField(
                           controller: _password,
-                          decoration: const InputDecoration(
+                          decoration: InputDecoration(
                             labelText: 'Lösenord',
+                            prefixIcon: const Icon(Icons.lock_outline),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
                           ),
                           obscureText: true,
                           onSubmitted: (_) => _submit(),
                         ),
                         if (_error != null) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            _error!,
-                            style: const TextStyle(
-                              color: TbColors.danger,
-                              fontWeight: FontWeight.w600,
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: TbColors.danger.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.error_outline, color: TbColors.danger, size: 20),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Text(
+                                    _error!,
+                                    style: const TextStyle(
+                                      color: TbColors.danger,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         ],
-                        const SizedBox(height: 18),
+                        const SizedBox(height: 24),
                         FilledButton(
                           onPressed: _busy ? null : _submit,
-                          child: Text(_busy ? 'Loggar in…' : 'Logga in'),
+                          style: FilledButton.styleFrom(
+                            backgroundColor: TbColors.ink,
+                            minimumSize: const Size.fromHeight(56),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: _busy 
+                              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                              : const Text('Logga in med e-post', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                         ),
                         // Bara på webben -- se welcome_screen.dart.
-                        if (kIsWeb)
+                        if (kIsWeb) ...[
+                          const SizedBox(height: 12),
                           TextButton(
                             onPressed: widget.onSignup,
                             child: const Text('Skapa företagskonto'),
                           ),
-                        const SizedBox(height: 4),
+                        ],
+                        const SizedBox(height: 24),
                         Row(
                           children: [
-                            const Expanded(child: Divider()),
+                            Expanded(child: Divider(color: Colors.grey.shade300)),
                             Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                              ),
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
                               child: Text(
-                                'eller',
+                                'ELLER',
                                 style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 13,
+                                  color: Colors.grey.shade500,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1,
                                 ),
                               ),
                             ),
-                            const Expanded(child: Divider()),
+                            Expanded(child: Divider(color: Colors.grey.shade300)),
                           ],
+                        ),
+                        const SizedBox(height: 24),
+                        OutlinedButton.icon(
+                          onPressed: _busy ? null : () => _oauth('google'),
+                          icon: Icon(Icons.g_mobiledata, size: 28), // Fallback if no asset, but usually there's one. Assuming standard icon.
+                          label: const Text('Fortsätt med Google', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: TbColors.ink,
+                            side: BorderSide(color: Colors.grey.shade300),
+                            minimumSize: const Size.fromHeight(52),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
                         ),
                         const SizedBox(height: 12),
                         OutlinedButton.icon(
-                          onPressed: _busy ? null : () => _oauth('google'),
-                          icon: const Icon(Icons.g_mobiledata, size: 22),
-                          label: const Text('Fortsätt med Google'),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: TbColors.ink,
-                            minimumSize: const Size.fromHeight(48),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        OutlinedButton.icon(
                           onPressed: _busy ? null : () => _oauth('apple'),
-                          icon: const Icon(Icons.apple, size: 22),
-                          label: const Text('Fortsätt med Apple'),
+                          icon: const Icon(Icons.apple, size: 24),
+                          label: const Text('Fortsätt med Apple', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: TbColors.ink,
-                            minimumSize: const Size.fromHeight(48),
+                            side: BorderSide(color: Colors.grey.shade300),
+                            minimumSize: const Size.fromHeight(52),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  
+                  // For those who accidentally ended up here
+                  const SizedBox(height: 32),
+                  Row(
+                    children: [
+                      const Expanded(child: Divider(color: Colors.white24, thickness: 1)),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text('ÄR DU FÖRARE?', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1)),
+                      ),
+                      const Expanded(child: Divider(color: Colors.white24, thickness: 1)),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  
                   OutlinedButton.icon(
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: TbColors.taxi,
-                      side: const BorderSide(color: TbColors.taxi),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      foregroundColor: TbColors.foam,
+                      side: const BorderSide(color: Colors.white30, width: 1.5),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
                     onPressed: widget.onJoinPhone,
                     icon: const Icon(Icons.phone_android),
-                    label: const Text('Jag kör — registrera telefon med kod'),
+                    label: const Text('Anslut bil med bolagskod', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
                   ),
-                  if (widget.onDemo != null) ...[
-                    const SizedBox(height: 10),
-                    TextButton(
-                      onPressed: widget.onDemo,
-                      child: const Text(
-                        'Prova förardemo (utan login)',
-                        style: TextStyle(
-                          color: TbColors.foam,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),

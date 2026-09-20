@@ -296,6 +296,18 @@ def redeem_code(
         approval=approval,
     )
 
+    # Körområdet: en nyparkopplad telefon ärver licensens län.
+    #
+    # Utan det här är `notify_prefs` tomt, och varje notiskandidat faller på
+    # `no_area` i core/notify.py -- telefonen är parkopplad, betald och
+    # godkänd, och får ändå ingenting. Det ser ut som att pushen är trasig.
+    # Föraren kan smalna av i inställningarna efteråt; rättigheten är ändå
+    # licensens, så valet kan aldrig vidga åtkomsten (se fleet/access.py).
+    prefs = dict(device.notify_prefs or {})
+    if not (prefs.get("counties") or prefs.get("regions") or prefs.get("municipalities")):
+        prefs["counties"] = list(license_counties_for(license, now))
+        Device.objects.filter(id=device.id).update(notify_prefs=prefs)
+
     RiskSignal.objects.create(
         company_id=pairing.company_id, kind=RiskSignal.Kind.PAIRING,
         license=license, vehicle=vehicle, device_id=device.id, created_at=now,
@@ -317,6 +329,20 @@ def redeem_code(
         vehicle_id=str(vehicle.id), license_id=str(license.id),
         approval_id=str(approval.id), secret=secret, plate=vehicle.plate,
     )
+
+
+def license_counties_for(license: License, now) -> tuple[str, ...]:
+    """
+    Licensens aktiva län. Egen liten funktion här i stället för ett anrop till
+    fleet.access: den modulen importerar den här, och tvärtom hade blivit
+    cirkulärt.
+    """
+    from fleet.models import LicenseCounty
+
+    rows = LicenseCounty.objects.filter(license=license, active_from__lte=now).exclude(
+        active_to__lte=now
+    )
+    return tuple(sorted({row.county_code for row in rows}))
 
 
 def _upsert_device(*, company_id, installation_id: str, label: str, platform: str,

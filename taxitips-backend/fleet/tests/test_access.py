@@ -302,3 +302,35 @@ class AdminScopeTests(FleetTestCase):
         data = self.full_setup(county="12")
         License.objects.filter(id=data["license"].id).update(status=License.Status.CANCELED)
         self.assertEqual(access.company_counties(data["company"].id), ())
+
+
+class PairingDefaultsTests(FleetTestCase):
+    """En nyparkopplad telefon ska kunna få notiser utan att någon öppnar inställningarna."""
+
+    def test_a_paired_phone_inherits_the_licence_counties(self):
+        data = self.full_setup(county="14")
+        licensing.activate_extra_county(license=data["license"], county_code="12")
+        issued = pairing.issue_code(
+            license=data["license"], vehicle=data["vehicle"], created_by=None
+        )
+        result = pairing.redeem_code(
+            code=issued.code, installation_id="installation-abcdef123456", label="Testbil"
+        )
+
+        from billing.models import Device
+
+        device = Device.objects.get(id=result.device_id)
+        self.assertEqual(sorted(device.notify_prefs.get("counties", [])), ["12", "14"])
+
+    def test_an_existing_choice_is_not_overwritten(self):
+        data = self.full_setup(county="14")
+        device = self.make_device(data["company"])
+        Device = type(device)
+        Device.objects.filter(id=device.id).update(notify_prefs={"counties": ["01"]})
+        issued = pairing.issue_code(
+            license=data["license"], vehicle=data["vehicle"], created_by=None
+        )
+        pairing.redeem_code(code=issued.code, installation_id=device.token)
+
+        device.refresh_from_db()
+        self.assertEqual(device.notify_prefs["counties"], ["01"])

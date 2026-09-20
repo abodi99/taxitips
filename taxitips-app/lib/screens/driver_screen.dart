@@ -2120,7 +2120,10 @@ class _DriverScreenState extends State<DriverScreen>
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 6,
+                                vertical: 6,
+                              ),
                               decoration: BoxDecoration(
                                 color: Colors.white.withOpacity(0.96),
                                 borderRadius: BorderRadius.circular(32),
@@ -2140,7 +2143,8 @@ class _DriverScreenState extends State<DriverScreen>
                                     height: 24,
                                   ),
                                   Row(
-                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    mainAxisAlignment:
+                                        MainAxisAlignment.spaceBetween,
                                     children: [
                                       if (widget.onBack != null)
                                         IconButton(
@@ -2153,7 +2157,9 @@ class _DriverScreenState extends State<DriverScreen>
                                         const SizedBox(width: 48),
                                       if (widget.onOpenSettings != null)
                                         IconButton(
-                                          icon: const Icon(Icons.settings_outlined),
+                                          icon: const Icon(
+                                            Icons.settings_outlined,
+                                          ),
                                           tooltip: 'Inställningar',
                                           color: TbColors.ink,
                                           onPressed: widget.onOpenSettings!,
@@ -2285,7 +2291,8 @@ class _DriverScreenState extends State<DriverScreen>
                               controller: scrollController,
                               physics: const AlwaysScrollableScrollPhysics(),
                               padding: EdgeInsets.only(
-                                bottom: 24 + MediaQuery.paddingOf(context).bottom,
+                                bottom:
+                                    24 + MediaQuery.paddingOf(context).bottom,
                               ),
                               children: [
                                 // Handtaget: tryck för att växla mellan lista och karta.
@@ -2296,7 +2303,12 @@ class _DriverScreenState extends State<DriverScreen>
                                   ),
                                   child: Center(
                                     child: Container(
-                                      margin: const EdgeInsets.fromLTRB(0, 12, 0, 8),
+                                      margin: const EdgeInsets.fromLTRB(
+                                        0,
+                                        12,
+                                        0,
+                                        8,
+                                      ),
                                       width: 64,
                                       height: 6,
                                       decoration: BoxDecoration(
@@ -3002,7 +3014,9 @@ class _SheetTabs extends StatelessWidget {
                     height: 52,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: key == selected ? Colors.white : Colors.transparent,
+                      color: key == selected
+                          ? Colors.white
+                          : Colors.transparent,
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: key == selected
                           ? const [
@@ -3020,8 +3034,12 @@ class _SheetTabs extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 16,
-                        fontWeight: key == selected ? FontWeight.w800 : FontWeight.w600,
-                        color: key == selected ? TbColors.ink : Colors.grey.shade600,
+                        fontWeight: key == selected
+                            ? FontWeight.w800
+                            : FontWeight.w600,
+                        color: key == selected
+                            ? TbColors.ink
+                            : Colors.grey.shade600,
                       ),
                     ),
                   ),
