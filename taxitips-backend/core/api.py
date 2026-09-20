@@ -1148,7 +1148,16 @@ def device_session(request):
     # 1) Befintlig förarenhet / tidigare owner_app: spara push + last_seen
     # (+ user_id/company vid kontobyte).
     if device_header:
-        device = Device.objects.filter(token=device_header).first()
+        # Samma uppslag som åtkomstkontrollen: både den hashade hemligheten
+        # från parkopplingen och den äldre klartexttoken. Tidigare slog vyn
+        # bara upp `devices.token`, där nyparkopplade telefoner har sitt
+        # installations-id -- inte hemligheten. Registreringen svarade då
+        # `unknown_device`, push-token sparades aldrig, och en betald,
+        # godkänd telefon i en aktiv bil fick aldrig en enda notis.
+        # Hittat på en riktig telefon 2026-09-21.
+        from fleet.access import device_for_token
+
+        device, credential, _how = device_for_token(device_header)
         if device is None:
             return _json(request, {"error": "unknown_device"}, status=404)
         updates = {"last_seen_at": now}
@@ -1170,7 +1179,10 @@ def device_session(request):
             {
                 "ok": True,
                 "device_id": str(device.id),
-                "device_token": device.token,
+                # En parkopplad telefon har sin hemlighet redan; att skicka
+                # installations-id:t här hade kunnat skriva över den i en
+                # klient som sparar det den får.
+                "device_token": device_header if credential is not None else device.token,
                 "company_id": str(device.company_id),
                 "user_id": str(device.user_id) if device.user_id else None,
                 "last_seen_at": now.isoformat(),

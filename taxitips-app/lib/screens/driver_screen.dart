@@ -19,6 +19,7 @@ import '../theme.dart';
 import '../widgets/alert_feedback_bar.dart';
 import '../widgets/brand_icons.dart';
 import '../widgets/hotspot_map.dart';
+import '../widgets/vehicle_session_sheet.dart';
 import '../widgets/traffic_map.dart';
 import '../widgets/likelihood_badge.dart';
 import '../widgets/smart_alert_card.dart';
@@ -138,6 +139,9 @@ class _DriverScreenState extends State<DriverScreen>
   Map<String, List<Map<String, dynamic>>> _municipalityCatalog = {};
   // Servern hade varken plats eller körområde att gå på (needsArea).
   bool _needsArea = false;
+  // Telefonen är godkänd men kör ingen bil just nu. Inte ett fel -- föraren
+  // ska välja bil, och först då lämnas tipsen ut (se fleet/access.py).
+  bool _needsVehicle = false;
   // Färjor: `arrivals` = relevance (tidtabell+AIS, samma som /farjor);
   // `_ferryShips` = AIS-live för kartans nålar.
   List<Map<String, dynamic>> _ferries = const [];
@@ -579,6 +583,9 @@ class _DriverScreenState extends State<DriverScreen>
       setState(() {
         _data = data;
         _needsArea = data['needsArea'] == true;
+        // Backend säger varför flödet är tomt. `no_active_session` betyder
+        // att bilval saknas -- inte att perioden gått ut.
+        _needsVehicle = data['reason'] == 'no_active_session';
         _error = null;
       });
       // Färjor och evenemang i samma område; ett fel där får inte dölja tipsen.
@@ -755,10 +762,28 @@ class _DriverScreenState extends State<DriverScreen>
     try {
       final result = await widget.api.entitlements();
       if (!mounted) return;
-      setState(() => _entitled = result['entitled'] == true);
+      setState(() {
+        _entitled = result['entitled'] == true;
+        // Godkänd men utan bil är inte "provperioden slut". Backend säger
+        // vilket av dem det är; skärmen ska inte gissa.
+        if (result['needsSession'] == true ||
+            result['reason'] == 'no_active_session') {
+          _needsVehicle = true;
+        }
+      });
     } catch (e) {
       // Nätverksfel etc — behåll senast kända status hellre än att larma i onödan.
       debugPrint('DriverScreen[_checkEntitlement] error: $e');
+    }
+  }
+
+  /// Bilvalet och skiftbytet. Hämtar om flödet när föraren tagit en bil --
+  /// länen som tipsen filtreras mot är bilens, så listan blir en annan.
+  Future<void> _openVehiclePicker() async {
+    final changed = await VehicleSessionSheet.show(context, widget.api);
+    if (changed && mounted) {
+      setState(() => _needsVehicle = false);
+      await _load();
     }
   }
 
@@ -2171,7 +2196,15 @@ class _DriverScreenState extends State<DriverScreen>
                                 ],
                               ),
                             ),
-                            if (_entitled == false) ...[
+                            if (_needsVehicle) ...[
+                              const SizedBox(height: 8),
+                              _Notice(
+                                icon: Icons.local_taxi_outlined,
+                                text: 'Välj vilken bil du kör för att se tips.',
+                                action: 'Välj bil',
+                                onAction: _openVehiclePicker,
+                              ),
+                            ] else if (_entitled == false) ...[
                               const SizedBox(height: 8),
                               _EntitlementBanner(
                                 onOpenSettings: widget.onOpenSettings,

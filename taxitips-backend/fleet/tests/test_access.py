@@ -334,3 +334,34 @@ class PairingDefaultsTests(FleetTestCase):
 
         device.refresh_from_db()
         self.assertEqual(device.notify_prefs["counties"], ["01"])
+
+
+class PushRegistrationTests(FleetTestCase):
+    """
+    En parkopplad telefon måste kunna registrera sin push-token med den
+    hashade hemligheten. Utan det får den aldrig en notis.
+    """
+
+    def test_a_paired_phone_can_register_its_push_token(self):
+        from billing.models import Device
+
+        data = self.full_setup()
+        issued = pairing.issue_code(
+            license=data["license"], vehicle=data["vehicle"], created_by=None
+        )
+        paired = pairing.redeem_code(
+            code=issued.code, installation_id="installation-push-0001"
+        )
+
+        response = Client().post(
+            "/api/device/session",
+            data='{"push_token": "fcm-token-abc", "installation_id": "installation-push-0001"}',
+            content_type="application/json",
+            headers={"x-device-token": paired.secret},
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(
+            Device.objects.get(id=paired.device_id).push_token, "fcm-token-abc"
+        )
+        # Svaret skickar inte tillbaka installations-id:t i stället för hemligheten.
+        self.assertEqual(response.json()["device_token"], paired.secret)

@@ -499,6 +499,32 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> entitlements() async {
+    // Med Django-backenden är det den som avgör åtkomsten (fleet/access.py):
+    // godkänd telefon, licens, aktiv bilsession, period och län. Den gamla
+    // RPC:n `current_entitlement` slår bara upp `devices.token` -- där ligger
+    // installations-id:t, inte hemligheten från parkopplingen -- och svarade
+    // därför `false` för varje nyparkopplad telefon. Appen visade då "din
+    // provperiod har gått ut" för en förare som bara inte valt bil än.
+    final backend = _backend;
+    if (backend != null && deviceToken != null) {
+      try {
+        final status = await backend.fleetStatus(deviceToken: deviceToken);
+        return {
+          'ok': true,
+          'entitled': status['entitled'] == true,
+          'reason': status['reason'],
+          'needsSession': status['needsSession'] == true,
+          'message': status['message'],
+        };
+      } on ApiException catch (e) {
+        // En gammal klartexttoken som ännu inte parkopplats om: backend
+        // svarar 401 på /api/fleet/me men godkänner den i flödet under
+        // övergången. Faller igenom till RPC:n i stället för att larma.
+        debugPrint('ApiClient[entitlements] fleet: ${e.reason ?? e.message}');
+      } catch (e) {
+        debugPrint('ApiClient[entitlements] fleet error: $e');
+      }
+    }
     await ensureInitialized();
     // current_entitlement() also accepts an authenticated owner/manager session
     // (no device pairing needed) via auth.uid() -- so only short-circuit when
@@ -1274,6 +1300,14 @@ class ApiClient {
       List favoriteRows = const [];
       var source = 'trafiklab';
       var needsArea = false;
+      // Varför flödet är tomt, när det är det. Backend skickar `reason`
+      // (`no_active_session`, `device_not_approved`, `period_expired` …)
+      // och skärmen väljer meddelande efter det. Tidigare kastades fältet
+      // här, och en telefon som bara behövde välja bil visade "provperioden
+      // har gått ut" -- hittat på en riktig telefon, inte i ett test.
+      String? reason;
+      bool? entitled;
+      String? message;
       final backend = _backend;
       if (backend != null) {
         // Django äger både marknadsurvalet och bedömningen. Den äldre
@@ -1303,6 +1337,9 @@ class ApiClient {
         // lista, och skärmen ber föraren välja län.
         needsArea = body['needsArea'] == true;
         favoriteRows = (body['favorites'] as List?) ?? const [];
+        reason = body['reason']?.toString();
+        entitled = body['entitled'] is bool ? body['entitled'] as bool : null;
+        message = body['message']?.toString();
         source = 'django';
       } else {
         rows = await _smartAlertsViaRpc(lat, lon);
@@ -1333,6 +1370,9 @@ class ApiClient {
         'updatedAt': now.millisecondsSinceEpoch,
         'source': source,
         'needsArea': needsArea,
+        'reason': ?reason,
+        'entitled': ?entitled,
+        'message': ?message,
       };
     } on PostgrestException catch (e) {
       // Some environments are not provisioned with the alerts table yet.
