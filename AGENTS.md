@@ -163,15 +163,36 @@ Förarkartan i appen (ombyggd 2026-09-21, för förare med begränsad svenska):
   läses som en körning; styrkefiltret gäller inte dem.
 * **Kategoriraden** (`category_bar.dart`) överst styr både kartan och listan: Alla, en
   kategori, eller Följer. Ersätter de gamla flikarna i bottenpanelen.
-* **Kartan** (`signal_map.dart`): flutter_map + Esri World Street Map med dämpade färger på
-  dagen och `darkModeTileBuilder` när telefonen är i mörkt läge. Klustrar under zoom 15;
-  väghinder klustras för sig.
+* **Kartan** (`signal_map.dart`): flutter_map + CARTO Voyager, ljus och ofiltrerad (en mörk
+  variant upplevdes som för mörk i bilen). Nyckeln `CARTO_KEY` skickas in vid bygget och
+  checkas aldrig in -- repot är publikt. Utan nyckel ritas Esri World Street Map; CARTO
+  utan nyckel stämplar "API KEY REQUIRED" över varje ruta. Klustrar under zoom 15;
+  väghinder klustras för sig. Första GPS-positionen flyttar kartan till föraren.
+* **Releasebygget** läser alla inställningar ur `taxitips-app/dart_defines.local.json`
+  (git-ignorerad; API_BASE_URL, SUPABASE_URL, SUPABASE_ANON_KEY, CARTO_KEY):
+  `flutter build apk --release --dart-define-from-file=dart_defines.local.json`.
+* **Licensens län gäller överallt**: tips, väghändelser, evenemang, färjor och
+  notisinställningarna (`request_area`/`area_blocked` i `core/api.py`). Länsväljaren i appen
+  visar bara licensens län. Förarens val får smalna av, aldrig vidga.
+* **Väg visar ett urval, inte allt** (`core/text_scoring.road_tier`,
+  `thresholds.ROAD_SHOWN_TIERS`): olyckor, avstängda vägar och köer var de än är, akuta hinder
+  och "Mycket stor påverkan" på huvudled (E-väg, riksväg, primär länsväg <= 499). Mätt
+  2026-09-21: 98 av 1 570 i tre län. Resten blir `road_work` och skickas inte. Villkoret står
+  i `rule_id` (`road.<nivå>.<villkor>`) och kortet visar orsaken ("Vägen avstängd", "Kö").
+  En Trafikverket-situation med flera avvikelser visas en gång. Ett väghinder har inget
+  "Kör dit" och ingen "Fick körning?".
+* **Notisregler per förare** (`core/notify.decide`): kategorier, lägsta nivå (alla / medel+ /
+  bara starka) och paus i högst 24 h, satt på serverns klocka. Skälen `paused`,
+  `category_off:<kategori>` och `below_level` i `REASONS`.
+* **Favoriternas `owner_key` är `device:<uuid>`**, aldrig telefonens råa token (migration
+  `core/0025`).
 * **Kör dit** (`navigation.dart`) öppnar telefonens navigering (`google.navigation:` på
   Android, Apple Kartor på iPhone). Appen har ingen egen ruttplanering.
 * **Följ**: tips på servern (`OpportunityFavorite`), evenemang på telefonen
   (`followed_events.dart`, en kopia per evenemang, rensas dagen efter).
 * Google Maps-varianten (`traffic_map.dart`, `--dart-define=GOOGLE_MAPS=true` + `MAPS_API_KEY`)
-  finns kvar men har inte den nya designen; ingen nyckel finns i dag.
+  finns kvar men har inte den nya designen. Maps är inte aktiverat i GCP-projektet
+  `taxibehov` (Static Maps svarar 403).
 
 Pipeline-vyn (localhost:4000) har en sida per tjänst: `/tag`, `/kollektivtrafik`, `/vag`, `/flyg`,
 `/farjor`, `/evenemang`, `/vader`, och en översikt på `/`. Varje sida visar källorna och deras
@@ -361,7 +382,10 @@ Var och en av dem är skriven efter att ha gått sönder på riktigt.
    skriver inte ut om taket gäller per resenär, och då säger appen inget.
 3. **Vägtipsen är kapade till 15 poäng och ligger i `context`, inte i
    tipslistan.** En kö försenar dem som redan sitter i bil. Mätt: 129
-   vägrader mot 5 kollektivtrafiktips i Skåne.
+   vägrader mot 5 kollektivtrafiktips i Skåne. Och bara de viktiga når
+   föraren (`ROAD_SHOWN_TIERS`). Matcha aldrig "avstäng" eller "kö" som
+   delsträng: båda finns i "Körfältsavstängningar", och 546 planerade
+   körfältsavstängningar blev röda "Stopp".
 4. **`is_last_departure` sätts aldrig av en textkälla.** SL:s
    departures-endpoint svarar bara för ett fönster framåt; "inga fler
    avgångar" betyder "inga inom två timmar", inte "sista turen idag".
