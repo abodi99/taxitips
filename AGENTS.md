@@ -253,6 +253,32 @@ Drift inför lansering: backup och återställningsprov i `ops/backup/README.md`
 Stripe-webhookens scenarier i `ops/stripe/webhook_scenarios.py`, lasttest i
 `ops/loadtest/feed_load.py`, och läget i `docs/lansering-p0.md`.
 
+**Adminwebben** (`taxitips.se/admin`, `fleet/admin_api.py`): kunder, abonnemang,
+notiser, evenemang och riskgranskningar över ALLA bolag. Kräver en aktiv rad i
+`fleet_staff_role` -- en kunds roll i `company_members` ger ingenting där, hur hög
+den än är. `support` läser, `platform_admin` ändrar. Grundaren
+(`bbf6ca6c-…`) är platform_admin. Konton skapade med Google har inget lösenord
+och Google-inloggning är inte konfigurerad i produktionens Supabase Auth, så
+adminwebben loggar in med en e-postlänk.
+
+**Driftfällor i produktion (2026-09-21):**
+
+* **Push skickas från BACKEND-containern, inte workern.** Workern saknar
+  `FIREBASE_SERVICE_ACCOUNT_JSON`, så beats `push-cycle` är en no-op där (den
+  returnerar innan något köas). En Coolify-schemalagd uppgift på
+  `taxitips-backend` kör `push_cycle` varje minut. Kopiera nyckeln till workern
+  och ta bort uppgiften -- i den ordningen.
+* **Coolify kapar schemalagda kommandon vid 255 tecken.** Längre SQL går via
+  produktionens Supabase-MCP (`claude.ai taxitips mcp`), inte via `psql -c`.
+* **`api.taxitips.se` har svarat 502** (Traefik når inte Kong) i perioder.
+  Förarvägen går via `backend.taxitips.se` och påverkas inte.
+* **`flutter build … | tail` ljuger om exitkoden.** Kontrollera flutters egen,
+  annars installeras den gamla APK:n i tron att den är ny.
+
+Testverktyg: `manage.py seed_test_company` (testbolag + anslutningskod, utan
+Stripe) och `manage.py send_test_push --company "…"` (genom samma mottagargrind
+som riktiga notiser, med skäl per telefon).
+
 Kundlivscykeln (konton, billicenser, abonnemang): **`docs/fleet-abonnemang.md`**
 -- datamodellen, affärsreglerna, utrullningsordningen och återställningen.
 Utrullningen styrs av `FLEET_ENFORCE_LICENSES`, som är AV tills
@@ -261,9 +287,9 @@ Utrullningen styrs av `FLEET_ENFORCE_LICENSES`, som är AV tills
 Tester — båda ska vara gröna innan något deployas:
 
 ```bash
-cd taxitips-backend && CELERY_TASK_ALWAYS_EAGER=1 ./.venv/bin/python manage.py test   # 793
+cd taxitips-backend && CELERY_TASK_ALWAYS_EAGER=1 ./.venv/bin/python manage.py test   # 811
 cd taxitips-app && flutter test && flutter analyze                                     # 49
-cd taxitips-web && npx vite build                                                      # index + portal
+cd taxitips-web && npx vite build                                                      # index + portal + admin
 ```
 
 `flutter analyze` är rent (kontrollerat 2026-09-14).
