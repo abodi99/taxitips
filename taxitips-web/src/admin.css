@@ -78,3 +78,134 @@
   font-size: 0.8rem;
   word-break: break-word;
 }
+
+/* --- Säljflödet ------------------------------------------------------- */
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.25rem 1rem;
+  align-items: end;
+}
+.form-grid h2,
+.form-grid h3 {
+  margin-top: 0.75rem;
+}
+.span-2 {
+  grid-column: 1 / -1;
+}
+.form-grid textarea {
+  width: 100%;
+  font: inherit;
+  padding: 0.6rem 0.75rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  resize: vertical;
+}
+
+/* En bilrad: regnr, etikett, baslän, extra län, ta bort. */
+.pkg-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1.3fr auto;
+  gap: 0.5rem;
+  align-items: end;
+  padding: 0.5rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.pkg-row select[multiple] {
+  min-height: 5.5rem;
+}
+
+.quote {
+  background: var(--ljusgra);
+  border-radius: var(--radius);
+  padding: 0.75rem 1rem;
+  margin: 0.75rem 0;
+}
+.quote-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 0.15rem 0;
+}
+
+/* Tre sätt att starta: prov, kupong, beställning. */
+.start-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+  margin-top: 1rem;
+}
+.start-option {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.start-option h4 {
+  margin: 0;
+}
+.start-option .btn {
+  margin-top: auto;
+  align-self: flex-start;
+}
+
+.inline-field {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+.inline-field input {
+  flex: 1;
+  min-width: 0;
+}
+
+label.check {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  font-weight: 500;
+}
+label.check input {
+  width: auto;
+  margin-top: 0.2rem;
+}
+
+ul.plain {
+  list-style: none;
+  padding: 0;
+  margin: 0.5rem 0 0;
+}
+ul.plain li {
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.flash {
+  background: var(--vit);
+  border-left: 4px solid var(--ok);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 0.7rem 1rem;
+}
+
+.code-timer {
+  text-align: center;
+  font-weight: 600;
+}
+
+details.card > summary {
+  cursor: pointer;
+  list-style: none;
+}
+details.card > summary::-webkit-details-marker {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  .form-grid,
+  .pkg-row {
+    grid-template-columns: 1fr;
+  }
+}

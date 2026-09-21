@@ -206,6 +206,27 @@ class TrialToPaymentTests(FleetTestCase):
         self.trial.refresh_from_db()
         self.assertEqual(self.trial.status, Trial.Status.CONVERTED)
 
+    def test_trial_vehicles_that_were_not_ordered_stop_at_the_conversion(self):
+        """
+        Annars hade de två bortvalda provbilarna fått gratis åtkomst så länge
+        bolaget betalar för den tredje: provlicenser släpps igenom av
+        åtkomstkontrollen, och en betald period finns ju.
+        """
+        plan = orders.plan_change(
+            self.company.id,
+            add_vehicles=[orders.VehicleSpec(plate="TRI001", base_county="12")],
+        )
+        orders.mark_order_paid(orders.create_order(self.company.id, plan))
+        statuses = dict(
+            License.objects.filter(company_id=self.company.id)
+            .values_list("assignments__vehicle__plate", "status")
+        )
+        self.assertEqual(statuses["TRI001"], License.Status.ACTIVE)
+        self.assertEqual(
+            sorted(s for p, s in statuses.items() if p != "TRI001"),
+            [License.Status.CANCELED, License.Status.CANCELED],
+        )
+
     def test_cancelling_during_the_trial_ends_it_without_charge(self):
         """§8: uppsagt prov med tidigare betalningsgodkännande debiterar inte."""
         orders.cancel_subscription(self.company.id)

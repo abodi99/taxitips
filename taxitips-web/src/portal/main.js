@@ -53,7 +53,13 @@ async function boot() {
   }
 }
 
+// Inloggningen triggar både formulärets svar och `onAuthStateChange`; appen
+// ska bara startas en gång, annars renderas allt två gånger i otakt.
+let entered = false;
+
 async function enterApp(session) {
+  if (entered) return;
+  entered = true;
   el.login.hidden = true;
   el.app.hidden = false;
   el.logout.hidden = false;
@@ -64,7 +70,7 @@ async function enterApp(session) {
 async function refresh() {
   clearError();
   try {
-    state.data = await api.company();
+    state.data = await companyOrClaim();
     if (state.view === "abonnemang" && !state.orders) {
       state.orders = await api.orders();
     }
@@ -88,7 +94,72 @@ function render() {
   el.view.innerHTML = html ? html() : "";
 }
 
+/**
+ * Första inloggningen efter en inbjudan: kontot hör inte till något företag
+ * än. Servern knyter det till företaget som bjöd in e-postadressen -- och bara
+ * då; adressen läses ur den verifierade inloggningen, inte ur något vi skickar.
+ */
+async function companyOrClaim() {
+  try {
+    return await api.company();
+  } catch (error) {
+    if (!(error instanceof ApiError) || error.reason !== "missing_permission") throw error;
+    try {
+      await api.claimInvite();
+    } catch (claimError) {
+      if (claimError instanceof ApiError && claimError.reason === "no_invite") {
+        throw new ApiError(
+          403,
+          "Kontot är inte kopplat till något företag. Be den som sköter ert konto, " +
+            "eller Taxi Tips, att bjuda in din e-postadress.",
+          "no_company",
+        );
+      }
+      throw claimError;
+    }
+    return api.company();
+  }
+}
+
 /* --- Inloggning --------------------------------------------------------- */
+
+/**
+ * Inloggningslänk via e-post. `shouldCreateUser: false`: portalen skapar inga
+ * konton på egen hand. Ett inbjudet konto skapas när säljaren skickar den
+ * första länken; den här knappen ger en ny länk om den första hunnit gå ut.
+ */
+document.getElementById("magicLink")?.addEventListener("click", async () => {
+  el.loginError.hidden = true;
+  const email = String(new FormData(el.loginForm).get("email") ?? "").trim();
+  const sent = document.getElementById("magicSent");
+  if (!email) {
+    el.loginError.textContent = "Skriv din e-post först.";
+    el.loginError.hidden = false;
+    return;
+  }
+  try {
+    const { error } = await supabase().auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: `${window.location.origin}${window.location.pathname}`,
+      },
+    });
+    if (error) throw error;
+    sent.textContent = `Om ${email} har ett konto kommer en inloggningslänk strax.`;
+    sent.hidden = false;
+  } catch (error) {
+    el.loginError.textContent = error?.message ?? "Kunde inte skicka länken.";
+    el.loginError.hidden = false;
+  }
+});
+
+// Länken landar här med sessionen i URL:en; klienten plockar upp den själv.
+supabase().auth.onAuthStateChange((event, session) => {
+  if (event === "SIGNED_IN" && session && el.app.hidden) {
+    enterApp(session);
+  }
+});
 
 el.loginForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -281,10 +352,19 @@ async function buy(change) {
   if (!accepted) return;
 
   const order = await api.order(change);
-  if (order.status === "pending_payment") {
+  if (order.status === "pending_payment" && order.paymentUrl) {
+    // Stripes betalsida. Rättigheterna ges när Stripe bekräftat betalningen,
+    // inte när kunden kommer tillbaka hit.
+    const go = confirm(
+      "Beställningen väntar på betalning. Öppna betalsidan nu?\n\n" +
+        "Bilarna och länen aktiveras när betalningen har gått igenom.",
+    );
+    if (go) window.open(order.paymentUrl, "_blank", "noopener");
+  } else if (order.status === "pending_payment") {
     alert(
       "Beställningen är registrerad och väntar på betalning. Rättigheterna " +
-        "träder i kraft när betalningen har gått igenom.",
+        "träder i kraft när betalningen har gått igenom." +
+        (order.paymentError ? `\n\n${order.paymentError.message}` : ""),
     );
   } else if (order.status === "scheduled") {
     alert(

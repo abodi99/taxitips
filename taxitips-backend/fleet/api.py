@@ -31,6 +31,7 @@ from core.api import _json
 from fleet import (
     access,
     audit,
+    commerce,
     licensing,
     ownership,
     notifications,
@@ -40,6 +41,7 @@ from fleet import (
     ratelimit,
     risk,
     roles,
+    sales,
     sessions,
     trials,
 )
@@ -79,6 +81,7 @@ _DOMAIN_ERRORS = (
     risk.ReviewRequired,
     ratelimit.RateLimited,
     ownership.OwnershipError,
+    sales.SalesError,
     PermissionDenied,
 )
 
@@ -645,15 +648,22 @@ def create_order(request):
             "Kunden måste godkänna kvantitet, pris och betalningsdatum.",
         )
 
-    order = orders.create_order(
-        principal.company_id, plan, created_by=principal.user_id,
-        idempotency=body.get("idempotency_key"),
+    payment = str(body.get("payment") or commerce.PAYMENT_CARD)
+    if payment not in (commerce.PAYMENT_CARD, commerce.PAYMENT_INVOICE):
+        payment = commerce.PAYMENT_CARD
+    order, payment_info = commerce.place_order(
+        principal.company_id, plan, created_by=principal.user_id, actor_kind="customer",
+        payment=payment, idempotency=body.get("idempotency_key"),
     )
     notifications.order_confirmed(order)
     return _json(request, {
         "ok": True,
         "orderId": str(order.id),
         "status": order.status,
+        # Stripes betalsida. Rättigheterna ges när Stripe bekräftat betalningen,
+        # inte när kunden kommer tillbaka från sidan.
+        "paymentUrl": payment_info.get("paymentUrl"),
+        "paymentError": payment_info.get("stripeError"),
         "totalNowOre": order.total_now_ore,
         "nextPeriodTotalOre": order.next_period_total_ore,
         "effectiveAt": order.effective_at.isoformat() if order.effective_at else None,
@@ -680,6 +690,7 @@ def list_orders(request):
             "nextPeriodTotalOre": o.next_period_total_ore,
             "currency": o.currency, "lines": o.lines,
             "stripeInvoiceId": o.stripe_invoice_id,
+            "paymentUrl": o.stripe_payment_url or None,
             "paidAt": o.paid_at.isoformat() if o.paid_at else None,
             "priceVersion": o.price_version_id,
             "termsVersion": o.terms_version,
@@ -695,8 +706,8 @@ def list_orders(request):
 def cancel(request):
     """POST /api/fleet/subscription/cancel"""
     principal = _principal(request, Perm.CANCEL_SUBSCRIPTION)
-    change = orders.cancel_subscription(
-        principal.company_id, actor_user_id=principal.user_id,
+    change, _stripe = commerce.cancel_subscription(
+        principal.company_id, actor_user_id=principal.user_id, actor_kind="customer",
         reason=_body(request).get("reason", ""),
     )
     notifications.cancellation_confirmed(principal.company_id, change.effective_at)
@@ -716,8 +727,8 @@ def cancel(request):
 def undo_cancel(request):
     """POST /api/fleet/subscription/undo-cancel"""
     principal = _principal(request, Perm.CANCEL_SUBSCRIPTION)
-    subscription = orders.undo_cancellation(
-        principal.company_id, actor_user_id=principal.user_id
+    subscription, _stripe = commerce.undo_cancellation(
+        principal.company_id, actor_user_id=principal.user_id, actor_kind="customer"
     )
     return _json(request, {
         "ok": True,
@@ -817,6 +828,34 @@ def signup(request):
             else "Kortfri provperiod. Utan beställning avslutas provet utan debitering."
         ),
     })
+
+
+@csrf_exempt
+@require_POST
+@handle
+def claim_invite(request):
+    """
+    POST /api/fleet/claim-invite -- knyter det inloggade kontot till företaget
+    som en säljare bjöd in dess e-postadress till (fleet/sales.py).
+
+    E-postadressen läses ur den VERIFIERADE token, aldrig ur anropet: den som
+    kan skicka ett påstående om en adress bevisar ingenting.
+    """
+    from core.entitlement import verify_supabase_jwt
+
+    auth = request.headers.get("Authorization", "")
+    payload = verify_supabase_jwt(auth[7:].strip()) if auth.lower().startswith("bearer ") else None
+    if not payload:
+        raise PermissionDenied("login_required", "Logga in för att fortsätta.", status=401)
+    member = sales.claim_owner_invite(
+        user_id=payload.get("sub"), email=str(payload.get("email") or "")
+    )
+    if member is None:
+        return _json(request, {
+            "ok": False, "reason": "no_invite",
+            "message": "Det finns ingen inbjudan till den här e-postadressen.",
+        }, status=404)
+    return _json(request, {"ok": True, "companyId": str(member.company_id), "role": member.role})
 
 
 @require_GET

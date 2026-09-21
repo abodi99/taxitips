@@ -35,7 +35,7 @@ from django.views.decorators.http import require_GET, require_POST
 from billing.models import Company, CompanyMember, Device
 from core.api import _json
 from core.models import PushDelivery
-from fleet import access, audit, licensing, pairing, pricing, risk, roles, sessions
+from fleet import access, audit, licensing, pairing, pricing, risk, roles, sessions, trials
 from fleet.api import _DOMAIN_ERRORS, _error
 from fleet.models import (
     AuditEvent,
@@ -46,6 +46,7 @@ from fleet.models import (
     LicenseCounty,
     Order,
     OutboxMessage,
+    OwnerInvite,
     PendingChange,
     Subscription,
     SubscriptionStatus,
@@ -256,6 +257,9 @@ def _company_or_404(company_id) -> Company:
 @handle
 def company_detail(request, company_id):
     """GET /api/admin/companies/<id> -- allt om ett bolag, för en support-fråga."""
+    # admin_sales importerar härifrån; åt andra hållet går det bara i funktionen.
+    from fleet import admin_sales as admin_sales_rows
+
     _staff(request, Perm.ADMIN_VIEW)
     now = timezone.now()
     company = _company_or_404(company_id)
@@ -313,7 +317,13 @@ def company_detail(request, company_id):
         },
         "profile": (
             {"verificationStatus": profile.verification_status,
-             "legalName": profile.legal_name, "contactEmail": profile.contact_email,
+             "verificationNote": profile.verification_note,
+             "country": profile.country, "orgNumber": profile.org_number,
+             "legalName": profile.legal_name, "contactName": profile.contact_name,
+             "contactRole": profile.contact_role, "contactEmail": profile.contact_email,
+             "contactPhone": profile.contact_phone, "billingEmail": profile.billing_email,
+             "billingReference": profile.billing_reference,
+             "billingAddress": profile.billing_address or {},
              "legacyAccessUntil": _iso(profile.legacy_access_until),
              "legacyCounties": profile.legacy_counties}
             if profile else None
@@ -333,16 +343,21 @@ def company_detail(request, company_id):
         "trial": (
             {"status": trial.status, "source": trial.source,
              "startedAt": _iso(trial.started_at), "endsAt": _iso(trial.ends_at),
-             "vehicleLimit": trial.vehicle_limit}
+             "vehicleLimit": trial.vehicle_limit,
+             "vehicles": trials.trial_vehicle_count(trial)}
             if trial else None
         ),
+        "couponRedemptions": admin_sales_rows.redemptions_for(company.id),
+        "ownerInvites": [
+            {"id": str(i.id), "email": i.email, "status": i.status,
+             "expiresAt": _iso(i.expires_at), "consumedAt": _iso(i.consumed_at)}
+            for i in OwnerInvite.objects.filter(company_id=company.id).order_by("-created_at")[:10]
+        ],
         "licenses": licenses,
         "devices": devices,
         "members": members,
         "orders": [
-            {"id": str(o.id), "kind": o.kind, "status": o.status,
-             "totalNowOre": o.total_now_ore, "nextPeriodTotalOre": o.next_period_total_ore,
-             "createdAt": _iso(o.created_at), "paidAt": _iso(o.paid_at)}
+            admin_sales_rows._order_row(o)
             for o in Order.objects.filter(company_id=company.id).order_by("-created_at")[:30]
         ],
         "pendingChanges": [
@@ -434,7 +449,9 @@ def issue_code(request, company_id):
     kunden, när deras egen administratör inte kan skapa en. Samma regler som
     kundens egen väg: fem minuter, hashad, loggad.
     """
-    principal = _staff(request, Perm.ADMIN_MANAGE)
+    # Säljaren lägger till förarna under samma samtal som paketet, så
+    # koderna kräver säljbehörighet -- inte administratörens.
+    principal = _staff(request, Perm.ADMIN_SELL)
     body = _body(request)
     company = _company_or_404(company_id)
     license = License.objects.filter(id=body.get("license_id"), company_id=company.id).first()

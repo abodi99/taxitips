@@ -310,6 +310,12 @@ class Trial(models.Model):
     class Source(models.TextChoices):
         SELF_SIGNUP = "self_signup", "Självregistrering"
         SALES_INVITE = "sales_invite", "Säljarinbjudan"
+        # Upplagt av en säljare i adminwebben under ett samtal (fleet/sales.py).
+        SALES = "sales", "Säljare"
+        # Tillfällig åtkomst från en kupong. Samma rad som ett prov, för att
+        # samma regler ska gälla: provbilar debiteras aldrig av sig själva och
+        # avslutas utan kostnad om ingen beställer (fleet/sales.py).
+        COUPON = "coupon", "Kupong"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     company_id = models.UUIDField()
@@ -338,6 +344,113 @@ class Trial(models.Model):
                 fields=["company_id"],
                 condition=Q(status__in=["pending", "active"]),
                 name="fleet_one_open_trial_per_company",
+            ),
+        ]
+
+
+class Coupon(models.Model):
+    """
+    Kupong: ett antal gratisdagar som plattformsadministratören skapar och
+    säljaren löser in åt ett företag.
+
+    Vad dagarna BLIR beror på företagets läge när kupongen löses in, och
+    avgörs på servern (fleet/sales.py), inte av säljaren:
+
+    * utan betalande abonnemang -- tillfällig åtkomst i `days` dagar för högst
+      `vehicle_limit` bilar, som slutar utan debitering;
+    * med abonnemang i Stripe -- nästa debitering flyttas `days` dagar;
+    * med ett abonnemang som betalas utanför Stripe -- perioden förlängs.
+
+    **Koden sparas i klartext**, till skillnad från parkopplings- och
+    inbjudningskoderna. Den är en kampanjkod som ska kunna läsas upp i
+    telefon och delas ut igen, inte en inloggning: den ger ingen åtkomst till
+    något konto, bara gratisdagar åt det företag säljaren löser in den för,
+    och den begränsas av `max_redemptions`, `valid_until` och en inlösen per
+    företag.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    code = models.CharField(max_length=32, unique=True)
+    description = models.TextField(blank=True, default="")
+    days = models.IntegerField()
+    vehicle_limit = models.IntegerField(default=3)
+    # NULL = obegränsat antal inlösen.
+    max_redemptions = models.IntegerField(null=True, blank=True)
+    redemption_count = models.IntegerField(default=0)
+    valid_until = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_by = models.UUIDField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    deactivated_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "fleet_coupon"
+
+
+class CouponRedemption(models.Model):
+    """En inlöst kupong: vilket företag, vad den blev och vem som löste in den."""
+
+    class Effect(models.TextChoices):
+        TEMPORARY_ACCESS = "temporary_access", "Tillfällig åtkomst"
+        BILLING_DEFERRED = "billing_deferred", "Nästa debitering flyttad"
+        PERIOD_EXTENDED = "period_extended", "Perioden förlängd"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    coupon = models.ForeignKey(Coupon, on_delete=models.PROTECT, related_name="redemptions")
+    company_id = models.UUIDField()
+    effect = models.CharField(max_length=20, choices=Effect.choices)
+    days = models.IntegerField()
+    trial = models.ForeignKey(Trial, null=True, blank=True, on_delete=models.SET_NULL)
+    detail = models.JSONField(default=dict, blank=True)
+    redeemed_by = models.UUIDField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "fleet_coupon_redemption"
+        constraints = [
+            # En kupong ger ett företag dagarna en gång. Två säljare som löser
+            # in samma kod samtidigt ger en inlösen, inte två.
+            models.UniqueConstraint(
+                fields=["coupon", "company_id"], name="fleet_coupon_once_per_company"
+            ),
+        ]
+
+
+class OwnerInvite(models.Model):
+    """
+    Inbjudan till kundens egen administratör, skapad av säljaren.
+
+    Ingen kod och ingen länk med hemlighet: inbjudan knyts till en e-postadress,
+    och den löses in när någon loggar in i kundportalen med just den adressen
+    (fleet/api.py:claim_invite). Supabase Auth har då redan verifierat att
+    personen kommer åt adressen -- det är det enda beviset som behövs, och det
+    kan inte vidarebefordras som en kod kan.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Väntar"
+        CONSUMED = "consumed", "Använd"
+        REVOKED = "revoked", "Återkallad"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    company_id = models.UUIDField()
+    email = models.TextField()
+    role = models.CharField(max_length=32, default="company_owner")
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    created_by = models.UUIDField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    consumed_at = models.DateTimeField(null=True, blank=True)
+    consumed_by_user = models.UUIDField(null=True, blank=True)
+
+    class Meta:
+        db_table = "fleet_owner_invite"
+        indexes = [models.Index(fields=["email", "status"])]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company_id", "email"],
+                condition=Q(status="pending"),
+                name="fleet_one_pending_owner_invite",
             ),
         ]
 
@@ -766,6 +879,10 @@ class Order(models.Model):
 
     idempotency_key = models.CharField(max_length=64, unique=True, null=True, blank=True)
     stripe_invoice_id = models.TextField(blank=True, default="")
+    # Stripes betalsida för fakturan (`hosted_invoice_url`). Ingen hemlighet --
+    # den visar fakturan och tar emot betalningen -- men den visas bara för
+    # kundens egna administratörer och plattformens personal.
+    stripe_payment_url = models.TextField(blank=True, default="")
     stripe_payment_intent_id = models.TextField(blank=True, default="")
     stripe_checkout_session_id = models.TextField(blank=True, default="")
     paid_at = models.DateTimeField(null=True, blank=True)

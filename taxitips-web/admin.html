@@ -56,6 +56,8 @@
       <nav class="tabs" role="tablist" aria-label="Adminvyer">
         <button class="tab" role="tab" data-view="oversikt" aria-selected="true">Översikt</button>
         <button class="tab" role="tab" data-view="kunder" aria-selected="false">Kunder</button>
+        <button class="tab" role="tab" data-view="nykund" aria-selected="false">Ny kund</button>
+        <button class="tab" role="tab" data-view="kuponger" aria-selected="false">Kuponger</button>
         <button class="tab" role="tab" data-view="abonnemang" aria-selected="false">Abonnemang</button>
         <button class="tab" role="tab" data-view="notiser" aria-selected="false">Notiser</button>
         <button class="tab" role="tab" data-view="evenemang" aria-selected="false">Evenemang</button>
@@ -67,12 +69,17 @@
   </main>
 
   <dialog id="codeDialog" class="code-dialog">
-    <h2>Anslutningskod</h2>
+    <h2>Förarkod</h2>
     <p class="muted" id="codeFor"></p>
     <p class="code" id="codeValue"></p>
-    <p class="muted">Gäller i fem minuter. Läs upp den för föraren, som skriver
-      in den under <em>Anslut telefonen</em>. Visas bara en gång.</p>
-    <form method="dialog"><button class="btn btn-primary">Klar</button></form>
+    <p class="code-timer" id="codeTimer" aria-live="polite"></p>
+    <p class="muted">Läs upp koden för föraren, som öppnar appen och skriver in
+      den under <em>Anslut telefonen</em>. Visas bara en gång. En ny kod för
+      samma bil ersätter den här, så ta förarna i samma bil en i taget.</p>
+    <form method="dialog" class="btn-row">
+      <button class="btn btn-quiet" value="next" id="codeNext">Nästa förare i samma bil</button>
+      <button class="btn btn-primary" value="done">Klar</button>
+    </form>
   </dialog>
 
   <script type="module" src="/src/admin/main.js"></script>

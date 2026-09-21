@@ -198,12 +198,14 @@ def end_trial(trial: Trial, *, reason: str, converted: bool = False, now=None) -
     Trial.objects.filter(id=trial.id).update(
         status=status, ended_reason=reason[:200], ends_at=trial.ends_at or now
     )
-    if not converted:
-        # Provbilar som ingen beställt vidare avslutas. Antalet provbilar blir
-        # aldrig ett debiterat antal av sig självt.
-        License.objects.filter(trial=trial, status=License.Status.TRIAL).update(
-            status=License.Status.CANCELED, canceled_at=now, ends_at=now
-        )
+    # Provbilar som ingen beställt vidare avslutas -- både när provet tar slut
+    # och när en beställning tagit över. Vid en övergång har de beställda redan
+    # blivit aktiva (orders.apply_order); de som är kvar som `trial` valdes
+    # bort. Att låta dem ligga kvar hade gett dem gratis åtkomst så länge
+    # bolaget har en betald period, eftersom provlicenser släpps igenom.
+    License.objects.filter(trial=trial, status=License.Status.TRIAL).update(
+        status=License.Status.CANCELED, canceled_at=now, ends_at=now
+    )
     trial.refresh_from_db()
     audit.record(
         "trial_ended", company_id=trial.company_id, actor_kind="system",

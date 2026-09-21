@@ -1,4 +1,5 @@
 import { countyName, date, dateTime, money } from "../portal/api.js";
+import { ordersCard, redemptionsCard, salesPanel } from "./sales.js";
 
 /**
  * Adminwebbens vyer, som rena funktioner från data till HTML.
@@ -31,6 +32,13 @@ const STATUS = {
   open: ["pill-warn", "Öppen"],
   approved: ["pill-ok", "Godkänd"],
   rejected: ["pill-danger", "Avslagen"],
+};
+
+const TRIAL_SOURCE = {
+  self_signup: "självregistrering",
+  sales_invite: "säljarinbjudan",
+  sales: "upplagt av säljare",
+  coupon: "kupong",
 };
 
 function pill(status) {
@@ -115,7 +123,7 @@ export function kunder(list, query = "") {
   `;
 }
 
-export function kund(d) {
+export function kund(d, config = null) {
   const c = d.company;
   const s = d.subscription;
   const access = d.access ?? {};
@@ -157,23 +165,26 @@ export function kund(d) {
             ${s.cancelAtPeriodEnd ? `<dt>Uppsagt</dt><dd>till ${esc(date(s.accessUntil))}</dd>` : ""}
             <dt>Stripe</dt><dd class="mono">${esc(s.stripeSubscriptionId || "—")}</dd>
           </dl>` : '<p class="muted">Inget abonnemang i den nya modellen.</p>'}
+        ${config?.canManage ? `
         <h3 style="margin-top:1rem">Supportåtgärd</h3>
         <p class="muted">Ändrar appens rättigheter, inte Stripe. Loggas.</p>
         <div class="btn-row">
           <button class="btn btn-quiet" data-action="extend" data-days="7">+7 dagar</button>
           <button class="btn btn-quiet" data-action="extend" data-days="30">+30 dagar</button>
           <button class="btn btn-quiet" data-action="test-push">Testnotis</button>
-        </div>
+        </div>` : ""}
       </div>
     </div>
 
     ${d.trial ? `
       <div class="card">
-        <h2>Prov</h2>
-        <p>${pill(d.trial.status)} ${esc(d.trial.source)} ·
-          ${d.trial.startedAt ? `${esc(dateTime(d.trial.startedAt))} – ${esc(dateTime(d.trial.endsAt))}` : "inte startat"}
-          · högst ${esc(d.trial.vehicleLimit)} bilar</p>
+        <h2>${d.trial.source === "coupon" ? "Tillfällig åtkomst" : "Prov"}</h2>
+        <p>${pill(d.trial.status)} ${esc(TRIAL_SOURCE[d.trial.source] ?? d.trial.source)} ·
+          ${d.trial.startedAt ? `${esc(dateTime(d.trial.startedAt))} – ${esc(dateTime(d.trial.endsAt))}` : "startar när första telefonen ansluts"}
+          · ${esc(d.trial.vehicles ?? 0)} av högst ${esc(d.trial.vehicleLimit)} bilar</p>
       </div>` : ""}
+
+    ${salesPanel(d, config)}
 
     <div class="card">
       <h2>Licenser och bilar</h2>
@@ -191,10 +202,17 @@ export function kund(d) {
               <span>${esc(a.label || "Telefon")} · godkänd ${esc(date(a.approvedAt))}</span>
               <button class="btn btn-danger" data-action="block" data-approval="${esc(a.id)}">Spärra</button>
             </div>`).join("")}
-          <div class="btn-row">
+          ${["active", "trial", "pending_cancel"].includes(l.status) ? `<div class="btn-row">
             <button class="btn btn-primary" data-action="code" data-license="${esc(l.id)}"
-              data-plate="${esc(l.vehicle)}">Anslutningskod</button>
-          </div>
+              data-plate="${esc(l.vehicle)}">Lägg till förare</button>
+            ${config?.canSell && l.status === "active" ? `
+              <select data-county-for="${esc(l.id)}" aria-label="Län">${(config.counties ?? [])
+                .filter((c) => !(l.counties ?? []).includes(c.code))
+                .map((c) => `<option value="${esc(c.code)}">${esc(c.name)}</option>`).join("")}</select>
+              <button class="btn btn-quiet" data-action="lic-add-county" data-license="${esc(l.id)}">+ Län</button>
+              <button class="btn btn-quiet" data-action="lic-cancel" data-license="${esc(l.id)}"
+                data-plate="${esc(l.vehicle)}">Avsluta bilen vid förnyelse</button>` : ""}
+          </div>` : ""}
         </div>`).join("") : '<p class="muted">Inga licenser.</p>'}
     </div>
 
@@ -210,15 +228,8 @@ export function kund(d) {
         </tr>`).join("")}</tbody></table>
     </div>
 
-    <div class="card">
-      <h2>Beställningar</h2>
-      ${d.orders.length ? `<table><thead><tr><th>Datum</th><th>Typ</th><th>Status</th><th>Nu</th><th>Nästa period</th></tr></thead>
-      <tbody>${d.orders.map((o) => `
-        <tr><td data-label="Datum">${esc(date(o.createdAt))}</td><td data-label="Typ">${esc(o.kind)}</td>
-          <td data-label="Status">${esc(o.status)}</td><td data-label="Nu">${esc(money(o.totalNowOre))}</td>
-          <td data-label="Nästa">${esc(money(o.nextPeriodTotalOre))}</td></tr>`).join("")}</tbody></table>`
-        : '<p class="muted">Inga beställningar.</p>'}
-    </div>
+    ${ordersCard(d.orders, config)}
+    ${redemptionsCard(d.couponRedemptions)}
 
     <div class="card">
       <h2>Händelselogg</h2>

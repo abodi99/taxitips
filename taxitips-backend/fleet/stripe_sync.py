@@ -92,14 +92,56 @@ def ensure_customer(company: Company, subscription: Subscription) -> str:
         return existing
 
     customer = stripe.Customer.create(
-        email=company.email or None,
-        name=company.name,
-        metadata={"company_id": str(company.id), "org_number": company.org_number or ""},
-        idempotency_key=f"customer:{company.id}",
+        idempotency_key=f"customer:{company.id}", **_customer_fields(company)
     )
     Subscription.objects.filter(id=subscription.id).update(stripe_customer_id=customer.id)
     Company.objects.filter(id=company.id).update(stripe_customer_id=customer.id)
     return customer.id
+
+
+def _customer_fields(company: Company) -> dict:
+    """
+    Namn, fakturamejl, telefon och adress från företagsprofilen. En svensk
+    faktura ska bära mottagarens adress och organisationsnummer; utan dem är
+    den inte användbar i kundens bokföring.
+    """
+    from fleet.models import CompanyProfile
+
+    profile = CompanyProfile.objects.filter(company_id=company.id).first()
+    fields = {
+        "name": (profile.legal_name if profile and profile.legal_name else company.name),
+        "email": ((profile.billing_email if profile else "") or company.email or None),
+        "preferred_locales": ["sv"],
+        "metadata": {"company_id": str(company.id), "org_number": company.org_number or ""},
+    }
+    if profile and profile.contact_phone:
+        fields["phone"] = profile.contact_phone
+    address = (profile.billing_address if profile else None) or {}
+    if address.get("line1"):
+        fields["address"] = {
+            "line1": address.get("line1", ""),
+            "line2": address.get("line2", "") or None,
+            "postal_code": address.get("postal_code", ""),
+            "city": address.get("city", ""),
+            "country": (address.get("country") or (profile.country if profile else "SE")),
+        }
+        fields["address"] = {k: v for k, v in fields["address"].items() if v}
+    if profile and profile.billing_reference:
+        fields["invoice_settings"] = {
+            "custom_fields": [{"name": "Er referens", "value": profile.billing_reference[:30]}]
+        }
+    return fields
+
+
+def update_customer(company: Company, subscription: Subscription) -> None:
+    """Skickar ändrade kunduppgifter till Stripe, om kunden finns där."""
+    stripe = _client()
+    customer_id = subscription.stripe_customer_id or (company.stripe_customer_id or "")
+    if not customer_id:
+        return
+    fields = _customer_fields(company)
+    fields.pop("preferred_locales", None)
+    stripe.Customer.modify(customer_id, **fields)
 
 
 @dataclass(frozen=True)
@@ -123,19 +165,7 @@ def sync_subscription_amount(
     company = Company.objects.get(id=subscription.company_id)
     customer_id = ensure_customer(company, subscription)
     price = subscription.price_version
-
-    item = {
-        "price_data": {
-            "currency": price.currency.lower(),
-            "product": getattr(settings, "STRIPE_PRODUCT_ID", "") or None,
-            "unit_amount": monthly_amount_ore,
-            "recurring": {"interval": "month"},
-        },
-        "quantity": 1,
-        "tax_rates": _vat_tax_rates() or None,
-    }
-    item["price_data"] = {k: v for k, v in item["price_data"].items() if v is not None}
-    item = {k: v for k, v in item.items() if v is not None}
+    item = _monthly_item(subscription, monthly_amount_ore)
 
     metadata = {
         "company_id": str(subscription.company_id),
@@ -166,12 +196,36 @@ def sync_subscription_amount(
     return SyncResult(created.id, monthly_amount_ore, created=True)
 
 
-def charge_order(order: Order) -> str:
+COLLECTION_METHODS = ("charge_automatically", "send_invoice")
+
+
+def _collection(collection_method: str, days_until_due: int) -> dict:
+    """
+    Kort (`charge_automatically`) eller faktura (`send_invoice`).
+
+    Kort: kunden betalar på Stripes betalsida, och kortet sparas för
+    förnyelserna. Faktura: Stripe mejlar en faktura med förfallodag -- det
+    vanliga för ett taxibolag som vill ha papper på det.
+    """
+    if collection_method not in COLLECTION_METHODS:
+        raise ValueError(f"okänt betalsätt: {collection_method}")
+    if collection_method == "send_invoice":
+        return {
+            "collection_method": "send_invoice",
+            "days_until_due": max(1, min(int(days_until_due or 14), 60)),
+        }
+    return {"collection_method": "charge_automatically"}
+
+
+def charge_order(
+    order: Order, *, collection_method: str = "charge_automatically", days_until_due: int = 14
+):
     """
     Debiterar en uppgradering: en egen faktura med vårt proportionerade belopp.
 
     `idempotency_key` är orderns id. Ett återförsök efter en timeout skapar
     därför aldrig en andra debitering -- Stripe returnerar samma objekt (§11).
+    Returnerar den slutförda fakturan.
     """
     stripe = _client()
     subscription = Subscription.objects.get(company_id=order.company_id)
@@ -190,14 +244,245 @@ def charge_order(order: Order) -> str:
         )
     invoice = stripe.Invoice.create(
         customer=customer_id,
-        collection_method="charge_automatically",
         auto_advance=True,
+        # Bara posterna ovan. Utan flaggan hade en annan väntande post hos
+        # kunden hamnat på den här fakturan.
+        pending_invoice_items_behavior="include",
         metadata={"order_id": str(order.id), "company_id": str(order.company_id)},
         idempotency_key=f"invoice:{order.id}",
+        **_collection(collection_method, days_until_due),
     )
-    stripe.Invoice.finalize_invoice(invoice.id, idempotency_key=f"finalize:{order.id}")
+    invoice = stripe.Invoice.finalize_invoice(invoice.id, idempotency_key=f"finalize:{order.id}")
     Order.objects.filter(id=order.id).update(stripe_invoice_id=invoice.id)
-    return invoice.id
+    return invoice
+
+
+def collect_order(
+    order: Order, *, collection_method: str = "charge_automatically", days_until_due: int = 14
+) -> str:
+    """
+    Tar betalt för en beställning som väntar på betalning. Returnerar länken
+    till Stripes betalsida.
+
+    * **Första beställningen** (inget abonnemang i Stripe): abonnemanget skapas
+      med vårt månadsbelopp, och dess första faktura ÄR betalningen. Beloppet
+      är det kunden godkände (`amount_now_ore`); förnyelserna följer
+      `sync_company_amount` när beställningen är betald.
+    * **Uppgradering**: en egen faktura med det proportionerade beloppet
+      (`charge_order`). Månadsbeloppet i Stripe ändras först när den är
+      betald -- en obetald uppgradering får inte höja nästa faktura.
+
+    Rättigheterna ges fortfarande bara av webhooken eller avstämningen, när
+    Stripe säger att fakturan är betald. Idempotent: en order som redan har en
+    faktura får samma länk tillbaka.
+    """
+    stripe = _client()
+    order.refresh_from_db()
+    if order.status != Order.Status.PENDING_PAYMENT:
+        raise ValueError(f"ordern väntar inte på betalning ({order.status})")
+    if order.stripe_invoice_id:
+        return order.stripe_payment_url or _invoice_url(order.stripe_invoice_id)
+
+    subscription = Subscription.objects.get(company_id=order.company_id)
+    company = Company.objects.get(id=order.company_id)
+    customer_id = ensure_customer(company, subscription)
+    collection = _collection(collection_method, days_until_due)
+
+    if not subscription.stripe_subscription_id:
+        created = stripe.Subscription.create(
+            customer=customer_id,
+            items=[_monthly_item(subscription, order.amount_now_ore)],
+            metadata={
+                "company_id": str(order.company_id),
+                "order_id": str(order.id),
+                "licenses": str(order.quantity_after),
+                "price_version": subscription.price_version_id,
+            },
+            payment_behavior="default_incomplete",
+            payment_settings={"save_default_payment_method": "on_subscription"},
+            expand=["latest_invoice"],
+            idempotency_key=f"sub:{order.id}",
+            **collection,
+        )
+        Subscription.objects.filter(id=subscription.id).update(
+            stripe_subscription_id=created.id
+        )
+        invoice = created.latest_invoice
+        if isinstance(invoice, str):
+            invoice = stripe.Invoice.retrieve(invoice)
+        if invoice.status == "draft":
+            invoice = stripe.Invoice.finalize_invoice(
+                invoice.id, idempotency_key=f"finalize:{order.id}"
+            )
+        # Fakturan skapades av abonnemanget och bär inte orderns id. Webhooken
+        # hittar ordern på fakturans id; metadata är för den som läser i
+        # Stripes dashboard.
+        stripe.Invoice.modify(
+            invoice.id, metadata={"order_id": str(order.id), "company_id": str(order.company_id)}
+        )
+    else:
+        invoice = charge_order(order, collection_method=collection_method, days_until_due=days_until_due)
+
+    if collection["collection_method"] == "send_invoice":
+        stripe.Invoice.send_invoice(invoice.id)
+
+    url = getattr(invoice, "hosted_invoice_url", "") or ""
+    Order.objects.filter(id=order.id).update(stripe_invoice_id=invoice.id, stripe_payment_url=url)
+    audit.record(
+        "order_payment_requested", company_id=order.company_id, actor_kind="system",
+        subject_type="order", subject_id=order.id,
+        detail={"invoice": invoice.id, "collection_method": collection["collection_method"],
+                "total_now_ore": order.total_now_ore},
+    )
+    return url
+
+
+def _invoice_url(invoice_id: str) -> str:
+    stripe = _client()
+    invoice = stripe.Invoice.retrieve(invoice_id)
+    return getattr(invoice, "hosted_invoice_url", "") or ""
+
+
+def _monthly_item(subscription: Subscription, amount_ore: int) -> dict:
+    price = subscription.price_version
+    price_data = {
+        "currency": price.currency.lower(),
+        "unit_amount": int(amount_ore),
+        "recurring": {"interval": "month"},
+    }
+    product = getattr(settings, "STRIPE_PRODUCT_ID", "") or ""
+    if product:
+        price_data["product"] = product
+    else:
+        # Utan produkt-id kräver Stripe ett produktnamn i price_data.
+        price_data["product_data"] = {"name": "TaxiTips billicenser"}
+    item = {"price_data": price_data, "quantity": 1}
+    rates = _vat_tax_rates()
+    if rates:
+        item["tax_rates"] = rates
+    return item
+
+
+def fetch_invoice(invoice_id: str) -> dict:
+    """Fakturan som Stripe ser den just nu -- för avstämning av en enskild order."""
+    stripe = _client()
+    invoice = stripe.Invoice.retrieve(invoice_id)
+    return invoice.to_dict() if hasattr(invoice, "to_dict") else dict(invoice)
+
+
+def void_order_invoice(order: Order) -> None:
+    """
+    Makulerar en obetald orderfaktura. Var det den första beställningen
+    avslutas också abonnemanget den skapade -- annars hade Stripe försökt
+    driva in det i ett dygn och sedan lämnat ett dött abonnemang kvar.
+    """
+    stripe = _client()
+    if not order.stripe_invoice_id:
+        return
+    invoice = stripe.Invoice.retrieve(order.stripe_invoice_id)
+    if invoice.status in ("open", "draft"):
+        if invoice.status == "draft":
+            stripe.Invoice.delete(invoice.id)
+        else:
+            stripe.Invoice.void_invoice(invoice.id)
+    subscription = Subscription.objects.filter(company_id=order.company_id).first()
+    sub_id = getattr(invoice, "subscription", None)
+    if subscription and sub_id and sub_id == subscription.stripe_subscription_id:
+        remote = stripe.Subscription.retrieve(sub_id)
+        if remote.status in ("incomplete", "incomplete_expired"):
+            if remote.status == "incomplete":
+                stripe.Subscription.cancel(sub_id)
+            Subscription.objects.filter(id=subscription.id).update(stripe_subscription_id="")
+
+
+def sync_company_amount(company_id) -> SyncResult | None:
+    """
+    Låter månadsbeloppet i Stripe följa bilarna och länen hos oss.
+
+    Körs när en beställning har verkställts och när en minskning schemalagts,
+    med `proration_behavior="none"`: det som ändras är NÄSTA faktura, aldrig
+    en retroaktiv post. Gör ingenting för ett företag utan abonnemang i Stripe.
+    """
+    from fleet import licensing, pricing
+
+    subscription = Subscription.objects.filter(company_id=company_id).select_related(
+        "price_version"
+    ).first()
+    if subscription is None or not subscription.stripe_subscription_id:
+        return None
+    now = timezone.now()
+    licenses = licensing.billable_license_count(company_id)
+    extras = licensing.extra_county_count(company_id, now)
+    intro_next = bool(
+        subscription.intro_ends_at and subscription.current_period_end
+        and subscription.current_period_end < subscription.intro_ends_at
+    )
+    quote = pricing.monthly_quote(
+        subscription.price_version, licenses=licenses, extra_counties=extras, intro=intro_next
+    )
+    return sync_subscription_amount(
+        subscription, monthly_amount_ore=quote.amount_ore, licenses=licenses,
+        extra_counties=extras,
+    )
+
+
+def set_cancel_at_period_end(subscription: Subscription, flag: bool) -> None:
+    """Uppsägning till periodens slut, eller ångrad uppsägning, i Stripe."""
+    stripe = _client()
+    if not subscription.stripe_subscription_id:
+        return
+    if flag:
+        cancel_stripe_subscription(subscription, at_period_end=True)
+    else:
+        stripe.Subscription.modify(subscription.stripe_subscription_id, cancel_at_period_end=False)
+
+
+def defer_billing(subscription: Subscription, days: int):
+    """
+    Gratisdagar på ett abonnemang i Stripe: nästa debitering flyttas `days`
+    dagar framåt.
+
+    Görs med `trial_end`, som Stripe själv beskriver som sättet att skjuta
+    fram nästa fakturadatum på ett löpande abonnemang. `proration_behavior=
+    "none"`, annars hade Stripe krediterat resten av perioden och lagt en
+    extra post på nästa faktura. Abonnemanget står som `trialing` hos Stripe
+    tills dess; åtkomstkontrollen läser det som betald period
+    (fleet/access.py:company_window). Returnerar det nya datumet.
+    """
+    from datetime import datetime, timedelta, timezone as dt_timezone
+
+    stripe = _client()
+    remote = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+    candidates = [remote.get("trial_end"), remote.get("current_period_end")]
+    base_ts = max([int(c) for c in candidates if c] or [0])
+    base = max(
+        datetime.fromtimestamp(base_ts, tz=dt_timezone.utc) if base_ts else timezone.now(),
+        timezone.now(),
+    )
+    new_end = base + timedelta(days=int(days))
+    stripe.Subscription.modify(
+        subscription.stripe_subscription_id,
+        trial_end=int(new_end.timestamp()),
+        proration_behavior="none",
+    )
+    return new_end
+
+
+def status() -> dict:
+    """Stripe-läget för adminwebben: går det att ta betalt, och i vilket läge."""
+    key = getattr(settings, "STRIPE_SECRET_KEY", "") or ""
+    live = key.startswith(("sk_live_", "rk_live_"))
+    try:
+        _client()
+        ok, reason = True, ""
+    except StripeUnavailable as exc:
+        ok, reason = False, str(exc)
+    return {
+        "available": ok,
+        "mode": "live" if live else ("test" if key else "none"),
+        "reason": reason,
+        "problems": check_billing_config(),
+    }
 
 
 def cancel_stripe_subscription(subscription: Subscription, *, at_period_end: bool = True) -> None:
@@ -225,6 +510,11 @@ def cancel_stripe_subscription(subscription: Subscription, *, at_period_end: boo
         )
     else:
         stripe.Subscription.cancel(subscription.stripe_subscription_id)
+
+
+def cancel_now(subscription: Subscription) -> None:
+    """Avslutar abonnemanget i Stripe direkt, utan återbetalning."""
+    cancel_stripe_subscription(subscription, at_period_end=False)
 
 
 def billing_portal_url(subscription: Subscription, return_url: str) -> str:

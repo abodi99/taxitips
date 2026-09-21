@@ -313,6 +313,7 @@ def create_order(
     created_by=None,
     now=None,
     idempotency: str | None = None,
+    actor_kind: str = "customer",
 ) -> Order:
     """
     Skapar beställningen. Ändrar INGA rättigheter -- det gör `apply_order`,
@@ -361,7 +362,7 @@ def create_order(
 
     audit.record(
         "order_created", company_id=company_id, actor_user_id=created_by,
-        actor_kind="customer", subject_type="order", subject_id=order.id,
+        actor_kind=actor_kind, subject_type="order", subject_id=order.id,
         detail={
             "kind": plan.kind, "status": status,
             "total_now_ore": plan.quote.now.total_ore,
@@ -472,6 +473,14 @@ def apply_order(order: Order, *, now=None) -> Order:
         )
         if existing is not None:
             License.objects.filter(id=existing.id).update(status=License.Status.ACTIVE)
+            # Län som provades men inte beställdes följer inte med in i det
+            # betalda: annars hade nästa faktura burit län kunden aldrig
+            # godkänt, eftersom extra län räknas på aktiva licenser.
+            LicenseCounty.objects.filter(
+                license=existing, kind=LicenseCounty.Kind.EXTRA
+            ).exclude(county_code__in=list(spec.get("extraCounties", []))).exclude(
+                active_to__lte=now
+            ).update(active_to=now)
             existing.refresh_from_db()
             license = existing
         else:
@@ -525,7 +534,12 @@ def apply_order(order: Order, *, now=None) -> Order:
     Order.objects.filter(id=locked.id).update(status=Order.Status.APPLIED)
     locked.refresh_from_db()
 
-    if created_licenses and trial is not None and trial.status == Trial.Status.ACTIVE:
+    # Även ett prov som ännu inte startat (ingen telefon ansluten) avslutas:
+    # annars hade dess provbilar kunnat anslutas senare och köra gratis på
+    # bolagets betalda period.
+    if created_licenses and trial is not None and trial.status in (
+        Trial.Status.PENDING, Trial.Status.ACTIVE
+    ):
         # Kunden har uttryckligen beställt vilka bilar som fortsätter. Provet
         # övergår till betalning -- aldrig av sig självt (§8).
         from fleet import trials
@@ -583,7 +597,9 @@ def mark_order_failed(order: Order, *, reason: str, now=None) -> Order:
 
 
 @transaction.atomic
-def cancel_subscription(company_id, *, actor_user_id=None, reason: str = "", now=None) -> PendingChange:
+def cancel_subscription(
+    company_id, *, actor_user_id=None, reason: str = "", now=None, actor_kind: str = "customer"
+) -> PendingChange:
     """
     Säger upp abonnemanget till periodens slut.
 
@@ -634,14 +650,16 @@ def cancel_subscription(company_id, *, actor_user_id=None, reason: str = "", now
 
     audit.record(
         "subscription_canceled", company_id=company_id, actor_user_id=actor_user_id,
-        actor_kind="customer", subject_type="subscription", subject_id=subscription.id,
+        actor_kind=actor_kind, subject_type="subscription", subject_id=subscription.id,
         detail={"effective_at": effective_at.isoformat(), "reason": reason[:500]},
     )
     return change
 
 
 @transaction.atomic
-def undo_cancellation(company_id, *, actor_user_id=None, now=None) -> Subscription:
+def undo_cancellation(
+    company_id, *, actor_user_id=None, now=None, actor_kind: str = "customer"
+) -> Subscription:
     """
     Ångrar uppsägningen före slutdatum. Historiken för introduktion och provtid
     behålls -- inget av det rörs här, och det är avsikten (§8).
@@ -666,7 +684,7 @@ def undo_cancellation(company_id, *, actor_user_id=None, now=None) -> Subscripti
     subscription.refresh_from_db()
     audit.record(
         "subscription_cancellation_undone", company_id=company_id,
-        actor_user_id=actor_user_id, actor_kind="customer",
+        actor_user_id=actor_user_id, actor_kind=actor_kind,
         subject_type="subscription", subject_id=subscription.id, detail={},
     )
     return subscription

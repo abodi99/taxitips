@@ -86,10 +86,19 @@ class AdminAccessTests(FleetTestCase):
         )
         self.assertEqual(response.status_code, 403)
 
-    def test_sales_cannot_open_the_admin(self):
+    def test_sales_can_open_customers_but_not_change_access_by_hand(self):
+        """
+        Sedan säljflödet ser säljaren kunderna -- men att ändra status eller
+        förlänga en period utan betalning är fortfarande administratörens.
+        """
         sales_id = str(uuid.uuid4())
         StaffRole.objects.create(user_id=sales_id, role=StaffRole.Role.SALES)
-        self.assertEqual(self.get("/api/admin/companies", sales_id).status_code, 403)
+        company_id = self.data["company"].id
+        self.assertEqual(self.get("/api/admin/companies", sales_id).status_code, 200)
+        response = self.post(
+            f"/api/admin/companies/{company_id}/subscription", sales_id, {"extendDays": 30}
+        )
+        self.assertEqual(response.status_code, 403)
 
     def test_an_inactive_staff_role_grants_nothing(self):
         StaffRole.objects.filter(user_id=self.admin_id).update(is_active=False)

@@ -359,7 +359,8 @@ def quote_change(
         intro=intro_next_period,
     )
 
-    if period_start and period_end and period_end > period_start:
+    first_period = not (period_start and period_end and period_end > period_start)
+    if not first_period:
         remaining, total = proration_factor(now, period_start, period_end)
     else:
         # Ingen löpande period ännu: det här är företagets FÖRSTA beställning,
@@ -394,8 +395,13 @@ def quote_change(
                 quantity=line.quantity,
                 unit_price_ore=line.unit_price_ore,
                 amount_ore=prorated,
+                # Första beställningen har ingen period att proportionera mot:
+                # en hel månad betalas i förskott, och raden ska säga just det
+                # -- inte "0 av 0 dagar".
                 note=(
-                    f"Proportionellt för återstående del av perioden "
+                    "Första månaden, betalas i förskott."
+                    if first_period
+                    else f"Proportionellt för återstående del av perioden "
                     f"({_days(remaining)} av {_days(total)} dagar)."
                 ),
             )

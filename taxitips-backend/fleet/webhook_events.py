@@ -77,6 +77,31 @@ def _order_for(obj: dict) -> Order | None:
     return None
 
 
+def _paid_period(obj: dict) -> tuple[datetime | None, datetime | None]:
+    """
+    Perioden en betald faktura täcker.
+
+    Abonnemangsradens `period` först: på en abonnemangsfaktura beskriver
+    fakturans egna `period_start`/`period_end` något annat -- på den första
+    fakturan är de samma tidpunkt, och vid en förnyelse är de den period som
+    just TOG SLUT. Att läsa dem hade gett en period som slutar i samma sekund
+    som den betalas, och kunden hade blivit utelåst av sin egen betalning.
+    Fakturans egna fält används bara om de beskriver ett verkligt intervall.
+    Ett intervall som slutar där det börjar är ingen period.
+    """
+    for line in ((obj.get("lines") or {}).get("data") or []):
+        if line.get("type") not in (None, "subscription") and not line.get("subscription"):
+            continue
+        period = line.get("period") or {}
+        start, end = _ts(period.get("start")), _ts(period.get("end"))
+        if start and end and end > start:
+            return start, end
+    start, end = _ts(obj.get("period_start")), _ts(obj.get("period_end"))
+    if start and end and end > start:
+        return start, end
+    return None, None
+
+
 def _is_stale(subscription: Subscription, event_at: datetime | None) -> bool:
     if event_at is None or subscription.last_stripe_event_at is None:
         return False
@@ -121,12 +146,7 @@ def _payment_succeeded(event_type: str, obj: dict, *, event_at, now) -> dict:
     if subscription is None:
         return {"handled": False, "reason": "unknown_subscription"}
 
-    period_start = _ts(obj.get("period_start")) or _ts(
-        ((obj.get("lines") or {}).get("data") or [{}])[0].get("period", {}).get("start")
-    )
-    period_end = _ts(obj.get("period_end")) or _ts(
-        ((obj.get("lines") or {}).get("data") or [{}])[0].get("period", {}).get("end")
-    )
+    period_start, period_end = _paid_period(obj)
 
     # En äldre faktura får inte återöppna ett senare avslutat abonnemang.
     if subscription.status == SubscriptionStatus.CANCELED:
@@ -156,10 +176,30 @@ def _payment_succeeded(event_type: str, obj: dict, *, event_at, now) -> dict:
     subscription.refresh_from_db()
     orders.apply_pending_changes(subscription.company_id, now=now)
     _touch(subscription, event_at)
+    if order is not None:
+        # Den betalda ordern ändrade bilar eller län: nästa faktura i Stripe
+        # ska följa med. Ett fel här får inte göra betalningen obokförd --
+        # avstämningen fångar ett belopp som inte hann uppdateras.
+        _resync_amount(subscription.company_id)
     return {
         "handled": True, "action": "payment_succeeded",
         "order_id": str(order.id) if order else None,
     }
+
+
+def _resync_amount(company_id) -> None:
+    from fleet import stripe_sync
+
+    if not stripe_sync.available():
+        return
+    try:
+        stripe_sync.sync_company_amount(company_id)
+    except Exception:
+        log.exception("fleet.webhook: kunde inte uppdatera månadsbeloppet för %s", company_id)
+        audit.record(
+            "stripe_amount_sync_failed", company_id=company_id, actor_kind="system",
+            subject_type="company", subject_id=company_id, detail={},
+        )
 
 
 def _payment_failed(obj: dict, *, event_at, now) -> dict:

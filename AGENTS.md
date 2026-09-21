@@ -256,7 +256,10 @@ Stripe-webhookens scenarier i `ops/stripe/webhook_scenarios.py`, lasttest i
 **Adminwebben** (`taxitips.se/admin`, `fleet/admin_api.py`): kunder, abonnemang,
 notiser, evenemang och riskgranskningar över ALLA bolag. Kräver en aktiv rad i
 `fleet_staff_role` -- en kunds roll i `company_members` ger ingenting där, hur hög
-den än är. `support` läser, `platform_admin` ändrar. Grundaren
+den än är. `support` läser, `sales` säljer (företag, paket, prov, kuponger,
+förare, betallänkar, uppsägning till periodens slut), `platform_admin` gör allt
+och ensam det som ger åtkomst utan betalning (kuponger, betald utanför Stripe,
+avsluta direkt). Säljflödet: `docs/fleet-abonnemang.md` §9b. Grundaren
 (`bbf6ca6c-…`) är platform_admin. Konton skapade med Google har inget lösenord
 och Google-inloggning är inte konfigurerad i produktionens Supabase Auth, så
 adminwebben loggar in med en e-postlänk.
@@ -303,7 +306,7 @@ Utrullningen styrs av `FLEET_ENFORCE_LICENSES`, som är AV tills
 Tester — båda ska vara gröna innan något deployas:
 
 ```bash
-cd taxitips-backend && CELERY_TASK_ALWAYS_EAGER=1 ./.venv/bin/python manage.py test   # 811
+cd taxitips-backend && CELERY_TASK_ALWAYS_EAGER=1 ./.venv/bin/python manage.py test   # 855
 cd taxitips-app && flutter test && flutter analyze                                     # 49
 cd taxitips-web && npx vite build                                                      # index + portal + admin
 ```

@@ -31,6 +31,7 @@ urlpatterns = [
     # Registrering och prov
     path("signup", api.signup),
     path("trial-eligibility", api.trial_eligibility),
+    path("claim-invite", api.claim_invite),
     path("invites", api.create_invite),
     # Företag och behörigheter
     path("members/remove", api.remove_member),

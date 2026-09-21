@@ -152,7 +152,12 @@ def company_window(company_id, now=None) -> Window:
         # samma regel som core/entitlement.py.
         return _legacy_company_window(company_id, "legacy_company_status")
 
-    if subscription.status == SubscriptionStatus.TRIALING:
+    if subscription.status in (SubscriptionStatus.TRIALING, SubscriptionStatus.NONE):
+        # Ett pågående prov (eller en kupongs tillfälliga åtkomst) ger en
+        # period även när abonnemanget inte har någon ännu. Inget sätter
+        # abonnemanget till `trialing` när ett prov startar -- provet bor på
+        # sin egen rad -- så att bara titta här vid TRIALING hade nekat varje
+        # provföretag all data från första minuten.
         trial = (
             Trial.objects.filter(company_id=company_id, status=Trial.Status.ACTIVE)
             .order_by("-created_at")
@@ -160,7 +165,16 @@ def company_window(company_id, now=None) -> Window:
         )
         if trial and trial.ends_at and trial.ends_at > now:
             return Window(True, "trial", trial.ends_at)
-        return Window(False, "trial_ended")
+        if subscription.status == SubscriptionStatus.TRIALING:
+            # Stripes `trialing` utan eget prov: gratisdagar från en kupong har
+            # flyttat nästa debitering (fleet/sales.py). Perioden är då betald
+            # fram till dess.
+            if subscription.current_period_end and subscription.current_period_end > now:
+                return Window(True, "billing_deferred", subscription.current_period_end)
+            return Window(False, "trial_ended")
+        if Trial.objects.filter(company_id=company_id, status=Trial.Status.ENDED).exists():
+            return Window(False, "trial_ended")
+        return Window(False, "no_subscription")
 
     if subscription.status == SubscriptionStatus.ACTIVE:
         if subscription.current_period_end and subscription.current_period_end > now:

@@ -79,6 +79,7 @@ export async function request(path, { method = "GET", body } = {}) {
 
 export const api = {
   company: () => request("/api/fleet/company"),
+  claimInvite: () => request("/api/fleet/claim-invite", { method: "POST", body: {} }),
   orders: () => request("/api/fleet/orders/list"),
   createVehicle: (plate, label) =>
     request("/api/fleet/vehicles", { method: "POST", body: { plate, label } }),

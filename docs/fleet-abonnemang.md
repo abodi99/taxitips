@@ -255,6 +255,20 @@ liveinformationen är spärrad** — `/api/fleet/orders/list` kräver
 * **Avstämning** var sjätte timme (`fleet.tasks.reconcile_stripe`). Den
   **rapporterar**, rättar inget — en automatisk rättning hade spridit ett fel
   tyst i endera riktningen.
+* **Betalningen begärs i `fleet/commerce.py`**, samma väg för kundportalen och
+  adminwebbens säljflöde. Första beställningen skapar abonnemanget i Stripe med
+  `payment_behavior="default_incomplete"`; dess första faktura ÄR betalningen,
+  och `hosted_invoice_url` sparas som `Order.stripe_payment_url`. Uppgraderingar
+  blir egna fakturor (`charge_order`). Kort (`charge_automatically`, kortet sparas)
+  eller faktura (`send_invoice`, Stripe mejlar den). Månadsbeloppet i Stripe
+  följer med först när ordern är betald (`sync_company_amount` från webhooken).
+* **Betalperioden läses från abonnemangsraden**, inte från fakturans
+  `period_start`/`period_end`: på en abonnemangsfaktura är de samma tidpunkt
+  (första fakturan) eller den period som just tog slut (förnyelse).
+* **En enskild order kan stämmas av** mot Stripes API (`commerce.refresh_payment`,
+  knappen *Kontrollera betalning* i admin) — samma verkställning som webhooken.
+* **Uppsägning hos oss går alltid igenom**, även när Stripe inte nås. Svaret och
+  `stripe_not_updated` i revisionsloggen säger då att Stripe måste ändras för hand.
 
 ### Vad som måste konfigureras innan produktion
 
@@ -271,6 +285,28 @@ liveinformationen är spärrad** — `/api/fleet/orders/list` kräver
 för att den här modulen byggdes utan tillstånd att röra riktiga abonnemang.
 
 ---
+
+## 9b. Säljflödet (adminwebben)
+
+`fleet/sales.py`, `fleet/commerce.py`, vyer i `fleet/admin_sales.py`, gränssnitt
+i `taxitips-web/src/admin/sales.js`. Testat i `fleet/tests/test_sales.py`.
+
+| Steg | Vem | Regel |
+|---|---|---|
+| Lägga upp företag | säljare | Giltigt orgnr (Luhn), en gång per orgnr, dokumenterad kontroll av kontaktpersonen (`verification_note`). `companies.status = inactive` — den nya modellen styr. |
+| Prov | säljare | Samma regler som självregistrering: 14 dagar, högst 3 bilar, ett per orgnr och 24 månader, startar vid första telefonen. Provbilar får prova extra län gratis. |
+| Kupong | admin skapar, säljare löser in | Utan betalande abonnemang: tillfällig åtkomst (`Trial.source = coupon`, startar direkt). Med abonnemang i Stripe: nästa debitering flyttas (`trial_end`). Betalt utanför Stripe: perioden förlängs. En gång per bolag och kupong. |
+| Beställning | säljare | Offert först, kundens godkännande intygat. Betalning: kort, faktura eller *senare*. |
+| Markera betald utanför Stripe | admin | Kräver anteckning; vägras om ordern har en Stripe-faktura. Ny månad från nu om perioden saknas. |
+| Förare | säljare | Engångskod per bil och förare (5 min, §2). En kod per bil i taget. |
+| Kundens administratör | säljare | Inbjudan per e-post (`OwnerInvite`); kontot knyts vid första inloggningen i portalen (`/api/fleet/claim-invite`), med adressen ur den verifierade JWT:n. |
+| Uppsägning till periodens slut | säljare | Hos oss och i Stripe. |
+| Avsluta direkt | admin | Skäl krävs. Åtkomst, licenser och pass upphör nu; Stripe avslutas utan återbetalning. |
+
+**Rättat samtidigt (2026-09-21):** ett prov gav ingen åtkomst alls
+(`company_window` nekade abonnemang i läget `none` trots pågående prov), och
+provbilar som inte beställdes vidare fortsatte gratis efter en övergång till
+betalning.
 
 ## 10. Risk och granskning
 

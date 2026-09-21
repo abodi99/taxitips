@@ -1,5 +1,6 @@
 import { ApiError, supabase } from "../portal/api.js";
 import { admin } from "./api.js";
+import * as sales from "./sales.js";
 import * as views from "./views.js";
 
 /**
@@ -26,6 +27,7 @@ const el = {
   codeDialog: document.getElementById("codeDialog"),
   codeValue: document.getElementById("codeValue"),
   codeFor: document.getElementById("codeFor"),
+  codeTimer: document.getElementById("codeTimer"),
 };
 
 const state = {
@@ -35,6 +37,12 @@ const state = {
   pushStatus: "",
   eventQuery: "",
   eventHidden: false,
+  // Säljflödet: län, prislista, Stripe-läge och vad den inloggade får göra.
+  config: null,
+  lookup: null,
+  lookupOrg: "",
+  // Den senaste offerten, så att beställningen skickar exakt det kunden hörde.
+  quotedChange: null,
 };
 
 function showError(error) {
@@ -56,9 +64,20 @@ function setTab(view) {
 async function render() {
   clearError();
   el.view.innerHTML = '<p class="muted">Laddar …</p>';
+  const note = state.flash;
+  state.flash = null;
   try {
+    await renderView();
+  } finally {
+    if (note) el.view.insertAdjacentHTML("afterbegin", `<p class="ok flash" role="status">${sales.esc(note)}</p>`);
+  }
+}
+
+async function renderView() {
+  try {
+    if (!state.config) state.config = await admin.salesConfig();
     if (state.companyId) {
-      el.view.innerHTML = views.kund(await admin.company(state.companyId));
+      el.view.innerHTML = views.kund(await admin.company(state.companyId), state.config);
       return;
     }
     switch (state.view) {
@@ -70,6 +89,12 @@ async function render() {
         break;
       case "abonnemang":
         el.view.innerHTML = views.abonnemang(await admin.companies());
+        break;
+      case "nykund":
+        el.view.innerHTML = sales.nyKund(state.config, state.lookup, state.lookupOrg);
+        break;
+      case "kuponger":
+        el.view.innerHTML = sales.kuponger(await admin.coupons(), state.config);
         break;
       case "notiser":
         el.view.innerHTML = views.notiser(await admin.notifications(state.pushStatus), state.pushStatus);
@@ -140,7 +165,13 @@ async function boot() {
   el.login.hidden = false;
 }
 
+// Inloggningen triggar både formulärets svar och `onAuthStateChange`; appen
+// ska bara startas en gång, annars renderas allt två gånger i otakt.
+let entered = false;
+
 async function enterApp(session) {
+  if (entered) return;
+  entered = true;
   el.login.hidden = true;
   el.app.hidden = false;
   el.logout.hidden = false;
@@ -250,16 +281,53 @@ for (const tab of el.tabs) {
   });
 }
 
-el.view.addEventListener("submit", (event) => {
+el.view.addEventListener("submit", async (event) => {
   event.preventDefault();
-  if (event.target.id === "searchForm") {
-    state.query = new FormData(event.target).get("q")?.toString().trim() ?? "";
-  } else if (event.target.id === "eventForm") {
-    state.eventQuery = document.getElementById("eq")?.value.trim() ?? "";
-    state.eventHidden = document.getElementById("ehidden")?.checked ?? false;
+  const form = event.target;
+  clearError();
+  try {
+    switch (form.id) {
+      case "searchForm":
+        state.query = new FormData(form).get("q")?.toString().trim() ?? "";
+        break;
+      case "eventForm":
+        state.eventQuery = document.getElementById("eq")?.value.trim() ?? "";
+        state.eventHidden = document.getElementById("ehidden")?.checked ?? false;
+        break;
+      case "lookupForm":
+        state.lookupOrg = new FormData(form).get("orgNumber")?.toString().trim() ?? "";
+        state.lookup = await admin.lookup(state.lookupOrg);
+        break;
+      case "companyForm": {
+        const created = await admin.createCompany(sales.companyBody(form));
+        state.lookup = null;
+        state.lookupOrg = "";
+        state.companyId = created.companyId;
+        break;
+      }
+      case "profileForm":
+        await admin.updateProfile(state.companyId, sales.profileBody(form));
+        flash("Uppgifterna är sparade.");
+        break;
+      case "couponForm": {
+        const result = await admin.createCoupon(sales.couponBody(form));
+        flash(`Kupongen ${result.coupon.code} är skapad.`);
+        break;
+      }
+      default:
+        return;
+    }
+  } catch (error) {
+    showError(error);
+    return;
   }
   render();
 });
+
+/** Ett kort kvitto överst, som försvinner vid nästa åtgärd. */
+function flash(message) {
+  state.flash = message;
+}
 
 el.view.addEventListener("change", (event) => {
   if (event.target.id === "pushStatus") {
@@ -272,6 +340,7 @@ el.view.addEventListener("click", async (event) => {
   const row = event.target.closest("[data-company]");
   if (row && !event.target.closest("button")) {
     state.companyId = row.dataset.company;
+    state.quotedChange = null;
     return render();
   }
   const button = event.target.closest("button[data-action]");
@@ -306,13 +375,8 @@ async function act(action, ds) {
       return render();
     }
 
-    case "code": {
-      const result = await admin.pairingCode(state.companyId, ds.license);
-      el.codeFor.textContent = `För ${ds.plate || "bilen"}.`;
-      el.codeValue.textContent = result.code;
-      el.codeDialog.showModal();
-      return;
-    }
+    case "code":
+      return driverCode(ds.license, ds.plate);
 
     case "block": {
       if (!confirm("Spärra telefonen? Den slutar visa tips direkt och lämnar bilen.")) return;
@@ -350,8 +414,302 @@ async function act(action, ds) {
     }
 
     default:
+      return salesAction(action, ds);
+  }
+}
+
+/* --- Förare ----------------------------------------------------------- */
+
+let codeTimer = null;
+
+/**
+ * En kod per förare. Namnet blir telefonens etikett i listan över godkända
+ * telefoner, så att rätt telefon kan spärras senare. Koden gäller i fem
+ * minuter (§2) och bara en per bil i taget -- därför en i taget, med
+ * nedräkning, och en knapp för nästa förare i samma bil.
+ */
+async function driverCode(licenseId, plate) {
+  const name = prompt(`Förarens namn (visas som telefonens namn) för ${plate || "bilen"}:`);
+  if (name === null) return;
+  const result = await admin.pairingCode(state.companyId, licenseId, name.trim() || "Förare");
+  el.codeFor.textContent = `${name.trim() || "Förare"} · ${plate || "bilen"}`;
+  el.codeValue.textContent = result.code;
+  const expires = new Date(result.expiresAt).getTime();
+  const tick = () => {
+    const left = Math.max(0, Math.round((expires - Date.now()) / 1000));
+    el.codeTimer.textContent = left
+      ? `Gäller i ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}`
+      : "Koden har gått ut. Skapa en ny.";
+    if (!left) clearInterval(codeTimer);
+  };
+  clearInterval(codeTimer);
+  tick();
+  codeTimer = setInterval(tick, 1000);
+  el.codeDialog.dataset.license = licenseId;
+  el.codeDialog.dataset.plate = plate || "";
+  el.codeDialog.showModal();
+}
+
+el.codeDialog?.addEventListener("close", () => {
+  clearInterval(codeTimer);
+  if (el.codeDialog.returnValue === "next") {
+    driverCode(el.codeDialog.dataset.license, el.codeDialog.dataset.plate).catch(showError);
+  } else {
+    render();
+  }
+});
+
+/* --- Säljflödet ------------------------------------------------------- */
+
+function portalUrl() {
+  // Kundportalen ligger på huvuddomänen, inte på admin-värden.
+  const host = window.location.hostname.replace(/^admin\./, "");
+  return `${window.location.protocol}//${host}${window.location.port ? `:${window.location.port}` : ""}/portal`;
+}
+
+function packageChange() {
+  const panel = document.getElementById("salesPanel");
+  const vehicles = panel ? sales.readVehicles(panel) : [];
+  if (!vehicles.length) {
+    throw new ApiError(400, "Fyll i minst ett registreringsnummer.", "vehicles_required");
+  }
+  return { vehicles, change: { addVehicles: vehicles } };
+}
+
+function showResult(html) {
+  const box = document.getElementById("pkgResult");
+  if (box) box.innerHTML = html;
+}
+
+function stripeWarning(result) {
+  const stripe = result?.stripe;
+  return stripe && stripe.synced === false ? `\n\nOBS: ${stripe.message}` : "";
+}
+
+let rowCounter = 0;
+
+async function salesAction(action, ds) {
+  const companyId = state.companyId;
+  switch (action) {
+    case "open-company":
+      state.companyId = ds.id;
+      state.view = "kunder";
+      setTab("kunder");
+      return render();
+
+    case "pkg-add-row": {
+      const rows = document.getElementById("pkgRows");
+      rowCounter += 1;
+      rows.insertAdjacentHTML("beforeend", sales.vehicleRow(state.config.counties, rowCounter));
+      return;
+    }
+
+    case "pkg-remove-row": {
+      const rows = document.getElementById("pkgRows");
+      if (rows.children.length > 1) rows.querySelector(`.pkg-row[data-row="${ds.row}"]`)?.remove();
+      return;
+    }
+
+    case "pkg-quote": {
+      const { change } = packageChange();
+      const quote = await admin.quote(companyId, change);
+      state.quotedChange = JSON.stringify(change);
+      document.getElementById("pkgQuote").innerHTML = sales.quoteBox(quote);
+      return;
+    }
+
+    case "pkg-trial": {
+      const { vehicles } = packageChange();
+      const result = await admin.startTrial(companyId, vehicles);
+      flash(
+        `Provet omfattar nu ${result.vehicles} av högst ${result.vehicleLimit} bilar. ` +
+          (result.endsAt ? "" : "Det startar när första telefonen ansluts. ") +
+          "Lägg till förare under Licenser och bilar.",
+      );
+      return render();
+    }
+
+    case "pkg-coupon": {
+      const code = document.getElementById("couponCode")?.value.trim();
+      if (!code) throw new ApiError(400, "Skriv kupongkoden.", "code_required");
+      const panel = document.getElementById("salesPanel");
+      const vehicles = panel ? sales.readVehicles(panel) : [];
+      const result = await admin.redeemCoupon(companyId, code, vehicles);
+      const text = {
+        temporary_access: `Tillfällig åtkomst i ${result.days} dagar, till ${result.detail.accessUntil?.slice(0, 10)}.`,
+        billing_deferred: `Nästa debitering är flyttad till ${result.detail.nextBillingAt?.slice(0, 10)}.`,
+        period_extended: `Perioden är förlängd till ${result.detail.periodEnd?.slice(0, 10)}.`,
+      }[result.effect];
+      flash(`Kupongen är inlöst. ${text ?? ""}`);
+      return render();
+    }
+
+    case "pkg-order": {
+      const { change } = packageChange();
+      if (state.quotedChange !== JSON.stringify(change)) {
+        throw new ApiError(
+          400,
+          "Räkna priset först, och läs upp det för kunden. Bilarna har ändrats sedan offerten.",
+          "quote_required",
+        );
+      }
+      if (!document.getElementById("pkgAccepted")?.checked) {
+        throw new ApiError(
+          400,
+          "Bekräfta att kunden har godkänt antal, pris och betalningsdatum.",
+          "acceptance_required",
+        );
+      }
+      const payment = document.getElementById("pkgPayment").value;
+      const result = await admin.order(companyId, {
+        ...change,
+        accepted: true,
+        payment,
+        daysUntilDue: Number(document.getElementById("pkgDue")?.value || 14),
+      });
+      state.quotedChange = null;
+      return orderResult(result);
+    }
+
+    case "lic-add-county": {
+      const county = document.querySelector(`[data-county-for="${ds.license}"]`)?.value;
+      if (!county) return;
+      return quotedOrder({ addCounties: [{ licenseId: ds.license, county }] });
+    }
+
+    case "lic-cancel": {
+      if (!confirm(`Avsluta licensen för ${ds.plate} vid nästa förnyelse? Bilen fungerar perioden ut.`)) return;
+      return quotedOrder({ cancelLicenseIds: [ds.license] });
+    }
+
+    case "owner-invite": {
+      const email = document.getElementById("ownerEmail")?.value.trim();
+      if (!email) throw new ApiError(400, "Skriv e-postadressen.", "email_required");
+      const invite = await admin.inviteOwner(companyId, email);
+      // Länken skickas av Supabase Auth, som också skapar kontot om det inte
+      // finns. Kontot knyts till bolaget först när personen loggar in med den
+      // här adressen (fleet/api.py:claim_invite).
+      const { error } = await supabase().auth.signInWithOtp({
+        email: invite.email,
+        options: { shouldCreateUser: true, emailRedirectTo: portalUrl() },
+      });
+      flash(
+        error
+          ? `Inbjudan är sparad, men e-posten kunde inte skickas: ${error.message}. ` +
+              `Be kunden gå till ${portalUrl()} och begära en inloggningslänk till ${invite.email}.`
+          : `En inloggningslänk är skickad till ${invite.email}. Inbjudan gäller till ${invite.expiresAt.slice(0, 10)}.`,
+      );
+      return render();
+    }
+
+    case "cancel-period": {
+      const reason = prompt("Säg upp till periodens slut. Varför slutar kunden? (sparas i loggen)");
+      if (reason === null) return;
+      const result = await admin.cancelSubscription(companyId, reason, false);
+      alert(`Uppsagt till ${result.effectiveAt?.slice(0, 10)}. Kunden har åtkomst till dess.${stripeWarning(result)}`);
+      return render();
+    }
+
+    case "undo-cancel": {
+      const result = await admin.undoCancel(companyId);
+      alert(`Uppsägningen är ångrad.${stripeWarning(result)}`);
+      return render();
+    }
+
+    case "terminate-now": {
+      const reason = prompt(
+        "AVSLUTA DIREKT: åtkomsten upphör nu, alla licenser och förarpass avslutas och " +
+          "Stripe slutar debitera. Ingen återbetalning görs automatiskt.\n\nSkäl (obligatoriskt):",
+      );
+      if (!reason) return;
+      if (!confirm("Är du säker? Det går inte att ångra.")) return;
+      const result = await admin.cancelSubscription(companyId, reason, true);
+      alert(`Abonnemanget är avslutat.${stripeWarning(result)}`);
+      return render();
+    }
+
+    case "copy-link":
+      await navigator.clipboard.writeText(ds.url);
+      flash("Betallänken är kopierad. Skicka den till kunden.");
+      return render();
+
+    case "order-link": {
+      const payment = confirm("Kort (OK) eller faktura via e-post (Avbryt)?") ? "stripe_card" : "stripe_invoice";
+      await admin.paymentLink(ds.order, payment);
+      flash("Betallänken är skapad.");
+      return render();
+    }
+
+    case "order-refresh": {
+      const result = await admin.refreshOrder(ds.order);
+      flash(
+        result.orderStatus === "applied"
+          ? "Betalningen har gått igenom. Paketet är aktivt."
+          : `Stripe: fakturan är ${result.invoiceStatus}. Ingenting är ändrat än.`,
+      );
+      return render();
+    }
+
+    case "order-paid": {
+      const note = prompt(
+        "Markera betald utanför Stripe. Paketet aktiveras direkt.\n\nHur betalade kunden? (t.ex. fakturanummer)",
+      );
+      if (!note) return;
+      await admin.markPaid(ds.order, note);
+      flash("Ordern är markerad som betald och paketet är aktivt.");
+      return render();
+    }
+
+    case "order-cancel": {
+      if (!confirm("Avbryta den obetalda ordern? En faktura i Stripe makuleras.")) return;
+      await admin.cancelOrder(ds.order, "Avbruten av säljare");
+      flash("Ordern är avbruten.");
+      return render();
+    }
+
+    case "coupon-off": {
+      if (!confirm("Stänga av kupongen? Redan inlösta påverkas inte.")) return;
+      await admin.deactivateCoupon(ds.coupon);
+      return render();
+    }
+
+    default:
       return;
   }
+}
+
+/** Ändring på en befintlig licens: offert, bekräftelse, beställning. */
+async function quotedOrder(change) {
+  const quote = await admin.quote(state.companyId, change);
+  const box = document.createElement("div");
+  box.innerHTML = sales.quoteBox(quote);
+  if (!confirm(`${box.innerText}\n\nHar kunden godkänt det här?`)) return;
+  const stripeOk = !!state.config?.stripe?.available;
+  const result = await admin.order(state.companyId, {
+    ...change,
+    accepted: true,
+    payment: stripeOk ? "stripe_card" : "later",
+  });
+  return orderResult(result);
+}
+
+function orderResult(result) {
+  const order = result.order;
+  const pay = result.payment ?? {};
+  if (order.status === "pending_payment") {
+    if (pay.paymentUrl) {
+      flash("Beställningen väntar på betalning. Betallänken finns under Beställningar — kopiera och skicka den till kunden.");
+    } else if (pay.stripeError) {
+      flash(`Beställningen är sparad men ingen betallänk skapades: ${pay.stripeError.message}`);
+    } else {
+      flash("Beställningen är sparad och väntar på betalning.");
+    }
+  } else if (order.status === "scheduled") {
+    flash("Ändringen gäller från nästa förnyelse.");
+  } else {
+    flash("Beställningen är verkställd.");
+  }
+  return render();
 }
 
 boot().catch((error) => {

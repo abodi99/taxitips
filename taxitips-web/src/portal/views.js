@@ -332,7 +332,10 @@ export function abonnemang(data, orders) {
                  (o) => `<tr>
                    <td data-label="Datum">${esc(date(o.createdAt))}</td>
                    <td data-label="Ändring">${esc(orderKind(o.kind))}</td>
-                   <td data-label="Status">${esc(orderStatus(o.status))}</td>
+                   <td data-label="Status">${esc(orderStatus(o.status))}
+                     ${o.status === "pending_payment" && o.paymentUrl
+                       ? `<br /><a href="${esc(o.paymentUrl)}" target="_blank" rel="noopener">Betala</a>`
+                       : ""}</td>
                    <td data-label="Betalt nu">${esc(money(o.totalNowOre, o.currency))}</td>
                    <td data-label="Nästa period">${esc(money(o.nextPeriodTotalOre, o.currency))}</td>
                  </tr>`,

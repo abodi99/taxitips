@@ -47,6 +47,12 @@ class Perm:
     # helst eller spärra vilken förare som helst.
     ADMIN_VIEW = "admin_view"
     ADMIN_MANAGE = "admin_manage"
+    # Säljflödet i adminwebben: lägga upp företag, bilar, paket, prov,
+    # kuponger (lösa in, inte skapa), förarkoder, betallänkar och uppsägning
+    # till periodens slut. Det som flyttar pengar eller rättigheter UTAN
+    # betalning -- markera betald utanför Stripe, avsluta direkt, skapa
+    # kuponger, ändra status för hand -- kräver ADMIN_MANAGE.
+    ADMIN_SELL = "admin_sell"
 
 
 OWNER = "company_owner"
@@ -75,14 +81,19 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
     DRIVER: frozenset(),
 }
 
-# Plattformens roller. Säljaren kan bjuda in till prov -- inte återställa
-# provhistorik, inte se kundens ekonomi (§7).
+# Plattformens roller. Säljaren kan bjuda in till prov men aldrig återställa
+# provhistorik (§7). Sedan säljflödet (2026-09-21) ser säljaren kundens paket
+# och beställningar: att lägga upp och ändra ett abonnemang i telefon går inte
+# utan att se vad det kostar. Säljaren kan däremot inte ge åtkomst utan
+# betalning utöver prov och kuponger som administratören redan skapat.
 STAFF_PERMISSIONS: dict[str, frozenset[str]] = {
-    StaffRole.Role.SALES: frozenset({Perm.CREATE_SALES_INVITE}),
+    StaffRole.Role.SALES: frozenset({
+        Perm.CREATE_SALES_INVITE, Perm.ADMIN_VIEW, Perm.ADMIN_SELL,
+    }),
     StaffRole.Role.SUPPORT: frozenset({Perm.VIEW_COMPANY, Perm.ADMIN_VIEW}),
     StaffRole.Role.PLATFORM_ADMIN: frozenset({
         Perm.VIEW_COMPANY, Perm.REVIEW_CASES, Perm.CREATE_SALES_INVITE,
-        Perm.ADMIN_VIEW, Perm.ADMIN_MANAGE,
+        Perm.ADMIN_VIEW, Perm.ADMIN_MANAGE, Perm.ADMIN_SELL,
     }),
 }
 
@@ -90,6 +101,7 @@ STAFF_PERMISSIONS: dict[str, frozenset[str]] = {
 TWO_FACTOR_PERMISSIONS: frozenset[str] = frozenset({
     Perm.PURCHASE, Perm.CANCEL_SUBSCRIPTION, Perm.MANAGE_MEMBERS,
     Perm.TRANSFER_OWNERSHIP, Perm.CLOSE_ACCOUNT, Perm.ADMIN_MANAGE,
+    Perm.ADMIN_SELL,
 })
 
 

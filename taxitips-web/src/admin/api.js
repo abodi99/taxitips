@@ -15,10 +15,10 @@ export const admin = {
   company: (id) => request(`/api/admin/companies/${id}`),
   setSubscription: (id, body) =>
     request(`/api/admin/companies/${id}/subscription`, { method: "POST", body }),
-  pairingCode: (id, licenseId) =>
+  pairingCode: (id, licenseId, label = "Support") =>
     request(`/api/admin/companies/${id}/pairing-code`, {
       method: "POST",
-      body: { license_id: licenseId, label: "Support" },
+      body: { license_id: licenseId, label },
     }),
   testPush: (id) =>
     request(`/api/admin/companies/${id}/test-push`, { method: "POST", body: {} }),
@@ -41,6 +41,44 @@ export const admin = {
       body: { hidden, reason },
     }),
   reviews: (status = "open") => request(`/api/admin/reviews?status=${status}`),
+
+  /* --- Säljflödet (fleet/admin_sales.py) --- */
+  salesConfig: () => request("/api/admin/sales/config"),
+  lookup: (orgNumber) =>
+    request(`/api/admin/sales/lookup?orgNumber=${encodeURIComponent(orgNumber)}`),
+  createCompany: (body) => request("/api/admin/companies/new", { method: "POST", body }),
+  updateProfile: (id, body) =>
+    request(`/api/admin/companies/${id}/profile`, { method: "POST", body }),
+  quote: (id, change) =>
+    request(`/api/admin/companies/${id}/quote`, { method: "POST", body: change }),
+  order: (id, body) => request(`/api/admin/companies/${id}/orders`, { method: "POST", body }),
+  startTrial: (id, vehicles) =>
+    request(`/api/admin/companies/${id}/trial`, { method: "POST", body: { vehicles } }),
+  redeemCoupon: (id, code, vehicles) =>
+    request(`/api/admin/companies/${id}/coupon`, { method: "POST", body: { code, vehicles } }),
+  cancelSubscription: (id, reason, immediate = false) =>
+    request(`/api/admin/companies/${id}/cancel`, {
+      method: "POST",
+      body: { reason, immediate },
+    }),
+  undoCancel: (id) => request(`/api/admin/companies/${id}/undo-cancel`, { method: "POST", body: {} }),
+  inviteOwner: (id, email) =>
+    request(`/api/admin/companies/${id}/owner-invite`, { method: "POST", body: { email } }),
+  paymentLink: (orderId, payment, daysUntilDue = 14) =>
+    request(`/api/admin/orders/${orderId}/payment-link`, {
+      method: "POST",
+      body: { payment, daysUntilDue },
+    }),
+  refreshOrder: (orderId) =>
+    request(`/api/admin/orders/${orderId}/refresh`, { method: "POST", body: {} }),
+  markPaid: (orderId, note) =>
+    request(`/api/admin/orders/${orderId}/mark-paid`, { method: "POST", body: { note } }),
+  cancelOrder: (orderId, reason) =>
+    request(`/api/admin/orders/${orderId}/cancel`, { method: "POST", body: { reason } }),
+  coupons: () => request("/api/admin/coupons"),
+  createCoupon: (body) => request("/api/admin/coupons/new", { method: "POST", body }),
+  deactivateCoupon: (id) =>
+    request(`/api/admin/coupons/${id}/deactivate`, { method: "POST", body: {} }),
   resolveReview: (id, approved, note) =>
     request(`/api/admin/reviews/${id}/resolve`, {
       method: "POST",
