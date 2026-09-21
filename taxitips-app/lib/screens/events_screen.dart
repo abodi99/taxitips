@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api_client.dart';
+import '../followed_events.dart';
+import '../signal_kinds.dart' show countyShort;
 import '../theme.dart';
 import '../widgets/ferry_event_widgets.dart';
 
@@ -55,7 +57,8 @@ class _Period {
   bool get singleDay => _sameDay(from, to);
 }
 
-bool _sameDay(DateTime a, DateTime b) => a.year == b.year && a.month == b.month && a.day == b.day;
+bool _sameDay(DateTime a, DateTime b) =>
+    a.year == b.year && a.month == b.month && a.day == b.day;
 
 DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
 
@@ -80,13 +83,54 @@ class _EventsScreenState extends State<EventsScreen> {
   Set<String> _kindsOff = {};
   static const _prefsKindsOffKey = 'tb_event_kinds_off';
 
+  /// Bara evenemang inom så här många km från föraren. null = hela området.
+  double? _radiusKm;
+
+  /// Ett län av flera, när föraren kör i flera. null = alla valda län.
+  String? _county;
+
+  /// Sortering: time (tidigast först, per dag), distance (närmast) eller size (störst).
+  String _sort = 'time';
+
+  Map<String, Map<String, dynamic>> _followed = {};
+
   @override
   void initState() {
     super.initState();
     _period = _preset('month');
     _loadKinds();
+    FollowedEvents.load().then((f) {
+      if (mounted) setState(() => _followed = f);
+    });
     _load();
   }
+
+  Future<void> _toggleFollow(Map<String, dynamic> e, bool follow) async {
+    final id = e['id']?.toString();
+    if (id == null) return;
+    setState(() {
+      if (follow) {
+        _followed[id] = Map<String, dynamic>.from(e);
+      } else {
+        _followed.remove(id);
+      }
+    });
+    await FollowedEvents.save(_followed);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            follow
+                ? 'Du följer eventet. Det finns under ⭐ Följer på kartan.'
+                : 'Du följer det inte längre.',
+          ),
+        ),
+      );
+  }
+
+  bool _isFollowed(Map e) => _followed.containsKey(e['id']?.toString());
 
   Future<void> _loadKinds() async {
     try {
@@ -149,7 +193,10 @@ class _EventsScreenState extends State<EventsScreen> {
             if (e is Map) Map<String, dynamic>.from(e),
         ];
         _dayCounts = raw is Map
-            ? {for (final entry in raw.entries) entry.key.toString(): (entry.value as num).toInt()}
+            ? {
+                for (final entry in raw.entries)
+                  entry.key.toString(): (entry.value as num).toInt(),
+              }
             : const {};
         _preview = body['preview'] == true;
         _previewNote = body['previewNote']?.toString() ?? '';
@@ -160,7 +207,10 @@ class _EventsScreenState extends State<EventsScreen> {
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString().replaceFirst(RegExp(r'^(ApiException|Exception):\s*'), '');
+        _error = e.toString().replaceFirst(
+          RegExp(r'^(ApiException|Exception):\s*'),
+          '',
+        );
         _loading = false;
       });
     }
@@ -200,7 +250,9 @@ class _EventsScreenState extends State<EventsScreen> {
     if (picked != null) {
       final from = _day(picked.start);
       final to = _day(picked.end);
-      _select(_Period('range', '${shortDate(from)}–${shortDate(to)}', from, to));
+      _select(
+        _Period('range', '${shortDate(from)}–${shortDate(to)}', from, to),
+      );
     }
   }
 
@@ -208,8 +260,155 @@ class _EventsScreenState extends State<EventsScreen> {
       ? dayHeading(_period.from)
       : '${shortDate(_period.from)} – ${shortDate(_period.to)}';
 
-  List<Map<String, dynamic>> get _visibleEvents =>
-      _events.where((e) => !_kindsOff.contains(eventKindOf(e))).toList();
+  List<Map<String, dynamic>> get _visibleEvents {
+    final radius = _radiusKm;
+    final list = _events.where((e) {
+      if (_kindsOff.contains(eventKindOf(e))) return false;
+      if (_county != null && e['county']?.toString() != _county) return false;
+      if (radius != null) {
+        final d = (e['distanceKm'] as num?)?.toDouble();
+        if (d == null || d > radius) return false;
+      }
+      return true;
+    }).toList();
+    if (_sort == 'distance') {
+      list.sort(
+        (a, b) => ((a['distanceKm'] as num?) ?? 9999).compareTo(
+          (b['distanceKm'] as num?) ?? 9999,
+        ),
+      );
+    } else if (_sort == 'size') {
+      list.sort(
+        (a, b) =>
+            ((b['attendance'] as num?) ?? (b['venueCapacity'] as num?) ?? 0)
+                .compareTo(
+                  (a['attendance'] as num?) ??
+                      (a['venueCapacity'] as num?) ??
+                      0,
+                ),
+      );
+    }
+    return list;
+  }
+
+  /// Län i perioden, när föraren kör i fler än ett: kod -> namn.
+  Map<String, String> get _countiesInData {
+    final out = <String, String>{};
+    for (final e in _events) {
+      final code = e['county']?.toString() ?? '';
+      final name = e['countyName']?.toString() ?? '';
+      if (code.isNotEmpty && name.isNotEmpty) out[code] = name;
+    }
+    return out;
+  }
+
+  /// Avstånd, län och sortering -- var och en en rad chips, så att allt syns
+  /// utan att öppna något.
+  Widget _whereAndSort() {
+    Widget chip(
+      String label,
+      bool selected,
+      VoidCallback onTap, {
+      IconData? icon,
+    }) => Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        avatar: icon == null
+            ? null
+            : Icon(icon, size: 18, color: TbColors.midnatt),
+        label: Text(label, style: const TextStyle(fontWeight: FontWeight.w700)),
+        selected: selected,
+        showCheckmark: false,
+        selectedColor: TbColors.taxi,
+        onSelected: (_) => onTap(),
+      ),
+    );
+    Widget row(List<Widget> children) => SizedBox(
+      height: 46,
+      child: ListView(scrollDirection: Axis.horizontal, children: children),
+    );
+    final counties = _countiesInData;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (widget.lat != null && widget.lon != null)
+          row([
+            for (final (km, label) in const <(double?, String)>[
+              (null, 'Hela området'),
+              (10, '10 km'),
+              (25, '25 km'),
+              (50, '50 km'),
+            ])
+              chip(
+                label,
+                _radiusKm == km,
+                () => setState(() => _radiusKm = km),
+                icon: km == null ? Icons.map_rounded : Icons.near_me_rounded,
+              ),
+          ]),
+        if (counties.length > 1)
+          row([
+            chip(
+              'Alla län',
+              _county == null,
+              () => setState(() => _county = null),
+              icon: Icons.place_rounded,
+            ),
+            for (final entry in counties.entries)
+              chip(
+                countyShort(entry.value),
+                _county == entry.key,
+                () => setState(() => _county = entry.key),
+              ),
+          ]),
+        row([
+          chip(
+            'Tid',
+            _sort == 'time',
+            () => setState(() => _sort = 'time'),
+            icon: Icons.schedule_rounded,
+          ),
+          if (widget.lat != null)
+            chip(
+              'Närmast',
+              _sort == 'distance',
+              () => setState(() => _sort = 'distance'),
+              icon: Icons.near_me_rounded,
+            ),
+          chip(
+            'Störst',
+            _sort == 'size',
+            () => setState(() => _sort = 'size'),
+            icon: Icons.groups_rounded,
+          ),
+        ]),
+      ],
+    );
+  }
+
+  /// Sorterat på avstånd eller storlek: en platt lista med datum på korten.
+  List<Widget> _flatList() => [
+    for (final e in _visibleEvents)
+      Padding(
+        padding: const EdgeInsets.only(bottom: 10),
+        child: EventCard(
+          event: e,
+          showDate: true,
+          followed: _isFollowed(e),
+          onToggleFollow: (v) => _toggleFollow(e, v),
+          onTap: () => _openSheet(e),
+        ),
+      ),
+  ];
+
+  void _openSheet(Map<String, dynamic> e) => showEventSheet(
+    context,
+    e,
+    attribution: _attribution,
+    previewNote: _preview ? _previewNote : '',
+    followed: _isFollowed(e),
+    onToggleFollow: (v) => _toggleFollow(e, v),
+  );
 
   /// Sorterna i perioden: sporterna först, sedan flest evenemang.
   Widget _kindChips() {
@@ -224,7 +423,9 @@ class _EventsScreenState extends State<EventsScreen> {
     final kinds = counts.keys.toList()
       ..sort((a, b) {
         final sa = sports.indexOf(a), sb = sports.indexOf(b);
-        if (sa != -1 || sb != -1) return (sa == -1 ? 99 : sa).compareTo(sb == -1 ? 99 : sb);
+        if (sa != -1 || sb != -1) {
+          return (sa == -1 ? 99 : sa).compareTo(sb == -1 ? 99 : sb);
+        }
         return counts[b]!.compareTo(counts[a]!);
       });
     final allOn = kinds.every((k) => !_kindsOff.contains(k));
@@ -247,7 +448,10 @@ class _EventsScreenState extends State<EventsScreen> {
       runSpacing: 6,
       children: [
         FilterChip(
-          label: const Text('Alla sorter', style: TextStyle(fontWeight: FontWeight.w700)),
+          label: const Text(
+            'Alla sorter',
+            style: TextStyle(fontWeight: FontWeight.w700),
+          ),
           selected: allOn,
           selectedColor: TbColors.taxi,
           showCheckmark: false,
@@ -258,7 +462,10 @@ class _EventsScreenState extends State<EventsScreen> {
         ),
         for (final k in kinds)
           FilterChip(
-            label: Text('${labels[k]} ${counts[k]}', style: const TextStyle(fontWeight: FontWeight.w700)),
+            label: Text(
+              '${labels[k]} ${counts[k]}',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
             selected: !_kindsOff.contains(k) && !allOn,
             selectedColor: TbColors.taxi,
             showCheckmark: false,
@@ -281,14 +488,24 @@ class _EventsScreenState extends State<EventsScreen> {
   }
 
   Widget _periodChips() {
-    final presets = ['today', 'tomorrow', 'weekend', 'week', 'month', 'quarter'];
+    final presets = [
+      'today',
+      'tomorrow',
+      'weekend',
+      'week',
+      'month',
+      'quarter',
+    ];
     return Wrap(
       spacing: 8,
       runSpacing: 8,
       children: [
         for (final key in presets)
           ChoiceChip(
-            label: Text(_preset(key).label, style: const TextStyle(fontWeight: FontWeight.w700)),
+            label: Text(
+              _preset(key).label,
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
             selected: _period.key == key,
             selectedColor: TbColors.taxi,
             onSelected: (_) => _select(_preset(key)),
@@ -337,7 +554,9 @@ class _EventsScreenState extends State<EventsScreen> {
               decoration: BoxDecoration(
                 color: selected ? TbColors.midnatt : TbColors.vit,
                 borderRadius: BorderRadius.circular(14),
-                border: Border.all(color: selected ? TbColors.midnatt : TbColors.line),
+                border: Border.all(
+                  color: selected ? TbColors.midnatt : TbColors.line,
+                ),
               ),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -352,19 +571,36 @@ class _EventsScreenState extends State<EventsScreen> {
                   ),
                   Text(
                     '${date.day}',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: fg, height: 1.2),
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.w800,
+                      color: fg,
+                      height: 1.2,
+                    ),
                   ),
-                  Text(monthShort(date), style: TextStyle(fontSize: 11, color: fg)),
+                  Text(
+                    monthShort(date),
+                    style: TextStyle(fontSize: 11, color: fg),
+                  ),
                   const SizedBox(height: 2),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 6,
+                      vertical: 1,
+                    ),
                     decoration: BoxDecoration(
-                      color: selected ? TbColors.guld : TbColors.taxi.withValues(alpha: 0.3),
+                      color: selected
+                          ? TbColors.guld
+                          : TbColors.taxi.withValues(alpha: 0.3),
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Text(
                       '${_dayCounts[days[i]]}',
-                      style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: TbColors.ink),
+                      style: const TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        color: TbColors.ink,
+                      ),
                     ),
                   ),
                 ],
@@ -405,7 +641,9 @@ class _EventsScreenState extends State<EventsScreen> {
         );
       }
       final events = groups[day]!;
-      final prefix = day == today ? 'I dag · ' : (day == tomorrow ? 'I morgon · ' : '');
+      final prefix = day == today
+          ? 'I dag · '
+          : (day == tomorrow ? 'I morgon · ' : '');
       out.add(
         Padding(
           padding: const EdgeInsets.fromLTRB(2, 14, 2, 8),
@@ -414,12 +652,20 @@ class _EventsScreenState extends State<EventsScreen> {
               Expanded(
                 child: Text(
                   '$prefix${dayHeading(date)}',
-                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800, color: TbColors.ink),
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                    color: TbColors.ink,
+                  ),
                 ),
               ),
               Text(
                 '${events.length} ${events.length == 1 ? 'evenemang' : 'evenemang'}',
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade700,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
@@ -432,12 +678,9 @@ class _EventsScreenState extends State<EventsScreen> {
             child: EventCard(
               event: e,
               compactTime: true,
-              onTap: () => showEventSheet(
-                context,
-                e,
-                attribution: _attribution,
-                previewNote: _preview ? _previewNote : '',
-              ),
+              followed: _isFollowed(e),
+              onToggleFollow: (v) => _toggleFollow(e, v),
+              onTap: () => _openSheet(e),
             ),
           ),
         );
@@ -456,11 +699,18 @@ class _EventsScreenState extends State<EventsScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Evenemang', style: TextStyle(fontWeight: FontWeight.w800)),
+            const Text(
+              'Evenemang',
+              style: TextStyle(fontWeight: FontWeight.w800),
+            ),
             if (widget.areaLabel.isNotEmpty)
               Text(
                 widget.areaLabel,
-                style: TextStyle(fontSize: 13, color: Colors.grey.shade700, fontWeight: FontWeight.w600),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: Colors.grey.shade700,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
           ],
         ),
@@ -470,7 +720,12 @@ class _EventsScreenState extends State<EventsScreen> {
         onRefresh: _load,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.fromLTRB(16, 4, 16, 32 + MediaQuery.paddingOf(context).bottom),
+          padding: EdgeInsets.fromLTRB(
+            16,
+            4,
+            16,
+            32 + MediaQuery.paddingOf(context).bottom,
+          ),
           children: [
             _periodChips(),
             if (_dayCounts.isNotEmpty) ...[
@@ -478,7 +733,9 @@ class _EventsScreenState extends State<EventsScreen> {
               _dateStrip(),
             ],
             if (_events.isNotEmpty) ...[
-              const SizedBox(height: 14),
+              const SizedBox(height: 10),
+              _whereAndSort(),
+              const SizedBox(height: 6),
               _kindChips(),
             ],
             const SizedBox(height: 14),
@@ -486,9 +743,13 @@ class _EventsScreenState extends State<EventsScreen> {
               _loading
                   ? 'Hämtar $_periodText…'
                   : _visibleEvents.length == _events.length
-                      ? '${_events.length} evenemang · $_periodText'
-                      : '${_visibleEvents.length} av ${_events.length} evenemang · $_periodText',
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: TbColors.ink),
+                  ? '${_events.length} evenemang · $_periodText'
+                  : '${_visibleEvents.length} av ${_events.length} evenemang · $_periodText',
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w700,
+                color: TbColors.ink,
+              ),
             ),
             if (_preview && _previewNote.isNotEmpty) ...[
               const SizedBox(height: 10),
@@ -502,19 +763,30 @@ class _EventsScreenState extends State<EventsScreen> {
             else if (_error != null)
               Padding(
                 padding: const EdgeInsets.only(top: 24),
-                child: Text('Kunde inte hämta evenemangen: $_error', style: const TextStyle(color: TbColors.danger)),
+                child: Text(
+                  'Kunde inte hämta evenemangen: $_error',
+                  style: const TextStyle(color: TbColors.danger),
+                ),
               )
             else if (_events.isEmpty)
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 32, 8, 8),
                 child: Column(
                   children: [
-                    Icon(Icons.event_busy, size: 52, color: Colors.grey.shade400),
+                    Icon(
+                      Icons.event_busy,
+                      size: 52,
+                      color: Colors.grey.shade400,
+                    ),
                     const SizedBox(height: 10),
                     Text(
                       'Inga evenemang $_periodText i ditt område.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 16, color: Colors.grey.shade800, fontWeight: FontWeight.w600),
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey.shade800,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Text(
@@ -522,16 +794,27 @@ class _EventsScreenState extends State<EventsScreen> {
                           ? 'Ticketmaster har tunt utbud utanför Stockholm. Prova ett annat län.'
                           : 'Dagarna ovan har evenemang — tryck på en av dem, eller välj en längre period.',
                       textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 13.5, height: 1.4, color: Colors.grey.shade700),
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        height: 1.4,
+                        color: Colors.grey.shade700,
+                      ),
                     ),
                   ],
                 ),
               )
-            else
-              ..._groupedList(),
+            else if (_sort == 'time')
+              ..._groupedList()
+            else ...[
+              const SizedBox(height: 10),
+              ..._flatList(),
+            ],
             if (_attribution.isNotEmpty) ...[
               const SizedBox(height: 16),
-              Text(_attribution, style: TextStyle(fontSize: 12, color: Colors.grey.shade600)),
+              Text(
+                _attribution,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
             ],
           ],
         ),

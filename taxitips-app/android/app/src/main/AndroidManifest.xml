@@ -68,5 +68,16 @@
             <action android:name="android.intent.action.PROCESS_TEXT"/>
             <data android:mimeType="text/plain"/>
         </intent>
+        <!-- Kör dit: telefonens egen navigering (Google Maps turn-by-turn),
+             och webbläsaren som reserv. Android 11+ kräver att appen
+             deklarerar vilka appar den vill kunna öppna. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="google.navigation"/>
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="https"/>
+        </intent>
     </queries>
 </manifest>

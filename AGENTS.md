@@ -154,13 +154,24 @@ med sort (stor färja, pendelfärja, öbåt, pendelbåt, rundtur, vägfärja) oc
 filtrerar. Bara dubbletter, sådant utanför tidsfönstret och fartyg vid kaj utan sedd ankomst tas bort. Importen räknar också `stop_has_road` (buss, spårvagn eller tåg inom 600 m);
 efter en ändring av regeln behöver importen köras om ur samma zip.
 
-Förarkartan i appen: Google Maps med plattformens trafiklager (segare vägar) och Trafikverkets
-olyckor och avstängningar (`lib/widgets/traffic_map.dart`). Kräver en nyckel med Maps SDK för
-Android och iOS: `MAPS_API_KEY=...` i `taxitips-app/android/local.properties` och i
-`taxitips-app/ios/Flutter/Maps.xcconfig` (ingen av dem i git), och bygget med
-`--dart-define=GOOGLE_MAPS=true`. Utan flaggan används flutter_map som förut; Google Maps utan
-nyckel avslutar appen på Android. Bottenpanelen visar en lista åt gången (Tips, Färjor,
-Evenemang); allt filter och område ligger bakom en knapp.
+Förarkartan i appen (ombyggd 2026-09-21, för förare med begränsad svenska):
+
+* **En sanning för typ och styrka: `lib/signal_kinds.dart`.** Kategori (Tåg & buss, Väg, Flyg,
+  Färja, Event) ger ikonen, styrkan ger färg, storlek och ett ord. Samma par på kartan, i
+  listan, i detaljvyn, i filtret och i förklaringen (`?`-knappen, `map_legend_sheet.dart`).
+  Väghinder har egen skala och egen form (triangel, rött = olycka/avstängt) så att de aldrig
+  läses som en körning; styrkefiltret gäller inte dem.
+* **Kategoriraden** (`category_bar.dart`) överst styr både kartan och listan: Alla, en
+  kategori, eller Följer. Ersätter de gamla flikarna i bottenpanelen.
+* **Kartan** (`signal_map.dart`): flutter_map + Esri World Street Map med dämpade färger på
+  dagen och `darkModeTileBuilder` när telefonen är i mörkt läge. Klustrar under zoom 15;
+  väghinder klustras för sig.
+* **Kör dit** (`navigation.dart`) öppnar telefonens navigering (`google.navigation:` på
+  Android, Apple Kartor på iPhone). Appen har ingen egen ruttplanering.
+* **Följ**: tips på servern (`OpportunityFavorite`), evenemang på telefonen
+  (`followed_events.dart`, en kopia per evenemang, rensas dagen efter).
+* Google Maps-varianten (`traffic_map.dart`, `--dart-define=GOOGLE_MAPS=true` + `MAPS_API_KEY`)
+  finns kvar men har inte den nya designen; ingen nyckel finns i dag.
 
 Pipeline-vyn (localhost:4000) har en sida per tjänst: `/tag`, `/kollektivtrafik`, `/vag`, `/flyg`,
 `/farjor`, `/evenemang`, `/vader`, och en översikt på `/`. Varje sida visar källorna och deras
@@ -307,7 +318,7 @@ Tester — båda ska vara gröna innan något deployas:
 
 ```bash
 cd taxitips-backend && CELERY_TASK_ALWAYS_EAGER=1 ./.venv/bin/python manage.py test   # 855
-cd taxitips-app && flutter test && flutter analyze                                     # 49
+cd taxitips-app && flutter test && flutter analyze                                     # 66
 cd taxitips-web && npx vite build                                                      # index + portal + admin
 ```
 

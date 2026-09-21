@@ -102,7 +102,11 @@ ThemeData buildTaxiTheme() {
         foregroundColor: TbColors.midnatt,
         // Size.fromHeight uses infinite width and breaks buttons inside Row.
         minimumSize: const Size(64, 52),
-        textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+        textStyle: const TextStyle(
+          fontFamily: kBodyFont,
+          fontWeight: FontWeight.w600,
+          fontSize: 16,
+        ),
       ),
     ),
     outlinedButtonTheme: OutlinedButtonThemeData(
@@ -110,21 +114,36 @@ ThemeData buildTaxiTheme() {
         foregroundColor: TbColors.midnatt,
         side: const BorderSide(color: TbColors.line, width: 1.5),
         minimumSize: const Size(64, 48),
-        textStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+        textStyle: const TextStyle(
+          fontFamily: kBodyFont,
+          fontWeight: FontWeight.w600,
+          fontSize: 16,
+        ),
       ),
     ),
     textButtonTheme: TextButtonThemeData(
       style: TextButton.styleFrom(
         foregroundColor: TbColors.midnatt,
-        textStyle: const TextStyle(fontWeight: FontWeight.w600),
+        textStyle: const TextStyle(
+          fontFamily: kBodyFont,
+          fontWeight: FontWeight.w600,
+        ),
       ),
     ),
     chipTheme: ChipThemeData(
       backgroundColor: TbColors.vit,
       selectedColor: TbColors.guld,
       disabledColor: TbColors.ljusgraDjup,
-      labelStyle: const TextStyle(fontWeight: FontWeight.w600, color: TbColors.midnatt),
-      secondaryLabelStyle: const TextStyle(fontWeight: FontWeight.w600, color: TbColors.midnatt),
+      labelStyle: const TextStyle(
+        fontFamily: kBodyFont,
+        fontWeight: FontWeight.w600,
+        color: TbColors.midnatt,
+      ),
+      secondaryLabelStyle: const TextStyle(
+        fontFamily: kBodyFont,
+        fontWeight: FontWeight.w600,
+        color: TbColors.midnatt,
+      ),
       side: const BorderSide(color: TbColors.line),
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
     ),
@@ -158,19 +177,51 @@ ThemeData buildTaxiTheme() {
         fontWeight: FontWeight.w600,
         fontSize: 16,
       ),
-      subtitleTextStyle: TextStyle(color: TbColors.skiffer, fontSize: 13),
+      subtitleTextStyle: TextStyle(
+        fontFamily: kBodyFont,
+        color: TbColors.skiffer,
+        fontSize: 13,
+      ),
     ),
     textTheme: const TextTheme(
-      headlineLarge: TextStyle(fontFamily: kDisplayFont, color: TbColors.midnatt, fontWeight: FontWeight.w700),
-      headlineMedium: TextStyle(fontFamily: kDisplayFont, color: TbColors.midnatt, fontWeight: FontWeight.w700),
-      headlineSmall: TextStyle(fontFamily: kDisplayFont, color: TbColors.midnatt, fontWeight: FontWeight.w700),
-      titleLarge: TextStyle(fontFamily: kDisplayFont, color: TbColors.midnatt, fontWeight: FontWeight.w700),
-      titleMedium: TextStyle(fontFamily: kDisplayFont, color: TbColors.midnatt, fontWeight: FontWeight.w600),
-      titleSmall: TextStyle(fontFamily: kDisplayFont, color: TbColors.midnatt, fontWeight: FontWeight.w600),
-      bodyLarge: TextStyle(color: TbColors.midnatt),
-      bodyMedium: TextStyle(color: TbColors.midnatt),
-      bodySmall: TextStyle(color: TbColors.skiffer),
-      labelLarge: TextStyle(color: TbColors.midnatt, fontWeight: FontWeight.w600),
+      headlineLarge: TextStyle(
+        fontFamily: kDisplayFont,
+        color: TbColors.midnatt,
+        fontWeight: FontWeight.w700,
+      ),
+      headlineMedium: TextStyle(
+        fontFamily: kDisplayFont,
+        color: TbColors.midnatt,
+        fontWeight: FontWeight.w700,
+      ),
+      headlineSmall: TextStyle(
+        fontFamily: kDisplayFont,
+        color: TbColors.midnatt,
+        fontWeight: FontWeight.w700,
+      ),
+      titleLarge: TextStyle(
+        fontFamily: kDisplayFont,
+        color: TbColors.midnatt,
+        fontWeight: FontWeight.w700,
+      ),
+      titleMedium: TextStyle(
+        fontFamily: kDisplayFont,
+        color: TbColors.midnatt,
+        fontWeight: FontWeight.w600,
+      ),
+      titleSmall: TextStyle(
+        fontFamily: kDisplayFont,
+        color: TbColors.midnatt,
+        fontWeight: FontWeight.w600,
+      ),
+      bodyLarge: TextStyle(fontFamily: kBodyFont, color: TbColors.midnatt),
+      bodyMedium: TextStyle(fontFamily: kBodyFont, color: TbColors.midnatt),
+      bodySmall: TextStyle(fontFamily: kBodyFont, color: TbColors.skiffer),
+      labelLarge: TextStyle(
+        fontFamily: kBodyFont,
+        color: TbColors.midnatt,
+        fontWeight: FontWeight.w600,
+      ),
     ),
     navigationBarTheme: NavigationBarThemeData(
       backgroundColor: TbColors.midnatt,
@@ -186,7 +237,9 @@ ThemeData buildTaxiTheme() {
       iconTheme: WidgetStateProperty.resolveWith((states) {
         final selected = states.contains(WidgetState.selected);
         return IconThemeData(
-          color: selected ? TbColors.midnatt : TbColors.vit.withValues(alpha: 0.75),
+          color: selected
+              ? TbColors.midnatt
+              : TbColors.vit.withValues(alpha: 0.75),
           size: 26,
         );
       }),

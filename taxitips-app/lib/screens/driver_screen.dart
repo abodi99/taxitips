@@ -20,11 +20,14 @@ import '../severity_labels.dart';
 import '../theme.dart';
 import '../widgets/alert_feedback_bar.dart';
 import '../widgets/brand_icons.dart';
-import '../widgets/hotspot_map.dart';
+import '../followed_events.dart';
+import '../signal_kinds.dart';
+import '../widgets/category_bar.dart';
+import '../widgets/map_legend_sheet.dart';
+import '../widgets/signal_card.dart';
+import '../widgets/signal_map.dart';
 import '../widgets/vehicle_session_sheet.dart';
 import '../widgets/traffic_map.dart';
-import '../widgets/likelihood_badge.dart';
-import '../widgets/smart_alert_card.dart';
 
 class DriverScreen extends StatefulWidget {
   const DriverScreen({
@@ -123,14 +126,25 @@ class _DriverScreenState extends State<DriverScreen>
   /// (egna API:er), övriga filtrerar tipslistan via [alertFilterMode].
   Set<String> _hiddenModes = {};
 
-  /// Fliken i bottenpanelen: en lista i taget ('tips', 'ferries' eller 'events').
-  String _sheetTab = 'tips';
+  /// Kategorin i raden överst: null = Alla, 'followed' = Följer, annars en
+  /// [SignalCategory.key]. EN väljare styr både kartan och listan -- föraren
+  /// ska aldrig behöva förstå två olika filter för samma sak.
+  String? _category;
 
-  // Per-signal markers by default. The place-aggregated view depends on
-  // placeStats, which is built from taxi.places -- a legacy field that is
-  // always empty for real opportunities, so the default map rendered
-  // literally nothing while 121 signals had perfectly good coordinates.
-  final bool _mapShowsPerOpportunity = true;
+  /// Evenemangens dag i Event-läget: today, tomorrow, weekend, week eller all
+  /// (hela fönstret backend skickar, 14 dagar).
+  String _eventDay = 'today';
+
+  /// Evenemang inom så här många km. null = alla i förarens län.
+  double? _eventRadiusKm;
+
+  /// Evenemang föraren följer. Sparas på telefonen (followed_events.dart);
+  /// tipsen följs på servern (`favorites` i flödet).
+  Map<String, Map<String, dynamic>> _followedEvents = {};
+
+  /// Det föraren senast tryckte på -- markeras med guldring på kartan.
+  String? _selectedId;
+
   Set<String> _regions = {};
   Set<String> _cities = {};
   // Körområde i län (SCB-kod). Styr listan när platsen saknas och alla notiser.
@@ -221,6 +235,8 @@ class _DriverScreenState extends State<DriverScreen>
   static const _prefsCitiesKey = 'tb_filter_cities';
   static const _prefsCountiesKey = 'tb_filter_counties';
   static const _prefsMunicipalitiesKey = 'tb_filter_municipalities';
+  static const _prefsCategoryKey = 'tb_map_category';
+  static const _prefsEventDayKey = 'tb_event_day';
 
   Future<void> _loadSavedFilters() async {
     try {
@@ -240,9 +256,17 @@ class _DriverScreenState extends State<DriverScreen>
       final legacyRegion = prefs.getString(_prefsRegionKey);
       final legacyPlace = prefs.getString(_prefsPlaceKey);
       final sortMode = prefs.getString(_prefsSortModeKey);
+      final category = prefs.getString(_prefsCategoryKey);
+      final eventDay = prefs.getString(_prefsEventDayKey);
+      final followedEvents = await FollowedEvents.load();
       if (!mounted) return;
       setState(() {
         if (sortMode != null) _sortMode = sortMode;
+        if (category == 'followed' || signalCategoryFromKey(category) != null) {
+          _category = category;
+        }
+        if (eventDay != null) _eventDay = eventDay;
+        _followedEvents = followedEvents;
         if (scoreMin != null) _scoreMin = scoreMin.clamp(0, 100);
         if (scoreMax != null) _scoreMax = scoreMax.clamp(0, 100);
         if (_scoreMin > _scoreMax) {
@@ -308,6 +332,12 @@ class _DriverScreenState extends State<DriverScreen>
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(_prefsSortModeKey, _sortMode);
+      if (_category == null) {
+        await prefs.remove(_prefsCategoryKey);
+      } else {
+        await prefs.setString(_prefsCategoryKey, _category!);
+      }
+      await prefs.setString(_prefsEventDayKey, _eventDay);
       await prefs.setDouble(_prefsScoreMinKey, _scoreMin);
       await prefs.setDouble(_prefsScoreMaxKey, _scoreMax);
       await prefs.remove(_prefsHighOnlyKey);
@@ -413,7 +443,9 @@ class _DriverScreenState extends State<DriverScreen>
     _openedSub = openedMessageSignals.listen((_) => _openFromNotification());
     _bootstrap();
     // Kallstart från en notis: meddelandet kom innan skärmen fanns.
-    WidgetsBinding.instance.addPostFrameCallback((_) => _openFromNotification());
+    WidgetsBinding.instance.addPostFrameCallback(
+      (_) => _openFromNotification(),
+    );
   }
 
   /// Öppnar tipset en notis handlade om. Först ur det laddade flödet
@@ -443,7 +475,9 @@ class _DriverScreenState extends State<DriverScreen>
     if (alert == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Tipset finns inte längre, eller så har bilen inte tillgång till det.'),
+          content: Text(
+            'Tipset finns inte längre, eller så har bilen inte tillgång till det.',
+          ),
         ),
       );
       return;
@@ -783,12 +817,19 @@ class _DriverScreenState extends State<DriverScreen>
       _showEvents ? _events : const [];
 
   void _openFerry(Map<String, dynamic> f) {
-    showFerrySheet(context, f, attribution: _ferryAttribution);
+    final harbor = _harborFor(f);
+    showFerrySheet(
+      context,
+      f,
+      attribution: _ferryAttribution,
+      harborLat: harbor?.$1,
+      harborLon: harbor?.$2,
+    );
   }
 
   /// Alla evenemang per datum, i samma område som listan.
-  void _openEventsScreen() {
-    Navigator.of(context).push(
+  Future<void> _openEventsScreen() async {
+    await Navigator.of(context).push(
       MaterialPageRoute<void>(
         builder: (_) => EventsScreen(
           api: widget.api,
@@ -800,6 +841,9 @@ class _DriverScreenState extends State<DriverScreen>
         ),
       ),
     );
+    // Föraren kan ha följt eller slutat följa evenemang där.
+    final followed = await FollowedEvents.load();
+    if (mounted) setState(() => _followedEvents = followed);
   }
 
   void _openEvent(Map<String, dynamic> e) {
@@ -808,6 +852,8 @@ class _DriverScreenState extends State<DriverScreen>
       e,
       attribution: _eventsAttribution,
       previewNote: _eventsPreview ? _eventsPreviewNote : '',
+      followed: _isFollowedEvent(e),
+      onToggleFollow: (v) => _toggleFollowEvent(e, v),
     );
   }
 
@@ -823,7 +869,11 @@ class _DriverScreenState extends State<DriverScreen>
     final lat = (o['lat'] as num?)?.toDouble();
     final lon = (o['lon'] as num?)?.toDouble();
     if (lat == null || lon == null) return;
-    _mapFocus.move(lat, lon, 13);
+    setState(() {
+      _selectedId = o.containsKey('startDate') ? 'event:${o['id']}' : _tipId(o);
+    });
+    // Gatunivå: klustren löses upp där, så att just den här syns för sig.
+    _mapFocus.move(lat, lon, kClusterUntilZoom);
   }
 
   /// Kollar entitlement separat från _load så att ett fel här inte döljer
@@ -899,6 +949,7 @@ class _DriverScreenState extends State<DriverScreen>
           params: {'favorite': favorite ? 1 : 0},
         ),
       );
+      if (mounted) _followedSnack(favorite);
       // Hämtar om flödet så att `favorites`-listan speglar det som just
       // sparades -- den byggs av backend, inte här.
       await _load(silent: true);
@@ -913,6 +964,268 @@ class _DriverScreenState extends State<DriverScreen>
         ),
       );
     }
+  }
+
+  /// Säger var det följda hamnar -- annars vet föraren inte att "Följer" finns.
+  void _followedSnack(bool followed) {
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(
+            followed
+                ? 'Du följer den nu. Den finns under ⭐ Följer.'
+                : 'Du följer den inte längre.',
+          ),
+          action: followed
+              ? SnackBarAction(
+                  label: 'Visa',
+                  onPressed: () => _selectCategory('followed'),
+                )
+              : null,
+        ),
+      );
+  }
+
+  Future<void> _toggleFollowEvent(
+    Map<String, dynamic> event,
+    bool follow,
+  ) async {
+    final id = event['id']?.toString();
+    if (id == null || id.isEmpty) return;
+    setState(() {
+      if (follow) {
+        _followedEvents[id] = Map<String, dynamic>.from(event);
+      } else {
+        _followedEvents.remove(id);
+      }
+    });
+    await FollowedEvents.save(_followedEvents);
+    unawaited(
+      logAnalyticsEvent('event_followed', params: {'follow': follow ? 1 : 0}),
+    );
+    if (mounted) _followedSnack(follow);
+  }
+
+  bool _isFollowedEvent(Map e) =>
+      _followedEvents.containsKey(e['id']?.toString());
+
+  void _selectCategory(String? category) {
+    setState(() => _category = category);
+    _saveFilters();
+    unawaited(
+      logAnalyticsEvent(
+        'map_category',
+        params: {'category': category ?? 'all'},
+      ),
+    );
+  }
+
+  // --- Evenemang: dag och avstånd -----------------------------------------
+
+  /// Dagarna för [_eventDay], eller null för hela fönstret.
+  (DateTime, DateTime)? get _eventDayRange {
+    final now = DateTime.now();
+    final t = DateTime(now.year, now.month, now.day);
+    switch (_eventDay) {
+      case 'today':
+        return (t, t);
+      case 'tomorrow':
+        final d = t.add(const Duration(days: 1));
+        return (d, d);
+      case 'weekend':
+        final friday = t.weekday <= DateTime.friday
+            ? t.add(Duration(days: DateTime.friday - t.weekday))
+            : t;
+        return (friday, t.add(Duration(days: DateTime.sunday - t.weekday)));
+      case 'week':
+        return (t, t.add(const Duration(days: 6)));
+      default:
+        return null;
+    }
+  }
+
+  bool _eventInDays(Map e) {
+    final range = _eventDayRange;
+    if (range == null) return true;
+    final start = DateTime.tryParse(e['startDate']?.toString() ?? '');
+    final end =
+        DateTime.tryParse((e['endDate'] ?? e['startDate'])?.toString() ?? '') ??
+        start;
+    if (start == null || end == null) return e['ongoing'] == true;
+    return !end.isBefore(range.$1) && !start.isAfter(range.$2);
+  }
+
+  bool _eventWithinRadius(Map e) {
+    final radius = _eventRadiusKm;
+    if (radius == null) return true;
+    final d = (e['distanceKm'] as num?)?.toDouble();
+    return d != null && d <= radius;
+  }
+
+  /// Evenemangen i Event-läget: vald dag och avstånd, tidigast först.
+  List<Map<String, dynamic>> get _eventsInWindow {
+    final list = _eventsVisible
+        .where(_eventInDays)
+        .where(_eventWithinRadius)
+        .toList();
+    list.sort((a, b) {
+      if ((a['ongoing'] == true) != (b['ongoing'] == true)) {
+        return a['ongoing'] == true ? -1 : 1;
+      }
+      final sa = a['startAt']?.toString() ?? a['startDate']?.toString() ?? '';
+      final sb = b['startAt']?.toString() ?? b['startDate']?.toString() ?? '';
+      final c = sa.compareTo(sb);
+      if (c != 0) return c;
+      return ((a['distanceKm'] as num?) ?? 9999).compareTo(
+        (b['distanceKm'] as num?) ?? 9999,
+      );
+    });
+    return list;
+  }
+
+  /// Evenemang i dag -- de som visas på kartan under Alla.
+  List<Map<String, dynamic>> get _eventsToday {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return _eventsVisible.where((e) {
+      if (e['ongoing'] == true) return true;
+      final start = DateTime.tryParse(e['startDate']?.toString() ?? '');
+      return start != null &&
+          start.year == today.year &&
+          start.month == today.month &&
+          start.day == today.day;
+    }).toList();
+  }
+
+  // --- Kategorierna -------------------------------------------------------
+
+  SignalCategory? get _lens => signalCategoryFromKey(_category);
+
+  /// Kategorier föraren stängt av helt i filtret. Tåg & buss räknas som
+  /// avstängt först när alla dess färdsätt är det.
+  Set<SignalCategory> get _hiddenCategories => {
+    if (const [
+      'train',
+      'metro',
+      'tram',
+      'bus',
+      'boat',
+    ].every(_hiddenModes.contains))
+      SignalCategory.transit,
+    if (_hiddenModes.contains('road')) SignalCategory.road,
+    if (_hiddenModes.contains('flight')) SignalCategory.flight,
+    if (_hiddenModes.contains('ferry')) SignalCategory.ferry,
+    if (_hiddenModes.contains('events')) SignalCategory.event,
+  };
+
+  Map<SignalCategory, int> get _categoryCounts {
+    final counts = {for (final c in SignalCategory.values) c: 0};
+    for (final a in _activeSignalsVisible) {
+      final c = categoryOfAlert(a);
+      counts[c] = counts[c]! + 1;
+    }
+    counts[SignalCategory.ferry] =
+        counts[SignalCategory.ferry]! + _ferriesVisible.length;
+    counts[SignalCategory.event] = _eventsToday.length;
+    return counts;
+  }
+
+  int get _followedCount => _favorites.length + _followedEvents.length;
+
+  String _tipId(Map<String, dynamic> a) =>
+      'tip:${a['id'] ?? a['external_id'] ?? a['title']}';
+
+  /// Det kartan ritar, för den valda kategorin. Samma urval som listan.
+  List<MapItem> get _mapItems {
+    final items = <MapItem>[];
+    void addTip(Map<String, dynamic> a, {bool followed = false}) {
+      final lat = (a['lat'] as num?)?.toDouble();
+      final lon = (a['lon'] as num?)?.toDouble();
+      if (lat == null || lon == null) return;
+      final id = _tipId(a);
+      items.add(
+        MapItem(
+          id: id,
+          lat: lat,
+          lon: lon,
+          category: categoryOfAlert(a),
+          strength: strengthOfAlert(a),
+          icon: iconForAlert(a),
+          followed: followed || a['is_favorite'] == true,
+          onTap: () {
+            setState(() => _selectedId = id);
+            _openAlertDetail(a);
+          },
+        ),
+      );
+    }
+
+    void addEvent(Map<String, dynamic> e) {
+      final lat = (e['lat'] as num?)?.toDouble();
+      final lon = (e['lon'] as num?)?.toDouble();
+      if (lat == null || lon == null) return;
+      final id = 'event:${e['id']}';
+      items.add(
+        MapItem(
+          id: id,
+          lat: lat,
+          lon: lon,
+          category: SignalCategory.event,
+          strength: strengthOfEvent(e),
+          icon: iconForEvent(e),
+          followed: _isFollowedEvent(e),
+          onTap: () {
+            setState(() => _selectedId = id);
+            _openEvent(e);
+          },
+        ),
+      );
+    }
+
+    if (_category == 'followed') {
+      for (final a in _favorites) {
+        addTip(a, followed: true);
+      }
+      for (final e in _followedEvents.values) {
+        addEvent(e);
+      }
+      return items;
+    }
+    final lens = _lens;
+    for (final a in _activeSignalsVisible) {
+      if (lens == null || categoryOfAlert(a) == lens) addTip(a);
+    }
+    if (lens == SignalCategory.event) {
+      _eventsInWindow.forEach(addEvent);
+    } else if (lens == null) {
+      _eventsToday.forEach(addEvent);
+    }
+    return items;
+  }
+
+  bool get _mapShowsFerries =>
+      _showFerries &&
+      (_category == null || _category == SignalCategory.ferry.key);
+
+  /// Terminalens läge för en färja -- dit föraren kör, inte till fartyget.
+  (double, double)? _harborFor(Map<String, dynamic> f) {
+    final t = f['terminal'];
+    if (t is Map && t['lat'] is num && t['lon'] is num) {
+      return ((t['lat'] as num).toDouble(), (t['lon'] as num).toDouble());
+    }
+    final key = t?.toString() ?? '';
+    for (final terminal in _ferryTerminals) {
+      if (terminal['key']?.toString() == key &&
+          terminal['lat'] is num &&
+          terminal['lon'] is num) {
+        return (
+          (terminal['lat'] as num).toDouble(),
+          (terminal['lon'] as num).toDouble(),
+        );
+      }
+    }
+    return null;
   }
 
   /// Place + near-me filters (not kind / high-only).
@@ -944,15 +1257,6 @@ class _DriverScreenState extends State<DriverScreen>
   }
 
   // "Bara hög prio" ersattes av poängslidaren — se `_inScoreRange`.
-
-  DateTime? _signalTime(Map<String, dynamic> a) {
-    final raw = a['start_time'] ?? a['computed_at'];
-    if (raw is String && raw.isNotEmpty) return DateTime.tryParse(raw);
-    if (raw is num) {
-      return DateTime.fromMillisecondsSinceEpoch(raw.toInt());
-    }
-    return null;
-  }
 
   /// Kart + bottenlista: starkast först (samma färg som pinnarna).
   ///
@@ -1053,7 +1357,13 @@ class _DriverScreenState extends State<DriverScreen>
   /// inte: många SL-tips saknar plats men ska fortfarande synas.
   List<Map<String, dynamic>> get _listOpportunities {
     var list = _sourceFilterList(_geoFilter(_rawActive));
-    list = list.where(_inScoreRange).toList();
+    // Styrkefiltret gäller körningar, inte väghinder: en olycka på vägen dit
+    // ska synas även när föraren bara vill se de starkaste tipsen.
+    list = list
+        .where(
+          (a) => _inScoreRange(a) || categoryOfAlert(a) == SignalCategory.road,
+        )
+        .toList();
     _sortByPriority(list);
     return list;
   }
@@ -1421,45 +1731,7 @@ class _DriverScreenState extends State<DriverScreen>
                         ),
                         const SizedBox(height: 14),
                         const Text(
-                          'Vad vill du se?',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            for (final opt in filterModeOptions)
-                              FilterChip(
-                                avatar: BrandIcons.forMode(
-                                  opt.$1,
-                                  size: 16,
-                                  color: _hiddenModes.contains(opt.$1)
-                                      ? Colors.grey
-                                      : TbColors.ink,
-                                ),
-                                label: Text(
-                                  opt.$2,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                selected: !_hiddenModes.contains(opt.$1),
-                                selectedColor: TbColors.taxi,
-                                showCheckmark: false,
-                                onSelected: (on) => apply(() {
-                                  if (on) {
-                                    _hiddenModes.remove(opt.$1);
-                                  } else {
-                                    _hiddenModes.add(opt.$1);
-                                  }
-                                }),
-                              ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        const Text(
-                          'Sortera listan',
+                          'Sortera',
                           style: TextStyle(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 8),
@@ -1468,61 +1740,102 @@ class _DriverScreenState extends State<DriverScreen>
                             selectedBackgroundColor: TbColors.taxi,
                             selectedForegroundColor: TbColors.ink,
                           ),
-                          segments: const [
-                            ButtonSegment(value: 'score', label: Text('Poäng')),
-                            ButtonSegment(
-                              value: 'distance',
-                              label: Text('Närmast'),
-                            ),
-                            ButtonSegment(
-                              value: 'newest',
-                              label: Text('Nyast'),
-                            ),
+                          segments: [
+                            for (final (value, icon, label) in _sortOptions)
+                              ButtonSegment(
+                                value: value,
+                                icon: Icon(icon, size: 18),
+                                label: Text(label),
+                              ),
                           ],
                           selected: {_sortMode},
                           onSelectionChanged: (set) =>
                               apply(() => _sortMode = set.first),
                         ),
-                        if (_filterableTiers.isNotEmpty)
-                          Theme(
-                            data: Theme.of(
-                              ctx,
-                            ).copyWith(dividerColor: Colors.transparent),
-                            child: ExpansionTile(
-                              tilePadding: EdgeInsets.zero,
-                              childrenPadding: EdgeInsets.zero,
-                              title: const Text(
-                                'Fler val: typ av störning',
-                                style: TextStyle(fontWeight: FontWeight.w700),
-                              ),
-                              children: [
-                                for (final tier in _filterableTiers)
-                                  CheckboxListTile(
-                                    contentPadding: EdgeInsets.zero,
-                                    dense: true,
-                                    controlAffinity:
-                                        ListTileControlAffinity.leading,
-                                    title: Text(
-                                      severityTierShortLabels[tier] ?? tier,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    value: !_hiddenTiers.contains(tier),
-                                    onChanged: (on) => apply(() {
-                                      if (on == true) {
-                                        _hiddenTiers.remove(tier);
-                                      } else {
-                                        _hiddenTiers.add(tier);
-                                      }
-                                    }),
-                                  ),
-                              ],
+                        // Alltid med: färdsätten går att dölja även när
+                        // inga störningstyper finns att välja bland.
+                        Theme(
+                          data: Theme.of(
+                            ctx,
+                          ).copyWith(dividerColor: Colors.transparent),
+                          child: ExpansionTile(
+                            tilePadding: EdgeInsets.zero,
+                            childrenPadding: EdgeInsets.zero,
+                            title: const Text(
+                              'Fler val: dölj typer',
+                              style: TextStyle(fontWeight: FontWeight.w700),
                             ),
+                            children: [
+                              const Align(
+                                alignment: Alignment.centerLeft,
+                                child: Padding(
+                                  padding: EdgeInsets.only(bottom: 8),
+                                  child: Text(
+                                    'Gul = visas. Tryck för att dölja.',
+                                    style: TextStyle(color: TbColors.skiffer),
+                                  ),
+                                ),
+                              ),
+                              Wrap(
+                                spacing: 8,
+                                runSpacing: 8,
+                                children: [
+                                  for (final opt in filterModeOptions)
+                                    FilterChip(
+                                      avatar: BrandIcons.forMode(
+                                        opt.$1,
+                                        size: 16,
+                                        color: _hiddenModes.contains(opt.$1)
+                                            ? Colors.grey
+                                            : TbColors.ink,
+                                      ),
+                                      label: Text(
+                                        opt.$2,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      selected: !_hiddenModes.contains(opt.$1),
+                                      selectedColor: TbColors.taxi,
+                                      showCheckmark: false,
+                                      onSelected: (on) => apply(() {
+                                        if (on) {
+                                          _hiddenModes.remove(opt.$1);
+                                        } else {
+                                          _hiddenModes.add(opt.$1);
+                                        }
+                                      }),
+                                    ),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              for (final tier in _filterableTiers)
+                                CheckboxListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  dense: true,
+                                  controlAffinity:
+                                      ListTileControlAffinity.leading,
+                                  title: Text(
+                                    severityTierShortLabels[tier] ?? tier,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                    ),
+                                  ),
+                                  value: !_hiddenTiers.contains(tier),
+                                  onChanged: (on) => apply(() {
+                                    if (on == true) {
+                                      _hiddenTiers.remove(tier);
+                                    } else {
+                                      _hiddenTiers.add(tier);
+                                    }
+                                  }),
+                                ),
+                            ],
                           ),
+                        ),
                         const SizedBox(height: 16),
                         const Text(
-                          'Hur starka tips?',
+                          'Styrka',
                           style: TextStyle(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 8),
@@ -1531,7 +1844,7 @@ class _DriverScreenState extends State<DriverScreen>
                             for (final (i, label) in const [
                               (0, 'Alla'),
                               (1, 'Starka'),
-                              (2, 'Akuta'),
+                              (2, 'Starkast'),
                             ]) ...[
                               if (i > 0) const SizedBox(width: 8),
                               Expanded(
@@ -1549,7 +1862,7 @@ class _DriverScreenState extends State<DriverScreen>
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          'Var kör du?',
+                          'Område',
                           style: TextStyle(fontWeight: FontWeight.w700),
                         ),
                         ListTile(
@@ -1862,60 +2175,80 @@ class _DriverScreenState extends State<DriverScreen>
                           ),
                         ),
                       ),
+                      // VAD och HUR VIKTIGT, som på kortet och kartan: samma
+                      // ikon, samma färg, samma ord.
                       Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text(
-                            (a['kind'] ?? a['sourceKind']) == 'road'
-                                ? 'VÄG'
-                                : 'KOLLEKTIV',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 0.6,
-                              color: Colors.grey.shade700,
+                          Container(
+                            width: 52,
+                            height: 52,
+                            decoration: BoxDecoration(
+                              color: strengthColor(
+                                strengthOfAlert(a),
+                                category: categoryOfAlert(a),
+                              ),
+                              borderRadius: BorderRadius.circular(
+                                categoryOfAlert(a) == SignalCategory.road
+                                    ? 8
+                                    : 14,
+                              ),
+                            ),
+                            child: Icon(
+                              iconForAlert(a),
+                              color: TbColors.vit,
+                              size: 30,
                             ),
                           ),
-                          // Restates the same likelihood the card already showed
-                          // -- the sheet shouldn't require remembering it from
-                          // the list.
-                          LikelihoodBadge(
-                            likelihood: likelihood,
-                            distanceKm: _distanceFor(a),
-                            fontSize: 13,
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '${categoryOfAlert(a).label} · ${shortWhat(a)}'
+                                      .toUpperCase(),
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.6,
+                                    color: TbColors.skiffer,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                StrengthPill(
+                                  strength: strengthOfAlert(a),
+                                  category: categoryOfAlert(a),
+                                  large: true,
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 12),
                       Text(
                         _placeName(a),
                         style: const TextStyle(
                           fontFamily: kDisplayFont,
-                          fontSize: 28,
+                          fontSize: 26,
                           fontWeight: FontWeight.w700,
-                          height: 1.1,
+                          height: 1.15,
                         ),
                       ),
-                      if (_distanceFor(a) != null ||
-                          (_userLat != null && (a['lat'] as num?) != null)) ...[
-                        const SizedBox(height: 10),
-                        _DistanceBanner(
-                          distanceKm: _distanceFor(a),
-                          hasGps: _userLat != null,
-                          onNavigate: () async {
-                            final lat = (a['lat'] as num?)?.toDouble();
-                            final lon = (a['lon'] as num?)?.toDouble();
-                            if (lat == null || lon == null) return;
-                            final uri = Uri.parse(
-                              'https://www.google.com/maps/dir/?api=1&destination=$lat,$lon',
-                            );
-                            await launchUrl(
-                              uri,
-                              mode: LaunchMode.externalApplication,
-                            );
-                          },
-                        ),
-                      ],
+                      const SizedBox(height: 14),
+                      // Kör dit (telefonens navigering) och Följ -- de två saker
+                      // föraren gör med ett tips, överst och stora.
+                      ActionRow(
+                        lat: (a['lat'] as num?)?.toDouble(),
+                        lon: (a['lon'] as num?)?.toDouble(),
+                        driveLabel: _distanceFor(a) == null
+                            ? 'Kör dit'
+                            : 'Kör dit · ${distanceText(_distanceFor(a))}',
+                        followed: a['is_favorite'] == true,
+                        onToggleFollow: widget.api.supportsFavorites
+                            ? (v) => _toggleFavorite(a, v)
+                            : null,
+                      ),
                       const SizedBox(height: 10),
                       // Stat row: date/time + score up front so a driver scanning
                       // the sheet can place it in time and judge it at a glance,
@@ -2184,137 +2517,150 @@ class _DriverScreenState extends State<DriverScreen>
                               _openAlertDetail(o);
                             },
                           )
-                        : HotspotMap(
-                            placeStats: _asMaps(_data?['placeStats']),
-                            events: _mapEvents,
-                            userLat: _userLat,
-                            userLon: _userLon,
-                            highOnly: _scoreMin >= 50,
-                            perOpportunity: _mapShowsPerOpportunity,
-                            opportunities: _mapOpportunities,
-                            ferries: _showFerries ? _ferryShips : const [],
-                            ferryTerminals: _showFerries
+                        : SignalMap(
+                            items: _mapItems,
+                            mapController: _mapController,
+                            ferries: _mapShowsFerries ? _ferryShips : const [],
+                            ferryTerminals: _mapShowsFerries
                                 ? _ferryTerminals
                                 : const [],
                             onSelectFerry: _openFerry,
-                            onSelectEvent: _openEvent,
-                            mapController: _mapController,
-                            onSelectOpportunity: (o) {
-                              _focusOpportunity(o);
-                              _openAlertDetail(o);
-                            },
+                            userLat: _userLat,
+                            userLon: _userLon,
+                            selectedId: _selectedId,
                           ),
                   ),
 
-                  // 2. Uppe: bara inställningar, och en rad när något behöver åtgärdas.
+                  // 2. Uppe: logotyp och inställningar, kategoriraden, och en rad
+                  // när något behöver åtgärdas.
                   Positioned(
                     top: 0,
                     left: 0,
                     right: 0,
                     child: SafeArea(
                       bottom: false,
-                      child: Padding(
-                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.stretch,
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 6,
-                                vertical: 6,
-                              ),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.96),
-                                borderRadius: BorderRadius.circular(32),
-                                boxShadow: const [
-                                  BoxShadow(
-                                    color: Colors.black12,
-                                    blurRadius: 12,
-                                    offset: Offset(0, 4),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 6,
+                                    vertical: 6,
                                   ),
-                                ],
-                              ),
-                              child: Stack(
-                                alignment: Alignment.center,
-                                children: [
-                                  SvgPicture.asset(
-                                    'assets/brand/logo.svg',
-                                    height: 24,
-                                  ),
-                                  Row(
-                                    mainAxisAlignment:
-                                        MainAxisAlignment.spaceBetween,
-                                    children: [
-                                      if (widget.onBack != null)
-                                        IconButton(
-                                          icon: const Icon(Icons.arrow_back),
-                                          tooltip: 'Tillbaka',
-                                          color: TbColors.ink,
-                                          onPressed: widget.onBack!,
-                                        )
-                                      else
-                                        const SizedBox(width: 48),
-                                      if (widget.onOpenSettings != null)
-                                        IconButton(
-                                          icon: const Icon(
-                                            Icons.settings_outlined,
-                                          ),
-                                          tooltip: 'Inställningar',
-                                          color: TbColors.ink,
-                                          onPressed: widget.onOpenSettings!,
-                                        )
-                                      else
-                                        const SizedBox(width: 48),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: 0.96),
+                                    borderRadius: BorderRadius.circular(32),
+                                    boxShadow: const [
+                                      BoxShadow(
+                                        color: Colors.black12,
+                                        blurRadius: 12,
+                                        offset: Offset(0, 4),
+                                      ),
                                     ],
                                   ),
+                                  child: Stack(
+                                    alignment: Alignment.center,
+                                    children: [
+                                      SvgPicture.asset(
+                                        'assets/brand/logo.svg',
+                                        height: 24,
+                                      ),
+                                      Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          if (widget.onBack != null)
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.arrow_back,
+                                              ),
+                                              tooltip: 'Tillbaka',
+                                              color: TbColors.ink,
+                                              onPressed: widget.onBack!,
+                                            )
+                                          else
+                                            const SizedBox(width: 48),
+                                          if (widget.onOpenSettings != null)
+                                            IconButton(
+                                              icon: const Icon(
+                                                Icons.settings_outlined,
+                                              ),
+                                              tooltip: 'Inställningar',
+                                              color: TbColors.ink,
+                                              onPressed: widget.onOpenSettings!,
+                                            )
+                                          else
+                                            const SizedBox(width: 48),
+                                        ],
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                if (_needsVehicle) ...[
+                                  const SizedBox(height: 8),
+                                  _Notice(
+                                    icon: Icons.local_taxi_outlined,
+                                    text:
+                                        'Välj vilken bil du kör för att se tips.',
+                                    action: 'Välj bil',
+                                    onAction: _openVehiclePicker,
+                                  ),
+                                ] else if (_entitled == false) ...[
+                                  const SizedBox(height: 8),
+                                  _EntitlementBanner(
+                                    onOpenSettings: widget.onOpenSettings,
+                                  ),
+                                ] else if (_needsArea) ...[
+                                  const SizedBox(height: 8),
+                                  _Notice(
+                                    icon: Icons.map_outlined,
+                                    text:
+                                        'Välj ditt körområde för att se tips.',
+                                    action: 'Välj',
+                                    onAction: _openAreaChecklist,
+                                  ),
                                 ],
-                              ),
+                                if (_error != null) ...[
+                                  const SizedBox(height: 8),
+                                  _Notice(
+                                    icon: Icons.cloud_off,
+                                    text: _error!,
+                                    danger: true,
+                                  ),
+                                ] else if (_data != null &&
+                                    !live &&
+                                    !widget.demo) ...[
+                                  const SizedBox(height: 8),
+                                  _Notice(
+                                    icon: Icons.schedule,
+                                    text:
+                                        'Inte uppdaterat sedan ${_clock(_data?['updatedAt'])}',
+                                  ),
+                                ],
+                                if (_status != null) ...[
+                                  const SizedBox(height: 8),
+                                  _Notice(
+                                    icon: Icons.info_outline,
+                                    text: _status!,
+                                  ),
+                                ],
+                              ],
                             ),
-                            if (_needsVehicle) ...[
-                              const SizedBox(height: 8),
-                              _Notice(
-                                icon: Icons.local_taxi_outlined,
-                                text: 'Välj vilken bil du kör för att se tips.',
-                                action: 'Välj bil',
-                                onAction: _openVehiclePicker,
-                              ),
-                            ] else if (_entitled == false) ...[
-                              const SizedBox(height: 8),
-                              _EntitlementBanner(
-                                onOpenSettings: widget.onOpenSettings,
-                              ),
-                            ] else if (_needsArea) ...[
-                              const SizedBox(height: 8),
-                              _Notice(
-                                icon: Icons.map_outlined,
-                                text: 'Välj ditt körområde för att se tips.',
-                                action: 'Välj',
-                                onAction: _openAreaChecklist,
-                              ),
-                            ],
-                            if (_error != null) ...[
-                              const SizedBox(height: 8),
-                              _Notice(
-                                icon: Icons.cloud_off,
-                                text: _error!,
-                                danger: true,
-                              ),
-                            ] else if (_data != null &&
-                                !live &&
-                                !widget.demo) ...[
-                              const SizedBox(height: 8),
-                              _Notice(
-                                icon: Icons.schedule,
-                                text:
-                                    'Inte uppdaterat sedan ${_clock(_data?['updatedAt'])}',
-                              ),
-                            ],
-                            if (_status != null) ...[
-                              const SizedBox(height: 8),
-                              _Notice(icon: Icons.info_outline, text: _status!),
-                            ],
-                          ],
-                        ),
+                          ),
+                          const SizedBox(height: 8),
+                          CategoryBar(
+                            selected: _category,
+                            counts: _categoryCounts,
+                            followedCount: _followedCount,
+                            hidden: _hiddenCategories,
+                            onSelect: _selectCategory,
+                          ),
+                        ],
                       ),
                     ),
                   ),
@@ -2348,19 +2694,35 @@ class _DriverScreenState extends State<DriverScreen>
                             ),
                           ),
                         ),
-                        FloatingActionButton(
-                          heroTag: 'location_fab',
-                          onPressed: _goToMyLocation,
-                          backgroundColor: Colors.white,
-                          foregroundColor: _userLat != null
-                              ? const Color(0xFF1A73E8)
-                              : TbColors.ink,
-                          elevation: 4,
-                          child: Icon(
-                            _userLat != null
-                                ? Icons.my_location
-                                : Icons.location_searching,
-                          ),
+                        Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            FloatingActionButton.small(
+                              heroTag: 'legend_fab',
+                              onPressed: () => showMapLegend(context),
+                              backgroundColor: Colors.white,
+                              foregroundColor: TbColors.ink,
+                              elevation: 4,
+                              tooltip: 'Vad betyder symbolerna?',
+                              child: const Icon(Icons.help_outline_rounded),
+                            ),
+                            const SizedBox(height: 10),
+                            FloatingActionButton(
+                              heroTag: 'location_fab',
+                              onPressed: _goToMyLocation,
+                              backgroundColor: Colors.white,
+                              foregroundColor: _userLat != null
+                                  ? const Color(0xFF1A73E8)
+                                  : TbColors.ink,
+                              elevation: 4,
+                              tooltip: 'Min position',
+                              child: Icon(
+                                _userLat != null
+                                    ? Icons.my_location
+                                    : Icons.location_searching,
+                              ),
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -2434,36 +2796,8 @@ class _DriverScreenState extends State<DriverScreen>
                                         )
                                       : null,
                                 ),
-                                Padding(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                  ),
-                                  child: _SheetTabs(
-                                    selected: _sheetTab,
-                                    tabs: [
-                                      (
-                                        'tips',
-                                        'Tips',
-                                        _activeSignalsVisible.length,
-                                      ),
-                                      if (_showFerries)
-                                        (
-                                          'ferries',
-                                          'Färjor',
-                                          _ferriesVisible.length,
-                                        ),
-                                      if (_showEvents)
-                                        (
-                                          'events',
-                                          'Evenemang',
-                                          _eventsVisible.length,
-                                        ),
-                                    ],
-                                    onSelect: (tab) =>
-                                        setState(() => _sheetTab = tab),
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
+                                _sheetHeader(),
+                                const SizedBox(height: 8),
                                 ..._buildSheetItems(),
                               ],
                             ),
@@ -2478,43 +2812,265 @@ class _DriverScreenState extends State<DriverScreen>
     );
   }
 
-  /// Bottenpanelens lista: bara den valda fliken, korta tomma lägen, inga extra knappar.
-  List<Widget> _buildSheetItems() {
-    Widget empty(String text, {String? action, VoidCallback? onAction}) =>
-        Padding(
-          padding: const EdgeInsets.fromLTRB(32, 28, 32, 24),
-          child: Column(
-            children: [
-              Text(
-                text,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 16,
-                  height: 1.4,
-                  color: Colors.grey.shade700,
+  /// Rubriken i bottenpanelen: vad som visas, hur många, och sorteringen.
+  Widget _sheetHeader() {
+    final lens = _lens;
+    final String title;
+    final int count;
+    if (_category == 'followed') {
+      title = 'Följer';
+      count = _followedCount;
+    } else if (lens == SignalCategory.event) {
+      title = 'Event';
+      count = _eventsInWindow.length;
+    } else if (lens == SignalCategory.ferry) {
+      title = 'Färjor';
+      count = _ferriesVisible.length + _tipsIn(lens).length;
+    } else {
+      title = lens?.label ?? 'Alla tips';
+      count = _tipsIn(lens).length;
+    }
+    final sortable = _category != 'followed' && lens != SignalCategory.event;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
+      child: Row(
+        children: [
+          Icon(
+            _category == 'followed'
+                ? Icons.star_rounded
+                : (lens?.icon ?? Icons.apps_rounded),
+            color: _category == 'followed'
+                ? TbColors.guldDjup
+                : TbColors.midnatt,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '$title · $count',
+              style: const TextStyle(
+                fontFamily: kDisplayFont,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: TbColors.midnatt,
+              ),
+            ),
+          ),
+          if (sortable)
+            PopupMenuButton<String>(
+              tooltip: 'Sortera',
+              initialValue: _sortMode,
+              onSelected: (v) {
+                setState(() => _sortMode = v);
+                _saveFilters();
+              },
+              itemBuilder: (_) => [
+                for (final (value, icon, label) in _sortOptions)
+                  PopupMenuItem(
+                    value: value,
+                    child: Row(
+                      children: [
+                        Icon(icon, size: 20, color: TbColors.midnatt),
+                        const SizedBox(width: 10),
+                        Text(
+                          label,
+                          style: const TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(_sortIcon, size: 20, color: TbColors.midnatt),
+                    const SizedBox(width: 4),
+                    Text(
+                      _sortLabel,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        color: TbColors.midnatt,
+                      ),
+                    ),
+                    const Icon(
+                      Icons.arrow_drop_down_rounded,
+                      color: TbColors.midnatt,
+                    ),
+                  ],
                 ),
               ),
-              if (action != null) ...[
-                const SizedBox(height: 14),
-                FilledButton(onPressed: onAction, child: Text(action)),
-              ],
-            ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  static const _sortOptions = <(String, IconData, String)>[
+    ('score', Icons.bolt_rounded, 'Viktigast'),
+    ('distance', Icons.near_me_rounded, 'Närmast'),
+    ('newest', Icons.schedule_rounded, 'Nyast'),
+  ];
+
+  IconData get _sortIcon => _sortOptions
+      .firstWhere((o) => o.$1 == _sortMode, orElse: () => _sortOptions.first)
+      .$2;
+  String get _sortLabel => _sortOptions
+      .firstWhere((o) => o.$1 == _sortMode, orElse: () => _sortOptions.first)
+      .$3;
+
+  List<Map<String, dynamic>> _tipsIn(SignalCategory? lens) => [
+    for (final a in _activeSignalsVisible)
+      if (lens == null || categoryOfAlert(a) == lens) a,
+  ];
+
+  /// Bottenpanelens lista för den valda kategorin.
+  List<Widget> _buildSheetItems() {
+    Widget empty(
+      String text, {
+      IconData? icon,
+      String? action,
+      VoidCallback? onAction,
+    }) => Padding(
+      padding: const EdgeInsets.fromLTRB(32, 20, 32, 24),
+      child: Column(
+        children: [
+          if (icon != null) ...[
+            Icon(icon, size: 44, color: TbColors.skiffer),
+            const SizedBox(height: 10),
+          ],
+          Text(
+            text,
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 16,
+              height: 1.4,
+              color: TbColors.skiffer,
+            ),
           ),
-        );
+          if (action != null) ...[
+            const SizedBox(height: 14),
+            FilledButton(onPressed: onAction, child: Text(action)),
+          ],
+        ],
+      ),
+    );
     Widget pad(Widget child) => Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
       child: child,
     );
+    Widget tipCard(Map<String, dynamic> a) => pad(
+      SignalCard(
+        alert: a,
+        onTap: () {
+          _focusOpportunity(a);
+          _openAlertDetail(a);
+        },
+        onToggleFollow: widget.api.supportsFavorites
+            ? (v) => _toggleFavorite(a, v)
+            : null,
+      ),
+    );
+    Widget eventCard(Map<String, dynamic> e) => pad(
+      EventCard(
+        event: e,
+        showDate: true,
+        followed: _isFollowedEvent(e),
+        onToggleFollow: (v) => _toggleFollowEvent(e, v),
+        onTap: () {
+          _focusOpportunity(e);
+          _openEvent(e);
+        },
+      ),
+    );
 
-    final tab = switch (_sheetTab) {
-      'ferries' when _showFerries => 'ferries',
-      'events' when _showEvents => 'events',
-      _ => 'tips',
-    };
-
-    if (tab == 'ferries') {
-      if (_ferriesVisible.isEmpty) return [empty('Inga färjor just nu.')];
+    // --- Följer ---
+    if (_category == 'followed') {
+      final events = _followedEvents.values.toList()
+        ..sort(
+          (a, b) => (a['startDate']?.toString() ?? '').compareTo(
+            b['startDate']?.toString() ?? '',
+          ),
+        );
+      if (_favorites.isEmpty && events.isEmpty) {
+        return [
+          empty(
+            'Du följer inget än.\n\nTryck på ☆ på ett tips eller ett event. '
+            'Då sparas det här, också när det är över.',
+            icon: Icons.star_outline_rounded,
+          ),
+        ];
+      }
       return [
+        if (_favorites.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: _SectionTitle('Tips'),
+          ),
+          ..._favorites.map(tipCard),
+        ],
+        if (events.isNotEmpty) ...[
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: _SectionTitle('Event'),
+          ),
+          ...events.map(eventCard),
+        ],
+      ];
+    }
+
+    final lens = _lens;
+
+    // --- Event ---
+    if (lens == SignalCategory.event) {
+      final events = _eventsInWindow;
+      return [
+        _eventFilters(),
+        if (_eventsPreview && _eventsPreviewNote.isNotEmpty)
+          pad(PreviewBanner(text: _eventsPreviewNote)),
+        if (events.isEmpty)
+          _eventsSourceOk
+              ? empty(
+                  _eventRadiusKm != null
+                      ? 'Inga event inom ${_eventRadiusKm!.round()} km. Välj ett längre avstånd.'
+                      : 'Inga event de här dagarna.',
+                  icon: Icons.event_busy_rounded,
+                  action: 'Fler datum',
+                  onAction: _openEventsScreen,
+                )
+              : empty(
+                  'Kan inte hämta event just nu.',
+                  icon: Icons.cloud_off_rounded,
+                ),
+        ...events.take(30).map(eventCard),
+        if (events.isNotEmpty)
+          pad(
+            OutlinedButton.icon(
+              style: OutlinedButton.styleFrom(
+                minimumSize: const Size.fromHeight(52),
+              ),
+              onPressed: _openEventsScreen,
+              icon: const Icon(Icons.calendar_month_rounded),
+              label: const Text('Fler datum'),
+            ),
+          ),
+        if (_eventsAttribution.isNotEmpty) _sourceNote(_eventsAttribution),
+      ];
+    }
+
+    // --- Färjor ---
+    if (lens == SignalCategory.ferry) {
+      final tips = _tipsIn(lens);
+      if (_ferriesVisible.isEmpty && tips.isEmpty) {
+        return [
+          empty(
+            'Inga färjor på väg in just nu.',
+            icon: Icons.directions_boat_rounded,
+          ),
+        ];
+      }
+      return [
+        ...tips.map(tipCard),
         for (final f in _ferriesVisible)
           pad(
             FerryCard(
@@ -2529,95 +3085,205 @@ class _DriverScreenState extends State<DriverScreen>
       ];
     }
 
-    if (tab == 'events') {
-      final out = <Widget>[
-        if (_eventsPreview && _eventsPreviewNote.isNotEmpty)
-          pad(PreviewBanner(text: _eventsPreviewNote)),
-        if (_eventsVisible.isEmpty)
-          _eventsSourceOk
-              ? empty(
-                  'Inga evenemang närmaste tiden.',
-                  action: 'Fler datum',
-                  onAction: _openEventsScreen,
-                )
-              : empty('Kan inte hämta evenemang.'),
-        for (final e in _eventsVisible.take(8))
-          pad(
-            EventCard(
-              event: e,
-              showDate: true,
-              onTap: () {
-                _focusOpportunity(e);
-                _openEvent(e);
-              },
-            ),
-          ),
-        if (_eventsVisible.isNotEmpty)
-          pad(
-            OutlinedButton.icon(
-              style: OutlinedButton.styleFrom(
-                minimumSize: const Size.fromHeight(48),
-              ),
-              onPressed: _openEventsScreen,
-              icon: const Icon(Icons.calendar_month),
-              label: const Text('Fler datum'),
-            ),
-          ),
-        if (_eventsAttribution.isNotEmpty) _sourceNote(_eventsAttribution),
-      ];
-      return out;
-    }
-
-    Widget card(Map<String, dynamic> a, {bool focusMap = true}) => pad(
-      SmartAlertCard(
-        alert: a,
-        onTap: () {
-          if (focusMap) _focusOpportunity(a);
-          _openAlertDetail(a);
-        },
-        onToggleFavorite: widget.api.supportsFavorites
-            ? (v) => _toggleFavorite(a, v)
-            : null,
-      ),
-    );
+    // --- Alla, eller en typ av tips ---
+    final tips = _tipsIn(lens);
+    final ended = [
+      for (final a in _endedSignalsVisible)
+        if (lens == null || categoryOfAlert(a) == lens) a,
+    ];
     final out = <Widget>[];
-    if (_favorites.isNotEmpty) {
-      out.add(
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
-          child: _SectionTitle('Sparade'),
-        ),
-      );
-      out.addAll(_favorites.map((a) => card(a, focusMap: false)));
+    if (lens == null) {
+      final today = _eventsToday.length;
+      final ferries = _ferriesVisible.length;
+      if (today > 0 || ferries > 0) {
+        out.add(
+          SizedBox(
+            height: 48,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+              children: [
+                if (today > 0)
+                  _ShortcutChip(
+                    icon: Icons.stadium_rounded,
+                    label: '$today event i dag',
+                    onTap: () => _selectCategory(SignalCategory.event.key),
+                  ),
+                if (ferries > 0)
+                  _ShortcutChip(
+                    icon: Icons.directions_boat_rounded,
+                    label: '$ferries färjor på väg in',
+                    onTap: () => _selectCategory(SignalCategory.ferry.key),
+                  ),
+              ],
+            ),
+          ),
+        );
+      }
     }
-    out.addAll(_activeSignalsVisible.map(card));
-    if (_activeSignalsVisible.isEmpty && _favorites.isEmpty) {
+    out.addAll(tips.map(tipCard));
+    if (tips.isEmpty) {
       out.add(
         _filtersActive
             ? empty(
-                'Inga tips hittades.',
+                'Inga tips med de här filtren.',
+                icon: Icons.filter_alt_off_rounded,
                 action: 'Rensa filter',
                 onAction: _clearFilters,
               )
-            : empty('Inga störningar i ditt område.'),
+            : empty(
+                lens == SignalCategory.road
+                    ? 'Inga olyckor eller hinder på vägarna i ditt område.'
+                    : 'Inga störningar i ditt område just nu.',
+                icon: Icons.check_circle_outline_rounded,
+              ),
       );
     }
-    if (_endedSignalsVisible.isNotEmpty) {
+    if (ended.isNotEmpty) {
       out.add(
         Theme(
           data: ThemeData(dividerColor: Colors.transparent),
           child: ExpansionTile(
             tilePadding: const EdgeInsets.symmetric(horizontal: 16),
             title: Text(
-              'Tidigare i dag (${_endedSignalsVisible.length})',
+              'Tidigare i dag (${ended.length})',
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
-            children: [for (final a in _endedSignalsVisible) card(a)],
+            children: [for (final a in ended) tipCard(a)],
           ),
         ),
       );
     }
     return out;
+  }
+
+  /// Dag och avstånd för event. Avståndet kräver position -- utan den visas
+  /// en knapp som hämtar den i stället för val som inte kan göra något.
+  Widget _eventFilters() {
+    const days = [
+      ('today', 'I dag'),
+      ('tomorrow', 'I morgon'),
+      ('weekend', 'Helgen'),
+      ('week', '7 dagar'),
+      ('all', '14 dagar'),
+    ];
+    const radii = <(double?, String)>[
+      (null, 'Hela länet'),
+      (10, '10 km'),
+      (25, '25 km'),
+      (50, '50 km'),
+    ];
+    Widget chip(
+      String label,
+      bool selected,
+      VoidCallback onTap, {
+      IconData? icon,
+    }) => Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ChoiceChip(
+        avatar: icon == null
+            ? null
+            : Icon(
+                icon,
+                size: 18,
+                color: selected ? TbColors.midnatt : TbColors.skiffer,
+              ),
+        label: Text(label),
+        selected: selected,
+        showCheckmark: false,
+        selectedColor: TbColors.guld,
+        labelStyle: const TextStyle(
+          fontWeight: FontWeight.w700,
+          color: TbColors.midnatt,
+          fontSize: 15,
+        ),
+        onSelected: (_) => onTap(),
+      ),
+    );
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            height: 48,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                for (final (key, label) in days)
+                  chip(
+                    label,
+                    _eventDay == key,
+                    () {
+                      setState(() => _eventDay = key);
+                      _saveFilters();
+                    },
+                    icon: key == 'today' ? Icons.today_rounded : null,
+                  ),
+              ],
+            ),
+          ),
+          SizedBox(
+            height: 48,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              children: [
+                if (_userLat == null)
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: ActionChip(
+                      avatar: const Icon(Icons.my_location_rounded, size: 18),
+                      label: const Text(
+                        'Visa avstånd',
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      onPressed: _goToMyLocation,
+                    ),
+                  )
+                else
+                  for (final (km, label) in radii)
+                    chip(
+                      label,
+                      _eventRadiusKm == km,
+                      () => setState(() => _eventRadiusKm = km),
+                      icon: km == null
+                          ? Icons.map_rounded
+                          : Icons.near_me_rounded,
+                    ),
+              ],
+            ),
+          ),
+          if (_counties.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 2, 16, 0),
+              child: Row(
+                children: [
+                  const Icon(
+                    Icons.place_rounded,
+                    size: 16,
+                    color: TbColors.skiffer,
+                  ),
+                  const SizedBox(width: 4),
+                  Expanded(
+                    child: Text(
+                      _areaFilterSummary,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: TbColors.skiffer,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 
@@ -3027,139 +3693,47 @@ class _EntitlementBanner extends StatelessWidget {
   }
 }
 
-class _DistanceBanner extends StatelessWidget {
-  const _DistanceBanner({
-    required this.distanceKm,
-    required this.hasGps,
-    required this.onNavigate,
+class _ShortcutChip extends StatelessWidget {
+  const _ShortcutChip({
+    required this.icon,
+    required this.label,
+    required this.onTap,
   });
 
-  final double? distanceKm;
-  final bool hasGps;
-  final VoidCallback onNavigate;
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    final d = distanceKm;
-    final String text;
-    if (d != null) {
-      final label = d < 1
-          ? 'Under 1 km'
-          : d < 10
-          ? '${d.toStringAsFixed(1)} km'
-          : '${d.round()} km';
-      text = 'Du är ca $label härifrån (fågelväg)';
-    } else if (!hasGps) {
-      text = 'Slå på plats så visar vi hur långt det är';
-    } else {
-      text = 'Tipset saknar koordinater — avstånd okänt';
-    }
-
-    return Material(
-      color: TbColors.ljusgraDjup,
-      borderRadius: BorderRadius.circular(12),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
-        child: Row(
+    return Padding(
+      padding: const EdgeInsets.only(right: 8),
+      child: ActionChip(
+        avatar: Icon(icon, size: 18, color: TbColors.midnatt),
+        label: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.near_me, size: 20, color: TbColors.ink),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                text,
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w700,
-                  color: TbColors.ink,
-                  height: 1.25,
-                ),
+            Text(
+              label,
+              style: const TextStyle(
+                fontWeight: FontWeight.w700,
+                color: TbColors.midnatt,
               ),
             ),
-            if (d != null)
-              TextButton(onPressed: onNavigate, child: const Text('Navigera')),
+            const Icon(
+              Icons.chevron_right_rounded,
+              size: 18,
+              color: TbColors.midnatt,
+            ),
           ],
         ),
+        backgroundColor: TbColors.ljusgra,
+        side: const BorderSide(color: TbColors.line),
+        onPressed: onTap,
       ),
     );
   }
 }
-
-/// Flikarna i bottenpanelen: stora tryckytor (minst 48 px) och antal, så att föraren ser
-/// vad som finns utan att läsa en lista.
-class _SheetTabs extends StatelessWidget {
-  const _SheetTabs({
-    required this.selected,
-    required this.tabs,
-    required this.onSelect,
-  });
-
-  final String selected;
-  final List<(String, String, int)> tabs;
-  final ValueChanged<String> onSelect;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(6),
-      decoration: BoxDecoration(
-        color: Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          for (final (key, label, count) in tabs)
-            Expanded(
-              child: Semantics(
-                button: true,
-                selected: key == selected,
-                label: '$label, $count',
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(12),
-                  onTap: () => onSelect(key),
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 150),
-                    height: 52,
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: key == selected
-                          ? Colors.white
-                          : Colors.transparent,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: key == selected
-                          ? const [
-                              BoxShadow(
-                                color: Color(0x15000000),
-                                blurRadius: 8,
-                                offset: Offset(0, 2),
-                              ),
-                            ]
-                          : null,
-                    ),
-                    child: Text(
-                      '$label $count',
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: key == selected
-                            ? FontWeight.w800
-                            : FontWeight.w600,
-                        color: key == selected
-                            ? TbColors.ink
-                            : Colors.grey.shade600,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Rund kartknapp: vit, med skugga, stor nog för en tumme i bilen (minst 44 px).
 
 /// En kort rad överst på kartan när något behöver göras eller inte fungerar.
 class _Notice extends StatelessWidget {
