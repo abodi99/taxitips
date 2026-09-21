@@ -263,11 +263,27 @@ adminwebben loggar in med en e-postlänk.
 
 **Driftfällor i produktion (2026-09-21):**
 
-* **Push skickas från BACKEND-containern, inte workern.** Workern saknar
-  `FIREBASE_SERVICE_ACCOUNT_JSON`, så beats `push-cycle` är en no-op där (den
-  returnerar innan något köas). En Coolify-schemalagd uppgift på
-  `taxitips-backend` kör `push_cycle` varje minut. Kopiera nyckeln till workern
-  och ta bort uppgiften -- i den ordningen.
+* **Push skickas från workern** (`taxitips-celery-worker`, beats `push-cycle`).
+  Workern fick `FIREBASE_SERVICE_ACCOUNT_JSON` (base64) 2026-09-21 och den
+  tillfälliga schemalagda uppgiften på `taxitips-backend` är borttagen. Lägg
+  inte tillbaka den: två avsändare = dubbla notiser.
+* **Färjor: egen app `taxitips-ais`** (`8x3hdgz1g5q8fa8dcoo4q5yn`, APP_ROLE=ais,
+  ingen HTTP, EN instans). Den ansluter som rollen `taxitips_ais`
+  (migration `20260921000002_ais_listener_role.sql`) -- inte som postgres --
+  och får bara skriva fartyg, anlöp, sina tips och sin källstatus. Lösenordet
+  finns bara i appens `DATABASE_URL` i Coolify. Tips ges bara för fartyg
+  ≥ 100 m; skärgårdsbåtarna loggas som ankomster utan tips. Färjornas
+  tidtabell (`import_ferry_timetable`) kräver `GTFS_SWEDEN3_STATIC_KEY`, som
+  ännu saknas.
+* **Evenemang i appen kommer från PredictHQ** (ägarbeslut 2026-09-21).
+  Rättighetsreferensen i `EVENTS_PREDICTHQ_*_REFERENCE` säger det rakt ut:
+  beslutet är ägarens, inget skriftligt avtal är registrerat. Ticketmaster och
+  TheSportsDB lagras men visas inte. Nycklarna (PredictHQ, Ticketmaster,
+  Swedavia, ResRobot) ligger på workern; web har PredictHQ-token och
+  rättighetsflaggorna, eftersom evenemangslistan och pipeline-sidan körs där.
+* **Produktionens Supabase saknar `supabase_migrations`.** `apply_migration`
+  i MCP:n misslyckas; migrationer körs med `execute_sql` och ligger ändå som
+  filer i `taxitips-api/supabase/migrations/`.
 * **Coolify kapar schemalagda kommandon vid 255 tecken.** Längre SQL går via
   produktionens Supabase-MCP (`claude.ai taxitips mcp`), inte via `psql -c`.
 * **`api.taxitips.se` har svarat 502** (Traefik når inte Kong) i perioder.
