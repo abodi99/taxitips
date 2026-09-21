@@ -24,6 +24,46 @@ final StreamController<RemoteMessage> _foreground =
 Stream<RemoteMessage> get foregroundMessages => _foreground.stream;
 StreamSubscription<RemoteMessage>? _onMessageSub;
 
+/// Notisen som öppnade appen, och en signal när en ny kommer.
+///
+/// Tidigare lyssnade appen inte alls på att den öppnats av en notis, så ett
+/// tryck startade appen men visade aldrig tipset notisen handlade om.
+///
+/// Två vägar in: `onMessageOpenedApp` när appen låg i bakgrunden, och
+/// `getInitialMessage()` när den var helt stängd (kallstart). Vid kallstart
+/// finns förarskärmen inte än när meddelandet kommer, så det sparas och
+/// hämtas en gång med `takeOpenedMessage()`. Båda vägarna går genom den
+/// funktionen, så varje notis öppnas exakt en gång.
+final StreamController<void> _opened = StreamController<void>.broadcast();
+Stream<void> get openedMessageSignals => _opened.stream;
+RemoteMessage? _pendingOpened;
+StreamSubscription<RemoteMessage>? _openedSub;
+
+RemoteMessage? takeOpenedMessage() {
+  final message = _pendingOpened;
+  _pendingOpened = null;
+  return message;
+}
+
+void _deliverOpened(RemoteMessage message) {
+  _pendingOpened = message;
+  _opened.add(null);
+}
+
+Future<void> _listenForOpens() async {
+  if (_openedSub != null) return;
+  _openedSub = FirebaseMessaging.onMessageOpenedApp.listen(
+    _deliverOpened,
+    onError: (Object e) => debugPrint('Push onMessageOpenedApp error: $e'),
+  );
+  try {
+    final initial = await FirebaseMessaging.instance.getInitialMessage();
+    if (initial != null) _deliverOpened(initial);
+  } catch (e) {
+    debugPrint('Push getInitialMessage error: $e');
+  }
+}
+
 void _listenInForeground() {
   if (_onMessageSub != null) return;
   _onMessageSub = FirebaseMessaging.onMessage.listen(
@@ -43,6 +83,9 @@ Future<void> initFirebaseSafe() async {
       await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
     }
     firebaseReady = true;
+    // Tidigt: getInitialMessage() måste läsas innan något annat hinner
+    // konsumera kallstarten, och det kräver inget notistillstånd.
+    if (!kIsWeb) unawaited(_listenForOpens());
   } catch (e) {
     debugPrint('Firebase init failed: $e');
     firebaseReady = false;

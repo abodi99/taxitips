@@ -29,6 +29,11 @@ class Command(BaseCommand):
         parser.add_argument("--company", required=True, help="Bolagets namn.")
         parser.add_argument("--title", default="TaxiTips")
         parser.add_argument("--body", default="Testnotis: notiserna fungerar.")
+        parser.add_argument(
+            "--with-tip", action="store_true",
+            help="Skicka ett riktigt tips i bolagets län, så att ett tryck på "
+                 "notisen ska öppna just det tipset.",
+        )
 
     def handle(self, *args, **options):
         company = Company.objects.filter(name=options["company"]).first()
@@ -41,6 +46,22 @@ class Command(BaseCommand):
                 "FIREBASE_SERVICE_ACCOUNT_JSON saknas i den här containern."
             )
         access_token = fcm.get_access_token(service_account)
+
+        title, body, data = options["title"], options["body"], {"kind": "test"}
+        if options["with_tip"]:
+            tip = self._tip_for(company.id)
+            if tip is None:
+                raise CommandError("Inget aktivt tips i bolagets län just nu.")
+            title = tip.title or title
+            body = (tip.summary or body)[:180]
+            # Samma fält som riktiga notiser (core/notify._send_due), så att
+            # appens väg för "öppna tipset" provas på riktigt.
+            data = {
+                "opportunity_id": str(tip.id),
+                "severity_tier": tip.severity_tier or "",
+                "demand_score": tip.demand_score or 0,
+            }
+            self.stdout.write(f"Tips: {tip.id} -- {title}")
 
         sent = 0
         for device in Device.objects.filter(company_id=company.id):
@@ -57,11 +78,31 @@ class Command(BaseCommand):
                 continue
             result = fcm.send_push(
                 service_account, access_token, token=device.push_token,
-                title=options["title"], body=options["body"],
-                data={"kind": "test"},
+                title=title, body=body, data=data,
             )
             status = "skickad" if result.get("ok") else f"FEL {result.get('status')}"
             self.stdout.write(f"{label}: {status}")
             sent += int(bool(result.get("ok")))
 
         self.stdout.write(self.style.SUCCESS(f"{sent} testnotis(er) skickade."))
+
+
+    def _tip_for(self, company_id):
+        """Det starkaste pågående tipset i något av bolagets licensierade län."""
+        from django.utils import timezone
+
+        from core.models import Opportunity
+        from fleet.access import company_counties
+
+        counties = list(company_counties(company_id))
+        if not counties:
+            return None
+        return (
+            Opportunity.objects.filter(
+                end_time__gt=timezone.now(), demand_score__gt=0,
+                area_codes__has_any_keys=counties,
+            )
+            .exclude(severity_tier="ignore")
+            .order_by("-demand_score")
+            .first()
+        )

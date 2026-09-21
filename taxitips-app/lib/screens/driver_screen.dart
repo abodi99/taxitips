@@ -145,6 +145,7 @@ class _DriverScreenState extends State<DriverScreen>
   // ska välja bil, och först då lämnas tipsen ut (se fleet/access.py).
   bool _needsVehicle = false;
   StreamSubscription<RemoteMessage>? _pushSub;
+  StreamSubscription<void>? _openedSub;
   // Färjor: `arrivals` = relevance (tidtabell+AIS, samma som /farjor);
   // `_ferryShips` = AIS-live för kartans nålar.
   List<Map<String, dynamic>> _ferries = const [];
@@ -409,7 +410,45 @@ class _DriverScreenState extends State<DriverScreen>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _pushSub = foregroundMessages.listen(_onForegroundPush);
+    _openedSub = openedMessageSignals.listen((_) => _openFromNotification());
     _bootstrap();
+    // Kallstart från en notis: meddelandet kom innan skärmen fanns.
+    WidgetsBinding.instance.addPostFrameCallback((_) => _openFromNotification());
+  }
+
+  /// Öppnar tipset en notis handlade om. Först ur det laddade flödet
+  /// (direkt, ingen nätväg), annars hämtat från servern.
+  Future<void> _openFromNotification() async {
+    final message = takeOpenedMessage();
+    if (message == null) return;
+    final id = message.data['opportunity_id']?.toString() ?? '';
+    // En testnotis eller en notis utan tips: att appen öppnas räcker.
+    if (id.isEmpty) return;
+
+    Map<String, dynamic>? alert;
+    final data = _data;
+    if (data != null) {
+      for (final key in const ['alerts', 'favorites']) {
+        for (final row in (data[key] as List?) ?? const []) {
+          if (row is Map && row['id']?.toString() == id) {
+            alert = Map<String, dynamic>.from(row);
+            break;
+          }
+        }
+        if (alert != null) break;
+      }
+    }
+    alert ??= await widget.api.alertById(id);
+    if (!mounted) return;
+    if (alert == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tipset finns inte längre, eller så har bilen inte tillgång till det.'),
+        ),
+      );
+      return;
+    }
+    await _openAlertDetail(alert);
   }
 
   /// En notis medan appen är öppen: visa den och hämta om flödet, så att
@@ -425,6 +464,17 @@ class _DriverScreenState extends State<DriverScreen>
           content: Text(body.isEmpty ? title : '$title\n$body'),
           duration: const Duration(seconds: 8),
           behavior: SnackBarBehavior.floating,
+          action: (message.data['opportunity_id']?.toString() ?? '').isEmpty
+              ? null
+              : SnackBarAction(
+                  label: 'Visa',
+                  onPressed: () async {
+                    final alert = await widget.api.alertById(
+                      message.data['opportunity_id'].toString(),
+                    );
+                    if (alert != null && mounted) await _openAlertDetail(alert);
+                  },
+                ),
         ),
       );
     _load(silent: true);
@@ -461,6 +511,7 @@ class _DriverScreenState extends State<DriverScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _pushSub?.cancel();
+    _openedSub?.cancel();
     _timer?.cancel();
     _ferryTimer?.cancel();
     _sheetController.dispose();

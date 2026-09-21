@@ -1402,6 +1402,24 @@ class ApiClient {
   /// (rule_id/confidence) behind one opportunity. Only called on demand when a
   /// driver taps "Varför visas detta?" -- not fetched eagerly for every card, to
   /// avoid hitting the backend for detail nobody asked to see.
+  /// Ett enskilt tips i samma form som en rad i flödet, hämtat på id.
+  ///
+  /// För en notis som öppnats: tipset kan ligga utanför det laddade flödet
+  /// (annat filter, eller appen kallstartad innan flödet hunnit hämtas).
+  /// Servern prövar åtkomsten igen -- en telefon som spärrats efter att
+  /// notisen skickades får ett fel här, inte tipset. Null om det inte går.
+  Future<Map<String, dynamic>?> alertById(String opportunityId) async {
+    try {
+      final detail = await opportunityDetail(opportunityId);
+      final row = detail['opportunity'];
+      if (row is! Map) return null;
+      return _alertFromRow(Map<String, dynamic>.from(row));
+    } catch (e) {
+      debugPrint('ApiClient[alertById] $e');
+      return null;
+    }
+  }
+
   Future<Map<String, dynamic>> opportunityDetail(String opportunityId) async {
     try {
       final backend = _backend;
