@@ -174,13 +174,12 @@ Förarkartan i appen (ombyggd 2026-09-21, för förare med begränsad svenska):
 * **Licensens län gäller överallt**: tips, väghändelser, evenemang, färjor och
   notisinställningarna (`request_area`/`area_blocked` i `core/api.py`). Länsväljaren i appen
   visar bara licensens län. Förarens val får smalna av, aldrig vidga.
-* **Väg visar ett urval, inte allt** (`core/text_scoring.road_tier`,
-  `thresholds.ROAD_SHOWN_TIERS`): olyckor, avstängda vägar och köer var de än är, akuta hinder
-  och "Mycket stor påverkan" på huvudled (E-väg, riksväg, primär länsväg <= 499). Mätt
-  2026-09-21: 98 av 1 570 i tre län. Resten blir `road_work` och skickas inte. Villkoret står
-  i `rule_id` (`road.<nivå>.<villkor>`) och kortet visar orsaken ("Vägen avstängd", "Kö").
-  En Trafikverket-situation med flera avvikelser visas en gång. Ett väghinder har inget
-  "Kör dit" och ingen "Fick körning?".
+* **Väg visar bara trafikolyckor** (beslut 2026-09-21, `thresholds.ROAD_SHOWN_CONDITIONS`).
+  `core/text_scoring.road_tier` klassar ändå alla väghändelser (olycka, avstängd, kö, hinder
+  på huvudled, stor störning på huvudled, övrigt) och villkoret står i `rule_id`
+  (`road.<nivå>.<villkor>`), så att varje dold händelse går att förklara i pipeline-vyn.
+  Urvalet görs i SQL i `feed_for`. En Trafikverket-situation med flera avvikelser visas en
+  gång. Ett väghinder har inget "Kör dit" och ingen "Fick körning?".
 * **Notisregler per förare** (`core/notify.decide`): kategorier, lägsta nivå (alla / medel+ /
   bara starka) och paus i högst 24 h, satt på serverns klocka. Skälen `paused`,
   `category_off:<kategori>` och `below_level` i `REASONS`.
@@ -382,8 +381,8 @@ Var och en av dem är skriven efter att ha gått sönder på riktigt.
    skriver inte ut om taket gäller per resenär, och då säger appen inget.
 3. **Vägtipsen är kapade till 15 poäng och ligger i `context`, inte i
    tipslistan.** En kö försenar dem som redan sitter i bil. Mätt: 129
-   vägrader mot 5 kollektivtrafiktips i Skåne. Och bara de viktiga når
-   föraren (`ROAD_SHOWN_TIERS`). Matcha aldrig "avstäng" eller "kö" som
+   vägrader mot 5 kollektivtrafiktips i Skåne. Och bara olyckor når
+   föraren (`ROAD_SHOWN_CONDITIONS`). Matcha aldrig "avstäng" eller "kö" som
    delsträng: båda finns i "Körfältsavstängningar", och 546 planerade
    körfältsavstängningar blev röda "Stopp".
 4. **`is_last_departure` sätts aldrig av en textkälla.** SL:s
