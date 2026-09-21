@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
@@ -7,6 +9,28 @@ import 'firebase_options.dart';
 import 'push_platform.dart';
 
 bool firebaseReady = false;
+
+/// Notiser som kommer medan appen är öppen.
+///
+/// Android visar INTE en FCM-notis i systemfältet när appen ligger i
+/// förgrunden -- den levereras till `onMessage` och försvinner om ingen
+/// lyssnar. För en förare som har TaxiTips uppe under ett pass betydde det
+/// att varje notis tappades tyst. Förarskärmen lyssnar på den här strömmen,
+/// visar notisen och hämtar om flödet så att tipset syns direkt.
+///
+/// (`setForegroundNotificationPresentationOptions` nedan gäller bara iOS.)
+final StreamController<RemoteMessage> _foreground =
+    StreamController<RemoteMessage>.broadcast();
+Stream<RemoteMessage> get foregroundMessages => _foreground.stream;
+StreamSubscription<RemoteMessage>? _onMessageSub;
+
+void _listenInForeground() {
+  if (_onMessageSub != null) return;
+  _onMessageSub = FirebaseMessaging.onMessage.listen(
+    _foreground.add,
+    onError: (Object e) => debugPrint('Push onMessage error: $e'),
+  );
+}
 
 /// Serialiserar registerForPush — boot + auth-listener + driver_screen
 /// kan annars köra requestPermission samtidigt och FCM svarar
@@ -56,6 +80,7 @@ Future<String?> _registerForPushOnce(ApiClient api) async {
         sound: true,
       );
       if (settings.authorizationStatus != AuthorizationStatus.denied) {
+        _listenInForeground();
         if (!kIsWeb) {
           await messaging.setForegroundNotificationPresentationOptions(
             alert: true,

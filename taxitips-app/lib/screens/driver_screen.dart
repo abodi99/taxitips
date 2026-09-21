@@ -1,6 +1,8 @@
 import 'package:flutter_svg/flutter_svg.dart';
 
 import 'dart:async';
+
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -142,6 +144,7 @@ class _DriverScreenState extends State<DriverScreen>
   // Telefonen är godkänd men kör ingen bil just nu. Inte ett fel -- föraren
   // ska välja bil, och först då lämnas tipsen ut (se fleet/access.py).
   bool _needsVehicle = false;
+  StreamSubscription<RemoteMessage>? _pushSub;
   // Färjor: `arrivals` = relevance (tidtabell+AIS, samma som /farjor);
   // `_ferryShips` = AIS-live för kartans nålar.
   List<Map<String, dynamic>> _ferries = const [];
@@ -405,7 +408,26 @@ class _DriverScreenState extends State<DriverScreen>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _pushSub = foregroundMessages.listen(_onForegroundPush);
     _bootstrap();
+  }
+
+  /// En notis medan appen är öppen: visa den och hämta om flödet, så att
+  /// tipset som notisen handlar om redan ligger i listan när föraren tittar.
+  void _onForegroundPush(RemoteMessage message) {
+    if (!mounted) return;
+    final title = message.notification?.title ?? 'TaxiTips';
+    final body = message.notification?.body ?? '';
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(body.isEmpty ? title : '$title\n$body'),
+          duration: const Duration(seconds: 8),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    _load(silent: true);
   }
 
   @override
@@ -438,6 +460,7 @@ class _DriverScreenState extends State<DriverScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    _pushSub?.cancel();
     _timer?.cancel();
     _ferryTimer?.cancel();
     _sheetController.dispose();

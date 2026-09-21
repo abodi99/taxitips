@@ -55,7 +55,26 @@ class MessageTests(SimpleTestCase):
                 collapse_key="abc123", ttl_seconds=600,
             )
         message = post.call_args.kwargs["json"]["message"]
-        self.assertEqual(message["android"], {"collapse_key": "abc123", "ttl": "600s"})
+        self.assertEqual(message["android"]["collapse_key"], "abc123")
+        self.assertEqual(message["android"]["ttl"], "600s")
         self.assertEqual(message["apns"]["headers"]["apns-collapse-id"], "abc123")
         self.assertIn("apns-expiration", message["apns"]["headers"])
         self.assertEqual(message["data"], {"a": "1"})
+
+    def test_every_message_is_high_priority_on_its_own_channel(self):
+        """
+        Utan hög prioritet fördröjer Doze leveransen i minuter, och utan egen
+        kanal visar Samsung notisen tyst i panelen. Mätt på en S22+
+        2026-09-21: notisen levererades men syntes aldrig. Gäller även ett
+        meddelande utan collapse_key och ttl -- de var tidigare det enda som
+        gav meddelandet en android-del över huvud taget.
+        """
+        response = mock.Mock(ok=True, status_code=200, text="{}")
+        with mock.patch("billing.fcm.requests.post", return_value=response) as post:
+            fcm.send_push({"project_id": "p"}, "at", token="t", title="T", body="B")
+        message = post.call_args.kwargs["json"]["message"]
+        self.assertEqual(message["android"]["priority"], "high")
+        self.assertEqual(
+            message["android"]["notification"]["channel_id"], fcm.ANDROID_CHANNEL_ID
+        )
+        self.assertEqual(message["apns"]["headers"]["apns-priority"], "10")

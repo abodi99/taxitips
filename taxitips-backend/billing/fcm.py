@@ -60,6 +60,11 @@ def get_access_token(service_account_info: dict) -> str:
     return credentials.token
 
 
+# Samma id som kanalen appen skapar i MainActivity.kt. Ändras den ena måste
+# den andra ändras i samma commit, annars hamnar notiserna i reservkanalen igen.
+ANDROID_CHANNEL_ID = "taxitips_tips"
+
+
 def send_push(
     service_account_info: dict,
     access_token: str,
@@ -88,17 +93,30 @@ def send_push(
         "notification": {"title": title, "body": body},
         "data": {k: str(v) for k, v in (data or {}).items()},
     }
-    android: dict = {}
-    apns_headers: dict = {}
+    # Hög prioritet och en egen kanal, alltid.
+    #
+    # Utan `priority: high` levererar Android meddelandet när Doze släpper
+    # taget -- på en telefon som legat still i en hållare kan det vara flera
+    # minuter. Ett taxitips som kommer fem minuter sent är värdelöst.
+    #
+    # Utan `channel_id` hamnar notisen i FCM:s reservkanal, som Samsung visar
+    # tyst i panelen utan att den dyker upp. Kanalen skapas av appen
+    # (MainActivity.kt) med hög vikt, så att den visas som heads-up ovanpå
+    # navigationsappen. Mätt på en S22+ 2026-09-21: notisen levererades men
+    # syntes inte.
+    android: dict = {
+        "priority": "high",
+        "notification": {"channel_id": ANDROID_CHANNEL_ID},
+    }
+    apns_headers: dict = {"apns-priority": "10"}
     if collapse_key:
         android["collapse_key"] = collapse_key
         apns_headers["apns-collapse-id"] = collapse_key[:64]
     if ttl_seconds:
         android["ttl"] = f"{int(ttl_seconds)}s"
         apns_headers["apns-expiration"] = str(int(time.time()) + int(ttl_seconds))
-    if android:
-        message["android"] = android
-        message["apns"] = {"headers": apns_headers}
+    message["android"] = android
+    message["apns"] = {"headers": apns_headers}
 
     try:
         res = requests.post(
