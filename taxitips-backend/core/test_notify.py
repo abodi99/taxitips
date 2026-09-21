@@ -638,3 +638,47 @@ class MunicipalityDecisionTests(TestCase):
         prefs = {"counties": ["01"], "municipalities": ["0180"]}
         self.assertTrue(notify.decide(prefs, stockholm).ok)
         self.assertEqual(notify.decide(prefs, sodertalje).reason, "outside_area")
+
+
+class DriverRulesTests(TestCase):
+    """Förarens enkla regler: kategori, lägsta nivå och paus (NotifyPrefsSheet)."""
+
+    stockholm = {"counties": ["01"]}
+
+    def strong(self, **kw):
+        return opportunity(region="sl", severity_tier=SeverityTier.LINE_PAUSED, demand_score=80, **kw)
+
+    def test_a_category_can_be_switched_off(self):
+        o = self.strong()
+        self.assertTrue(notify.decide(self.stockholm, o).ok)
+        prefs = {**self.stockholm, "categories": {"transit": False}}
+        self.assertEqual(notify.decide(prefs, o).reason, "category_off:transit")
+        # En annan kategori av påverkar inte.
+        self.assertTrue(notify.decide({**self.stockholm, "categories": {"road": False}}, o).ok)
+
+    def test_road_and_flight_are_their_own_categories(self):
+        self.assertEqual(notify.category_of(opportunity(kind="road", mode="road")), "road")
+        self.assertEqual(notify.category_of(opportunity(kind="flight")), "flight")
+        self.assertEqual(notify.category_of(opportunity(kind="ferry", mode="boat")), "ferry")
+        self.assertEqual(notify.category_of(opportunity(kind="transit", mode="boat")), "transit")
+
+    def test_only_strong_tips_when_the_driver_asks_for_that(self):
+        medium = opportunity(region="sl", severity_tier=SeverityTier.VEHICLE_CANCELLED, demand_score=40)
+        self.assertEqual(notify.level_of(medium), "medium")
+        if notify.decide(self.stockholm, medium).ok:
+            self.assertEqual(
+                notify.decide({**self.stockholm, "minLevel": "high"}, medium).reason, "below_level"
+            )
+        self.assertTrue(notify.decide({**self.stockholm, "minLevel": "high"}, self.strong()).ok)
+
+    def test_a_pause_silences_until_it_ends(self):
+        o = self.strong()
+        future = (timezone.now() + timedelta(hours=2)).isoformat()
+        past = (timezone.now() - timedelta(minutes=1)).isoformat()
+        self.assertEqual(notify.decide({**self.stockholm, "pausedUntil": future}, o).reason, "paused")
+        self.assertTrue(notify.decide({**self.stockholm, "pausedUntil": past}, o).ok)
+        self.assertTrue(notify.decide({**self.stockholm, "pausedUntil": "trasigt"}, o).ok)
+
+    def test_the_new_reasons_are_documented(self):
+        for code in ("paused", "category_off", "below_level"):
+            self.assertIn(code, notify.REASONS)

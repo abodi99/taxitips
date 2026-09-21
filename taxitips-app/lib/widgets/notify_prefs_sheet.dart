@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../api_client.dart';
+import '../signal_kinds.dart';
 import '../theme.dart';
 
 /// Notisinställningar: på/av och händelsetyper.
@@ -32,14 +33,29 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
   bool _onDuty = false;
   bool _dutyBusy = false;
 
+  /// Förarens enkla regler (core/notify.py): kategori av/på, lägsta nivå, paus.
+  List<Map<String, dynamic>> _categoryCatalog = [];
+  Map<String, bool> _categories = {};
+  String _minLevel = 'all';
+  DateTime? _pausedUntil;
+  Set<String> _licensedCounties = {};
+
   String get _geoSummary {
     if (!_enabled) return 'Notiser av — ingen push skickas.';
+    if (_counties.isEmpty && _licensedCounties.isNotEmpty) {
+      final names = [
+        for (final code in (_licensedCounties.toList()..sort()))
+          countyShort(_countyNames[code] ?? code),
+      ];
+      return 'Alla dina län: ${names.join(', ')}';
+    }
     if (_counties.isEmpty) {
       return 'Inget körområde valt: inga notiser förrän du väljer län '
           'eller slår på I tjänst';
     }
     final names = [
-      for (final code in (_counties.toList()..sort())) _countyNames[code] ?? code,
+      for (final code in (_counties.toList()..sort()))
+        _countyNames[code] ?? code,
     ];
     final municipalities = _municipalities.isEmpty
         ? 'hela länen'
@@ -76,13 +92,34 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
           for (final c in (prefs['counties'] as List?) ?? []) c.toString(),
         };
         _municipalities = {
-          for (final m in (prefs['municipalities'] as List?) ?? []) m.toString(),
+          for (final m in (prefs['municipalities'] as List?) ?? [])
+            m.toString(),
         };
         _countyNames = {
           for (final c in (data['countyCatalog'] as List?) ?? const [])
             if (c is Map) c['code'].toString(): c['name']?.toString() ?? '',
         };
         _readOnly = data['readOnly'] == true;
+        _categoryCatalog = [
+          for (final c in (data['categoryCatalog'] as List?) ?? const [])
+            if (c is Map) Map<String, dynamic>.from(c),
+        ];
+        final cats = prefs['categories'];
+        _categories = {
+          if (cats is Map)
+            for (final e in cats.entries) e.key.toString(): e.value != false,
+        };
+        _minLevel = prefs['minLevel']?.toString() ?? 'all';
+        final paused = DateTime.tryParse(
+          prefs['pausedUntil']?.toString() ?? '',
+        )?.toLocal();
+        _pausedUntil = paused != null && paused.isAfter(DateTime.now())
+            ? paused
+            : null;
+        _licensedCounties = {
+          for (final c in (data['licensedCounties'] as List?) ?? const [])
+            c.toString(),
+        };
         _catalog =
             (meta['catalog'] as List?)?.cast<Map<String, dynamic>>() ?? [];
         _tips =
@@ -147,10 +184,12 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
   Future<void> _persist() async {
     setState(() => _saving = true);
     try {
-      // Spara bara enabled/types — regions/cities ägs av huvudskärmens filter.
+      // Spara reglerna -- län och kommuner ägs av huvudskärmens filter.
       await widget.api.saveNotifyPrefs(
         enabled: _enabled,
         types: _types,
+        categories: _categories,
+        minLevel: _minLevel,
       );
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -169,6 +208,172 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
     } finally {
       if (mounted) setState(() => _saving = false);
     }
+  }
+
+  /// Pausar notiserna [hours] timmar, eller tar bort pausen (0). Tiden räknas
+  /// på servern, så att en telefon med fel klocka inte kan pausa i ett år.
+  Future<void> _pause(double hours) async {
+    setState(() => _saving = true);
+    try {
+      final prefs = await widget.api.saveNotifyPrefs(pauseHours: hours);
+      final until = DateTime.tryParse(
+        prefs['pausedUntil']?.toString() ?? '',
+      )?.toLocal();
+      if (!mounted) return;
+      setState(() => _pausedUntil = until);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            until == null
+                ? 'Notiserna är på igen.'
+                : 'Pausat till ${_clock(until)}.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(
+          () => _error = e.toString().replaceFirst(
+            RegExp(r'^(ApiException|Exception):\s*'),
+            '',
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  static String _clock(DateTime t) {
+    final now = DateTime.now();
+    final hm =
+        '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
+    return t.day == now.day ? hm : 'i morgon $hm';
+  }
+
+  /// Timmar till kl 07 nästa morgon -- "tyst i natt" (högst 24).
+  double get _hoursToMorning {
+    final now = DateTime.now();
+    var morning = DateTime(now.year, now.month, now.day, 7);
+    if (!morning.isAfter(now)) morning = morning.add(const Duration(days: 1));
+    return (morning.difference(now).inMinutes / 60).clamp(0.5, 24);
+  }
+
+  Widget _section(String title) => Padding(
+    padding: const EdgeInsets.only(top: 18, bottom: 8),
+    child: Text(
+      title,
+      style: const TextStyle(
+        fontWeight: FontWeight.w700,
+        fontSize: 16,
+        color: TbColors.midnatt,
+      ),
+    ),
+  );
+
+  /// Paus, kategorier och nivå -- det de flesta vill ändra, överst och enkelt.
+  List<Widget> _rules() {
+    final editable = _enabled && !_readOnly;
+    final paused = _pausedUntil != null;
+    return [
+      _section('Pausa'),
+      if (paused)
+        Material(
+          color: TbColors.guld.withValues(alpha: 0.18),
+          borderRadius: BorderRadius.circular(12),
+          child: ListTile(
+            leading: const Icon(
+              Icons.notifications_paused_rounded,
+              color: TbColors.guldDjup,
+            ),
+            title: Text(
+              'Pausat till ${_clock(_pausedUntil!)}',
+              style: const TextStyle(fontWeight: FontWeight.w700),
+            ),
+            trailing: TextButton(
+              onPressed: _saving ? null : () => _pause(0),
+              child: const Text('Starta igen'),
+            ),
+          ),
+        )
+      else
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final (label, hours) in [
+              ('1 tim', 1.0),
+              ('4 tim', 4.0),
+              ('I natt', _hoursToMorning),
+            ])
+              ActionChip(
+                avatar: const Icon(
+                  Icons.notifications_paused_outlined,
+                  size: 18,
+                ),
+                label: Text(label),
+                onPressed: editable && !_saving ? () => _pause(hours) : null,
+              ),
+          ],
+        ),
+      if (_categoryCatalog.isNotEmpty) ...[
+        _section('Vilka notiser?'),
+        for (final c in _categoryCatalog)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Material(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              child: SwitchListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                secondary: Icon(
+                  signalCategoryFromKey(c['id']?.toString())?.icon ??
+                      Icons.notifications_rounded,
+                  color: TbColors.midnatt,
+                ),
+                title: Text(
+                  c['label']?.toString() ?? '',
+                  style: const TextStyle(fontWeight: FontWeight.w700),
+                ),
+                value: _categories[c['id']?.toString()] ?? true,
+                activeThumbColor: TbColors.ink,
+                activeTrackColor: TbColors.signal,
+                onChanged: editable
+                    ? (v) {
+                        setState(() => _categories[c['id'].toString()] = v);
+                        _persist();
+                      }
+                    : null,
+              ),
+            ),
+          ),
+      ],
+      _section('Hur viktiga?'),
+      SegmentedButton<String>(
+        style: SegmentedButton.styleFrom(
+          selectedBackgroundColor: TbColors.taxi,
+          selectedForegroundColor: TbColors.ink,
+        ),
+        segments: const [
+          ButtonSegment(value: 'all', label: Text('Alla')),
+          ButtonSegment(value: 'medium', label: Text('Medel +')),
+          ButtonSegment(value: 'high', label: Text('Bara starka')),
+        ],
+        selected: {_minLevel},
+        onSelectionChanged: editable
+            ? (v) {
+                setState(() => _minLevel = v.first);
+                _persist();
+              }
+            : null,
+      ),
+      const SizedBox(height: 6),
+      Text(switch (_minLevel) {
+        'high' => 'Bara när många sannolikt behöver taxi.',
+        'medium' => 'Medel och starka. Inga svaga.',
+        _ => 'Allt som är värt en notis. Svaga signaler väcker dig aldrig.',
+      }, style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
+    ];
   }
 
   @override
@@ -308,10 +513,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                     _enabled
                         ? 'På — filtreras enligt område och typ'
                         : 'Av — ingen push',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey.shade700,
-                    ),
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
                   ),
                   value: _enabled,
                   activeThumbColor: TbColors.ink,
@@ -339,10 +541,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                         ? 'På — notiser inom 30 km från där du är. Gäller 30 min '
                               'efter att appen senast var öppen, sedan körområdet.'
                         : 'Av — notiser enligt körområdet.',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: Colors.grey.shade700,
-                    ),
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
                   ),
                   value: _onDuty,
                   activeThumbColor: TbColors.ink,
@@ -358,58 +557,65 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                 'det vid varje uppdatering och hämtar aldrig plats i bakgrunden.',
                 style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
               ),
-              const SizedBox(height: 18),
-              Text(
-                'Vilka händelser?',
-                style: TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                  color: Colors.grey.shade800,
+              ..._rules(),
+              const SizedBox(height: 10),
+              Theme(
+                data: Theme.of(
+                  context,
+                ).copyWith(dividerColor: Colors.transparent),
+                child: ExpansionTile(
+                  tilePadding: EdgeInsets.zero,
+                  childrenPadding: EdgeInsets.zero,
+                  title: const Text(
+                    'Fler val: enskilda störningstyper',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  children: [
+                    for (final t in _catalog) ...[
+                      Material(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        child: SwitchListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
+                          title: Text(
+                            t['label']?.toString() ?? '',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              color: TbColors.ink,
+                            ),
+                          ),
+                          subtitle: Text(
+                            '${t['short'] ?? ''}\n${t['help'] ?? ''}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              height: 1.35,
+                              color: Colors.grey.shade700,
+                            ),
+                          ),
+                          isThreeLine: true,
+                          value:
+                              _types[t['id']?.toString()] ??
+                              (t['defaultOn'] == true),
+                          activeThumbColor: TbColors.ink,
+                          activeTrackColor: TbColors.signal,
+                          onChanged: _enabled && !_readOnly
+                              ? (v) {
+                                  final id = t['id']?.toString();
+                                  if (id == null) return;
+                                  setState(() => _types[id] = v);
+                                  _persist();
+                                }
+                              : null,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  ],
                 ),
               ),
-              const SizedBox(height: 8),
-              for (final t in _catalog) ...[
-                Material(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(12),
-                  child: SwitchListTile(
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 4,
-                    ),
-                    title: Text(
-                      t['label']?.toString() ?? '',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        color: TbColors.ink,
-                      ),
-                    ),
-                    subtitle: Text(
-                      '${t['short'] ?? ''}\n${t['help'] ?? ''}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        height: 1.35,
-                        color: Colors.grey.shade700,
-                      ),
-                    ),
-                    isThreeLine: true,
-                    value:
-                        _types[t['id']?.toString()] ??
-                        (t['defaultOn'] == true),
-                    activeThumbColor: TbColors.ink,
-                    activeTrackColor: TbColors.signal,
-                    onChanged: _enabled && !_readOnly
-                        ? (v) {
-                            final id = t['id']?.toString();
-                            if (id == null) return;
-                            setState(() => _types[id] = v);
-                            _persist();
-                          }
-                        : null,
-                  ),
-                ),
-                const SizedBox(height: 8),
-              ],
               if (_tips.isNotEmpty) ...[
                 const SizedBox(height: 8),
                 Container(

@@ -85,12 +85,15 @@ class BackendApi {
     List<String>? regions,
     List<String>? counties,
     List<String>? municipalities,
+    bool roadAll = false,
     String? deviceToken,
     String? accessToken,
   }) async {
     final uri = Uri.parse('$baseUrl/api/alerts').replace(
       queryParameters: {
         if (includeAll) 'all': '1',
+        // Väg-läget: alla väghändelser i området, inte bara de 50 närmaste.
+        if (roadAll) 'road': 'all',
         if (regions != null && regions.isNotEmpty)
           'regions': (List<String>.from(regions)..sort()).join(','),
         if (counties != null && counties.isNotEmpty)
@@ -250,6 +253,9 @@ class BackendApi {
     List<String>? municipalities,
     List<String>? cities,
     Map<String, bool>? types,
+    Map<String, bool>? categories,
+    String? minLevel,
+    double? pauseHours,
     String? deviceToken,
     String? accessToken,
   }) async {
@@ -264,6 +270,9 @@ class BackendApi {
             'municipalities': ?municipalities,
             'cities': ?cities,
             'types': ?types,
+            'categories': ?categories,
+            'minLevel': ?minLevel,
+            'pauseHours': ?pauseHours,
           }),
         )
         .timeout(_timeout);

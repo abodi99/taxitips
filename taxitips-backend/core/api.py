@@ -29,6 +29,7 @@ from django.db import IntegrityError, transaction
 from django.http import JsonResponse
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.gzip import gzip_page
 from django.views.decorators.http import require_GET, require_POST
 
 from core import areas, notify, thresholds
@@ -140,6 +141,7 @@ FEED_CACHE_SECONDS = 20
 
 def shared_feed(
     lat, lon, *, include_all: bool, regions: list[str], counties: list[str], municipalities: list[str] | None = None,
+    road_all: bool = False,
 ) -> dict:
     """
     Flödet utan det personliga (favoriterna), med ETag-delen, ur cachen eller nyräknat.
@@ -149,7 +151,9 @@ def shared_feed(
     """
     import hashlib
 
-    parts = json.dumps([lat, lon, include_all, sorted(regions), sorted(counties), sorted(municipalities or [])])
+    parts = json.dumps([
+        lat, lon, include_all, sorted(regions), sorted(counties), sorted(municipalities or []), road_all,
+    ])
     key = "feed:" + hashlib.sha1(parts.encode("utf-8")).hexdigest()
     shared = cache.get(key)
     if shared is not None:
@@ -161,8 +165,12 @@ def shared_feed(
     payload = {
         **feed,
         # Väghändelserna kapas i svaret, se thresholds.FEED_CONTEXT_LIMIT. feed_for
-        # returnerar alla, så pipeline-sidan fortsätter att räkna dem.
-        "context": feed["context"][: thresholds.FEED_CONTEXT_LIMIT],
+        # returnerar alla, så pipeline-sidan fortsätter att räkna dem. `road=all`
+        # (appens Väg-läge) ger alla i området upp till ett tak som skyddar
+        # telefonen: i Skåne, Halland och Västra Götaland var det 1 800 samtidigt.
+        "context": feed["context"][
+            : (thresholds.FEED_CONTEXT_FULL_LIMIT if road_all else thresholds.FEED_CONTEXT_LIMIT)
+        ],
         "contextTotal": len(feed["context"]),
         "entitled": True,
         "config": thresholds.as_config(),
@@ -187,6 +195,22 @@ def _iso(dt):
     return dt.isoformat() if dt else None
 
 
+def _move_favorites(old_key: str, new_key: str) -> None:
+    """
+    Favoriter sparade med den råa token som nyckel flyttas till telefonens id.
+    Kostar en indexerad UPDATE som oftast träffar noll rader. Se också
+    core/migrations/0025_favorite_owner_is_device_id.py för dem som aldrig hörs av.
+    """
+    from django.db import IntegrityError, transaction
+
+    try:
+        with transaction.atomic():
+            OpportunityFavorite.objects.filter(owner_key=old_key).update(owner_key=new_key)
+    except IntegrityError:
+        # Samma tips sparat under båda nycklarna: den nya gäller, den gamla tas bort.
+        OpportunityFavorite.objects.filter(owner_key=old_key).delete()
+
+
 def owner_key_for(request) -> str | None:
     """
     Vem "mina favoriter" och "mina notiser" tillhör.
@@ -202,7 +226,16 @@ def owner_key_for(request) -> str | None:
     """
     token = request.headers.get("X-Device-Token") or request.GET.get("device_token")
     if token:
-        return token
+        # Telefonens id, aldrig dess hemlighet: token är en inloggning, och en
+        # kopia i favorittabellen hade gjort hashningen vid parkopplingen verkningslös.
+        from fleet.access import device_for_token
+
+        device, _credential, _how = device_for_token(token)
+        if device is None:
+            return None
+        key = f"device:{device.id}"
+        _move_favorites(token, key)
+        return key
     auth = request.headers.get("Authorization", "")
     if auth.lower().startswith("bearer "):
         payload = verify_supabase_jwt(auth[7:].strip())
@@ -567,6 +600,7 @@ def tip_within_entitlement(ent, opportunity) -> bool:
 
 
 @require_GET
+@gzip_page
 def alerts(request):
     """GET /api/alerts?lat=..&lon=..  (X-Device-Token eller Bearer-JWT)"""
     ent = entitlement_for_request(request)
@@ -607,7 +641,7 @@ def alerts(request):
 
     shared = shared_feed(
         lat, lon, include_all=request.GET.get("all") == "1", regions=regions, counties=counties,
-        municipalities=municipalities,
+        municipalities=municipalities, road_all=request.GET.get("road") == "all",
     )
 
     # Favoriterna är personliga och räknas per anrop; resten delas av alla med samma
@@ -913,20 +947,35 @@ def notifications(request):
 
 
 def _device_for(request):
-    """Enheten notisinställningarna hör till, eller None."""
-    from billing.models import Device
+    """
+    Enheten notisinställningarna hör till, eller None.
+
+    Samma uppslag som åtkomstkontrollen (fleet/access.device_for_token): den
+    hashade hemligheten från parkopplingen först, klartexttoken bara för
+    telefoner som ännu inte parkopplats om. Tidigare letades bara på
+    klartexttoken, och varje nyparkopplad telefon fick då skrivskyddade
+    notisinställningar -- valen sparades aldrig, och notiserna följde inte
+    förarens regler.
+    """
+    from fleet.access import device_for_token
 
     token = request.headers.get("X-Device-Token") or request.GET.get("device_token")
     if not token:
         return None
-    return Device.objects.filter(token=token).first()
+    device, _credential, _how = device_for_token(token)
+    return device
 
 
-def request_area(request, lat, lon) -> tuple[list[str], list[str]]:
+def request_area(request, lat, lon, ent=None) -> tuple[list[str], list[str]]:
     """
     Län och kommuner för anropet: parametrarna `counties` och `municipalities`, annars
     enhetens sparade körområde när positionen saknas. Samma regel som /api/alerts, så att
     tips, färjor och evenemang alltid gäller samma område.
+
+    Med [ent] och licensmodellen gäller licensens län, precis som i /api/alerts: förarens
+    val får smalna av, aldrig vidga, och utan val gäller licensens län -- inte radien kring
+    positionen. Utan det såg en förare med licens för Skåne Stockholms färjor och
+    evenemang så fort hen valde Stockholm eller stod där. Se `county_gate`.
     """
     counties = [c.strip() for c in (request.GET.get("counties") or "").split(",") if c.strip()]
     municipalities = [m.strip() for m in (request.GET.get("municipalities") or "").split(",") if m.strip()]
@@ -935,7 +984,14 @@ def request_area(request, lat, lon) -> tuple[list[str], list[str]]:
         if device is not None:
             counties = areas.device_counties(device.notify_prefs)
             municipalities = areas.device_municipalities(device.notify_prefs)
+    if ent is not None and not getattr(ent, "unrestricted", True):
+        counties, municipalities = county_gate(ent, counties, municipalities)
     return counties, municipalities
+
+
+def area_blocked(ent, counties, municipalities) -> bool:
+    """Licensmodellen och inget län kvar efter spärren: svaret ska vara tomt, inte en radie."""
+    return not getattr(ent, "unrestricted", True) and not counties and not municipalities
 
 
 @csrf_exempt
@@ -986,6 +1042,14 @@ def notify_prefs(request):
         "municipalityCatalog": areas.municipality_catalog(),
         "defaults": notify.default_prefs(),
         "notifyScoreFloor": thresholds.NOTIFY_SCORE_FLOOR,
+        # Förarens enkla regler: kategorierna (samma som kartans rad) och nivåerna.
+        "categoryCatalog": notify.CATEGORY_CATALOG,
+        "levels": list(notify.LEVELS),
+        "maxPauseHours": notify.MAX_PAUSE_HOURS,
+        # Länen licensen omfattar. Appen erbjuder bara dem; tom lista och
+        # `licensedCountiesUnrestricted` = bolaget är inte på licensmodellen än.
+        "licensedCounties": sorted(getattr(ent, "counties", ()) or ()),
+        "licensedCountiesUnrestricted": bool(getattr(ent, "unrestricted", True)),
     }
 
     if device is None:
@@ -1035,7 +1099,31 @@ def notify_prefs(request):
         known = {r["key"] for r in notify.region_catalog()}
         current["regions"] = [str(r) for r in body["regions"] if str(r) in known]
     if isinstance(body.get("counties"), list):
-        current["counties"] = sorted({str(c) for c in body["counties"] if str(c) in areas.COUNTY_NAMES})
+        counties = {str(c) for c in body["counties"] if str(c) in areas.COUNTY_NAMES}
+        if not getattr(ent, "unrestricted", True):
+            # Bara län licensen omfattar. Ett annat län hade sett ut som ett val
+            # men aldrig gett en enda notis (fleet/push_gate.py släpper inte igenom det).
+            counties &= set(getattr(ent, "counties", ()) or ())
+        current["counties"] = sorted(counties)
+    if isinstance(body.get("categories"), dict):
+        current["categories"] = {
+            k: v is not False for k, v in body["categories"].items() if k in {c["id"] for c in notify.CATEGORY_CATALOG}
+        }
+    if "minLevel" in body:
+        level = str(body.get("minLevel") or "all")
+        current["minLevel"] = level if level in notify.LEVELS else "all"
+    if "pauseHours" in body:
+        # Pausen räknas på servern, från serverns klocka: en telefon med fel tid
+        # ska inte kunna pausa i ett år eller "pausa" bakåt i tiden.
+        try:
+            hours = float(body.get("pauseHours") or 0)
+        except (TypeError, ValueError):
+            hours = 0
+        if hours > 0:
+            hours = min(hours, notify.MAX_PAUSE_HOURS)
+            current["pausedUntil"] = (timezone.now() + timedelta(hours=hours)).isoformat()
+        else:
+            current.pop("pausedUntil", None)
     if isinstance(body.get("municipalities"), list):
         current["municipalities"] = areas.device_municipalities({"municipalities": body["municipalities"]})
     if isinstance(body.get("cities"), list):

@@ -450,3 +450,7 @@ HEARTBEAT_MAX_AGE_SECONDS = 180
 # fast varken appen eller pipeline-sidan läser listan -- två sync-workers klarade då
 # ungefär 27 svar/s. De främsta räcker som sammanhang för vägen dit.
 FEED_CONTEXT_LIMIT = 50
+# Taket när appen ber om alla väghändelser (`road=all`, Väg-läget). Mätt
+# 2026-09-21: 1 800 samtidiga i Skåne, Halland och Västra Götaland. Taket
+# skyddar telefonen om Trafikverket skulle skicka ett helt land på en gång.
+FEED_CONTEXT_FULL_LIMIT = 3000

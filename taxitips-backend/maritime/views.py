@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import functools
 
+from django.views.decorators.gzip import gzip_page
 from django.conf import settings
 from django.core.cache import cache
 from django.http import JsonResponse
@@ -18,7 +19,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET
 
 from core import areas
-from core.api import _json, position_from, request_area
+from core.api import _json, area_blocked, position_from, request_area
 from core.entitlement import entitlement_for_request
 from core.geo import haversine_km
 from maritime import approach
@@ -72,6 +73,7 @@ def _terminal_key_for_arrival(item: dict, terminals: list[dict]) -> str | None:
 
 
 @require_GET
+@gzip_page
 def ferries(request):
     """
     GET /api/ferries  (X-Device-Token eller Bearer-JWT, position i X-TT-Position)
@@ -88,7 +90,12 @@ def ferries(request):
         })
 
     lat, lon = position_from(request)
-    counties, municipalities = request_area(request, lat, lon)
+    counties, municipalities = request_area(request, lat, lon, ent)
+    if area_blocked(ent, counties, municipalities):
+        return _json(request, {
+            "ferries": [], "arrivals": [], "terminals": [],
+            "entitled": False, "reason": "no_entitled_county",
+        })
     chosen = set(areas.device_area_codes({"counties": counties, "municipalities": municipalities}))
     snapshot = _shared_snapshot()
     if chosen:

@@ -225,7 +225,6 @@ class _SignalMapState extends State<SignalMap> {
 
   @override
   Widget build(BuildContext context) {
-    final dark = MediaQuery.platformBrightnessOf(context) == Brightness.dark;
 
     // Färjorna: terminalerna som små ankare, fartygen som pilar i sin kurs, och
     // en streckad linje till terminalen för dem som är på väg in eller lägger till.
@@ -293,15 +292,16 @@ class _SignalMapState extends State<SignalMap> {
       mapController: widget.mapController,
       options: _options,
       children: [
-        // Esri World Street Map: gatunamn ända ner till husnivå, utan nyckel.
-        // Färgerna tonas ner så att symbolerna -- inte bakgrunden -- drar blicken.
-        // I mörkt läge inverteras kartan, så att skärmen inte bländar i bilen.
+        // Esri World Street Map: en vanlig ljus gatukarta med gatunamn ända ner
+        // till husnivå, utan nyckel och utan vattenstämpel. Ofiltrerad -- ett
+        // färgfilter per ruta gjorde kartan seg -- och alltid ljus: en mörk
+        // variant upplevdes som för mörk i bilen. (CARTO Voyager provades men
+        // stämplar "API KEY REQUIRED" över kartan utan konto.)
         TileLayer(
           urlTemplate:
               'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
           userAgentPackageName: 'se.taxibehov.taxibehov_app',
           maxNativeZoom: 19,
-          tileBuilder: dark ? darkModeTileBuilder : _calmTileBuilder,
         ),
         SimpleAttributionWidget(
           source: const Text('© Esri · OpenStreetMap'),
@@ -328,21 +328,6 @@ class _SignalMapState extends State<SignalMap> {
     );
   }
 }
-
-/// Dämpad gatukarta: 45 % mättnad och lite ljusare. Vägarna och namnen syns,
-/// men de gula motorvägarna konkurrerar inte längre med de gula tipsen.
-const _calm = ColorFilter.matrix(<double>[
-  0.5663, 0.3934, 0.0397, 0, 8, //
-  0.1169, 0.8434, 0.0397, 0, 8, //
-  0.1169, 0.3934, 0.4897, 0, 8, //
-  0, 0, 0, 1, 0, //
-]);
-
-Widget _calmTileBuilder(
-  BuildContext context,
-  Widget tileWidget,
-  TileImage tile,
-) => ColorFiltered(colorFilter: _calm, child: tileWidget);
 
 /// Blå prick med ring -- "du är här", samma som i telefonens egen karta.
 class _UserDot extends StatelessWidget {

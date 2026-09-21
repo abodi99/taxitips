@@ -55,7 +55,7 @@ class _DriverScreenState extends State<DriverScreen>
     with WidgetsBindingObserver {
   // Anti-overload: max tips i listan (prioritetssorterade). Kartan har egen
   // gräns så nålarna inte täcker varandra.
-  static const int _maxVisibleSignals = 100;
+  static const int _maxVisibleSignals = 5000;
   static const int _maxMapPins = 40;
 
   Map<String, dynamic>? _data;
@@ -144,6 +144,15 @@ class _DriverScreenState extends State<DriverScreen>
 
   /// Det föraren senast tryckte på -- markeras med guldring på kartan.
   String? _selectedId;
+
+  /// Länen licensen omfattar (från /api/fleet/me). null = okänt eller
+  /// bolaget är inte på licensmodellen än; då erbjuds alla län, och servern
+  /// avgör ändå.
+  Set<String>? _licensedCounties;
+
+  /// Länen föraren kan välja i filtret: bara licensens, när de är kända.
+  Iterable<MapEntry<String, String>> get _pickableCounties => _countyNames.entries
+      .where((e) => _licensedCounties == null || _licensedCounties!.contains(e.key));
 
   Set<String> _regions = {};
   Set<String> _cities = {};
@@ -676,6 +685,7 @@ class _DriverScreenState extends State<DriverScreen>
       final results = await Future.wait([
         widget.api.taxi(
           demo: widget.demo,
+          roadAll: _category == SignalCategory.road.key,
           userLat: _userLat,
           userLon: _userLon,
           counties: _counties.isEmpty ? null : (_counties.toList()..sort()),
@@ -886,8 +896,21 @@ class _DriverScreenState extends State<DriverScreen>
     try {
       final result = await widget.api.entitlements();
       if (!mounted) return;
+      final licensed = {
+        for (final c in (result['licensedCounties'] as List?) ?? const []) c.toString(),
+      };
       setState(() {
         _entitled = result['entitled'] == true;
+        if (licensed.isNotEmpty) {
+          _licensedCounties = licensed;
+          // Sparade val utanför licensen hade bara gett en tom lista.
+          final before = _counties.length + _municipalities.length;
+          _counties.removeWhere((c) => !licensed.contains(c));
+          _municipalities.removeWhere((m) => !licensed.contains(m.substring(0, 2)));
+          if (_counties.length + _municipalities.length != before) {
+            WidgetsBinding.instance.addPostFrameCallback((_) => _saveFilters(reloadFeed: true));
+          }
+        }
         // Godkänd men utan bil är inte "provperioden slut". Backend säger
         // vilket av dem det är; skärmen ska inte gissa.
         if (result['needsSession'] == true ||
@@ -1011,8 +1034,12 @@ class _DriverScreenState extends State<DriverScreen>
       _followedEvents.containsKey(e['id']?.toString());
 
   void _selectCategory(String? category) {
+    final road = SignalCategory.road.key;
+    final reload = (category == road) != (_category == road);
     setState(() => _category = category);
     _saveFilters();
+    // Väg-läget hämtar alla väghändelser; de andra bara de närmaste 50.
+    if (reload) unawaited(_load(silent: true));
     unawaited(
       logAnalyticsEvent(
         'map_category',
@@ -1128,6 +1155,15 @@ class _DriverScreenState extends State<DriverScreen>
     counts[SignalCategory.ferry] =
         counts[SignalCategory.ferry]! + _ferriesVisible.length;
     counts[SignalCategory.event] = _eventsToday.length;
+    // Utanför Väg-läget skickar servern bara de närmaste väghändelserna, men
+    // räknar alla. Knappen ska säga hur många föraren får se när hen trycker.
+    final roadTotal = (_data?['roadTotal'] as num?)?.toInt();
+    if (_data?['roadAll'] != true &&
+        roadTotal != null &&
+        !_hiddenModes.contains('road') &&
+        roadTotal > counts[SignalCategory.road]!) {
+      counts[SignalCategory.road] = roadTotal;
+    }
     return counts;
   }
 
@@ -1355,7 +1391,27 @@ class _DriverScreenState extends State<DriverScreen>
 
   /// Tips i listan — samma filter som pipelinens förarvy. Koordinater krävs
   /// inte: många SL-tips saknar plats men ska fortfarande synas.
+  List<Map<String, dynamic>>? _listMemo;
+  String? _listMemoKey;
+
+  /// Filtrerad och sorterad lista. Räknas om bara när data eller filter ändras:
+  /// med 1 800 väghändelser och en panel som byggs om vid varje drag hade
+  /// sorteringen annars körts hundratals gånger i sekunden.
   List<Map<String, dynamic>> get _listOpportunities {
+    final key = [
+      identityHashCode(_data),
+      _scoreMin, _scoreMax, _nearMe, _sortMode,
+      (_hiddenModes.toList()..sort()).join(','),
+      (_hiddenTiers.toList()..sort()).join(','),
+      _userLat?.toStringAsFixed(3), _userLon?.toStringAsFixed(3),
+    ].join('|');
+    if (key == _listMemoKey && _listMemo != null) return _listMemo!;
+    _listMemo = _computeListOpportunities();
+    _listMemoKey = key;
+    return _listMemo!;
+  }
+
+  List<Map<String, dynamic>> _computeListOpportunities() {
     var list = _sourceFilterList(_geoFilter(_rawActive));
     // Styrkefiltret gäller körningar, inte väghinder: en olycka på vägen dit
     // ska synas även när föraren bara vill se de starkaste tipsen.
@@ -1453,6 +1509,9 @@ class _DriverScreenState extends State<DriverScreen>
       return names.length <= 2
           ? names.join(', ')
           : '${names.take(2).join(', ')} +${names.length - 2}';
+    }
+    if (_licensedCounties != null) {
+      return 'Alla dina län (${_licensedCounties!.length})';
     }
     return 'Inget län valt';
   }
@@ -1561,7 +1620,18 @@ class _DriverScreenState extends State<DriverScreen>
                               ),
                             ),
                           ),
-                          for (final county in _countyNames.entries) ...[
+                          if (_licensedCounties != null)
+                            Padding(
+                              padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                              child: Text(
+                                'Bara länen ni har licens för visas här.',
+                                style: TextStyle(
+                                  color: Colors.grey.shade700,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          for (final county in _pickableCounties) ...[
                             CheckboxListTile(
                               dense: true,
                               contentPadding: const EdgeInsets.symmetric(
@@ -2797,6 +2867,7 @@ class _DriverScreenState extends State<DriverScreen>
                                       : null,
                                 ),
                                 _sheetHeader(),
+                                _activeFilterBar(),
                                 const SizedBox(height: 8),
                                 ..._buildSheetItems(),
                               ],
@@ -2902,6 +2973,51 @@ class _DriverScreenState extends State<DriverScreen>
               ),
             ),
         ],
+      ),
+    );
+  }
+
+  /// Vad som är bortfiltrerat, i klartext, med en knapp som tar bort allt.
+  /// Utan den ser ett filter som sattes för en vecka sedan ut som att data saknas.
+  Widget _activeFilterBar() {
+    if (!_filtersActive) return const SizedBox.shrink();
+    final modeLabels = {for (final (key, label) in filterModeOptions) key: label};
+    final parts = <String>[
+      if (_scorePreset == 1)
+        'Bara starka'
+      else if (_scorePreset == 2)
+        'Bara starkast'
+      else if (_scoreFilterActive)
+        'Styrka ${_scoreMin.round()}–${_scoreMax.round()}',
+      if (_nearMe) 'Nära mig',
+      if (_counties.isNotEmpty || _municipalities.isNotEmpty) _areaFilterSummary,
+      if (_hiddenModes.isNotEmpty)
+        'Dolt: ${_hiddenModes.map((m) => modeLabels[m] ?? m).join(', ')}',
+      if (_hiddenTiers.isNotEmpty) '${_hiddenTiers.length} störningstyper dolda',
+    ];
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+      child: Material(
+        color: TbColors.guld.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+          child: Row(
+            children: [
+              const Icon(Icons.filter_alt_rounded, size: 20, color: TbColors.guldDjup),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  parts.join(' · '),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontWeight: FontWeight.w600, color: TbColors.midnatt),
+                ),
+              ),
+              TextButton(onPressed: _clearFilters, child: const Text('Visa allt')),
+            ],
+          ),
+        ),
       ),
     );
   }

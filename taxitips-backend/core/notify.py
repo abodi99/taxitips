@@ -138,6 +138,76 @@ TYPE_CATALOG: list[dict] = [
 
 _DEFAULT_ON = {t["id"] for t in TYPE_CATALOG if t["defaultOn"]}
 
+# --- Förarens enkla regler: kategori, nivå och paus ------------------------
+#
+# Typkatalogen ovan är finkornig (en rad per störningstyp) och ligger kvar
+# under "Fler val". De flesta förare vill något enklare: "inga vägnotiser",
+# "bara de starka", "tyst i två timmar". Samma kategorier som kartans
+# kategorirad (lib/signal_kinds.dart), så att notisen och kartan talar samma
+# språk. Allt är PÅ tills föraren stänger av -- en ny kategori ska inte vara
+# tyst bara för att den tillkom efter att prefs sparades.
+
+CATEGORY_CATALOG = [
+    {"id": "transit", "label": "Tåg & buss"},
+    {"id": "road", "label": "Väg"},
+    {"id": "flight", "label": "Flyg"},
+    {"id": "ferry", "label": "Färja"},
+]
+_CATEGORY_IDS = {c["id"] for c in CATEGORY_CATALOG}
+
+# Lägsta nivå för en notis. "all" = allt som redan klarat notisgolvet.
+LEVELS = ("all", "medium", "high")
+_LEVEL_RANK = {"low": 0, "medium": 1, "high": 2}
+_MIN_RANK = {"all": 0, "medium": 1, "high": 2}
+
+# Längsta paus: en glömd paus ska inte tysta telefonen i en vecka.
+MAX_PAUSE_HOURS = 24
+
+
+def category_of(opportunity) -> str:
+    """Kartans kategori för ett tips: kind först, som i appen."""
+    kind = getattr(opportunity, "kind", None)
+    if kind in ("road", "flight", "ferry"):
+        return kind
+    mode = getattr(opportunity, "mode", None)
+    if mode in ("road", "flight"):
+        return mode
+    return "transit"
+
+
+def category_enabled(categories: dict | None, category: str) -> bool:
+    if isinstance(categories, dict) and category in categories:
+        return categories[category] is not False
+    return True
+
+
+def level_of(opportunity) -> str:
+    """Samma bedömning som listan visar (core/api.py:_serialize)."""
+    demand = getattr(opportunity, "demand_score", 0) or 0
+    return thresholds.customer_likelihood(
+        getattr(opportunity, "severity_tier", None), demand, demand,
+        getattr(opportunity, "has_alternative", False),
+    )
+
+
+def level_allows(min_level: str | None, level: str) -> bool:
+    return _LEVEL_RANK.get(level, 0) >= _MIN_RANK.get(min_level or "all", 0)
+
+
+def paused_until(prefs: dict | None):
+    """Pausens slut, eller None. Ett trasigt värde är ingen paus."""
+    from django.utils.dateparse import parse_datetime
+
+    raw = (prefs or {}).get("pausedUntil") if isinstance(prefs, dict) else None
+    if not raw:
+        return None
+    parsed = parse_datetime(str(raw))
+    if parsed is None:
+        return None
+    if timezone.is_naive(parsed):
+        parsed = timezone.make_aware(parsed)
+    return parsed
+
 
 def type_catalog() -> list[dict]:
     """Katalogen med en ärlig markering av vad som faktiskt kan pushas."""
@@ -336,6 +406,9 @@ REASONS: dict[str, str] = {
     "not_notify_worthy": "tipset är inte notisvärt: typ, poäng under golvet eller känt alternativ",
     "ai_only": "bara språkmodellens höjning gör tipset notisvärt, inte regelverket",
     "notifications_off": "föraren har stängt av notiser",
+    "paused": "föraren har pausat notiserna en stund",
+    "category_off": "föraren har stängt av notiser för den här kategorin",
+    "below_level": "tipset är svagare än den nivå föraren valt för notiser",
     "type_off": "föraren har stängt av den här händelsetypen",
     "no_area": "föraren har inte valt något körområde",
     "unplaced_tip": "tipset går inte att placera i ett län",
@@ -354,7 +427,9 @@ def decide(prefs: dict | None, opportunity, presence=None) -> Match:
 
     1. `not_notify_worthy` -- thresholds.is_notify_worthy. Anroparen filtrerar
        redan i SQL (candidates), men kontrollen står kvar som skyddsräcke.
-    2. `notifications_off`
+    2. `notifications_off`, `paused` (en tidsbegränsad paus), `category_off:<kategori>`
+       (Tåg & buss, Väg, Flyg, Färja) och `below_level` (föraren vill bara ha
+       starka eller medel och uppåt)
     3. `type_off:<tier>`
     4. `no_area` -- inget körområde valt. Ingen rikstäckande standardnotis: en
        förare som inte sagt var hen kör väcks inte av något i andra änden av
@@ -384,6 +459,14 @@ def decide(prefs: dict | None, opportunity, presence=None) -> Match:
     prefs = prefs if isinstance(prefs, dict) else {}
     if prefs.get("enabled") is False:
         return Match(False, "notifications_off")
+    pause = paused_until(prefs)
+    if pause is not None and pause > timezone.now():
+        return Match(False, "paused")
+    category = category_of(opportunity)
+    if not category_enabled(prefs.get("categories"), category):
+        return Match(False, f"category_off:{category}")
+    if not level_allows(prefs.get("minLevel"), level_of(opportunity)):
+        return Match(False, "below_level")
     if not type_enabled(prefs.get("types"), opportunity.severity_tier):
         return Match(False, f"type_off:{opportunity.severity_tier}")
     if presence is not None:

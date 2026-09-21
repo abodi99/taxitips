@@ -509,12 +509,27 @@ class ApiClient {
     if (backend != null && deviceToken != null) {
       try {
         final status = await backend.fleetStatus(deviceToken: deviceToken);
+        // Länen licensen omfattar: bilen föraren kör just nu, annars alla
+        // bilar telefonen är godkänd för. Filtret erbjuder bara dem.
+        final licensed = <String>{
+          for (final c in (status['counties'] as List?) ?? const []) c.toString(),
+        };
+        if (licensed.isEmpty) {
+          for (final v in (status['vehicles'] as List?) ?? const []) {
+            if (v is Map) {
+              for (final c in (v['counties'] as List?) ?? const []) {
+                licensed.add(c.toString());
+              }
+            }
+          }
+        }
         return {
           'ok': true,
           'entitled': status['entitled'] == true,
           'reason': status['reason'],
           'needsSession': status['needsSession'] == true,
           'message': status['message'],
+          'licensedCounties': licensed.toList()..sort(),
         };
       } on ApiException catch (e) {
         // En gammal klartexttoken som ännu inte parkopplats om: backend
@@ -897,6 +912,13 @@ class ApiClient {
           'catalog': (body['typeCatalog'] as List?) ?? notifyTypeCatalog,
           'tips': const <String>[],
         },
+        // Förarens enkla regler: kategorier, nivåer och paus (core/notify.py).
+        'categoryCatalog': (body['categoryCatalog'] as List?) ?? const [],
+        'levels': (body['levels'] as List?) ?? const ['all', 'medium', 'high'],
+        'maxPauseHours': body['maxPauseHours'] ?? 24,
+        // Länen licensen omfattar -- notiserna kan bara gälla dem.
+        'licensedCounties': (body['licensedCounties'] as List?) ?? const [],
+        'licensedCountiesUnrestricted': body['licensedCountiesUnrestricted'] != false,
       };
     }
     final meDev = await getDeviceMe();
@@ -1026,6 +1048,9 @@ class ApiClient {
     List<String>? counties,
     List<String>? municipalities,
     Map<String, bool>? types,
+    Map<String, bool>? categories,
+    String? minLevel,
+    double? pauseHours,
   }) async {
     final backend = _backend;
     if (backend != null) {
@@ -1036,6 +1061,9 @@ class ApiClient {
         counties: counties,
         municipalities: municipalities,
         types: types,
+        categories: categories,
+        minLevel: minLevel,
+        pauseHours: pauseHours,
         deviceToken: deviceToken,
         accessToken: _accessToken,
       );
@@ -1286,6 +1314,7 @@ class ApiClient {
     List<String>? regions,
     List<String>? counties,
     List<String>? municipalities,
+    bool roadAll = false,
   }) async {
     try {
       await ensureInitialized();
@@ -1308,6 +1337,9 @@ class ApiClient {
       String? reason;
       bool? entitled;
       String? message;
+      // Hur många väghändelser som finns i området -- också när bara de
+      // närmaste skickades. Kategoriraden visar det riktiga antalet.
+      int? roadTotal;
       final backend = _backend;
       if (backend != null) {
         // Django äger både marknadsurvalet och bedömningen. Den äldre
@@ -1321,10 +1353,12 @@ class ApiClient {
           regions: regions,
           counties: counties,
           municipalities: municipalities,
+          roadAll: roadAll,
           deviceToken: deviceToken,
           accessToken: _accessToken,
         );
         rows = (body['alerts'] as List?) ?? const [];
+        roadTotal = (body['contextTotal'] as num?)?.toInt();
         // Väghändelser ligger i `context` (kapade, låga poäng) — de är
         // sammanhang för vägen dit, inte skäl att köra någonstans. Appen
         // tar med dem så föraren kan filtrera in/ut väg; sorteringen håller
@@ -1367,6 +1401,8 @@ class ApiClient {
         'events': const [],
         'placeStats': _buildPlaceStats(all),
         'demo': demo,
+        'roadTotal': ?roadTotal,
+        'roadAll': roadAll,
         'updatedAt': now.millisecondsSinceEpoch,
         'source': source,
         'needsArea': needsArea,

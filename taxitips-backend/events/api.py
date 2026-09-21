@@ -15,6 +15,7 @@ from __future__ import annotations
 import datetime as dt
 from collections import Counter
 
+from django.views.decorators.gzip import gzip_page
 from django.db.models import F, Q
 from django.utils import timezone
 from django.views.decorators.http import require_GET
@@ -24,7 +25,7 @@ import functools
 from django.conf import settings
 
 from core import areas
-from core.api import _float, _json, position_from, request_area
+from core.api import _float, _json, area_blocked, position_from, request_area
 from core.entitlement import entitlement_for_request
 from core.geo import haversine_km
 from events import matching, timing
@@ -221,6 +222,7 @@ def _in_period(event, first: dt.date, last: dt.date) -> bool:
 
 
 @require_GET
+@gzip_page
 def upcoming(request):
     """
     GET /api/events?from=2026-10-03&to=2026-10-05   (eller ?days=14)
@@ -239,7 +241,12 @@ def upcoming(request):
     horizon = today + dt.timedelta(days=MAX_DAYS)
     lat, lon = position_from(request)
     radius = _float(request.GET.get("radius_km"), DEFAULT_RADIUS_KM)
-    counties, municipalities = request_area(request, lat, lon)
+    counties, municipalities = request_area(request, lat, lon, ent)
+    if area_blocked(ent, counties, municipalities):
+        return _json(request, {
+            "events": [], "entitled": False, "reason": "no_entitled_county",
+            "message": "Billicensen har inget län som matchar ditt filter.",
+        })
     chosen = set(areas.device_area_codes({"counties": counties, "municipalities": municipalities}))
 
     # Bara källor med rätt att visas i den betalda appen -- se events/rights.py. Under
