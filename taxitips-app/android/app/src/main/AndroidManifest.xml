@@ -4,7 +4,7 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.INTERNET" />
     <!-- Notiser. Sedan Android 13 måste tillståndet DEKLARERAS här för att
-         appen alls ska kunna be om det -- utan raden svarar
+         appen alls ska kunna be om det — utan raden svarar
          requestPermission() tyst nej, och varje ny installation får aldrig
          en enda notis. Mätt 2026-09-21: en testtelefon fick notiser bara för
          att tillståndet getts för hand via adb. -->
