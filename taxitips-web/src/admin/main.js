@@ -101,7 +101,40 @@ async function render() {
 
 /* --- Inloggning ------------------------------------------------------- */
 
+const EMAIL_KEY = "tt_admin_email";
+
+/**
+ * Förifyller e-posten. Från `?email=` i adressen (en länk man kan spara som
+ * bokmärke), annars den som senast loggade in i den här webbläsaren.
+ *
+ * Aldrig inskriven i själva sidan: admin.taxitips.se är publik, och en
+ * förifylld adress i HTML:en hade talat om för vem som helst vilket
+ * användarnamn som är administratörens.
+ */
+function prefillEmail() {
+  const input = document.getElementById("email");
+  if (!input || input.value) return;
+  const fromUrl = new URLSearchParams(window.location.search).get("email");
+  let remembered = "";
+  try {
+    remembered = window.localStorage.getItem(EMAIL_KEY) || "";
+  } catch {
+    /* privat läge eller blockerad lagring: inget att förifylla */
+  }
+  input.value = fromUrl || remembered;
+  if (input.value) document.getElementById("password")?.focus();
+}
+
+function rememberEmail(email) {
+  try {
+    if (email) window.localStorage.setItem(EMAIL_KEY, email);
+  } catch {
+    /* bekvämlighet, inte funktion */
+  }
+}
+
 async function boot() {
+  prefillEmail();
   const { data } = await supabase().auth.getSession();
   if (data?.session) return enterApp(data.session);
   el.login.hidden = false;
@@ -111,7 +144,9 @@ async function enterApp(session) {
   el.login.hidden = true;
   el.app.hidden = false;
   el.logout.hidden = false;
+  document.getElementById("changePassword").hidden = false;
   el.whoami.textContent = session.user?.email ?? "";
+  rememberEmail(session.user?.email);
   await render();
 }
 
@@ -174,6 +209,28 @@ document.getElementById("magicLink")?.addEventListener("click", async () => {
 supabase().auth.onAuthStateChange((event, session) => {
   if (event === "SIGNED_IN" && session && el.app.hidden) {
     enterApp(session);
+  }
+});
+
+document.getElementById("changePassword")?.addEventListener("click", async () => {
+  const first = prompt("Nytt lösenord (minst 12 tecken):");
+  if (first === null) return;
+  if (first.length < 12) {
+    alert("Lösenordet måste vara minst 12 tecken.");
+    return;
+  }
+  const second = prompt("Skriv det nya lösenordet igen:");
+  if (second === null) return;
+  if (first !== second) {
+    alert("Lösenorden stämmer inte överens. Inget ändrades.");
+    return;
+  }
+  try {
+    const { error } = await supabase().auth.updateUser({ password: first });
+    if (error) throw error;
+    alert("Lösenordet är bytt.");
+  } catch (error) {
+    alert(error?.message ?? "Kunde inte byta lösenord.");
   }
 });
 
