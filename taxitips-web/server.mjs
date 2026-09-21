@@ -252,9 +252,29 @@ async function twentyCreateNote({ personId, message, company, email, page }) {
   }).catch(() => null);
 }
 
+// Adminwebben har en egen värd. På den värden är `/` adminsidan, inte
+// marknadssidan -- annars landar den som skriver admin.taxitips.se på
+// "Hitta fler kunder. Tjäna mer." och tror att något är trasigt.
+// Behörigheten avgörs ändå av backenden (StaffRole), inte av värdnamnet.
+const ADMIN_HOSTS = new Set(
+  (process.env.ADMIN_HOSTS || "admin.taxitips.se")
+    .split(",")
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean),
+);
+
+function isAdminHost(req) {
+  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "")
+    .split(",")[0]
+    .split(":")[0]
+    .trim()
+    .toLowerCase();
+  return ADMIN_HOSTS.has(host);
+}
+
 function serveStatic(req, res) {
   let urlPath = decodeURIComponent((req.url || "/").split("?")[0]);
-  if (urlPath === "/") urlPath = "/index.html";
+  if (urlPath === "/") urlPath = isAdminHost(req) ? "/admin.html" : "/index.html";
   const filePath = path.normalize(path.join(DIST, urlPath));
   if (!filePath.startsWith(DIST)) {
     res.writeHead(403);

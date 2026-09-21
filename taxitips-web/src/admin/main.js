@@ -157,7 +157,7 @@ document.getElementById("magicLink")?.addEventListener("click", async () => {
       email,
       options: {
         shouldCreateUser: false,
-        emailRedirectTo: `${window.location.origin}/admin`,
+        emailRedirectTo: `${window.location.origin}${window.location.pathname}`,
       },
     });
     if (error) throw error;
