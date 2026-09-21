@@ -73,6 +73,9 @@ class _DriverScreenState extends State<DriverScreen>
   /// Listan är uppdragen över kartan: kartknapparna skulle hamna under
   /// statusraden, så de göms och filtret flyttar in i listans rubrik.
   bool get _sheetHigh => _sheetExtent > 0.6;
+
+  /// Kartan har flyttats till förarens första position.
+  bool _centeredOnUser = false;
   final _mapController = MapController();
   // Flyttar vilken karta som visas: Google Maps med trafik, eller flutter_map.
   late final _mapFocus = MapFocus(_mapController);
@@ -638,6 +641,18 @@ class _DriverScreenState extends State<DriverScreen>
         if (_data != null) _enrichClientDistances(_data!);
         _error = null;
       });
+      // Första positionen flyttar kartan till föraren, en gång. Annars
+      // startade kartan över hela Sverige med listan över södra halvan --
+      // en förare i Helsingborg såg Norrland.
+      if (!_centeredOnUser) {
+        _centeredOnUser = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted || _userLat == null || _userLon == null) return;
+          try {
+            _mapFocus.move(_userLat!, _userLon!, 10);
+          } catch (_) {}
+        });
+      }
       return null;
     } on TimeoutException {
       return 'GPS tog för lång tid — försök utomhus eller igen';
@@ -2329,9 +2344,12 @@ class _DriverScreenState extends State<DriverScreen>
                       ),
                       const SizedBox(height: 14),
                       // Kör dit (telefonens navigering) och Följ -- de två saker
-                      // föraren gör med ett tips, överst och stora.
+                      // föraren gör med ett tips, överst och stora. Ett väghinder
+                      // kör man runt, inte till: där finns bara Följ.
                       ActionRow(
-                        lat: (a['lat'] as num?)?.toDouble(),
+                        lat: categoryOfAlert(a) == SignalCategory.road
+                            ? null
+                            : (a['lat'] as num?)?.toDouble(),
                         lon: (a['lon'] as num?)?.toDouble(),
                         driveLabel: _distanceFor(a) == null
                             ? 'Kör dit'
@@ -2510,11 +2528,15 @@ class _DriverScreenState extends State<DriverScreen>
                         ),
                       ],
                       if (a['id'] != null) ...[
-                        AlertFeedbackBar(
-                          api: widget.api,
-                          opportunityId: a['id'].toString(),
-                        ),
-                        const SizedBox(height: 16),
+                        // "Fick körning / Ingen kund" frågar om ett tips gav
+                        // kunder -- ett väghinder lovar inga.
+                        if (categoryOfAlert(a) != SignalCategory.road) ...[
+                          AlertFeedbackBar(
+                            api: widget.api,
+                            opportunityId: a['id'].toString(),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
                         _ExplainSection(
                           opportunityId: a['id'].toString(),
                           api: widget.api,

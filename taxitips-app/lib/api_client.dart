@@ -512,7 +512,8 @@ class ApiClient {
         // Länen licensen omfattar: bilen föraren kör just nu, annars alla
         // bilar telefonen är godkänd för. Filtret erbjuder bara dem.
         final licensed = <String>{
-          for (final c in (status['counties'] as List?) ?? const []) c.toString(),
+          for (final c in (status['counties'] as List?) ?? const [])
+            c.toString(),
         };
         if (licensed.isEmpty) {
           for (final v in (status['vehicles'] as List?) ?? const []) {
@@ -876,9 +877,8 @@ class ApiClient {
         deviceToken: deviceToken,
         accessToken: _accessToken,
       );
-      final areas = (body['areaCatalog'] as List?)
-              ?.map((e) => e.toString())
-              .toList() ??
+      final areas =
+          (body['areaCatalog'] as List?)?.map((e) => e.toString()).toList() ??
           skaneAreaFallback;
       final byRegionRaw = body['citiesByRegion'];
       final citiesByRegion = <String, List<String>>{};
@@ -886,8 +886,9 @@ class ApiClient {
         for (final e in byRegionRaw.entries) {
           final list = e.value;
           if (list is! List) continue;
-          citiesByRegion[e.key.toString()] =
-              list.map((c) => c.toString()).toList();
+          citiesByRegion[e.key.toString()] = list
+              .map((c) => c.toString())
+              .toList();
         }
       }
       return {
@@ -901,7 +902,8 @@ class ApiClient {
         // Alla 21 län med namn, för notisinställningarnas sammanfattning.
         'countyCatalog': (body['countyCatalog'] as List?) ?? const [],
         // Kommunerna per län (SCB-kod), för att förfina ett valt län.
-        'municipalityCatalog': (body['municipalityCatalog'] as Map?) ?? const {},
+        'municipalityCatalog':
+            (body['municipalityCatalog'] as Map?) ?? const {},
         'uncoveredCounties': (body['uncoveredCounties'] as List?) ?? const [],
         // true = inloggad ägare utan parad telefon. Katalogerna går att
         // visa, men det finns ingen enhet att spara för -- och det är ett
@@ -918,7 +920,8 @@ class ApiClient {
         'maxPauseHours': body['maxPauseHours'] ?? 24,
         // Länen licensen omfattar -- notiserna kan bara gälla dem.
         'licensedCounties': (body['licensedCounties'] as List?) ?? const [],
-        'licensedCountiesUnrestricted': body['licensedCountiesUnrestricted'] != false,
+        'licensedCountiesUnrestricted':
+            body['licensedCountiesUnrestricted'] != false,
       };
     }
     final meDev = await getDeviceMe();
@@ -1274,6 +1277,10 @@ class ApiClient {
       'countyName': m['countyName'],
       'municipality': m['municipality'],
       'severity_tier': m['severity_tier'],
+      // Varför backend bedömde som den gjorde (färdsätt.nivå.villkor). För
+      // väg bär villkoret orsaken -- olycka, avstängd, kö -- se
+      // signal_kinds.roadCondition.
+      'rule_id': m['rule_id'],
       'confidence': m['confidence'],
       'level': m['level'],
       'notify_worthy': m['notify_worthy'],
@@ -1642,9 +1649,7 @@ class ApiClient {
 
   Future<Map<String, dynamic>> listMembers() async {
     final meData = await me();
-    return {
-      'members': (meData['members'] as List?) ?? const [],
-    };
+    return {'members': (meData['members'] as List?) ?? const []};
   }
 
   /// Inbjudan av ny admin kräver Auth Admin (skapas på webbportalen).
