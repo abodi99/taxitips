@@ -132,6 +132,51 @@ el.loginForm?.addEventListener("submit", async (event) => {
   }
 });
 
+/**
+ * Inloggningslänk via e-post.
+ *
+ * Konton som skapats med Google har inget lösenord, och Google-inloggning är
+ * inte konfigurerad i produktionens Supabase Auth. En länk till den verifierade
+ * adressen loggar in samma konto -- GoTrue matchar på e-post -- utan att något
+ * lösenord behöver sättas eller skickas någonstans.
+ *
+ * `shouldCreateUser: false`: adminwebben skapar aldrig konton. Att någon kan
+ * begära en länk till en okänd adress får inte bli ett sätt att registrera sig.
+ */
+document.getElementById("magicLink")?.addEventListener("click", async () => {
+  el.loginError.hidden = true;
+  const email = String(new FormData(el.loginForm).get("email") ?? "").trim();
+  const sent = document.getElementById("magicSent");
+  if (!email) {
+    el.loginError.textContent = "Skriv din e-post först.";
+    el.loginError.hidden = false;
+    return;
+  }
+  try {
+    const { error } = await supabase().auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: `${window.location.origin}/admin`,
+      },
+    });
+    if (error) throw error;
+    sent.textContent = `Om ${email} har ett konto kommer en inloggningslänk strax.`;
+    sent.hidden = false;
+  } catch (error) {
+    el.loginError.textContent = error?.message ?? "Kunde inte skicka länken.";
+    el.loginError.hidden = false;
+  }
+});
+
+// Länken landar här med sessionen i URL:en. Supabase-klienten plockar upp den
+// själv (detectSessionInUrl); det här ser bara till att appen visas direkt.
+supabase().auth.onAuthStateChange((event, session) => {
+  if (event === "SIGNED_IN" && session && el.app.hidden) {
+    enterApp(session);
+  }
+});
+
 el.logout?.addEventListener("click", async () => {
   await supabase().auth.signOut();
   window.location.reload();
