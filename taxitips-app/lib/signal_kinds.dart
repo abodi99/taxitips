@@ -42,7 +42,7 @@ extension SignalCategoryText on SignalCategory {
     SignalCategory.transit =>
       'Tåg, buss eller tunnelbana står still eller är sen. Folk behöver taxi.',
     SignalCategory.road =>
-      'Olycka, avstängd väg, kö eller vägarbete (Trafikverket). Kör runt.',
+      'Trafikolycka (Trafikverket). Räkna med kö, eller kör en annan väg.',
     SignalCategory.flight =>
       'Många flyg landar, eller sista flyget. Folk behöver taxi från flygplatsen.',
     SignalCategory.ferry => 'Färja på väg in. Folk kliver av i hamnen.',
@@ -158,7 +158,9 @@ Color strengthColor(SignalStrength s, {SignalCategory? category}) {
 String strengthWord(SignalStrength s, {SignalCategory? category}) {
   if (category == SignalCategory.road) {
     return switch (s) {
-      SignalStrength.high => 'Stopp',
+      // Föraren ser bara olyckor (backend: ROAD_SHOWN_CONDITIONS); Kö och
+      // Arbete finns kvar för sparade favoriter från före urvalet.
+      SignalStrength.high => 'Olycka',
       SignalStrength.medium => 'Kö',
       SignalStrength.low => 'Arbete',
     };

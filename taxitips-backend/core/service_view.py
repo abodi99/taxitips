@@ -173,9 +173,8 @@ def _notify(o: Opportunity) -> tuple[str, str]:
         return "hidden", "Brus: ingen taxisignal, visas inte för föraren"
     if (o.demand_score or 0) <= 0:
         return "hidden", "Poäng 0: visas inte för föraren"
-    if o.kind == "road" and o.severity_tier not in thresholds.ROAD_SHOWN_TIERS:
-        return "hidden", ("Väg: planerat vägarbete eller körfältsavstängning utan stor påverkan "
-                          "på huvudled -- visas inte för föraren")
+    if o.kind == "road" and not thresholds.road_shown(o.rule_id):
+        return "hidden", "Väg: föraren ser bara trafikolyckor -- visas inte"
     if thresholds.is_notify_worthy(o.severity_tier, o.demand_score, o.has_alternative):
         return "notify", (f"Notis: {tier_label.lower()} är notisvärd, poäng {o.demand_score} ≥ "
                           f"{thresholds.NOTIFY_SCORE_FLOOR} och inget alternativ. Går till förare i körområdet.")

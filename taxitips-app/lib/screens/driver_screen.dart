@@ -3047,13 +3047,13 @@ class _DriverScreenState extends State<DriverScreen>
 
   /// Vad som är bortfiltrerat, i klartext, med en knapp som tar bort allt.
   /// Utan den ser ett filter som sattes för en vecka sedan ut som att data saknas.
-  /// Väg-läget är ett urval, inte allt Trafikverket skickar -- och säger
-  /// vilket, så att ett planerat vägarbete som saknas inte ser ut som ett fel.
-  /// Urvalet görs i backend: core/text_scoring.road_tier.
+  /// Väg-läget visar bara trafikolyckor -- och säger det, så att ett
+  /// vägarbete som saknas inte ser ut som ett fel. Urvalet görs i backend:
+  /// thresholds.ROAD_SHOWN_CONDITIONS.
   Widget _roadScopeNote() => Padding(
     padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
     child: Text(
-      'Olyckor, avstängda vägar, köer och stora hinder på huvudleder.',
+      'Bara trafikolyckor. Vägarbeten och avstängningar visas inte.',
       style: TextStyle(fontSize: 13.5, color: Colors.grey.shade700),
     ),
   );
@@ -3342,7 +3342,7 @@ class _DriverScreenState extends State<DriverScreen>
               )
             : empty(
                 lens == SignalCategory.road
-                    ? 'Inga olyckor eller hinder på vägarna i ditt område.'
+                    ? 'Inga trafikolyckor i ditt område just nu.'
                     : 'Inga störningar i ditt område just nu.',
                 icon: Icons.check_circle_outline_rounded,
               ),

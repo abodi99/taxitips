@@ -447,14 +447,22 @@ HEARTBEAT_MAX_AGE_SECONDS = 180
 
 # Vilka väghändelser föraren ser -- i Väg-läget, på kartan och i antalen.
 #
-# Mätt 2026-09-21 i Skåne, Halland och Västra Götaland: 1 570 aktiva, varav 546
-# körfältsavstängningar och ~900 vägarbeten, de flesta planerade och veckor
-# gamla. Föraren vill se det som stoppar eller bromsar trafiken på vägen dit,
-# inte varje vägarbete. Regeln (core/text_scoring.road_tier) släpper igenom
-# olyckor, avstängda vägar och köer var de än är, och akuta hinder och "Mycket
-# stor påverkan" på huvudled: 98 av 1 570. Resten sätts till `road_work` och
-# ligger kvar i databasen -- förklarbara och räknade -- men skickas inte ut.
-ROAD_SHOWN_TIERS = frozenset({"road_accident_or_closure", "road_work_or_queue"})
+# Bara trafikolyckor (beslut 2026-09-21). Mätt samma dag i Skåne, Halland och
+# Västra Götaland: 1 570 aktiva väghändelser, varav 546 körfältsavstängningar och
+# ~900 vägarbeten, de flesta planerade och veckor gamla. Ett första urval med
+# avstängda vägar, köer och stora störningar på huvudled gav 98 -- fortfarande
+# mest planerade avstängningar. En olycka är det föraren inte kan veta om i
+# förväg. Klassningen i core/text_scoring.road_tier är kvar (villkoret står i
+# rule_id, road.<nivå>.<villkor>), så varje dold händelse går att förklara.
+ROAD_SHOWN_CONDITIONS = frozenset({"accident"})
+
+
+def road_shown(rule_id: str | None) -> bool:
+    """Visas väghändelsen för föraren? Avgörs av villkoret i rule_id."""
+    parts = (rule_id or "").split(".")
+    return len(parts) == 3 and parts[0] == "road" and parts[2] in ROAD_SHOWN_CONDITIONS
+
+
 # Huvudled: E-vägar, riksvägar (1-99) och primära länsvägar (100-499) -- samma
 # gräns som Trafikverkets numrering drar. Sekundära länsvägar (500+) räknas inte.
 ROAD_MAIN_ROAD_MAX_NUMBER = 499
@@ -468,7 +476,7 @@ ROAD_HAZARD_CAUSES = frozenset({
 
 # Hur många väghändelser förarflödet skickar som sammanhang. Mätt 2026-09-13: med
 # alla situationer hämtade var `context` 400-1 200 rader och 0,4-1,3 MB per svar.
-# Sedan bara de viktiga skickas (ROAD_SHOWN_TIERS ovan) är de ~100 i tre län, så
+# Sedan bara olyckorna skickas (ROAD_SHOWN_CONDITIONS ovan) är de en handfull, så
 # taket rymmer dem alla: tipslistan och Väg-läget visar då samma väghändelser och
 # samma antal. Taket skyddar bara mot en förare med hela landet.
 FEED_CONTEXT_LIMIT = 300

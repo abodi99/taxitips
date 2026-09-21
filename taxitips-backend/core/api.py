@@ -140,6 +140,8 @@ FEED_CACHE_SECONDS = 20
 
 
 _ROAD_TIER_RANK = {"road_accident_or_closure": 0, "road_work_or_queue": 1}
+# SQL-sidan av thresholds.road_shown: road.<nivå>.<ett visat villkor>.
+_ROAD_SHOWN_RE = r"^road\.[a-z_]+\.(" + "|".join(sorted(thresholds.ROAD_SHOWN_CONDITIONS)) + r")$"
 
 
 def _one_per_road_situation(rows: list[dict]) -> list[dict]:
@@ -441,8 +443,8 @@ def feed_for(
             demand_score__gt=0,
         )
         .exclude(severity_tier="ignore")
-        # Bara de väghändelser föraren ska se, se thresholds.ROAD_SHOWN_TIERS.
-        .exclude(Q(kind="road") & ~Q(severity_tier__in=thresholds.ROAD_SHOWN_TIERS))
+        # Bara de väghändelser föraren ska se, se thresholds.ROAD_SHOWN_CONDITIONS.
+        .exclude(Q(kind="road") & ~Q(rule_id__regex=_ROAD_SHOWN_RE))
     )
 
     # Förfilter i SQL: läs bara tips som kan hamna i svaret. Slingan nedan fäller

@@ -101,7 +101,7 @@ void main() {
       );
       expect(
         strengthWord(SignalStrength.high, category: SignalCategory.road),
-        'Stopp',
+        'Olycka',
       );
       expect(strengthWord(SignalStrength.high), 'Stark');
     });

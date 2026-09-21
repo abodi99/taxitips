@@ -397,11 +397,12 @@ class RoadContextTests(ApiTestCase):
         # förhållandet i Skåne. I samma lista hade de begravt det enda som
         # var värt att köra till.
         opportunity(title="Stoppad linje", severity_tier=SeverityTier.LINE_PAUSED)
-        opportunity(title="Olycka E22", kind="road",
-                    severity_tier=SeverityTier.ROAD_ACCIDENT_OR_CLOSURE, mode="road", demand_score=15)
-        # Ett vanligt vägarbete skickas inte alls, se thresholds.ROAD_SHOWN_TIERS.
-        opportunity(title="Vägarbete E22", kind="road",
-                    severity_tier=SeverityTier.ROAD_WORK, mode="road", demand_score=5)
+        opportunity(title="Olycka E22", kind="road", mode="road", demand_score=15,
+                    severity_tier=SeverityTier.ROAD_ACCIDENT_OR_CLOSURE,
+                    rule_id="road.road_accident_or_closure.accident")
+        # Föraren ser bara olyckor, se thresholds.ROAD_SHOWN_CONDITIONS.
+        opportunity(title="Vägarbete E22", kind="road", mode="road", demand_score=5,
+                    severity_tier=SeverityTier.ROAD_WORK, rule_id="road.road_work.minor")
         body = self.get_alerts()
         self.assertEqual([a["title"] for a in body["alerts"]], ["Stoppad linje"])
         self.assertEqual([a["title"] for a in body["context"]], ["Olycka E22"])
@@ -593,7 +594,8 @@ class ContextLimitTests(ApiTestCase):
 
         for i in range(thresholds.FEED_CONTEXT_LIMIT + 5):
             opportunity(title=f"Väg {i}", kind="road", mode="road", demand_score=10,
-                        severity_tier=SeverityTier.ROAD_WORK_OR_QUEUE)
+                        severity_tier=SeverityTier.ROAD_ACCIDENT_OR_CLOSURE,
+                        rule_id="road.road_accident_or_closure.accident")
         body = self.get_alerts()
         self.assertEqual(len(body["context"]), thresholds.FEED_CONTEXT_LIMIT)
         self.assertEqual(body["contextTotal"], thresholds.FEED_CONTEXT_LIMIT + 5)

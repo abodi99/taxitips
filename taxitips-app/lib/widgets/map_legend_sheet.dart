@@ -81,29 +81,19 @@ Future<void> showMapLegend(BuildContext context) {
               ),
             const SizedBox(height: 8),
             const _Heading('Väg (Trafikverket)'),
-            for (final s in SignalStrength.values)
-              _Row(
-                symbol: HazardSign(
-                  icon: switch (s) {
-                    SignalStrength.high => Icons.car_crash_rounded,
-                    SignalStrength.medium => Icons.traffic_rounded,
-                    SignalStrength.low => Icons.construction_rounded,
-                  },
-                  strength: s,
-                ),
-                titleWidget: StrengthPill(
-                  strength: s,
-                  category: SignalCategory.road,
-                  large: true,
-                ),
-                text: switch (s) {
-                  SignalStrength.high =>
-                    'Olycka eller avstängd väg. Kör en annan väg.',
-                  SignalStrength.medium =>
-                    'Kö eller vägarbete. Det tar längre tid.',
-                  SignalStrength.low => 'Mindre vägarbete.',
-                },
+            // Bara olyckor visas -- se thresholds.ROAD_SHOWN_CONDITIONS.
+            const _Row(
+              symbol: HazardSign(
+                icon: Icons.car_crash_rounded,
+                strength: SignalStrength.high,
               ),
+              titleWidget: StrengthPill(
+                strength: SignalStrength.high,
+                category: SignalCategory.road,
+                large: true,
+              ),
+              text: 'Trafikolycka. Räkna med kö, eller kör en annan väg.',
+            ),
             const SizedBox(height: 8),
             const _Heading('Övrigt'),
             const _Row(

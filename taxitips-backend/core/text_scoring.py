@@ -51,9 +51,9 @@ def road_tier(alert: dict) -> tuple[str, str]:
     """
     (nivå, villkor) för en väghändelse -- och därmed om föraren ser den.
 
-    Nivåerna i thresholds.ROAD_SHOWN_TIERS visas; `road_work` gör det inte.
-    Villkoret hamnar i rule_id (road.<nivå>.<villkor>) så att det går att
-    svara på varför en händelse visas eller inte.
+    Villkoret hamnar i rule_id (road.<nivå>.<villkor>) och avgör om föraren
+    ser händelsen (thresholds.ROAD_SHOWN_CONDITIONS -- bara `accident`).
+    Resten klassas ändå, så att det går att svara på varför den inte visas.
 
     Trafikverkets MessageCode (`cause`) avgör typen och SeverityText
     (`effect`) hur mycket den påverkar. Körfältsavstängningar är ingen
@@ -67,7 +67,9 @@ def road_tier(alert: dict) -> tuple[str, str]:
     ).lower()
     effect = str(alert.get("effect") or "").lower()
 
-    if "olycka" in text or "brand" in cause:
+    # Brand i fordon är en trafikolycka; "Omfattande brand" (skog, byggnad)
+    # nära vägen är det inte.
+    if "olycka" in text or cause == "brand i fordon":
         return SeverityTier.ROAD_ACCIDENT_OR_CLOSURE, "accident"
     lane_only = "körfält" in cause
     if (

@@ -283,9 +283,10 @@ class TierTests(TestCase):
 
 class ShownToDriverTests(SimpleTestCase):
     """
-    Vilka väghändelser föraren ser (thresholds.ROAD_SHOWN_TIERS): det som
-    stoppar eller bromsar trafiken, inte varje vägarbete. Fallen är verkliga
-    kombinationer ur Skåne, Halland och Västra Götaland 2026-09-21.
+    Hur väghändelserna klassas (core/text_scoring.road_tier). Föraren ser
+    bara villkoret `accident` (thresholds.ROAD_SHOWN_CONDITIONS), men resten
+    klassas ändå så att varje dold händelse går att förklara. Fallen är
+    verkliga kombinationer ur Skåne, Halland och Västra Götaland 2026-09-21.
     """
 
     def tier(self, cause, effect="Stor påverkan", road="E6", header=None, description=""):
@@ -329,6 +330,20 @@ class ShownToDriverTests(SimpleTestCase):
         self.assertEqual(self.tier("Fordonshaveri", effect="Liten påverkan"),
                          (SeverityTier.ROAD_WORK_OR_QUEUE, "hazard_main_road"))
         self.assertEqual(self.tier("Djur på vägen", road="Väg 874"), (SeverityTier.ROAD_WORK, "minor"))
+
+    def test_a_vehicle_fire_is_an_accident_a_forest_fire_is_not(self):
+        self.assertEqual(self.tier("Brand i fordon")[1], "accident")
+        self.assertNotEqual(self.tier("Omfattande brand", road=None)[1], "accident")
+
+    def test_only_accidents_reach_the_driver(self):
+        from core import thresholds
+
+        self.assertTrue(thresholds.road_shown("road.road_accident_or_closure.accident"))
+        for rule_id in ("road.road_accident_or_closure.closed", "road.road_work_or_queue.queue",
+                        "road.road_work_or_queue.major_main_road", "road.road_work.minor",
+                        "road.road_accident_or_closure", "", None):
+            with self.subTest(rule_id):
+                self.assertFalse(thresholds.road_shown(rule_id))
 
     def test_main_road_follows_the_road_number(self):
         for road, main in [("E6", True), ("E 22", True), ("Väg 40", True), ("Väg 499", True),
