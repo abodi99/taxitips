@@ -2,3 +2,6 @@
 build/
 .flutter-plugins-dependencies
 .env
+
+# Bygginställningar med nycklar (CARTO_KEY m.fl.) -- repot är publikt.
+dart_defines.local.json

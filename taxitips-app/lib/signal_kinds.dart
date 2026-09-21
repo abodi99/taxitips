@@ -178,10 +178,37 @@ String strengthWord(SignalStrength s, {SignalCategory? category}) {
 }
 
 /// Ikonen för ett tips: färdsättet för kollektivtrafik, typen av hinder för väg.
+/// Varför backend visar väghändelsen: villkoret i `rule_id`
+/// (`road.<nivå>.<villkor>`, se core/text_scoring.road_tier). Null för rader
+/// som klassades innan villkoret fanns.
+String? roadCondition(Map alert) {
+  final parts = (alert['rule_id']?.toString() ?? '').split('.');
+  return parts.length >= 3 && parts.first == 'road' ? parts[2] : null;
+}
+
+/// Det som hänt, i ett eller två ord -- det föraren behöver veta om vägen dit.
+const roadConditionLabels = {
+  'accident': 'Olycka',
+  'closed': 'Vägen avstängd',
+  'queue': 'Kö',
+  'hazard_main_road': 'Hinder på vägen',
+  'major_main_road': 'Stor störning',
+};
+
 IconData iconForAlert(Map alert) {
   final category = categoryOfAlert(alert);
   switch (category) {
     case SignalCategory.road:
+      final condition = roadCondition(alert);
+      if (condition != null) {
+        return switch (condition) {
+          'accident' => Icons.car_crash_rounded,
+          'closed' => Icons.do_not_disturb_on_rounded,
+          'queue' => Icons.traffic_rounded,
+          'hazard_main_road' => Icons.warning_rounded,
+          _ => Icons.construction_rounded,
+        };
+      }
       return switch (alert['severity_tier']?.toString()) {
         'road_accident_or_closure' => Icons.car_crash_rounded,
         'road_work_or_queue' => Icons.traffic_rounded,
@@ -229,6 +256,8 @@ IconData iconForEvent(Map event) {
 
 /// "Vad hände" i några få ord, för kortets andra rad.
 String shortWhat(Map alert) {
+  final road = roadConditionLabels[roadCondition(alert)];
+  if (road != null) return road;
   final tier = alert['severity_tier']?.toString();
   final short = severityTierShortLabels[tier];
   if (short != null) return short;

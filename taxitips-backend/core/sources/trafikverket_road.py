@@ -169,6 +169,12 @@ def _parse_time(value: str | None):
         return None
 
 
+def _road_name(number) -> str:
+    """RoadNumber är redan "Väg 40" eller "E6" -- bara ett rent tal får prefix."""
+    text = str(number).strip()
+    return f"Väg {text}" if text.isdigit() else text
+
+
 def normalize_situation(situation: dict) -> list[dict]:
     """Situation -> larm i samma form som SL/Västtrafik/Trafiklab levererar."""
     deviations = situation.get("Deviation") or []
@@ -183,7 +189,7 @@ def normalize_situation(situation: dict) -> list[dict]:
             for part in (
                 dev.get("Message"),
                 dev.get("LocationDescriptor"),
-                f"Väg {dev['RoadNumber']}" if dev.get("RoadNumber") else None,
+                _road_name(dev["RoadNumber"]) if dev.get("RoadNumber") else None,
             )
             if part
         )

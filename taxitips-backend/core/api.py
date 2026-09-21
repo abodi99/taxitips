@@ -139,6 +139,42 @@ def feed_etag(payload: dict) -> str:
 FEED_CACHE_SECONDS = 20
 
 
+_ROAD_TIER_RANK = {"road_accident_or_closure": 0, "road_work_or_queue": 1}
+
+
+def _one_per_road_situation(rows: list[dict]) -> list[dict]:
+    """
+    Den tydligaste avvikelsen per Trafikverket-situation (tv:<situation>:<avvikelse>).
+
+    Allvarligast nivå vinner, sedan en rubrik som säger något ("Olycka") före
+    den allmänna "Trafikmeddelande". Ordningen i övrigt behålls.
+    """
+    best: dict[str, int] = {}
+    for i, row in enumerate(rows):
+        external = row.get("_external_id") or ""
+        if row.get("kind") != "road" or not external.startswith("tv:"):
+            continue
+        situation = external.rsplit(":", 1)[0]
+        rank = (
+            _ROAD_TIER_RANK.get(row.get("severity_tier"), 9),
+            (row.get("title") or "") == "Trafikmeddelande",
+        )
+        held = best.get(situation)
+        if held is None or rank < (
+            _ROAD_TIER_RANK.get(rows[held].get("severity_tier"), 9),
+            (rows[held].get("title") or "") == "Trafikmeddelande",
+        ):
+            best[situation] = i
+    keep = set(best.values())
+    return [
+        row
+        for i, row in enumerate(rows)
+        if row.get("kind") != "road"
+        or not (row.get("_external_id") or "").startswith("tv:")
+        or i in keep
+    ]
+
+
 def shared_feed(
     lat, lon, *, include_all: bool, regions: list[str], counties: list[str], municipalities: list[str] | None = None,
     road_all: bool = False,
@@ -397,17 +433,22 @@ def feed_for(
             "generatedAt": _iso(now),
         }
 
-    rows = Opportunity.objects.filter(
-        end_time__gt=now - timedelta(hours=thresholds.FEED_LOOKBACK_HOURS),
-        demand_score__gt=0,
-    ).exclude(severity_tier="ignore")
+    from django.db.models import Q
+
+    rows = (
+        Opportunity.objects.filter(
+            end_time__gt=now - timedelta(hours=thresholds.FEED_LOOKBACK_HOURS),
+            demand_score__gt=0,
+        )
+        .exclude(severity_tier="ignore")
+        # Bara de väghändelser föraren ska se, se thresholds.ROAD_SHOWN_TIERS.
+        .exclude(Q(kind="road") & ~Q(severity_tier__in=thresholds.ROAD_SHOWN_TIERS))
+    )
 
     # Förfilter i SQL: läs bara tips som kan hamna i svaret. Slingan nedan fäller
     # fortfarande det slutliga avgörandet med exakt avstånd och län -- filtret får
     # bara vara vidare än den, aldrig snävare.
     if not include_all:
-        from django.db.models import Q
-
         if chosen_area:
             # Tomma area_codes: rader skrivna innan länen fanns (se backfill_areas).
             rows = rows.filter(Q(area_codes__has_any_keys=chosen_area) | Q(area_codes=[]))
@@ -468,6 +509,9 @@ def feed_for(
             -a["_computed_at"].timestamp(),
         )
     )
+    # En Trafikverket-situation har ofta flera avvikelser med samma text --
+    # "Olycka" och "Trafikmeddelande" om samma krock. Föraren ser en.
+    out = _one_per_road_situation(out)
     for row in out:
         del row["_computed_at"]
         del row["_external_id"]

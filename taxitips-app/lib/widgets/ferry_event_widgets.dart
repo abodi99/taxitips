@@ -496,47 +496,52 @@ class EventCard extends StatelessWidget {
     final body = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        // Etikett, avstånd och stjärna på första raden, tiden på en egen rad:
+        // på en smal telefon (384 dp) klämdes tiden annars till en bokstav
+        // per rad bredvid en lång etikett som "MÄSSA OCH KONFERENS".
         Row(
           children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: TbColors.midnatt,
-                borderRadius: BorderRadius.circular(6),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(iconForEvent(event), size: 14, color: TbColors.guld),
-                  const SizedBox(width: 4),
-                  Text(
-                    (((event['sportLabel']?.toString() ?? '').isNotEmpty
-                                    ? event['sportLabel']
-                                    : event['categoryLabel'])
-                                ?.toString() ??
-                            'Evenemang')
-                        .toUpperCase(),
-                    style: const TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 0.6,
-                      color: TbColors.vit,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
             Expanded(
-              child: Text(
-                _whenText,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800,
-                  color: ongoing ? TbColors.live : TbColors.ink,
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: TbColors.midnatt,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(iconForEvent(event), size: 14, color: TbColors.guld),
+                      const SizedBox(width: 4),
+                      Flexible(
+                        child: Text(
+                          (((event['sportLabel']?.toString() ?? '').isNotEmpty
+                                          ? event['sportLabel']
+                                          : event['categoryLabel'])
+                                      ?.toString() ??
+                                  'Evenemang')
+                              .toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.6,
+                            color: TbColors.vit,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),
+            const SizedBox(width: 8),
             if (distance != null)
               Text(
                 '${_km(distance)} km',
@@ -560,6 +565,17 @@ class EventCard extends StatelessWidget {
                 ),
               ),
           ],
+        ),
+        const SizedBox(height: 6),
+        Text(
+          _whenText,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w800,
+            color: ongoing ? TbColors.live : TbColors.ink,
+          ),
         ),
         const SizedBox(height: 8),
         Text(

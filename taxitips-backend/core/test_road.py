@@ -24,7 +24,7 @@ from core.sources.trafikverket_road import (
     places_from_deviation,
 )
 from core.taxi_relevance import enrich_alert, is_road_alert, score_road_alert
-from core.text_scoring import classify_transit_alert
+from core.text_scoring import classify_transit_alert, is_main_road, road_tier
 
 
 def road_alert(**overrides) -> dict:
@@ -279,6 +279,72 @@ class TierTests(TestCase):
         )
         self.assertEqual(result.tier, SeverityTier.IGNORE)
         self.assertEqual(result.score, 0)
+
+
+class ShownToDriverTests(SimpleTestCase):
+    """
+    Vilka väghändelser föraren ser (thresholds.ROAD_SHOWN_TIERS): det som
+    stoppar eller bromsar trafiken, inte varje vägarbete. Fallen är verkliga
+    kombinationer ur Skåne, Halland och Västra Götaland 2026-09-21.
+    """
+
+    def tier(self, cause, effect="Stor påverkan", road="E6", header=None, description=""):
+        return road_tier({
+            "header": header or cause, "cause": cause, "effect": effect,
+            "description": description, "routes": [road] if road else [],
+        })
+
+    def test_accidents_and_closed_roads_are_shown_on_any_road(self):
+        self.assertEqual(self.tier("Olycka", road="Väg 1700"), (SeverityTier.ROAD_ACCIDENT_OR_CLOSURE, "accident"))
+        self.assertEqual(self.tier("Brand i fordon", road=None), (SeverityTier.ROAD_ACCIDENT_OR_CLOSURE, "accident"))
+        self.assertEqual(self.tier("Vägen avstängd", road="Väg 1700"), (SeverityTier.ROAD_ACCIDENT_OR_CLOSURE, "closed"))
+        self.assertEqual(
+            self.tier("Vägarbete", header="Trafikmeddelande",
+                      description="Vägen avstängd på grund av vägarbete.", road="Väg 115"),
+            (SeverityTier.ROAD_ACCIDENT_OR_CLOSURE, "closed"),
+        )
+
+    def test_a_lane_closure_is_not_a_closed_road_and_not_a_queue(self):
+        # "kö" är också början på "Körfältsavstängningar".
+        self.assertEqual(self.tier("Körfältsavstängningar"), (SeverityTier.ROAD_WORK, "minor"))
+        self.assertEqual(
+            self.tier("Körfältsavstängningar", effect="Mycket stor påverkan"),
+            (SeverityTier.ROAD_WORK_OR_QUEUE, "major_main_road"),
+        )
+
+    def test_roadwork_is_only_shown_with_very_large_impact_on_a_main_road(self):
+        self.assertEqual(self.tier("Vägarbete", effect="Mycket stor påverkan", road="Väg 40"),
+                         (SeverityTier.ROAD_WORK_OR_QUEUE, "major_main_road"))
+        self.assertEqual(self.tier("Vägarbete", effect="Mycket stor påverkan", road="Väg 1700"),
+                         (SeverityTier.ROAD_WORK, "minor"))
+        self.assertEqual(self.tier("Vägarbete", effect="Stor påverkan"), (SeverityTier.ROAD_WORK, "minor"))
+        self.assertEqual(
+            self.tier("Vägarbete", description="Risk för kö under dagtid."),
+            (SeverityTier.ROAD_WORK, "minor"),
+            "en varning i beskrivningen är ingen kö",
+        )
+
+    def test_queues_everywhere_hazards_on_main_roads(self):
+        self.assertEqual(self.tier("Långsam kö", road=None), (SeverityTier.ROAD_WORK_OR_QUEUE, "queue"))
+        self.assertEqual(self.tier("Fordonshaveri", effect="Liten påverkan"),
+                         (SeverityTier.ROAD_WORK_OR_QUEUE, "hazard_main_road"))
+        self.assertEqual(self.tier("Djur på vägen", road="Väg 874"), (SeverityTier.ROAD_WORK, "minor"))
+
+    def test_main_road_follows_the_road_number(self):
+        for road, main in [("E6", True), ("E 22", True), ("Väg 40", True), ("Väg 499", True),
+                           ("40", True), ("Väg 500", False), ("Väg 1700", False), ("", False)]:
+            with self.subTest(road):
+                self.assertEqual(is_main_road([road]), main)
+
+    def test_the_condition_is_in_the_rule_id(self):
+        alert = road_alert()
+        result = classify_transit_alert(alert, enrich_alert(alert))
+        self.assertEqual(result.rule_id, "road.road_accident_or_closure.accident")
+
+    def test_the_road_number_is_not_prefixed_twice(self):
+        [alert] = normalize_situation({"Id": "s", "Deviation": [{"Id": "d", "RoadNumber": "Väg 115"}]})
+        self.assertNotIn("Väg Väg", alert["description"])
+        self.assertIn("Väg 115", alert["description"])
 
 
 POST = "core.sources.trafikverket_road.requests.post"

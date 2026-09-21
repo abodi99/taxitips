@@ -445,11 +445,33 @@ HEARTBEAT_INTERVAL_SECONDS = 60
 HEARTBEAT_MAX_AGE_SECONDS = 180
 
 
+# Vilka väghändelser föraren ser -- i Väg-läget, på kartan och i antalen.
+#
+# Mätt 2026-09-21 i Skåne, Halland och Västra Götaland: 1 570 aktiva, varav 546
+# körfältsavstängningar och ~900 vägarbeten, de flesta planerade och veckor
+# gamla. Föraren vill se det som stoppar eller bromsar trafiken på vägen dit,
+# inte varje vägarbete. Regeln (core/text_scoring.road_tier) släpper igenom
+# olyckor, avstängda vägar och köer var de än är, och akuta hinder och "Mycket
+# stor påverkan" på huvudled: 98 av 1 570. Resten sätts till `road_work` och
+# ligger kvar i databasen -- förklarbara och räknade -- men skickas inte ut.
+ROAD_SHOWN_TIERS = frozenset({"road_accident_or_closure", "road_work_or_queue"})
+# Huvudled: E-vägar, riksvägar (1-99) och primära länsvägar (100-499) -- samma
+# gräns som Trafikverkets numrering drar. Sekundära länsvägar (500+) räknas inte.
+ROAD_MAIN_ROAD_MAX_NUMBER = 499
+# Akuta hinder (Trafikverkets MessageCode, gemener) som visas på huvudled. Kort
+# livslängd och ofta oannonserade -- därför värda en blick även utan olycka.
+ROAD_HAZARD_CAUSES = frozenset({
+    "fordonshaveri", "fordonsfel", "bärgning", "djur på vägen", "föremål på vägen",
+    "nedfallet träd", "faror på vägen", "hinder på vägbanan", "olja på vägen",
+    "människor på vägen", "långsamtgående fordon", "evenemang",
+})
+
 # Hur många väghändelser förarflödet skickar som sammanhang. Mätt 2026-09-13: med
-# alla situationer hämtade var `context` 400-1 200 rader och 0,4-1,3 MB per svar,
-# fast varken appen eller pipeline-sidan läser listan -- två sync-workers klarade då
-# ungefär 27 svar/s. De främsta räcker som sammanhang för vägen dit.
-FEED_CONTEXT_LIMIT = 50
+# alla situationer hämtade var `context` 400-1 200 rader och 0,4-1,3 MB per svar.
+# Sedan bara de viktiga skickas (ROAD_SHOWN_TIERS ovan) är de ~100 i tre län, så
+# taket rymmer dem alla: tipslistan och Väg-läget visar då samma väghändelser och
+# samma antal. Taket skyddar bara mot en förare med hela landet.
+FEED_CONTEXT_LIMIT = 300
 # Taket när appen ber om alla väghändelser (`road=all`, Väg-läget). Mätt
 # 2026-09-21: 1 800 samtidiga i Skåne, Halland och Västra Götaland. Taket
 # skyddar telefonen om Trafikverket skulle skicka ett helt land på en gång.

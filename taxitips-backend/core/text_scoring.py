@@ -21,12 +21,71 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from core import thresholds
 from core.mode import classify_mode
 from core.models import Confidence, SeverityTier
 from core.rules import rule_for
 from core.taxi_relevance import _INSTALLD_STOPP_RE
 
 RAIL_LIKE_MODES = {"train", "metro", "tram"}
+
+# "E6", "E 22", "Väg 40", "40". Trafikverkets RoadNumber har båda formerna.
+_ROAD_NUMBER_RE = re.compile(r"^(?:E\s*(\d+)|(?:väg\s*)?(\d+))$", re.IGNORECASE)
+# Kö som eget ord: "kö" finns också i början av "Körfältsavstängningar", och
+# det var just den förväxlingen som gjorde 546 körfältsavstängningar till köer.
+_QUEUE_RE = re.compile(r"(?<!\w)kö(?!\w)|kövarning|köbildning", re.IGNORECASE)
+
+
+def is_main_road(routes) -> bool:
+    """E-väg, riksväg eller primär länsväg (se thresholds.ROAD_MAIN_ROAD_MAX_NUMBER)."""
+    for route in routes or []:
+        match = _ROAD_NUMBER_RE.match(str(route).strip())
+        if not match:
+            continue
+        if match.group(1) or int(match.group(2)) <= thresholds.ROAD_MAIN_ROAD_MAX_NUMBER:
+            return True
+    return False
+
+
+def road_tier(alert: dict) -> tuple[str, str]:
+    """
+    (nivå, villkor) för en väghändelse -- och därmed om föraren ser den.
+
+    Nivåerna i thresholds.ROAD_SHOWN_TIERS visas; `road_work` gör det inte.
+    Villkoret hamnar i rule_id (road.<nivå>.<villkor>) så att det går att
+    svara på varför en händelse visas eller inte.
+
+    Trafikverkets MessageCode (`cause`) avgör typen och SeverityText
+    (`effect`) hur mycket den påverkar. Körfältsavstängningar är ingen
+    avstängd väg: tidigare räckte "avstäng" i texten, och 546 planerade
+    körfältsavstängningar -- en av dem 154 dagar gammal -- visades som röda
+    "Stopp" överst i listan.
+    """
+    cause = str(alert.get("cause") or "").strip().lower()
+    text = " ".join(
+        str(alert.get(k) or "") for k in ("header", "description", "cause")
+    ).lower()
+    effect = str(alert.get("effect") or "").lower()
+
+    if "olycka" in text or "brand" in cause:
+        return SeverityTier.ROAD_ACCIDENT_OR_CLOSURE, "accident"
+    lane_only = "körfält" in cause
+    if (
+        "vägen avstängd" in text
+        or "helt avstängd" in text
+        or (not lane_only and ("avstäng" in cause or "avstangning" in cause))
+    ):
+        return SeverityTier.ROAD_ACCIDENT_OR_CLOSURE, "closed"
+    # Bara typ och rubrik: "Risk för kö" står i beskrivningen på vanliga
+    # vägarbeten och hade släppt igenom dem.
+    if _QUEUE_RE.search(f"{alert.get('header') or ''} {cause}"):
+        return SeverityTier.ROAD_WORK_OR_QUEUE, "queue"
+    main = is_main_road(alert.get("routes"))
+    if main and cause in thresholds.ROAD_HAZARD_CAUSES:
+        return SeverityTier.ROAD_WORK_OR_QUEUE, "hazard_main_road"
+    if main and "mycket stor" in effect:
+        return SeverityTier.ROAD_WORK_OR_QUEUE, "major_main_road"
+    return SeverityTier.ROAD_WORK, "minor"
 
 _STATED_ALTERNATIVE_RE = re.compile(
     r"(övriga avgångar|ersättningsbuss|ersättningstrafik|buss ersätter|tågbyte)",
@@ -111,18 +170,10 @@ def classify_transit_alert(alert: dict, taxi: dict | None) -> Assessment:
         # Bara etikett, ingen ompoängsättning: score_road_alert har redan
         # kapat vägpoängen lågt (max 15) av skäl som står i dess docstring,
         # och tiern får inte smyga tillbaka in poäng som medvetet togs bort.
-        text = " ".join(
-            str(alert.get(k) or "") for k in ("header", "description", "cause")
-        ).lower()
-        if "olycka" in text or "avstäng" in text or "avstangning" in text:
-            tier = SeverityTier.ROAD_ACCIDENT_OR_CLOSURE
-        elif "kö" in text or "köbildning" in text or "kövarning" in text:
-            tier = SeverityTier.ROAD_WORK_OR_QUEUE
-        else:
-            tier = SeverityTier.ROAD_WORK
+        tier, condition = road_tier(alert)
         return Assessment(
             tier, taxi.get("score", 0), Confidence.MEDIUM,
-            _reasons_from(taxi), f"road.{tier}", mode,
+            _reasons_from(taxi), f"road.{tier}.{condition}", mode,
         )
 
     score = taxi.get("score", 0)

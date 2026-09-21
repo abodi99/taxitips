@@ -28,21 +28,44 @@ class AreaGateTests(FleetTestCase):
     def get(self, path, **params):
         return self.client.get(path, params, headers={"x-device-token": self.secret}).json()
 
-    def test_all_road_events_when_the_driver_asks_for_road(self):
+    def road(self, external_id, tier, title="Vägarbete", i=0):
         now = timezone.now()
+        return Opportunity.objects.create(
+            external_id=external_id, kind="road", mode="road",
+            severity_tier=tier, title=title, summary="",
+            lat=55.60 + i * 0.001, lon=13.00, region="skane", area_codes=["12"],
+            start_time=now - timedelta(minutes=10), end_time=now + timedelta(hours=3),
+            demand_score=5, reasons=[], rule_id=f"road.{tier}",
+        )
+
+    def test_the_driver_sees_the_road_events_that_matter_not_every_roadwork(self):
         for i in range(70):
-            Opportunity.objects.create(
-                external_id=f"road:{i}", kind="road", mode="road",
-                severity_tier=SeverityTier.ROAD_WORK, title=f"Vägarbete {i}", summary="",
-                lat=55.60 + i * 0.001, lon=13.00, region="skane", area_codes=["12"],
-                start_time=now - timedelta(minutes=10), end_time=now + timedelta(hours=3),
-                demand_score=5, reasons=[], rule_id="road.work",
-            )
-        capped = self.get("/api/alerts", **MALMO)
-        full = self.get("/api/alerts", road="all", **MALMO)
-        self.assertEqual(len(capped["context"]), 50)
-        self.assertEqual(capped["contextTotal"], 70)
-        self.assertEqual(len(full["context"]), 70)
+            self.road(f"tv:work{i}:1", SeverityTier.ROAD_WORK, i=i)
+        self.road("tv:crash:1", SeverityTier.ROAD_ACCIDENT_OR_CLOSURE, "Olycka")
+        self.road("tv:crash:2", SeverityTier.ROAD_ACCIDENT_OR_CLOSURE, "Trafikmeddelande")
+        self.road("tv:closed:1", SeverityTier.ROAD_ACCIDENT_OR_CLOSURE, "Vägen avstängd")
+        self.road("tv:e6:1", SeverityTier.ROAD_WORK_OR_QUEUE, "Kö")
+        for params in ({}, {"road": "all"}):
+            with self.subTest(**params):
+                body = self.get("/api/alerts", **params, **MALMO)
+                titles = sorted(r["title"] for r in body["context"])
+                self.assertEqual(
+                    titles, ["Kö", "Olycka", "Vägen avstängd"],
+                    "små vägarbeten skickas inte, och samma krock kommer en gång",
+                )
+                self.assertEqual(body["contextTotal"], 3)
+
+    def test_the_cap_only_guards_against_a_whole_country(self):
+        from unittest import mock
+
+        for i in range(12):
+            self.road(f"tv:q{i}:1", SeverityTier.ROAD_WORK_OR_QUEUE, f"Kö {i}", i=i)
+        with mock.patch("core.thresholds.FEED_CONTEXT_LIMIT", 10):
+            capped = self.get("/api/alerts", **MALMO)
+            full = self.get("/api/alerts", road="all", **MALMO)
+        self.assertEqual(len(capped["context"]), 10)
+        self.assertEqual(capped["contextTotal"], 12)
+        self.assertEqual(len(full["context"]), 12)
 
     def test_events_outside_the_licence_are_refused(self):
         body = self.get("/api/events", counties="01")

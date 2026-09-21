@@ -38,6 +38,12 @@ class MapItem {
   LatLng get point => LatLng(lat, lon);
 }
 
+/// CARTO-nyckeln för bakgrundskartan. Skickas in vid bygget
+/// (`--dart-define-from-file=dart_defines.local.json`) och checkas aldrig in --
+/// repot är publikt. Utan nyckel ritas Esri i stället: CARTO stämplar annars
+/// "API KEY REQUIRED" över varje ruta.
+const String kCartoKey = String.fromEnvironment('CARTO_KEY');
+
 /// Zoomnivån där klustren löses upp: på gatunivå ska varje sak synas för sig.
 const double kClusterUntilZoom = 15;
 
@@ -225,7 +231,6 @@ class _SignalMapState extends State<SignalMap> {
 
   @override
   Widget build(BuildContext context) {
-
     // Färjorna: terminalerna som små ankare, fartygen som pilar i sin kurs, och
     // en streckad linje till terminalen för dem som är på väg in eller lägger till.
     final terminals = <String, LatLng>{};
@@ -292,19 +297,33 @@ class _SignalMapState extends State<SignalMap> {
       mapController: widget.mapController,
       options: _options,
       children: [
-        // Esri World Street Map: en vanlig ljus gatukarta med gatunamn ända ner
-        // till husnivå, utan nyckel och utan vattenstämpel. Ofiltrerad -- ett
-        // färgfilter per ruta gjorde kartan seg -- och alltid ljus: en mörk
-        // variant upplevdes som för mörk i bilen. (CARTO Voyager provades men
-        // stämplar "API KEY REQUIRED" över kartan utan konto.)
-        TileLayer(
-          urlTemplate:
-              'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-          userAgentPackageName: 'se.taxibehov.taxibehov_app',
-          maxNativeZoom: 19,
-        ),
+        // CARTO Voyager: ljus, lugn gatukarta i samma stil som de vanliga
+        // kartapparna -- symbolerna syns, bakgrunden gör det inte. Skarpa
+        // @2x-rutor på täta skärmar. Ofiltrerad och alltid ljus: en mörk
+        // variant upplevdes som för mörk i bilen. Esri är reserven när bygget
+        // saknar nyckel.
+        if (kCartoKey.isNotEmpty)
+          TileLayer(
+            urlTemplate:
+                'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key={key}',
+            additionalOptions: const {'key': kCartoKey},
+            retinaMode: RetinaMode.isHighDensity(context),
+            userAgentPackageName: 'se.taxibehov.taxibehov_app',
+            maxNativeZoom: 20,
+          )
+        else
+          TileLayer(
+            urlTemplate:
+                'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
+            userAgentPackageName: 'se.taxibehov.taxibehov_app',
+            maxNativeZoom: 19,
+          ),
         SimpleAttributionWidget(
-          source: const Text('© Esri · OpenStreetMap'),
+          source: Text(
+            kCartoKey.isNotEmpty
+                ? '© CARTO · OpenStreetMap'
+                : '© Esri · OpenStreetMap',
+          ),
           alignment: Alignment.bottomLeft,
           backgroundColor: TbColors.vit.withValues(alpha: 0.7),
         ),

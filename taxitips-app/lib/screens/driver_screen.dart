@@ -69,6 +69,10 @@ class _DriverScreenState extends State<DriverScreen>
 
   /// Aktuell sheet-höjd (0–1) — FAB ska sitta ovanför, inte mitt i sheetet.
   double _sheetExtent = 0.40;
+
+  /// Listan är uppdragen över kartan: kartknapparna skulle hamna under
+  /// statusraden, så de göms och filtret flyttar in i listans rubrik.
+  bool get _sheetHigh => _sheetExtent > 0.6;
   final _mapController = MapController();
   // Flyttar vilken karta som visas: Google Maps med trafik, eller flutter_map.
   late final _mapFocus = MapFocus(_mapController);
@@ -151,8 +155,10 @@ class _DriverScreenState extends State<DriverScreen>
   Set<String>? _licensedCounties;
 
   /// Länen föraren kan välja i filtret: bara licensens, när de är kända.
-  Iterable<MapEntry<String, String>> get _pickableCounties => _countyNames.entries
-      .where((e) => _licensedCounties == null || _licensedCounties!.contains(e.key));
+  Iterable<MapEntry<String, String>> get _pickableCounties =>
+      _countyNames.entries.where(
+        (e) => _licensedCounties == null || _licensedCounties!.contains(e.key),
+      );
 
   Set<String> _regions = {};
   Set<String> _cities = {};
@@ -674,7 +680,13 @@ class _DriverScreenState extends State<DriverScreen>
     return s.replaceFirst(RegExp(r'^(ApiException|Exception):\s*'), '');
   }
 
+  /// Numrerar laddningarna. Ett byte till eller från Väg laddar om medan en
+  /// poll kan vara på väg, och den som svarar sist vann: på telefonen låg
+  /// Väg-lägets alla väghändelser kvar i "Alla" tills nästa poll.
+  int _loadSeq = 0;
+
   Future<void> _load({bool silent = false}) async {
+    final seq = ++_loadSeq;
     if (!silent && mounted) setState(() => _refreshing = true);
     // Fräscha GPS innan varje poll så avståndsbadgen inte visar gårdagens
     // parkering — en one-shot i bootstrap räckte inte under ett pass.
@@ -696,8 +708,9 @@ class _DriverScreenState extends State<DriverScreen>
         _checkEntitlement(),
       ]);
       final data = results[0] as Map<String, dynamic>;
+      // En nyare laddning har startat sedan den här: dess svar gäller.
+      if (!mounted || seq != _loadSeq) return;
       _enrichClientDistances(data);
-      if (!mounted) return;
       setState(() {
         _data = data;
         _needsArea = data['needsArea'] == true;
@@ -710,10 +723,10 @@ class _DriverScreenState extends State<DriverScreen>
       unawaited(_loadFerries());
       unawaited(_loadEvents());
     } catch (e) {
-      if (!mounted) return;
+      if (!mounted || seq != _loadSeq) return;
       setState(() => _error = _friendly(e));
     } finally {
-      if (mounted) setState(() => _refreshing = false);
+      if (mounted && seq == _loadSeq) setState(() => _refreshing = false);
     }
   }
 
@@ -897,7 +910,8 @@ class _DriverScreenState extends State<DriverScreen>
       final result = await widget.api.entitlements();
       if (!mounted) return;
       final licensed = {
-        for (final c in (result['licensedCounties'] as List?) ?? const []) c.toString(),
+        for (final c in (result['licensedCounties'] as List?) ?? const [])
+          c.toString(),
       };
       setState(() {
         _entitled = result['entitled'] == true;
@@ -906,9 +920,13 @@ class _DriverScreenState extends State<DriverScreen>
           // Sparade val utanför licensen hade bara gett en tom lista.
           final before = _counties.length + _municipalities.length;
           _counties.removeWhere((c) => !licensed.contains(c));
-          _municipalities.removeWhere((m) => !licensed.contains(m.substring(0, 2)));
+          _municipalities.removeWhere(
+            (m) => !licensed.contains(m.substring(0, 2)),
+          );
           if (_counties.length + _municipalities.length != before) {
-            WidgetsBinding.instance.addPostFrameCallback((_) => _saveFilters(reloadFeed: true));
+            WidgetsBinding.instance.addPostFrameCallback(
+              (_) => _saveFilters(reloadFeed: true),
+            );
           }
         }
         // Godkänd men utan bil är inte "provperioden slut". Backend säger
@@ -1400,10 +1418,14 @@ class _DriverScreenState extends State<DriverScreen>
   List<Map<String, dynamic>> get _listOpportunities {
     final key = [
       identityHashCode(_data),
-      _scoreMin, _scoreMax, _nearMe, _sortMode,
+      _scoreMin,
+      _scoreMax,
+      _nearMe,
+      _sortMode,
       (_hiddenModes.toList()..sort()).join(','),
       (_hiddenTiers.toList()..sort()).join(','),
-      _userLat?.toStringAsFixed(3), _userLon?.toStringAsFixed(3),
+      _userLat?.toStringAsFixed(3),
+      _userLon?.toStringAsFixed(3),
     ].join('|');
     if (key == _listMemoKey && _listMemo != null) return _listMemo!;
     _listMemo = _computeListOpportunities();
@@ -2736,65 +2758,75 @@ class _DriverScreenState extends State<DriverScreen>
                   ),
 
                   // 3. Kartknapparna nere till höger, där tummen når: filter och min position.
+                  // De följer listans överkant och tonas bort när listan dras upp
+                  // -- annars hamnar de under statusraden. Filtret finns då i
+                  // listans rubrik i stället.
                   Positioned(
                     left: 12,
                     right: 12,
                     bottom:
                         MediaQuery.of(context).size.height * _sheetExtent + 12,
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Badge(
-                          isLabelVisible: _filtersActive,
-                          smallSize: 12,
-                          backgroundColor: TbColors.taxiDeep,
-                          child: FloatingActionButton.extended(
-                            heroTag: 'filter_fab',
-                            onPressed: _openFilters,
-                            backgroundColor: Colors.white,
-                            foregroundColor: TbColors.ink,
-                            elevation: 4,
-                            icon: const Icon(Icons.tune),
-                            label: const Text(
-                              'Filter',
-                              style: TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ),
-                        ),
-                        Column(
-                          mainAxisSize: MainAxisSize.min,
+                    child: IgnorePointer(
+                      ignoring: _sheetHigh,
+                      child: AnimatedOpacity(
+                        opacity: _sheetHigh ? 0 : 1,
+                        duration: const Duration(milliseconds: 150),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            FloatingActionButton.small(
-                              heroTag: 'legend_fab',
-                              onPressed: () => showMapLegend(context),
-                              backgroundColor: Colors.white,
-                              foregroundColor: TbColors.ink,
-                              elevation: 4,
-                              tooltip: 'Vad betyder symbolerna?',
-                              child: const Icon(Icons.help_outline_rounded),
-                            ),
-                            const SizedBox(height: 10),
-                            FloatingActionButton(
-                              heroTag: 'location_fab',
-                              onPressed: _goToMyLocation,
-                              backgroundColor: Colors.white,
-                              foregroundColor: _userLat != null
-                                  ? const Color(0xFF1A73E8)
-                                  : TbColors.ink,
-                              elevation: 4,
-                              tooltip: 'Min position',
-                              child: Icon(
-                                _userLat != null
-                                    ? Icons.my_location
-                                    : Icons.location_searching,
+                            Badge(
+                              isLabelVisible: _filtersActive,
+                              smallSize: 12,
+                              backgroundColor: TbColors.taxiDeep,
+                              child: FloatingActionButton.extended(
+                                heroTag: 'filter_fab',
+                                onPressed: _openFilters,
+                                backgroundColor: Colors.white,
+                                foregroundColor: TbColors.ink,
+                                elevation: 4,
+                                icon: const Icon(Icons.tune),
+                                label: const Text(
+                                  'Filter',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
                               ),
+                            ),
+                            Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                FloatingActionButton.small(
+                                  heroTag: 'legend_fab',
+                                  onPressed: () => showMapLegend(context),
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: TbColors.ink,
+                                  elevation: 4,
+                                  tooltip: 'Vad betyder symbolerna?',
+                                  child: const Icon(Icons.help_outline_rounded),
+                                ),
+                                const SizedBox(height: 10),
+                                FloatingActionButton(
+                                  heroTag: 'location_fab',
+                                  onPressed: _goToMyLocation,
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: _userLat != null
+                                      ? const Color(0xFF1A73E8)
+                                      : TbColors.ink,
+                                  elevation: 4,
+                                  tooltip: 'Min position',
+                                  child: Icon(
+                                    _userLat != null
+                                        ? Icons.my_location
+                                        : Icons.location_searching,
+                                  ),
+                                ),
+                              ],
                             ),
                           ],
                         ),
-                      ],
+                      ),
                     ),
                   ),
 
@@ -2867,6 +2899,8 @@ class _DriverScreenState extends State<DriverScreen>
                                       : null,
                                 ),
                                 _sheetHeader(),
+                                if (_lens == SignalCategory.road)
+                                  _roadScopeNote(),
                                 _activeFilterBar(),
                                 const SizedBox(height: 8),
                                 ..._buildSheetItems(),
@@ -2926,6 +2960,18 @@ class _DriverScreenState extends State<DriverScreen>
               ),
             ),
           ),
+          if (_sheetHigh)
+            Badge(
+              isLabelVisible: _filtersActive,
+              smallSize: 10,
+              backgroundColor: TbColors.taxiDeep,
+              offset: const Offset(-6, 6),
+              child: IconButton(
+                tooltip: 'Filter',
+                onPressed: _openFilters,
+                icon: const Icon(Icons.tune, color: TbColors.midnatt),
+              ),
+            ),
           if (sortable)
             PopupMenuButton<String>(
               tooltip: 'Sortera',
@@ -2979,9 +3025,22 @@ class _DriverScreenState extends State<DriverScreen>
 
   /// Vad som är bortfiltrerat, i klartext, med en knapp som tar bort allt.
   /// Utan den ser ett filter som sattes för en vecka sedan ut som att data saknas.
+  /// Väg-läget är ett urval, inte allt Trafikverket skickar -- och säger
+  /// vilket, så att ett planerat vägarbete som saknas inte ser ut som ett fel.
+  /// Urvalet görs i backend: core/text_scoring.road_tier.
+  Widget _roadScopeNote() => Padding(
+    padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+    child: Text(
+      'Olyckor, avstängda vägar, köer och stora hinder på huvudleder.',
+      style: TextStyle(fontSize: 13.5, color: Colors.grey.shade700),
+    ),
+  );
+
   Widget _activeFilterBar() {
     if (!_filtersActive) return const SizedBox.shrink();
-    final modeLabels = {for (final (key, label) in filterModeOptions) key: label};
+    final modeLabels = {
+      for (final (key, label) in filterModeOptions) key: label,
+    };
     final parts = <String>[
       if (_scorePreset == 1)
         'Bara starka'
@@ -2990,10 +3049,12 @@ class _DriverScreenState extends State<DriverScreen>
       else if (_scoreFilterActive)
         'Styrka ${_scoreMin.round()}–${_scoreMax.round()}',
       if (_nearMe) 'Nära mig',
-      if (_counties.isNotEmpty || _municipalities.isNotEmpty) _areaFilterSummary,
+      if (_counties.isNotEmpty || _municipalities.isNotEmpty)
+        _areaFilterSummary,
       if (_hiddenModes.isNotEmpty)
         'Dolt: ${_hiddenModes.map((m) => modeLabels[m] ?? m).join(', ')}',
-      if (_hiddenTiers.isNotEmpty) '${_hiddenTiers.length} störningstyper dolda',
+      if (_hiddenTiers.isNotEmpty)
+        '${_hiddenTiers.length} störningstyper dolda',
     ];
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
@@ -3004,17 +3065,27 @@ class _DriverScreenState extends State<DriverScreen>
           padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
           child: Row(
             children: [
-              const Icon(Icons.filter_alt_rounded, size: 20, color: TbColors.guldDjup),
+              const Icon(
+                Icons.filter_alt_rounded,
+                size: 20,
+                color: TbColors.guldDjup,
+              ),
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
                   parts.join(' · '),
                   maxLines: 2,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w600, color: TbColors.midnatt),
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: TbColors.midnatt,
+                  ),
                 ),
               ),
-              TextButton(onPressed: _clearFilters, child: const Text('Visa allt')),
+              TextButton(
+                onPressed: _clearFilters,
+                child: const Text('Visa allt'),
+              ),
             ],
           ),
         ),

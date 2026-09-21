@@ -5,6 +5,7 @@ import 'package:taxibehov_app/followed_events.dart';
 import 'package:taxibehov_app/signal_kinds.dart';
 import 'package:taxibehov_app/theme.dart';
 import 'package:taxibehov_app/widgets/category_bar.dart';
+import 'package:taxibehov_app/widgets/ferry_event_widgets.dart';
 import 'package:taxibehov_app/widgets/map_legend_sheet.dart';
 import 'package:taxibehov_app/widgets/signal_card.dart';
 import 'package:taxibehov_app/widgets/signal_map.dart';
@@ -124,6 +125,39 @@ void main() {
     });
   });
 
+  group('väghändelsens orsak', () {
+    test('kortet säger vad som hänt, inte nivåns samlingsnamn', () {
+      Map road(String rule) => {
+        'kind': 'road',
+        'severity_tier': rule.split('.')[1],
+        'rule_id': rule,
+      };
+      expect(
+        shortWhat(road('road.road_accident_or_closure.closed')),
+        'Vägen avstängd',
+      );
+      expect(
+        iconForAlert(road('road.road_accident_or_closure.closed')),
+        Icons.do_not_disturb_on_rounded,
+      );
+      expect(shortWhat(road('road.road_work_or_queue.queue')), 'Kö');
+      expect(
+        shortWhat(road('road.road_work_or_queue.major_main_road')),
+        'Stor störning',
+      );
+    });
+    test('rader utan villkor faller tillbaka på nivån', () {
+      final old = {
+        'kind': 'road',
+        'severity_tier': 'road_accident_or_closure',
+        'rule_id': 'road.road_accident_or_closure',
+      };
+      expect(roadCondition(old), isNull);
+      expect(shortWhat(old), 'Olycka/avstängning');
+      expect(iconForAlert(old), Icons.car_crash_rounded);
+    });
+  });
+
   group('texter', () {
     test('avstånd läses på en halv sekund', () {
       expect(distanceText(0.42), '400 m');
@@ -238,6 +272,47 @@ void main() {
         expect(find.text('3,2 km'), findsOneWidget);
         await tester.tap(find.byTooltip('Följ'));
         expect(followed, isTrue);
+      },
+    );
+
+    testWidgets(
+      'evenemangskortet på en smal telefon: tiden på en rad, inte en bokstav per rad',
+      (tester) async {
+        // Galaxy S22+: 1080 px / 2,8125 = 384 dp.
+        tester.view.physicalSize = const Size(1080, 2340);
+        tester.view.devicePixelRatio = 2.8125;
+        addTearDown(tester.view.reset);
+        final tomorrow = DateTime.now().add(const Duration(days: 1));
+        await tester.pumpWidget(
+          wrap(
+            ListView(
+              padding: const EdgeInsets.all(16),
+              children: [
+                EventCard(
+                  showDate: true,
+                  event: {
+                    'name': "OpenTech Talks: Europe's New Tech Landscape",
+                    'categoryLabel': 'Mässa och konferens',
+                    'startDate':
+                        '${tomorrow.year}-${tomorrow.month.toString().padLeft(2, '0')}-${tomorrow.day.toString().padLeft(2, '0')}',
+                    'startLocal': '08:30',
+                    'distanceKm': 49,
+                  },
+                  onToggleFollow: (_) {},
+                ),
+              ],
+            ),
+          ),
+        );
+        expect(tester.takeException(), isNull);
+        final when = find.textContaining('08:30');
+        expect(when, findsOneWidget);
+        expect(
+          tester.getSize(when).height,
+          lessThan(30),
+          reason: 'en rad, inte en smal lodrät remsa',
+        );
+        expect(tester.getSize(when).width, greaterThan(60));
       },
     );
 
