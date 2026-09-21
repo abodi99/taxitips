@@ -41,6 +41,12 @@ class Perm:
     # Plattformen
     CREATE_SALES_INVITE = "create_sales_invite"
     REVIEW_CASES = "review_cases"
+    # Adminwebben (admin.html). Läsa räcker för support; ändra kräver
+    # plattformsadministratör -- och tvåfaktor när kravet är påslaget, för
+    # att en kapad adminsession annars kan förlänga vilket abonnemang som
+    # helst eller spärra vilken förare som helst.
+    ADMIN_VIEW = "admin_view"
+    ADMIN_MANAGE = "admin_manage"
 
 
 OWNER = "company_owner"
@@ -73,16 +79,17 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
 # provhistorik, inte se kundens ekonomi (§7).
 STAFF_PERMISSIONS: dict[str, frozenset[str]] = {
     StaffRole.Role.SALES: frozenset({Perm.CREATE_SALES_INVITE}),
-    StaffRole.Role.SUPPORT: frozenset({Perm.VIEW_COMPANY}),
+    StaffRole.Role.SUPPORT: frozenset({Perm.VIEW_COMPANY, Perm.ADMIN_VIEW}),
     StaffRole.Role.PLATFORM_ADMIN: frozenset({
         Perm.VIEW_COMPANY, Perm.REVIEW_CASES, Perm.CREATE_SALES_INVITE,
+        Perm.ADMIN_VIEW, Perm.ADMIN_MANAGE,
     }),
 }
 
 # Behörigheter som kräver en tvåfaktorssession när kravet är påslaget.
 TWO_FACTOR_PERMISSIONS: frozenset[str] = frozenset({
     Perm.PURCHASE, Perm.CANCEL_SUBSCRIPTION, Perm.MANAGE_MEMBERS,
-    Perm.TRANSFER_OWNERSHIP, Perm.CLOSE_ACCOUNT,
+    Perm.TRANSFER_OWNERSHIP, Perm.CLOSE_ACCOUNT, Perm.ADMIN_MANAGE,
 })
 
 

@@ -46,6 +46,8 @@ urlpatterns = [
     # Kundlivscykeln: parkoppling, skiftbyte, bilar, licenser, län,
     # beställningar och uppsägning. Se fleet/urls.py.
     path("api/fleet/", include("fleet.urls")),
+    # Plattformens egen back-office. Kräver StaffRole -- se fleet/admin_api.py.
+    path("api/admin/", include("fleet.admin_urls")),
     path("billing/", include("billing.urls")),
     path("admin/", admin.site.urls),
 ]

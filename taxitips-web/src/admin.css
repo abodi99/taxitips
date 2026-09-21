@@ -1,0 +1,80 @@
+/* Adminwebben. Bygger på portal.css (samma tokens, samma komponenter) och
+   lägger bara till det en översiktsvy över MÅNGA bolag behöver: en synlig
+   markering att man är i admin, en bredare yta och en klickbar tabellrad. */
+
+.admin-brand {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* Tydlig markering: den som har både portalen och adminwebben öppna ska
+   aldrig tveka om vilken flik som kan ändra ALLA kunders abonnemang. */
+.admin-badge {
+  background: var(--guld);
+  color: var(--midnatt);
+  font-weight: 700;
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.2rem 0.55rem;
+  border-radius: var(--radius-pill);
+}
+
+.admin-main {
+  max-width: 1280px;
+}
+
+.row-link {
+  cursor: pointer;
+}
+.row-link:hover td {
+  background: var(--ljusgra);
+}
+
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+.toolbar input,
+.toolbar select {
+  width: auto;
+  min-width: 220px;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0.35rem 1rem;
+  font-size: 0.95rem;
+}
+.kv dt {
+  color: var(--ink-soft);
+}
+.kv dd {
+  margin: 0;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+}
+
+.back-link {
+  background: none;
+  border: none;
+  color: var(--ink-soft);
+  font: inherit;
+  cursor: pointer;
+  padding: 0;
+  margin-bottom: 0.75rem;
+}
+
+.audit-detail {
+  color: var(--ink-soft);
+  font-size: 0.8rem;
+  word-break: break-word;
+}

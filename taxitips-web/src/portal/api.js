@@ -46,7 +46,7 @@ export class ApiError extends Error {
   }
 }
 
-async function request(path, { method = "GET", body } = {}) {
+export async function request(path, { method = "GET", body } = {}) {
   const token = await accessToken();
   if (!token) throw new ApiError(401, "Du är inte inloggad.", "login_required");
 

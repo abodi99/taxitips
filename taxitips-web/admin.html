@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Taxi Tips — Admin</title>
+  <meta name="description" content="Plattformens administration: kunder, abonnemang, notiser och evenemang." />
+  <!-- Adminwebben ska aldrig indexeras eller dyka upp i en sökmotor. -->
+  <meta name="robots" content="noindex, nofollow" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/brand.css" />
+  <link rel="stylesheet" href="/src/portal.css" />
+  <link rel="stylesheet" href="/src/admin.css" />
+</head>
+<body class="portal">
+  <a class="skip-link" href="#innehall">Hoppa till innehåll</a>
+
+  <header class="portal-nav">
+    <div class="admin-brand">
+      <a class="brand-logo" href="/"><img src="/brand/logo-on-dark.svg" alt="Taxi Tips" height="26" /></a>
+      <span class="admin-badge">Admin</span>
+    </div>
+    <div class="portal-nav-right">
+      <span id="whoami" class="portal-who"></span>
+      <button id="logout" class="btn btn-ghost" type="button" hidden>Logga ut</button>
+    </div>
+  </header>
+
+  <main id="innehall" class="portal-main admin-main">
+    <section id="login" class="card login-card" hidden>
+      <h1>Admin</h1>
+      <p class="muted">Bara för plattformens personal. Kunder loggar in i
+        <a href="/portal">kundportalen</a>.</p>
+      <form id="loginForm" novalidate>
+        <label for="email">E-post</label>
+        <input id="email" name="email" type="email" autocomplete="username" required />
+        <label for="password">Lösenord</label>
+        <input id="password" name="password" type="password" autocomplete="current-password" required />
+        <p id="loginError" class="error" role="alert" hidden></p>
+        <button class="btn btn-primary" type="submit">Logga in</button>
+      </form>
+    </section>
+
+    <div id="app" hidden>
+      <nav class="tabs" role="tablist" aria-label="Adminvyer">
+        <button class="tab" role="tab" data-view="oversikt" aria-selected="true">Översikt</button>
+        <button class="tab" role="tab" data-view="kunder" aria-selected="false">Kunder</button>
+        <button class="tab" role="tab" data-view="abonnemang" aria-selected="false">Abonnemang</button>
+        <button class="tab" role="tab" data-view="notiser" aria-selected="false">Notiser</button>
+        <button class="tab" role="tab" data-view="evenemang" aria-selected="false">Evenemang</button>
+        <button class="tab" role="tab" data-view="granskning" aria-selected="false">Granskningar</button>
+      </nav>
+      <p id="globalError" class="error" role="alert" hidden></p>
+      <div id="view" class="view" role="tabpanel" aria-live="polite"></div>
+    </div>
+  </main>
+
+  <dialog id="codeDialog" class="code-dialog">
+    <h2>Anslutningskod</h2>
+    <p class="muted" id="codeFor"></p>
+    <p class="code" id="codeValue"></p>
+    <p class="muted">Gäller i fem minuter. Läs upp den för föraren, som skriver
+      in den under <em>Anslut telefonen</em>. Visas bara en gång.</p>
+    <form method="dialog"><button class="btn btn-primary">Klar</button></form>
+  </dialog>
+
+  <script type="module" src="/src/admin/main.js"></script>
+</body>
+</html>

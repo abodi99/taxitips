@@ -14,6 +14,7 @@ export default defineConfig({
       input: {
         index: resolve(__dirname, "index.html"),
         portal: resolve(__dirname, "portal.html"),
+        admin: resolve(__dirname, "admin.html"),
       },
     },
   },
