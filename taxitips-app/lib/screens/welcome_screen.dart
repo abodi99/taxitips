@@ -135,6 +135,20 @@ class WelcomeScreen extends StatelessWidget {
                       ),
                       child: const Text('Logga in som administratör', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
                     ),
+                    const SizedBox(height: 12),
+                    // Nya företag ska inte behöva leta: registreringen låg förut
+                    // bakom inloggningen, två tryck bort.
+                    TextButton(
+                      onPressed: onSignup,
+                      style: TextButton.styleFrom(
+                        foregroundColor: TbColors.taxi,
+                        minimumSize: const Size.fromHeight(48),
+                      ),
+                      child: const Text(
+                        'Nytt företag? Prova gratis i 14 dagar',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                      ),
+                    ),
                     
                     if (onDemo != null) ...[
                       const SizedBox(height: 24),
