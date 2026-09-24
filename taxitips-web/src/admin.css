@@ -21,8 +21,245 @@
   border-radius: var(--radius-pill);
 }
 
+/* --- Skalet: sidomeny + innehåll ---------------------------------------
+   Tre grupper i den ordning en kund går genom dem: försäljning, drift och
+   konton. Menyn står kvar medan innehållet byts, så att man alltid ser var man
+   är. Under 900px blir den en vågrät rad som går att svepa. */
+
 .admin-main {
-  max-width: 1280px;
+  max-width: 1360px;
+  margin: 0 auto;
+  padding: 1.25rem 1.25rem 4rem;
+}
+.admin-main > .login-card {
+  margin-top: 3rem;
+}
+
+.admin-shell:not([hidden]) {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+}
+
+.admin-side {
+  position: sticky;
+  top: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  background: var(--vit);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.75rem;
+}
+.side-group {
+  margin: 0.85rem 0.6rem 0.3rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.side-group:first-child {
+  margin-top: 0.2rem;
+}
+.admin-side .tab {
+  all: unset;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--ink);
+  cursor: pointer;
+}
+.admin-side .tab:hover {
+  background: var(--ljusgra);
+}
+.admin-side .tab:focus-visible {
+  outline: 3px solid var(--guld);
+}
+.admin-side .tab[aria-current="page"] {
+  background: var(--midnatt);
+  color: var(--vit);
+}
+
+.admin-content {
+  min-width: 0;
+}
+.global-error {
+  background: var(--vit);
+  border-left: 4px solid var(--danger);
+  border-radius: 0 var(--radius) var(--radius) 0;
+  padding: 0.7rem 1rem;
+}
+
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.page-head h1 {
+  margin: 0;
+}
+.page-head p {
+  margin: 0.2rem 0 0;
+}
+
+@media (max-width: 900px) {
+  .admin-shell:not([hidden]) {
+    grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+  .admin-side {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+    padding: 0.4rem;
+    gap: 0.25rem;
+  }
+  .side-group {
+    display: none;
+  }
+  .admin-side .tab {
+    width: auto;
+    white-space: nowrap;
+  }
+}
+
+/* --- Nyckeltal ------------------------------------------------------------ */
+
+.kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.kpi {
+  background: var(--vit);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.9rem 1rem;
+}
+.kpi span {
+  display: block;
+  color: var(--ink-soft);
+  font-size: 0.82rem;
+  font-weight: 600;
+}
+.kpi b {
+  display: block;
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  margin-top: 0.15rem;
+  font-variant-numeric: tabular-nums;
+}
+.kpi.kpi-alert {
+  border-color: var(--danger);
+}
+.kpi.kpi-alert b {
+  color: var(--danger);
+}
+button.kpi {
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+button.kpi:hover {
+  border-color: var(--line-strong);
+}
+
+/* --- Kundens väg från start till mål -------------------------------------- */
+
+.journey {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.5rem;
+}
+.journey li {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.6rem 0.75rem;
+  font-size: 0.9rem;
+  background: var(--vit);
+}
+.journey li b {
+  display: block;
+}
+.journey li .step-state {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+.journey li.done {
+  border-color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 7%, var(--vit));
+}
+.journey li.done .step-state {
+  color: var(--ok);
+  font-weight: 600;
+}
+.journey li.next {
+  border-color: var(--guld-djup);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--guld) 35%, transparent);
+}
+
+.danger-zone {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+}
+.suspended-banner {
+  background: var(--danger);
+  color: var(--vit);
+  border-radius: var(--radius);
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 1rem;
+}
+.suspended-banner .btn {
+  margin-top: 0.5rem;
+}
+
+.drop {
+  border: 2px dashed var(--line-strong);
+  border-radius: var(--radius);
+  padding: 1.1rem;
+  text-align: center;
+  background: var(--ljusgra);
+}
+.drop.drag {
+  border-color: var(--guld-djup);
+  background: color-mix(in srgb, var(--guld) 10%, var(--vit));
+}
+.venue-hits {
+  list-style: none;
+  margin: 0.3rem 0 0;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  max-height: 220px;
+  overflow: auto;
+}
+.venue-hits button {
+  all: unset;
+  box-sizing: border-box;
+  display: block;
+  width: 100%;
+  padding: 0.45rem 0.7rem;
+  cursor: pointer;
+}
+.venue-hits button:hover,
+.venue-hits button:focus-visible {
+  background: var(--ljusgra);
+}
+.table-scroll {
+  overflow-x: auto;
 }
 
 .row-link {
@@ -207,5 +444,30 @@ details.card > summary::-webkit-details-marker {
   .form-grid,
   .pkg-row {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Två hopfällbara kort bredvid varandra ska inte sträckas till samma höjd. */
+.grid-top {
+  align-items: start;
+}
+
+@media (max-width: 600px) {
+  .portal-nav {
+    flex-wrap: wrap;
+    padding: 0.7rem 1rem;
+  }
+  .portal-who {
+    display: none;
+  }
+  .portal-nav-right .btn {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.85rem;
+  }
+  .admin-main {
+    padding: 1rem 1rem 3rem;
+  }
+  .kpi b {
+    font-size: 1.3rem;
   }
 }

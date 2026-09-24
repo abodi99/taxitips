@@ -29,12 +29,31 @@ export const admin = {
     }),
   notifications: (status = "") =>
     request(`/api/admin/notifications${status ? `?status=${status}` : ""}`),
-  events: (q = "", hidden = false, days = 14) => {
+  events: ({ q = "", hidden = false, days = 14, source = "" } = {}) => {
     const params = new URLSearchParams({ days: String(days) });
     if (q) params.set("q", q);
     if (hidden) params.set("hidden", "1");
+    if (source) params.set("source", source);
     return request(`/api/admin/events?${params}`);
   },
+  createEvent: (body) => request("/api/admin/events/new", { method: "POST", body }),
+  importEvents: (filename, content, dryRun) =>
+    request("/api/admin/events/import", { method: "POST", body: { filename, content, dryRun } }),
+  deleteEvent: (id) => request(`/api/admin/events/${id}/delete`, { method: "POST", body: {} }),
+  venues: (q) => request(`/api/admin/events/venues?q=${encodeURIComponent(q)}`),
+
+  /* --- Konton och spärrar (fleet/admin_accounts.py) --- */
+  accounts: (q) => request(`/api/admin/accounts?q=${encodeURIComponent(q)}`),
+  blocks: () => request("/api/admin/blocks"),
+  block: (kind, value, reason) =>
+    request("/api/admin/blocks/new", { method: "POST", body: { kind, value, reason } }),
+  liftBlock: (id, note) => request(`/api/admin/blocks/${id}/lift`, { method: "POST", body: { note } }),
+  setMember: (companyId, userId, body) =>
+    request(`/api/admin/companies/${companyId}/members/${userId}`, { method: "POST", body }),
+  verifyCompany: (companyId, status, note) =>
+    request(`/api/admin/companies/${companyId}/verification`, { method: "POST", body: { status, note } }),
+  staff: () => request("/api/admin/staff"),
+  setStaff: (email, role) => request("/api/admin/staff/set", { method: "POST", body: { email, role } }),
   setEventVisibility: (id, hidden, reason = "") =>
     request(`/api/admin/events/${id}/visibility`, {
       method: "POST",

@@ -31,7 +31,7 @@
     </div>
   </header>
 
-  <main id="innehall" class="portal-main admin-main">
+  <main id="innehall" class="admin-main">
     <section id="login" class="card login-card" hidden>
       <h1>Admin</h1>
       <p class="muted">Bara för plattformens personal. Kunder loggar in i
@@ -52,19 +52,26 @@
       <p id="magicSent" class="ok" role="status" hidden></p>
     </section>
 
-    <div id="app" hidden>
-      <nav class="tabs" role="tablist" aria-label="Adminvyer">
-        <button class="tab" role="tab" data-view="oversikt" aria-selected="true">Översikt</button>
-        <button class="tab" role="tab" data-view="kunder" aria-selected="false">Kunder</button>
-        <button class="tab" role="tab" data-view="nykund" aria-selected="false">Ny kund</button>
-        <button class="tab" role="tab" data-view="kuponger" aria-selected="false">Kuponger</button>
-        <button class="tab" role="tab" data-view="abonnemang" aria-selected="false">Abonnemang</button>
-        <button class="tab" role="tab" data-view="notiser" aria-selected="false">Notiser</button>
-        <button class="tab" role="tab" data-view="evenemang" aria-selected="false">Evenemang</button>
-        <button class="tab" role="tab" data-view="granskning" aria-selected="false">Granskningar</button>
+    <div id="app" class="admin-shell" hidden>
+      <nav class="admin-side" aria-label="Adminvyer">
+        <p class="side-group">Försäljning</p>
+        <button class="tab" data-view="oversikt" aria-current="page">Översikt</button>
+        <button class="tab" data-view="kunder">Kunder</button>
+        <button class="tab" data-view="nykund">Ny kund</button>
+        <button class="tab" data-view="abonnemang">Abonnemang</button>
+        <button class="tab" data-view="kuponger">Kuponger</button>
+        <p class="side-group">Drift</p>
+        <button class="tab" data-view="evenemang">Evenemang</button>
+        <button class="tab" data-view="notiser">Notiser</button>
+        <button class="tab" data-view="granskning">Granskningar</button>
+        <p class="side-group">Konton</p>
+        <button class="tab" data-view="konton">Konton och spärrar</button>
+        <button class="tab" data-view="personal">Personal</button>
       </nav>
-      <p id="globalError" class="error" role="alert" hidden></p>
-      <div id="view" class="view" role="tabpanel" aria-live="polite"></div>
+      <section class="admin-content">
+        <p id="globalError" class="error global-error" role="alert" hidden></p>
+        <div id="view" class="view" aria-live="polite"></div>
+      </section>
     </div>
   </main>
 

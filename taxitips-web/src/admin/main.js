@@ -1,4 +1,5 @@
 import { ApiError, supabase } from "../portal/api.js";
+import * as acc from "./accounts.js";
 import { admin } from "./api.js";
 import * as sales from "./sales.js";
 import * as views from "./views.js";
@@ -35,8 +36,10 @@ const state = {
   companyId: null,
   query: "",
   pushStatus: "",
-  eventQuery: "",
-  eventHidden: false,
+  // Evenemangens filter, och en vald fil som väntar på att sparas.
+  events: { q: "", hidden: false, days: 14, source: "", open: "" },
+  eventImport: null,
+  accountQuery: "",
   // Säljflödet: län, prislista, Stripe-läge och vad den inloggade får göra.
   config: null,
   lookup: null,
@@ -57,7 +60,8 @@ function clearError() {
 
 function setTab(view) {
   for (const tab of el.tabs) {
-    tab.setAttribute("aria-selected", String(tab.dataset.view === view));
+    if (tab.dataset.view === view) tab.setAttribute("aria-current", "page");
+    else tab.removeAttribute("aria-current");
   }
 }
 
@@ -101,10 +105,17 @@ async function renderView() {
         break;
       case "evenemang":
         el.view.innerHTML = views.evenemang(
-          await admin.events(state.eventQuery, state.eventHidden),
-          state.eventQuery,
-          state.eventHidden,
+          await admin.events(state.events), state.events, state.config, state.eventImport,
         );
+        break;
+      case "konton": {
+        const q = state.accountQuery;
+        const [found, blocks] = await Promise.all([q ? admin.accounts(q) : null, admin.blocks()]);
+        el.view.innerHTML = acc.konton(found, blocks, q, state.config);
+        break;
+      }
+      case "personal":
+        el.view.innerHTML = acc.personal(await admin.staff(), state.config);
         break;
       case "granskning":
         el.view.innerHTML = views.granskning(await admin.reviews("open"));
@@ -291,9 +302,36 @@ el.view.addEventListener("submit", async (event) => {
         state.query = new FormData(form).get("q")?.toString().trim() ?? "";
         break;
       case "eventForm":
-        state.eventQuery = document.getElementById("eq")?.value.trim() ?? "";
-        state.eventHidden = document.getElementById("ehidden")?.checked ?? false;
+        state.events = {
+          ...state.events,
+          q: document.getElementById("eq")?.value.trim() ?? "",
+          hidden: document.getElementById("ehidden")?.checked ?? false,
+          source: document.getElementById("esource")?.value ?? "",
+          days: Number(document.getElementById("edays")?.value || 14),
+          open: "",
+        };
         break;
+      case "eventNewForm": {
+        await admin.createEvent(eventBody(form));
+        state.events = { ...state.events, source: "manual", open: "" };
+        flash("Evenemanget är sparat och syns för förarna i det länet.");
+        break;
+      }
+      case "accountSearch":
+        state.accountQuery = new FormData(form).get("q")?.toString().trim() ?? "";
+        break;
+      case "blockEmailForm": {
+        const data = new FormData(form);
+        await admin.block("email", String(data.get("email") ?? ""), String(data.get("reason") ?? ""));
+        flash("Adressen är spärrad.");
+        break;
+      }
+      case "staffForm": {
+        const data = new FormData(form);
+        await admin.setStaff(String(data.get("email") ?? ""), String(data.get("role") ?? ""));
+        flash("Rollen är sparad. Den gäller från personens nästa sidladdning.");
+        break;
+      }
       case "lookupForm":
         state.lookupOrg = new FormData(form).get("orgNumber")?.toString().trim() ?? "";
         state.lookup = await admin.lookup(state.lookupOrg);
@@ -343,8 +381,9 @@ el.view.addEventListener("click", async (event) => {
     state.quotedChange = null;
     return render();
   }
-  const button = event.target.closest("button[data-action]");
+  const button = event.target.closest("[data-action]");
   if (!button) return;
+  if (button.tagName === "A") event.preventDefault();
   clearError();
   button.disabled = true;
   try {
@@ -404,6 +443,97 @@ async function act(action, ds) {
       await admin.setEventVisibility(Number(ds.event), false);
       return render();
 
+    case "event-delete":
+      if (!confirm(`Ta bort "${ds.name}"? Det försvinner för förarna direkt.`)) return;
+      await admin.deleteEvent(Number(ds.event));
+      flash("Evenemanget är borttaget.");
+      return render();
+
+    case "event-import": {
+      const pending = state.eventImport;
+      if (!pending?.content) return;
+      const result = await admin.importEvents(pending.filename, pending.content, false);
+      state.eventImport = null;
+      state.events = { ...state.events, source: "manual" };
+      flash(`${result.created} nya och ${result.updated} uppdaterade evenemang är sparade.`);
+      return render();
+    }
+
+    case "event-import-cancel":
+      state.eventImport = null;
+      return render();
+
+    case "event-template":
+      return downloadTemplate();
+
+    case "goto":
+      state.view = ds.view;
+      state.companyId = null;
+      setTab(state.view);
+      return render();
+
+    /* --- Konton och spärrar --- */
+
+    case "block-user": {
+      const reason = prompt(
+        `Spärra kontot ${ds.email || ""}? Det får ingen data i något företag och inga adminrättigheter.\n\nSkäl (obligatoriskt):`,
+      );
+      if (!reason) return;
+      await admin.block("user", ds.user, reason);
+      flash("Kontot är spärrat.");
+      return render();
+    }
+
+    case "block-email": {
+      const reason = prompt(`Spärra adressen ${ds.email}? Den kan inte heller registrera nya företag.\n\nSkäl:`);
+      if (!reason) return;
+      await admin.block("email", ds.email, reason);
+      flash("Adressen är spärrad.");
+      return render();
+    }
+
+    case "block-lift": {
+      const note = prompt("Häv spärren. Anteckning (sparas i loggen):");
+      if (note === null) return;
+      await admin.liftBlock(ds.block, note);
+      flash("Spärren är hävd.");
+      return render();
+    }
+
+    case "suspend": {
+      const reason = prompt(
+        "STÄNG AV FÖRETAGET: alla telefoner och inloggningar slutar få data direkt. Inget raderas.\n\nSkäl (obligatoriskt):",
+      );
+      if (!reason) return;
+      await admin.block("company", state.companyId, reason);
+      flash("Företaget är avstängt.");
+      return render();
+    }
+
+    case "member-status":
+      await admin.setMember(state.companyId, ds.user, { status: ds.status });
+      flash(ds.status === "active" ? "Kontot är aktivt i företaget igen." : "Kontot är avstängt i företaget.");
+      return render();
+
+    case "verify": {
+      const verified = ds.status === "verified";
+      const note = prompt(
+        verified
+          ? "Hur kontrollerades att personen får företräda bolaget? (t.ex. ringde växeln, firmatecknare enligt Bolagsverket)"
+          : "Varför avvisas företaget?",
+      );
+      if (!note) return;
+      await admin.verifyCompany(state.companyId, ds.status, note);
+      flash(verified ? "Behörigheten är markerad som kontrollerad." : "Företaget är avvisat.");
+      return render();
+    }
+
+    case "staff-remove":
+      if (!confirm(`Ta bort rollen för ${ds.email}?`)) return;
+      await admin.setStaff(ds.email, "");
+      flash("Rollen är borttagen.");
+      return render();
+
     case "review-approve":
     case "review-reject": {
       const approved = action === "review-approve";
@@ -417,6 +547,93 @@ async function act(action, ds) {
       return salesAction(action, ds);
   }
 }
+
+/* --- Evenemang: formulär, fil och arenasök ---------------------------- */
+
+/** "55.58, 12.98" eller "55.58 12.98" ur fältet, som två tal. */
+function eventBody(form) {
+  const data = Object.fromEntries(new FormData(form));
+  const parts = String(data.coords ?? "").split(/[,\s]+/).filter(Boolean);
+  if (parts.length !== 2) {
+    throw new ApiError(400, "Skriv koordinaten som lat, lon — till exempel 55.5838, 12.9884.", "coords");
+  }
+  delete data.coords;
+  return { ...data, lat: parts[0], lon: parts[1] };
+}
+
+async function previewFile(file) {
+  if (!file) return;
+  clearError();
+  const content = await file.text();
+  try {
+    const result = await admin.importEvents(file.name, content, true);
+    state.eventImport = { filename: file.name, content, count: result.count, preview: result.preview };
+  } catch (error) {
+    if (!(error instanceof ApiError) || !error.detail?.errors) throw error;
+    state.eventImport = { filename: file.name, message: error.message, errors: error.detail.errors };
+  }
+  render();
+}
+
+function downloadTemplate() {
+  const csv =
+    "namn;datum;tid;sluttid;arena;stad;lat;lon;kategori;besökare;länk\n" +
+    "Malmö FF – AIK;2026-10-03;19:00;;Eleda Stadion;Malmö;55.5838;12.9884;sport;20000;\n";
+  const url = URL.createObjectURL(new Blob(["\ufeff" + csv], { type: "text/csv;charset=utf-8" }));
+  const link = Object.assign(document.createElement("a"), { href: url, download: "evenemang-mall.csv" });
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+el.view.addEventListener("change", (event) => {
+  if (event.target.id === "eventFile") previewFile(event.target.files?.[0]).catch(showError);
+});
+
+el.view.addEventListener("dragover", (event) => {
+  const drop = event.target.closest?.("#eventDrop");
+  if (!drop) return;
+  event.preventDefault();
+  drop.classList.add("drag");
+});
+el.view.addEventListener("dragleave", (event) => {
+  event.target.closest?.("#eventDrop")?.classList.remove("drag");
+});
+el.view.addEventListener("drop", (event) => {
+  const drop = event.target.closest?.("#eventDrop");
+  if (!drop) return;
+  event.preventDefault();
+  drop.classList.remove("drag");
+  previewFile(event.dataTransfer?.files?.[0]).catch(showError);
+});
+
+let venueTimer = null;
+el.view.addEventListener("input", (event) => {
+  if (event.target.id !== "venueInput") return;
+  clearTimeout(venueTimer);
+  const q = event.target.value.trim();
+  const hits = document.getElementById("venueHits");
+  if (q.length < 2) {
+    hits.hidden = true;
+    return;
+  }
+  venueTimer = setTimeout(async () => {
+    const { venues } = await admin.venues(q).catch(() => ({ venues: [] }));
+    hits.innerHTML = venues
+      .map((v, i) => `<li><button type="button" data-venue="${i}">${sales.esc(v.venue)}
+        <span class="muted">${sales.esc(v.city)}</span></button></li>`)
+      .join("");
+    hits.hidden = !venues.length;
+    hits.onclick = (e) => {
+      const pick = venues[Number(e.target.closest("[data-venue]")?.dataset.venue)];
+      if (!pick) return;
+      const form = document.getElementById("eventNewForm");
+      form.venue.value = pick.venue;
+      form.city.value = pick.city;
+      form.coords.value = `${pick.lat}, ${pick.lon}`;
+      hits.hidden = true;
+    };
+  }, 250);
+});
 
 /* --- Förare ----------------------------------------------------------- */
 
