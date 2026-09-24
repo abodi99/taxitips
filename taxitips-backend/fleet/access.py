@@ -194,6 +194,20 @@ def _subscription_window(company_id, now=None) -> Window:
         # för en ny kund hade det låtit som att registreringen misslyckats.
         if Trial.objects.filter(company_id=company_id, status=Trial.Status.PENDING).exists():
             return Window(False, "trial_not_started")
+        # En orörd rad -- inget prov någonsin, aldrig betald, ingen period --
+        # betyder att företaget inte har gått över till den nya modellen. Raden
+        # skapas av företagsöversikten (orders.get_or_create_subscription) första
+        # gången en ägare öppnar den, och fick då ett befintligt, betalande
+        # företag att tappa all åtkomst: förarnas telefoner också. Samma regel
+        # som när raden saknas helt.
+        if (
+            subscription.status == SubscriptionStatus.NONE
+            and not subscription.had_successful_payment
+            and subscription.current_period_end is None
+            and not subscription.stripe_subscription_id
+            and not Trial.objects.filter(company_id=company_id).exists()
+        ):
+            return _legacy_company_window(company_id, "legacy_company_status")
         return Window(False, "no_subscription")
 
     if subscription.status == SubscriptionStatus.ACTIVE:

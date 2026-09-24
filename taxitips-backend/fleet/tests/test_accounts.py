@@ -282,3 +282,27 @@ class TrialVehicleTests(_Base):
         self.assertEqual(len(overview["licenses"]), 3)
         # Provbilarna finns, men provet har inte startat: ingen telefon än.
         self.assertFalse(overview["access"]["ok"])
+
+
+@override_settings(SUPABASE_JWT_SECRET=SECRET)
+class LegacyCompanyOverviewTests(_Base):
+    def test_opening_the_overview_does_not_lock_out_a_legacy_company(self):
+        """
+        Företagsöversikten skapar en tom abonnemangsrad. För ett företag från
+        före licensmodellen fick det förarna att tappa åtkomsten (2026-09-24).
+        """
+        from fleet.models import Subscription
+
+        company = self.make_company(status="active")
+        owner = self.make_owner(company)
+        self.assertEqual(access.company_window(company.id).reason, "legacy_company_status")
+        overview = self.call("get", "/api/fleet/company", str(owner.user_id)).json()
+        self.assertTrue(Subscription.objects.filter(company_id=company.id).exists())
+        self.assertTrue(overview["access"]["ok"], overview["access"])
+        self.assertTrue(access.company_window(company.id).ok)
+
+    def test_an_inactive_legacy_company_stays_closed(self):
+        company = self.make_company(status="inactive")
+        owner = self.make_owner(company)
+        self.call("get", "/api/fleet/company", str(owner.user_id))
+        self.assertFalse(access.company_window(company.id).ok)
