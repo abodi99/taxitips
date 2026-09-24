@@ -88,32 +88,23 @@ class _LoginScreenState extends State<LoginScreen> {
       await registerForPush(widget.api);
       widget.onLoggedIn();
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = _friendly(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
-  Future<void> _oauth(String provider) async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      final ok = provider == 'google'
-          ? await widget.api.signInWithGoogle()
-          : await widget.api.signInWithApple();
-      if (!ok && mounted) {
-        setState(
-          () => _error =
-              'Kunde inte starta ${provider == 'google' ? 'Google' : 'Apple'}-inloggningen.',
-        );
-      }
-    } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _busy = false);
+  /// Supabase Auths engelska fel, i klartext.
+  String _friendly(Object e) {
+    final text = e.toString();
+    if (text.contains('Invalid login credentials')) {
+      return 'Fel e-post eller lösenord.';
     }
+    if (text.contains('Email not confirmed')) {
+      return 'Bekräfta din e-post först. Titta i inkorgen.';
+    }
+    if (e is ApiException) return e.message;
+    return 'Det gick inte att logga in. Försök igen.';
   }
 
   @override
@@ -124,6 +115,10 @@ class _LoginScreenState extends State<LoginScreen> {
         body: Center(child: CircularProgressIndicator(color: TbColors.taxi)),
       );
     }
+    // En sida, ett jobb: ägaren eller kontoret loggar in. Föraren och nya
+    // företag har var sin tydlig väg härifrån. Google/Apple visas inte: de
+    // är inte påslagna i produktionens Supabase Auth, och en knapp som inte
+    // fungerar är värre än ingen.
     return Scaffold(
       backgroundColor: TbColors.navy,
       appBar: AppBar(
@@ -139,7 +134,7 @@ class _LoginScreenState extends State<LoginScreen> {
       body: SafeArea(
         child: Center(
           child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 420),
               child: Column(
@@ -147,74 +142,75 @@ class _LoginScreenState extends State<LoginScreen> {
                 children: [
                   SvgPicture.asset(
                     'assets/brand/logo-on-dark.svg',
-                    width: 240,
-                    height: 70,
+                    width: 200,
+                    height: 58,
                     fit: BoxFit.contain,
                   ),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 28),
                   const Text(
-                    'Logga in till kontoret',
+                    'Logga in',
                     textAlign: TextAlign.center,
                     style: TextStyle(
                       fontFamily: kDisplayFont,
                       color: TbColors.foam,
-                      fontSize: 26,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 30,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                  const SizedBox(height: 32),
+                  const SizedBox(height: 6),
+                  const Text(
+                    'För ägare och kontor',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: Colors.white70, fontSize: 16),
+                  ),
+                  const SizedBox(height: 24),
                   Container(
                     padding: const EdgeInsets.all(24),
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(24),
-                      boxShadow: const [
-                        BoxShadow(
-                          color: Colors.black12,
-                          blurRadius: 20,
-                          offset: Offset(0, 8),
-                        ),
-                      ],
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        TextField(
-                          controller: _email,
-                          decoration: InputDecoration(
-                            labelText: 'E-post',
-                            prefixIcon: const Icon(Icons.email_outlined),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
+                    child: AutofillGroup(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          TextField(
+                            controller: _email,
+                            keyboardType: TextInputType.emailAddress,
+                            autofillHints: const [AutofillHints.email],
+                            textInputAction: TextInputAction.next,
+                            decoration: InputDecoration(
+                              labelText: 'E-post',
+                              prefixIcon: const Icon(Icons.email_outlined),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                           ),
-                          keyboardType: TextInputType.emailAddress,
-                        ),
-                        const SizedBox(height: 16),
-                        TextField(
-                          controller: _password,
-                          decoration: InputDecoration(
-                            labelText: 'Lösenord',
-                            prefixIcon: const Icon(Icons.lock_outline),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          obscureText: true,
-                          onSubmitted: (_) => _submit(),
-                        ),
-                        if (_error != null) ...[
                           const SizedBox(height: 16),
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: TbColors.danger.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(8),
+                          TextField(
+                            controller: _password,
+                            obscureText: true,
+                            autofillHints: const [AutofillHints.password],
+                            onSubmitted: (_) => _submit(),
+                            decoration: InputDecoration(
+                              labelText: 'Lösenord',
+                              prefixIcon: const Icon(Icons.lock_outline),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
-                            child: Row(
+                          ),
+                          if (_error != null) ...[
+                            const SizedBox(height: 14),
+                            Row(
                               children: [
-                                const Icon(Icons.error_outline, color: TbColors.danger, size: 20),
-                                const SizedBox(width: 12),
+                                const Icon(
+                                  Icons.error_outline,
+                                  color: TbColors.danger,
+                                  size: 20,
+                                ),
+                                const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     _error!,
@@ -226,105 +222,116 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                               ],
                             ),
-                          ),
-                        ],
-                        const SizedBox(height: 24),
-                        FilledButton(
-                          onPressed: _busy ? null : _submit,
-                          style: FilledButton.styleFrom(
-                            backgroundColor: TbColors.ink,
-                            minimumSize: const Size.fromHeight(56),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                          child: _busy 
-                              ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                              : const Text('Logga in med e-post', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
-                        ),
-                        // Bara på webben -- se welcome_screen.dart.
-                        if (kIsWeb) ...[
-                          const SizedBox(height: 12),
-                          TextButton(
-                            onPressed: widget.onSignup,
-                            child: const Text('Skapa företagskonto'),
-                          ),
-                        ],
-                        const SizedBox(height: 24),
-                        Row(
-                          children: [
-                            Expanded(child: Divider(color: Colors.grey.shade300)),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                              child: Text(
-                                'ELLER',
-                                style: TextStyle(
-                                  color: Colors.grey.shade500,
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 1,
-                                ),
+                          ],
+                          const SizedBox(height: 20),
+                          FilledButton(
+                            onPressed: _busy ? null : _submit,
+                            style: FilledButton.styleFrom(
+                              backgroundColor: TbColors.taxi,
+                              foregroundColor: TbColors.ink,
+                              minimumSize: const Size.fromHeight(56),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(14),
                               ),
                             ),
-                            Expanded(child: Divider(color: Colors.grey.shade300)),
-                          ],
-                        ),
-                        const SizedBox(height: 24),
-                        OutlinedButton.icon(
-                          onPressed: _busy ? null : () => _oauth('google'),
-                          icon: Icon(Icons.g_mobiledata, size: 28), // Fallback if no asset, but usually there's one. Assuming standard icon.
-                          label: const Text('Fortsätt med Google', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: TbColors.ink,
-                            side: BorderSide(color: Colors.grey.shade300),
-                            minimumSize: const Size.fromHeight(52),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            child: _busy
+                                ? const SizedBox(
+                                    height: 22,
+                                    width: 22,
+                                    child: CircularProgressIndicator(
+                                      color: TbColors.ink,
+                                      strokeWidth: 2.5,
+                                    ),
+                                  )
+                                : const Text(
+                                    'Logga in',
+                                    style: TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-                        OutlinedButton.icon(
-                          onPressed: _busy ? null : () => _oauth('apple'),
-                          icon: const Icon(Icons.apple, size: 24),
-                          label: const Text('Fortsätt med Apple', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: TbColors.ink,
-                            side: BorderSide(color: Colors.grey.shade300),
-                            minimumSize: const Size.fromHeight(52),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  
-                  // For those who accidentally ended up here
-                  const SizedBox(height: 32),
-                  Row(
-                    children: [
-                      const Expanded(child: Divider(color: Colors.white24, thickness: 1)),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text('ÄR DU FÖRARE?', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1)),
+                        ],
                       ),
-                      const Expanded(child: Divider(color: Colors.white24, thickness: 1)),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-                  
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: TbColors.foam,
-                      side: const BorderSide(color: Colors.white30, width: 1.5),
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                     ),
-                    onPressed: widget.onJoinPhone,
-                    icon: const Icon(Icons.phone_android),
-                    label: const Text('Anslut bil med bolagskod', style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
+                  ),
+                  const SizedBox(height: 28),
+                  _Choice(
+                    icon: Icons.local_taxi_outlined,
+                    title: 'Jag är förare',
+                    subtitle: 'Ange koden från din chef',
+                    onTap: widget.onJoinPhone,
+                  ),
+                  const SizedBox(height: 12),
+                  _Choice(
+                    icon: Icons.add_business_outlined,
+                    title: 'Nytt företag',
+                    subtitle: 'Prova gratis i 14 dagar',
+                    onTap: widget.onSignup,
                   ),
                 ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// En stor, tydlig väg vidare: ikon, en rad, en förklaring på fem ord.
+class _Choice extends StatelessWidget {
+  const _Choice({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.white24, width: 1.5),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, color: TbColors.taxi, size: 28),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      style: const TextStyle(
+                        color: TbColors.foam,
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(color: Colors.white70, fontSize: 14),
+                    ),
+                  ],
+                ),
+              ),
+              const Icon(Icons.chevron_right, color: Colors.white54),
+            ],
           ),
         ),
       ),

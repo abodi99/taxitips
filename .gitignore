@@ -19,3 +19,11 @@ ops/crm/
 
 # Felsökningslogg från Firebase CLI. Brus, inte källkod.
 firebase-debug.log
+
+# Android upload-signing — aldrig i git.
+taxitips-app/android/key.properties
+taxitips-app/android/keystore/
+
+# Lokal venv för Play Store-uppladdning.
+taxitips-app/.playstore-venv/
+mcp-server.log
