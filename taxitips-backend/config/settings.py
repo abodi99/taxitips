@@ -225,6 +225,14 @@ EVENT_SOURCES = {
         # Fylls i med prenumerationen när den finns.
         "app_reference": os.environ.get("EVENTS_THESPORTSDB_APP_REFERENCE", ""),
     },
+    # Evenemang som personalen lagt in i adminwebben (events/manual.py). Eget
+    # innehåll: ingen tredje parts villkor begränsar lagring eller visning.
+    "manual": {
+        "store": True,
+        "store_reference": "Eget innehåll, inlagt av TaxiTips personal i adminwebben",
+        "show_in_app": os.environ.get("EVENTS_MANUAL_SHOW_IN_APP", "1") == "1",
+        "app_reference": "Eget innehåll, inlagt av TaxiTips personal i adminwebben",
+    },
 }
 # Vilka Trafiklab-operatörer som pollas, och vilken marknad som räknas som
 # "hemma" -- läses av core/market.py och core/sources/trafiklab.py. Samma

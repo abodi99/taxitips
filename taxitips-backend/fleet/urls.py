@@ -30,6 +30,8 @@ urlpatterns = [
     path("subscription/undo-cancel", api.undo_cancel),
     # Registrering och prov
     path("signup", api.signup),
+    path("register", api.register),
+    path("trial/vehicles", api.trial_vehicles),
     path("trial-eligibility", api.trial_eligibility),
     path("claim-invite", api.claim_invite),
     path("invites", api.create_invite),

@@ -19,7 +19,10 @@ from zoneinfo import ZoneInfo
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
 
-SOURCE_LABELS = {"ticketmaster": "Ticketmaster", "predicthq": "PredictHQ", "thesportsdb": "TheSportsDB"}
+SOURCE_LABELS = {
+    "ticketmaster": "Ticketmaster", "predicthq": "PredictHQ", "thesportsdb": "TheSportsDB",
+    "manual": "TaxiTips",
+}
 
 CATEGORY_LABELS = {
     "konsert": "Konsert",

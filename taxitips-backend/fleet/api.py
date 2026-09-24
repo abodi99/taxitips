@@ -22,13 +22,16 @@ from __future__ import annotations
 import json
 import logging
 
+from django.db import transaction
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from billing.models import Company, CompanyMember
 from core.api import _json
+from core import areas
 from fleet import (
+    accounts,
     access,
     audit,
     commerce,
@@ -73,6 +76,7 @@ log = logging.getLogger(__name__)
 # en except-gren per modul. Ett fel utan begripligt meddelande blir ett
 # supportärende; det är billigare att kräva formen här.
 _DOMAIN_ERRORS = (
+    accounts.AccountError,
     pairing.PairingError,
     sessions.SessionError,
     licensing.LicensingError,
@@ -427,11 +431,15 @@ def company_overview(request):
             "orgNumber": orgnr.format_se(profile.org_number) if profile else "",
             "country": profile.country if profile else "SE",
             "verificationStatus": profile.verification_status if profile else "unverified",
+            "suspended": accounts.company_block(company_id) is not None,
             "legacyAccessUntil": (
                 profile.legacy_access_until.isoformat()
                 if profile and profile.legacy_access_until else None
             ),
         },
+        # Samma svar som förarens telefon får, med skälet: appen och portalen
+        # visar det i stället för att räkna ut det själva.
+        "access": _access_summary(company_id, now),
         "role": principal.role,
         "permissions": sorted(principal.permissions),
         "twoFactor": {
@@ -477,12 +485,24 @@ def company_overview(request):
         "extraCountyCount": licensing.extra_county_count(company_id, now),
         "pendingChanges": pending,
         "reviews": risk.customer_status(company_id),
+        # Länslistan för att välja baslän på en ny provbil i appen.
+        "countyCatalog": [{"code": code, "name": name} for code, name in areas.COUNTIES],
     })
 
 
 # ---------------------------------------------------------------------------
 # Bilar och telefoner
 # ---------------------------------------------------------------------------
+
+
+def _access_summary(company_id, now) -> dict:
+    window = access.company_window(company_id, now)
+    return {
+        "ok": window.ok,
+        "reason": window.reason,
+        "message": "" if window.ok else access._window_message(window.reason),
+        "validUntil": window.valid_until.isoformat() if window.valid_until else None,
+    }
 
 
 @csrf_exempt
@@ -828,6 +848,85 @@ def signup(request):
             else "Kortfri provperiod. Utan beställning avslutas provet utan debitering."
         ),
     })
+
+
+@csrf_exempt
+@require_POST
+@handle
+def register(request):
+    """
+    POST /api/fleet/register -- appens registrering: nytt företag, kontot som
+    ägare och en kortfri provperiod. Se fleet/registration.py.
+
+        {"orgNumber": "556...", "companyName": "...", "contactName": "...",
+         "contactPhone": "...", "vehicles": [{"plate": "ABC123", "baseCounty": "12"}]}
+
+    E-postadressen läses ur den VERIFIERADE token, aldrig ur anropet.
+    """
+    from core.entitlement import verify_supabase_jwt
+    from fleet import registration
+
+    auth = request.headers.get("Authorization", "")
+    payload = verify_supabase_jwt(auth[7:].strip()) if auth.lower().startswith("bearer ") else None
+    if not payload:
+        raise PermissionDenied("login_required", "Logga in för att fortsätta.", status=401)
+    accounts.seen(payload)
+    body = _body(request)
+    country = (body.get("country") or "SE").upper()
+    org_number = str(body.get("orgNumber") or "")
+    ratelimit.enforce(ratelimit.SIGNUP, f"{country}:{orgnr.normalize(org_number, country)}")
+    result = registration.register(
+        user_id=payload.get("sub"), email=str(payload.get("email") or ""),
+        org_number=org_number, company_name=str(body.get("companyName") or ""),
+        contact_name=str(body.get("contactName") or ""),
+        contact_phone=str(body.get("contactPhone") or ""),
+        vehicles=body.get("vehicles") or [], country=country,
+    )
+    trial = result.trial
+    return _json(request, {
+        "ok": True,
+        "created": result.created,
+        "companyId": str(result.company.id),
+        "companyName": result.company.name,
+        "trial": (
+            {"status": trial.status, "vehicleLimit": trial.vehicle_limit,
+             "vehiclesUsed": trials.trial_vehicle_count(trial),
+             "endsAt": trial.ends_at.isoformat() if trial.ends_at else None}
+            if trial else None
+        ),
+        "message": result.trial_message,
+    }, status=201 if result.created else 200)
+
+
+@csrf_exempt
+@require_POST
+@handle
+def trial_vehicles(request):
+    """
+    POST /api/fleet/trial/vehicles {"vehicles": [{"plate": "ABC123", "baseCounty": "12"}]}
+
+    Fler bilar i ett pågående prov, upp till provets gräns. Kostar ingenting:
+    fler bilar EFTER provet är en beställning, och den läggs i kundportalen
+    eller av en säljare -- aldrig i appen (fleet/registration.py).
+    """
+    principal = _principal(request, Perm.MANAGE_VEHICLES)
+    trial = trials.active_trial(principal.company_id)
+    if trial is None:
+        raise trials.TrialError(
+            "no_active_trial",
+            "Företaget har ingen pågående provperiod. Fler bilar beställs hos TaxiTips.",
+        )
+    with transaction.atomic():
+        created = sales._add_trial_vehicles(
+            trial, sales._vehicle_specs(_body(request).get("vehicles") or []),
+            actor_user_id=principal.user_id, now=timezone.now(),
+        )
+    return _json(request, {
+        "ok": True,
+        "licenses": [str(license.id) for license in created],
+        "vehiclesUsed": trials.trial_vehicle_count(trial),
+        "vehicleLimit": trial.vehicle_limit,
+    }, status=201)
 
 
 @csrf_exempt

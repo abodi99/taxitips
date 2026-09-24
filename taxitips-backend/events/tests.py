@@ -15,6 +15,7 @@ import json
 from types import SimpleNamespace
 from unittest import mock
 
+from django.conf import settings
 from django.core.management import call_command
 from django.http import Http404
 from django.test import RequestFactory, SimpleTestCase, TestCase, override_settings
@@ -680,7 +681,13 @@ class PredictHQStorageTests(TestCase):
         self.assertIsNone(status.last_success_at)
 
 
+# Den egna källan (events/manual.py) får alltid visas. Grindtesterna nedan
+# prövar de externa källornas rättigheter och körs därför utan den.
+WITHOUT_MANUAL = {k: v for k, v in settings.EVENT_SOURCES.items() if k != "manual"}
+
+
 class AppGateTests(TestCase):
+    @override_settings(EVENT_SOURCES=WITHOUT_MANUAL)
     def test_without_an_app_reference_the_driver_app_gets_no_events(self):
         now = timezone.now()
         ingest.save([ingest.build_row(soon("G1", "Konsert", 2, "19:00"))], source="ticketmaster", now=now,
@@ -721,9 +728,9 @@ class AreaAndPreviewTests(TestCase):
         self.assertEqual(body["counties"], ["12"])
 
     def test_preview_needs_debug_and_is_labelled(self):
-        with override_settings(EVENTS_APP_PREVIEW=True, DEBUG=False):
+        with override_settings(EVENTS_APP_PREVIEW=True, DEBUG=False, EVENT_SOURCES=WITHOUT_MANUAL):
             self.assertEqual(_entitled_upcoming(counties="01")["reason"], "no_licensed_sources")
-        with override_settings(EVENTS_APP_PREVIEW=True, DEBUG=True):
+        with override_settings(EVENTS_APP_PREVIEW=True, DEBUG=True, EVENT_SOURCES=WITHOUT_MANUAL):
             body = _entitled_upcoming(counties="01")
         self.assertTrue(body["preview"])
         self.assertIn("Förhandsvisning", body["previewNote"])

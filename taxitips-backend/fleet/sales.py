@@ -552,8 +552,11 @@ def _temporary_access(company: Company, coupon: Coupon, specs, *, actor_user_id,
 
 
 def invite_owner(company: Company, email: str, *, actor_user_id, now=None) -> OwnerInvite:
+    from fleet import accounts
+
     now = now or timezone.now()
     email = _email(email, "e-postadressen", required=True)
+    accounts.assert_email_allowed(email)
     OwnerInvite.objects.filter(
         company_id=company.id, email=email, status=OwnerInvite.Status.PENDING
     ).update(status=OwnerInvite.Status.REVOKED)
@@ -580,9 +583,12 @@ def claim_owner_invite(*, user_id: str, email: str, now=None) -> CompanyMember |
     medlemskap, och två hade gjort det slumpmässigt vilket bolag som visas.
     """
     now = now or timezone.now()
+    from fleet import accounts
+
     email = (email or "").strip().lower()
     if not user_id or not email:
         return None
+    accounts.assert_email_allowed(email)
     if CompanyMember.objects.filter(user_id=user_id, status="active").exists():
         raise SalesError(
             "already_member", "Kontot hör redan till ett företag.", status=409

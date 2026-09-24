@@ -232,27 +232,18 @@ CREATE OR REPLACE FUNCTION public.join_device(p_join_code text, p_label text DEF
 AS $function$
 declare
   v_company public.companies;
-  v_seat_count int;
-  v_token text;
-  v_device public.devices;
 begin
-  select * into v_company from public.companies where join_code = upper(p_join_code);
+  -- Koden får bekräfta att företaget finns. Inget mer.
+  select * into v_company from public.companies where join_code = upper(trim(p_join_code));
+
   if v_company is null then
-    raise exception 'Ogiltig bolagskod';
+    raise exception 'Ogiltig bolagskod'
+      using errcode = 'P0002';
   end if;
 
-  select count(*) into v_seat_count from public.devices where company_id = v_company.id;
-  if v_seat_count >= v_company.seats then
-    raise exception 'Inga lediga platser';
-  end if;
-
-  v_token := gen_random_uuid()::text;
-
-  insert into public.devices (company_id, token, label, kind)
-  values (v_company.id, v_token, coalesce(nullif(p_label, ''), 'Förare'), 'driver')
-  returning * into v_device;
-
-  return json_build_object('token', v_device.token, 'id', v_device.id, 'label', v_device.label);
+  raise exception 'Bolagskoden ger inte längre åtkomst. Be din administratör om en anslutningskod i TaxiTips-portalen.'
+    using errcode = 'P0001',
+          hint = 'POST /api/fleet/join-request skapar en ansökan; administratören godkänner telefonen med en engångskod.';
 end;
 $function$;
 

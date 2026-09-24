@@ -9,7 +9,7 @@ Listan ska krympa när reglerna flyttas till `ScoringRule`.
 
 | betydelse | var | fil |
 |---|---|---|
-| hög-prio-gräns (app) | Flutter-app | `severity_labels.dart:64` |
+| hög-prio-gräns (app) | Flutter-app | `severity_labels.dart:77` |
 | pushgräns | Node-worker | `fcmPush.js:179` |
 | pushvärd (viz) | Pipeline-viz | `server.js:104` |
 

@@ -38,6 +38,7 @@ from core.models import PushDelivery
 from fleet import access, audit, licensing, pairing, pricing, risk, roles, sessions, trials
 from fleet.api import _DOMAIN_ERRORS, _error
 from fleet.models import (
+    AccountBlock,
     AuditEvent,
     ChangeReview,
     CompanyProfile,
@@ -179,6 +180,11 @@ def overview(request):
             status=SubscriptionStatus.PAST_DUE, grace_until__gt=now
         ).count(),
         "reviewsOpen": ChangeReview.objects.filter(status=ChangeReview.Status.OPEN).count(),
+        # Självregistrerade företag vars behörighet ingen kontrollerat än (§7).
+        "unverifiedCompanies": CompanyProfile.objects.filter(
+            verification_status="unverified"
+        ).count(),
+        "blocksActive": AccountBlock.objects.filter(lifted_at__isnull=True).count(),
         "push24h": push,
         "outboxPending": OutboxMessage.objects.filter(
             status=OutboxMessage.Status.PENDING
@@ -300,10 +306,20 @@ def company_detail(request, company_id):
          "counties": (d.notify_prefs or {}).get("counties", [])}
         for d in Device.objects.filter(company_id=company.id).order_by("-last_seen_at")[:50]
     ]
-    members = [
-        {"userId": str(m.user_id), "role": m.role, "status": m.status}
-        for m in CompanyMember.objects.filter(company_id=company.id)
-    ]
+    from fleet import accounts
+
+    member_rows = list(CompanyMember.objects.filter(company_id=company.id))
+    emails = accounts.emails_for([m.user_id for m in member_rows])
+    members = []
+    for m in member_rows:
+        block = accounts.account_block(user_id=m.user_id, email=emails.get(str(m.user_id), ""))
+        members.append({
+            "userId": str(m.user_id), "role": m.role, "status": m.status,
+            # Tom när kontot inte loggat in sedan katalogen infördes.
+            "email": emails.get(str(m.user_id), ""),
+            "blocked": accounts.block_row(block) if block else None,
+        })
+    suspension = accounts.company_block(company.id)
     trial = Trial.objects.filter(company_id=company.id).order_by("-created_at").first()
 
     return _json(request, {
@@ -329,6 +345,7 @@ def company_detail(request, company_id):
             if profile else None
         ),
         "access": {"ok": window.ok, "reason": window.reason, "validUntil": _iso(window.valid_until)},
+        "suspension": accounts.block_row(suspension) if suspension else None,
         "subscription": (
             {"status": sub.status, "priceVersion": sub.price_version_id,
              "periodStart": _iso(sub.current_period_start), "periodEnd": _iso(sub.current_period_end),
@@ -600,6 +617,9 @@ def events(request):
         rows = rows.filter(Q(name__icontains=q) | Q(venue_name__icontains=q) | Q(city__icontains=q))
     if request.GET.get("hidden") == "1":
         rows = rows.exclude(hidden_reason="")
+    source = (request.GET.get("source") or "").strip()
+    if source:
+        rows = rows.filter(source=source)
     rows = list(rows[:_LIST_LIMIT])
     return _json(request, {
         "ok": True,
@@ -644,6 +664,128 @@ def event_visibility(request, event_id):
         detail={"hidden": bool(new_reason), "reason": new_reason, "name": event.name[:120]},
     )
     return _json(request, {"ok": True, "hidden": bool(new_reason)})
+
+
+def _import_error(request, exc):
+    errors = [{"row": n, "error": why} for n, why in exc.errors[:100]]
+    return _json(request, {
+        "ok": False, "reason": "invalid_rows",
+        "message": f"{len(exc.errors)} rad(er) går inte att spara. Inget är sparat.",
+        # `detail` är där klienternas felklass (ApiError) läser tillägg.
+        "errors": errors, "detail": {"errors": errors},
+    }, status=400)
+
+
+@csrf_exempt
+@require_POST
+@handle
+def event_create(request):
+    """
+    POST /api/admin/events/new -- ett evenemang inlagt för hand.
+
+        {"name": "...", "date": "2026-10-03", "time": "19:00", "endTime": "22:00",
+         "venue": "...", "city": "...", "lat": 55.6, "lon": 13.0, "category": "konsert",
+         "attendance": 5000, "url": "https://..."}
+    """
+    from events import manual
+
+    principal = _staff(request, Perm.ADMIN_MANAGE)
+    body = _body(request)
+    if "endTime" in body:
+        body["end_time"] = body.pop("endTime")
+    try:
+        rows = manual.validate([body])
+    except manual.ImportError_ as exc:
+        return _import_error(request, exc)
+    result = manual.save(rows)
+    _record(
+        principal, "admin_event_created", subject_type="event", subject_id=result["ids"][0],
+        detail={"name": rows[0]["name"][:120], "date": rows[0]["start_date"].isoformat()},
+    )
+    return _json(request, {"ok": True, "id": result["ids"][0], "created": bool(result["created"])})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def event_import(request):
+    """
+    POST /api/admin/events/import {"filename": "x.csv", "content": "...", "dryRun": true}
+
+    `dryRun` validerar och visar vad som skulle sparas, utan att spara. Allt
+    eller inget: ett enda fel och ingenting sparas (events/manual.py).
+    """
+    from events import manual
+
+    principal = _staff(request, Perm.ADMIN_MANAGE)
+    body = _body(request)
+    try:
+        rows = manual.validate(
+            manual.parse_file(str(body.get("content") or ""), str(body.get("filename") or ""))
+        )
+    except manual.ImportError_ as exc:
+        return _import_error(request, exc)
+    preview = [
+        {"name": r["name"], "date": r["start_date"].isoformat(),
+         "time": r["start_at"].astimezone(manual.timing.STOCKHOLM).strftime("%H:%M") if r["start_at"] else "",
+         "venue": r["venue_name"], "city": r["city"], "category": r["category"],
+         "endNote": r["end_note"]}
+        for r in rows
+    ]
+    if body.get("dryRun"):
+        return _json(request, {"ok": True, "dryRun": True, "count": len(rows), "preview": preview})
+    result = manual.save(rows)
+    _record(
+        principal, "admin_events_imported", subject_type="event_import",
+        detail={"filename": str(body.get("filename") or "")[:120],
+                "created": result["created"], "updated": result["updated"]},
+    )
+    return _json(request, {
+        "ok": True, "count": len(rows), "created": result["created"], "updated": result["updated"],
+    })
+
+
+@csrf_exempt
+@require_POST
+@handle
+def event_delete(request, event_id):
+    """
+    POST /api/admin/events/<id>/delete -- tar bort ett EGET evenemang.
+
+    Hämtade evenemang döljs i stället (visibility): nästa hämtning hade annars
+    lagt tillbaka dem, och skälet till att de inte visas hade försvunnit.
+    """
+    from events import manual
+    from events.models import Event
+
+    principal = _staff(request, Perm.ADMIN_MANAGE)
+    event = Event.objects.filter(id=event_id).first()
+    if event is None:
+        raise licensing.LicensingError("unknown_event", "Evenemanget finns inte.", status=404)
+    if event.source != manual.SOURCE:
+        raise licensing.LicensingError(
+            "not_manual", "Bara egna evenemang kan tas bort. Dölj hämtade evenemang i stället.",
+        )
+    name = event.name
+    event.delete()
+    _record(
+        principal, "admin_event_deleted", subject_type="event", subject_id=event_id,
+        detail={"name": name[:120]},
+    )
+    return _json(request, {"ok": True})
+
+
+@require_GET
+@handle
+def event_venues(request):
+    """GET /api/admin/events/venues?q= -- kända arenor med koordinat."""
+    from events import manual
+
+    _staff(request, Perm.ADMIN_VIEW)
+    q = (request.GET.get("q") or "").strip()
+    if len(q) < 2:
+        return _json(request, {"ok": True, "venues": []})
+    return _json(request, {"ok": True, "venues": manual.venues(q)})
 
 
 # ---------------------------------------------------------------------------

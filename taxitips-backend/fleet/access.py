@@ -56,7 +56,7 @@ from fleet.models import (
     VehicleSession,
 )
 from fleet.pairing import hash_token
-from fleet.roles import Principal, permissions_for, staff_permissions_for
+from fleet.roles import Perm, Principal, permissions_for, staff_permissions_for
 
 
 @dataclass(frozen=True)
@@ -136,6 +136,22 @@ def enforce_licenses() -> bool:
 
 def company_window(company_id, now=None) -> Window:
     """
+    Har företaget en giltig period just nu -- och är det inte avstängt?
+
+    Avstängningen (fleet/accounts.py) prövas först och här, eftersom alla
+    vägar in passerar den här funktionen: förartelefonen, den inloggade ägaren
+    och övergångsvägen. En betald period ger ingen åtkomst åt ett avstängt
+    företag.
+    """
+    from fleet import accounts
+
+    if accounts.company_block(company_id) is not None:
+        return Window(False, "company_suspended")
+    return _subscription_window(company_id, now)
+
+
+def _subscription_window(company_id, now=None) -> Window:
+    """
     Har företaget en giltig period just nu?
 
     Provslut, betald period, uppsägningsdatum och betalningsfrist hålls isär
@@ -174,6 +190,10 @@ def company_window(company_id, now=None) -> Window:
             return Window(False, "trial_ended")
         if Trial.objects.filter(company_id=company_id, status=Trial.Status.ENDED).exists():
             return Window(False, "trial_ended")
+        # Ett prov som väntar på första telefonen är inte "inget abonnemang":
+        # för en ny kund hade det låtit som att registreringen misslyckats.
+        if Trial.objects.filter(company_id=company_id, status=Trial.Status.PENDING).exists():
+            return Window(False, "trial_not_started")
         return Window(False, "no_subscription")
 
     if subscription.status == SubscriptionStatus.ACTIVE:
@@ -487,7 +507,14 @@ def _legacy_access(device: Device, window: Window, now) -> Access | None:
 
 
 def _member_access(payload: dict, now) -> Access:
+    from fleet import accounts
+
     user_id = payload.get("sub")
+    accounts.seen(payload)
+    if accounts.account_block(user_id=user_id, email=payload.get("email") or "") is not None:
+        return Access(
+            False, "account_blocked", kind="member", message=_window_message("account_blocked"),
+        )
     member = CompanyMember.objects.filter(user_id=user_id, status="active").first()
     if member is None:
         return Access(False, "no_active_membership")
@@ -509,12 +536,18 @@ def _member_access(payload: dict, now) -> Access:
 
 def _window_message(reason: str) -> str:
     return {
-        "trial_ended": "Provperioden är slut. Lägg en beställning för att fortsätta.",
+        "trial_ended": "Provperioden är slut. Kontakta TaxiTips för att fortsätta.",
+        "trial_not_started": (
+            "Provperioden startar när den första telefonen kopplas. Lägg till en bil "
+            "och ge föraren en kod under Inställningar."
+        ),
         "period_expired": "Abonnemanget har gått ut.",
         "past_due": "Betalningen har inte gått igenom. Uppdatera betalmetoden.",
         "canceled": "Abonnemanget är avslutat.",
         "no_subscription": "Företaget har inget abonnemang.",
         "unknown_company": "Företaget finns inte.",
+        "company_suspended": "Företagets konto är avstängt. Kontakta TaxiTips support.",
+        "account_blocked": "Kontot är spärrat. Kontakta TaxiTips support.",
     }.get(reason, "Åtkomsten är inte aktiv.")
 
 
@@ -541,6 +574,15 @@ def principal_for(request) -> Principal:
     user_id = payload.get("sub")
     aal = str(payload.get("aal") or "")
 
+    # Ett spärrat konto har inga behörigheter alls -- inte heller som personal.
+    # Det är `Principal(user_id=...)` utan roll, så att svaret blir "saknar
+    # behörighet" och inte "logga in", som hade fått klienten att försöka igen.
+    from fleet import accounts
+
+    accounts.seen(payload)
+    if accounts.account_block(user_id=user_id, email=payload.get("email") or "") is not None:
+        return Principal(user_id=user_id, aal=aal)
+
     staff = StaffRole.objects.filter(user_id=user_id, is_active=True).first()
     if staff is not None:
         return Principal(
@@ -551,9 +593,14 @@ def principal_for(request) -> Principal:
     member = CompanyMember.objects.filter(user_id=user_id, status="active").first()
     if member is None:
         return Principal(user_id=user_id, aal=aal)
+    permissions = permissions_for(member.role)
+    if accounts.company_block(member.company_id) is not None:
+        # Avstängt företag: ägaren får se att det är avstängt, inte ändra något
+        # -- varken koppla telefoner, beställa eller bjuda in.
+        permissions = frozenset(p for p in permissions if p == Perm.VIEW_COMPANY)
     return Principal(
         user_id=user_id, company_id=str(member.company_id), role=member.role or "",
-        aal=aal, permissions=permissions_for(member.role),
+        aal=aal, permissions=permissions,
     )
 
 

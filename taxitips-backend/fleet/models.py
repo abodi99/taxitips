@@ -1119,3 +1119,62 @@ class OutboxMessage(models.Model):
     class Meta:
         db_table = "fleet_outbox_message"
         indexes = [models.Index(fields=["status", "-created_at"])]
+
+
+class KnownAccount(models.Model):
+    """
+    Inloggade konton som servern har sett, med e-postadressen ur den VERIFIERADE
+    token.
+
+    **Varför en egen katalog.** Adminwebben måste kunna söka på en e-postadress
+    och spärra den, men `auth.users` hör till Supabase Auth och Djangos roll i
+    produktion ska inte behöva läsrätt där. Adressen skrivs när kontot anropar
+    servern (fleet/accounts.py:seen), aldrig ur något klienten påstår.
+    """
+
+    user_id = models.UUIDField(primary_key=True)
+    email = models.TextField(db_index=True)
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "fleet_known_account"
+
+
+class AccountBlock(models.Model):
+    """
+    En spärr som plattformens personal lagt: ett helt företag, en e-postadress
+    eller ett enskilt konto.
+
+    Spärren kontrolleras på varje begäran i fleet/access.py -- inte genom att
+    radera något. Ett spärrat företag behåller bilar, licenser och historik, så
+    att en hävd spärr återställer exakt det som fanns. Hävningen skriver
+    `lifted_at` i stället för att ta bort raden: vem som spärrade, varför och
+    när ska gå att läsa i efterhand.
+    """
+
+    class Kind(models.TextChoices):
+        COMPANY = "company", "Företag"
+        EMAIL = "email", "E-postadress"
+        USER = "user", "Konto"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    # Företagets uuid, kontots uuid eller e-postadressen i gemener.
+    value = models.CharField(max_length=320)
+    reason = models.TextField()
+    created_by = models.UUIDField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    lifted_at = models.DateTimeField(null=True, blank=True)
+    lifted_by = models.UUIDField(null=True, blank=True)
+    lift_note = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "fleet_account_block"
+        constraints = [
+            # En aktiv spärr per sak: två spärrar hade krävt två hävningar.
+            models.UniqueConstraint(
+                fields=["kind", "value"], condition=Q(lifted_at__isnull=True),
+                name="fleet_one_active_block",
+            ),
+        ]
