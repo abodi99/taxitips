@@ -256,5 +256,37 @@ void main() {
     final body = jsonDecode(seen.single.body) as Map;
     expect(body, {'enabled': false});
   });
-}
 
+  test('ägarens vägar bär inloggningen, aldrig en förartoken', () async {
+    final api = BackendApi(
+      baseUrl: 'http://localhost:8000',
+      client: respond({'ok': true, 'companyId': 'c1'}, status: 201),
+    );
+    await api.ownerPost(
+      'register',
+      {'orgNumber': '5560360793', 'companyName': 'Nya Taxi AB'},
+      accessToken: 'jwt-1',
+    );
+    expect(seen.single.url.path, '/api/fleet/register');
+    expect(seen.single.headers['Authorization'], 'Bearer jwt-1');
+    expect(seen.single.headers.containsKey('X-Device-Token'), isFalse);
+    expect(jsonDecode(seen.single.body)['companyName'], 'Nya Taxi AB');
+  });
+
+  test('ägarens fel når fram med skäl, t.ex. ett orgnr som redan finns', () async {
+    final api = BackendApi(
+      baseUrl: 'http://localhost:8000',
+      client: respond({
+        'ok': false,
+        'reason': 'company_exists',
+        'message': 'Företaget har redan ett konto.',
+      }, status: 409),
+    );
+    await expectLater(
+      api.ownerPost('register', {}, accessToken: 'jwt-1'),
+      throwsA(isA<ApiException>()
+          .having((e) => e.reason, 'reason', 'company_exists')
+          .having((e) => e.status, 'status', 409)),
+    );
+  });
+}

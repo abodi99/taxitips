@@ -494,4 +494,35 @@ class BackendApi {
         .timeout(_timeout);
     return _decode(res, 'joinRequest');
   }
+
+  // Ägarens vägar mot /api/fleet/ (företagsöversikt, registrering, provbilar,
+  // förarkoder). De bär Supabase-inloggningen, aldrig en förartoken: en
+  // förartelefon ger ingen administrativ behörighet (fleet/access.py).
+  Future<Map<String, dynamic>> ownerGet(
+    String path, {
+    required String accessToken,
+  }) async {
+    final res = await _client
+        .get(
+          Uri.parse('$baseUrl/api/fleet/$path'),
+          headers: _headers(accessToken: accessToken),
+        )
+        .timeout(_timeout);
+    return _decode(res, path);
+  }
+
+  Future<Map<String, dynamic>> ownerPost(
+    String path,
+    Map<String, dynamic> body, {
+    required String accessToken,
+  }) async {
+    final res = await _client
+        .post(
+          Uri.parse('$baseUrl/api/fleet/$path'),
+          headers: _headers(accessToken: accessToken),
+          body: jsonEncode(body),
+        )
+        .timeout(_timeout);
+    return _decode(res, path);
+  }
 }

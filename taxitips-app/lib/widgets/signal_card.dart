@@ -110,7 +110,7 @@ class SignalCard extends StatelessWidget {
                         else if (start != null)
                           MetaItem(
                             icon: Icons.schedule_rounded,
-                            text: ageText(start),
+                            text: dateText(start),
                           ),
                         if (distance != null)
                           MetaItem(

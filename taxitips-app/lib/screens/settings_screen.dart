@@ -64,11 +64,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     });
     try {
       if (_isOffice) {
-        final me = await widget.api.me();
-        final company = me['company'] as Map<String, dynamic>? ?? {};
-        _name.text = company['name']?.toString() ?? '';
-        _email.text = company['email']?.toString() ?? '';
-        _orgNumber.text = company['orgNumber']?.toString() ?? '';
+        // Servern (GET /api/fleet/company), inte PostgREST: företag som skapats
+        // i den nya modellen och medlemskapens RLS ska inte avgöra om ägaren
+        // ser sitt eget företagsnamn. E-posten är inloggningens egen.
+        _email.text = widget.api.currentUserEmail ?? '';
+        try {
+          final overview = await widget.api.fleetCompany();
+          final company = overview['company'] as Map<String, dynamic>? ?? {};
+          _name.text = company['name']?.toString() ?? '';
+          _orgNumber.text = company['orgNumber']?.toString() ?? '';
+        } catch (_) {
+          final me = await widget.api.me();
+          final company = me['company'] as Map<String, dynamic>? ?? {};
+          _name.text = company['name']?.toString() ?? '';
+          _orgNumber.text = company['orgNumber']?.toString() ?? '';
+        }
       }
       if (_isDevice) {
         final data = await widget.api.getDeviceMe();

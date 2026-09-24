@@ -308,6 +308,59 @@ i `taxitips-web/src/admin/sales.js`. Testat i `fleet/tests/test_sales.py`.
 provbilar som inte beställdes vidare fortsatte gratis efter en övergång till
 betalning.
 
+## 9c. Självregistrering i appen och betalning utanför appbutikerna
+
+**Inget säljs i appen.** Ingen pris, ingen köpknapp, ingen länk till betalning
+-- varken på iPhone eller Android. Avtal, beställning och faktura sköts mellan
+TaxiTips och företaget: av en säljare i adminwebben (betallänk, Stripe-faktura
+eller *betald utanför Stripe*) eller i kundportalen på webben. Skälet:
+
+* Apple 3.1.3(c) *Enterprise Services*: en tjänst som säljs direkt till
+  företag för deras anställda får betalas utanför in-app-köp. Konsumentköp
+  får inte.
+* Google Play har inget sådant undantag. Play Billing krävs när en digital
+  tjänst **säljs i appen** -- inte när en tjänst som köpts någon annanstans
+  bara används i den. Därför säljer appen ingenting alls.
+
+Appen hade tidigare Stripe Checkout (`create-checkout-session`), Stripes
+kundportal och en platsväljare med pris. Allt det är borttaget ur klienten.
+
+**Registreringen** (`POST /api/fleet/register`, `fleet/registration.py`):
+kontot skapas i Supabase Auth, sedan skapar servern företag, profil
+(`verification_status = unverified`), ägarmedlemskap, abonnemangsrad och ett
+**kortfritt** prov i en transaktion. Samma provregler som §7. Kräver Supabase
+att e-posten bekräftas sparas företagsuppgifterna i telefonen och registreringen
+görs klart vid första inloggningen. Ett orgnr som redan har ett konto tas inte
+över (`company_exists`); en spärrad e-post kommer inte in (`account_blocked`).
+
+Ägaren lägger själv till provbilar upp till provets gräns
+(`POST /api/fleet/trial/vehicles`) och kopplar förare med engångskod. Fler bilar
+efter provet är en beställning, och den görs inte i appen.
+
+Adminwebben visar obekräftade företag på översikten; en säljare markerar
+behörigheten som kontrollerad (`/api/admin/companies/<id>/verification`) med en
+anteckning om hur.
+
+## 9d. Spärrar och avstängning
+
+`fleet/accounts.py`, `fleet/admin_accounts.py`, fliken *Konton och spärrar*.
+
+| Spärr | Biter på | Var |
+|---|---|---|
+| Företag (`company`) | alla förartelefoner och inloggade i företaget; ägaren får bara läsa | `access.company_window` -> `company_suspended` |
+| Konto (`user`) | den inloggade vägen och alla adminbehörigheter, även personalens | `_member_access`, `principal_for` -> `account_blocked` |
+| E-postadress (`email`) | samma, plus registrering och ägarinbjudan | dito, `assert_email_allowed` |
+
+Inget raderas: en hävd spärr återställer exakt det som fanns. Bara
+`platform_admin` spärrar och häver. E-postadresser läses ur
+`fleet_known_account`, som fylls ur den verifierade token vid varje anrop --
+Djangos roll behöver ingen läsrätt i `auth.users`. En medlem kan också stängas
+av i ETT företag (`company_members.status = disabled`) utan att spärras överallt.
+
+**Evenemang** som personalen lägger in (för hand eller CSV/JSON, `events/manual.py`)
+har källan `manual`, kräver en riktig koordinat och kan tas bort. Hämtade
+evenemang kan bara döljas.
+
 ## 10. Risk och granskning
 
 Konfigurerbara i `fleet_risk_config`. Startvärden:

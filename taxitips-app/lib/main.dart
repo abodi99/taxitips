@@ -99,6 +99,16 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
     if (mounted) setState(() => _booting = false);
   }
 
+  /// Efter inloggning: en registrering som väntade på bekräftad e-post görs
+  /// klart innan appen visas. Ett fel där (t.ex. orgnr som redan finns) visas
+  /// i företagspanelen, som försöker igen -- det får inte stänga ute kontot.
+  Future<void> _afterLogin() async {
+    try {
+      await widget.api.completePendingRegistration();
+    } catch (_) {}
+    if (mounted) _goShell();
+  }
+
   void _goShell() {
     setState(() {
       _route = AppRoute.shell;
@@ -118,15 +128,14 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
       localizationsDelegates: GlobalMaterialLocalizations.delegates,
       debugShowCheckedModeBanner: false,
       navigatorObservers: [?observer],
-      builder: (context, child) => ForceUpgradeOverlay(
-        child: child ?? const SizedBox.shrink(),
-      ),
+      builder: (context, child) =>
+          ForceUpgradeOverlay(child: child ?? const SizedBox.shrink()),
       home: _booting
           ? const _SplashScreen()
           : switch (_route) {
               AppRoute.login => LoginScreen(
                 api: widget.api,
-                onLoggedIn: _goShell,
+                onLoggedIn: _afterLogin,
                 onSignup: () => setState(() => _route = AppRoute.signup),
                 onJoinPhone: () => setState(() => _route = AppRoute.join),
                 onBack: () => setState(() => _route = AppRoute.welcome),
@@ -144,7 +153,7 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
                   await registerForPush(widget.api);
                   _goShell();
                 },
-                onLogin: () => setState(() => _route = AppRoute.welcome),
+                onLogin: () => setState(() => _route = AppRoute.login),
                 onBack: () => setState(() => _route = AppRoute.welcome),
               ),
               AppRoute.join => JoinScreen(

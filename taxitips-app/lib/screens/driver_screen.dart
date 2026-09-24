@@ -82,6 +82,10 @@ class _DriverScreenState extends State<DriverScreen>
   bool _claiming = false;
   bool _refreshing = false;
   bool? _entitled; // null = okänt/inte kollat än, kör inte spärr förrän vi vet.
+  // Serverns skäl och text när åtkomsten saknas (fleet/access.py) -- en ny
+  // provkund och ett uppsagt bolag ska inte få samma besked.
+  String? _entitlementReason;
+  String? _entitlementMessage;
   // Av som default: med dagens data (många planerade ersättningsarbeten
   // korrekt märkta low) ger "Bara hög prio" en tom lista som ser ut som
   // "inga störningar". Föraren slår på filtret när hen vill korta ner.
@@ -930,6 +934,8 @@ class _DriverScreenState extends State<DriverScreen>
       };
       setState(() {
         _entitled = result['entitled'] == true;
+        _entitlementReason = result['reason']?.toString();
+        _entitlementMessage = result['message']?.toString();
         if (licensed.isNotEmpty) {
           _licensedCounties = licensed;
           // Sparade val utanför licensen hade bara gett en tom lista.
@@ -1345,8 +1351,8 @@ class _DriverScreenState extends State<DriverScreen>
 
       final da = (a['distance_km'] as num?) ?? double.infinity;
       final db = (b['distance_km'] as num?) ?? double.infinity;
-      final ta = (a['updated_at'] as String?) ?? '';
-      final tb = (b['updated_at'] as String?) ?? '';
+      final ta = (a['start_time'] as String?) ?? '';
+      final tb = (b['start_time'] as String?) ?? '';
 
       if (_sortMode == 'score') {
         final sa = (a['worth_it_score'] as num?) ?? 0;
@@ -2727,6 +2733,8 @@ class _DriverScreenState extends State<DriverScreen>
                                 ] else if (_entitled == false) ...[
                                   const SizedBox(height: 8),
                                   _EntitlementBanner(
+                                    reason: _entitlementReason,
+                                    message: _entitlementMessage,
                                     onOpenSettings: widget.onOpenSettings,
                                   ),
                                 ] else if (_needsArea) ...[
@@ -3833,49 +3841,78 @@ class _ExplainRow extends StatelessWidget {
   }
 }
 
-/// Icke-blockerande banner som visas när bolagets provperiod/prenumeration
-/// inte längre är aktiv. Signalerna töms redan tyst server-side i det läget
-/// (get_smart_alerts), så det här ger föraren en förklaring i stället för
-/// en tom skärm utan anledning.
+/// Icke-blockerande banner när företaget saknar åtkomst. Rubrik och text följer
+/// serverns skäl (fleet/access.py): en ny provkund som inte kopplat någon
+/// telefon än ska få veta vad nästa steg är, inte att provet "gått ut".
 class _EntitlementBanner extends StatelessWidget {
-  const _EntitlementBanner({this.onOpenSettings});
+  const _EntitlementBanner({this.reason, this.message, this.onOpenSettings});
 
+  final String? reason;
+  final String? message;
   final VoidCallback? onOpenSettings;
+
+  (String, String, IconData, Color) get _copy => switch (reason) {
+    'trial_not_started' => (
+      'Välkommen! Ett steg kvar',
+      'Lägg till en bil och ge föraren en kod under Inställningar. '
+          'Provperioden på 14 dagar startar när den första telefonen kopplas.',
+      Icons.flag_outlined,
+      TbColors.live,
+    ),
+    'company_suspended' || 'account_blocked' => (
+      'Kontot är avstängt',
+      message ?? 'Kontakta TaxiTips support.',
+      Icons.block,
+      TbColors.danger,
+    ),
+    'trial_ended' => (
+      'Provperioden är slut',
+      'Nya tips visas inte just nu. Er kontaktperson på TaxiTips hjälper er '
+          'att fortsätta — det är inte samma sak som "inga störningar just nu".',
+      Icons.info_outline,
+      TbColors.taxiDeep,
+    ),
+    _ => (
+      'Tipsen är pausade',
+      '${message ?? 'Företagets abonnemang är inte aktivt.'} Det är inte samma '
+          'sak som "inga störningar just nu".',
+      Icons.info_outline,
+      TbColors.taxiDeep,
+    ),
+  };
 
   @override
   Widget build(BuildContext context) {
+    final (title, body, icon, color) = _copy;
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 10, 16, 0),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: TbColors.sand,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: TbColors.taxiDeep, width: 1.5),
+        border: Border.all(color: color, width: 1.5),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.info_outline, color: TbColors.taxiDeep),
+          Icon(icon, color: color),
           const SizedBox(width: 10),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Ditt företags provperiod har gått ut',
-                  style: TextStyle(
+                Text(
+                  title,
+                  style: const TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 15,
                     color: TbColors.ink,
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Text(
-                  'Prenumerationen är inte aktiv (provperiod slut, uppsagd '
-                  'eller betalning saknas). Nya taxisignaler visas inte '
-                  'förrän kontoret förnyar — det är inte samma sak som '
-                  '“inga störningar just nu”.',
-                  style: TextStyle(
+                Text(
+                  body,
+                  style: const TextStyle(
                     fontSize: 13,
                     height: 1.35,
                     fontWeight: FontWeight.w600,
@@ -3890,7 +3927,11 @@ class _EntitlementBanner extends StatelessWidget {
                       padding: EdgeInsets.zero,
                       alignment: Alignment.centerLeft,
                     ),
-                    child: const Text('Se inställningar'),
+                    child: Text(
+                      reason == 'trial_not_started'
+                          ? 'Lägg till bil och förare'
+                          : 'Se inställningar',
+                    ),
                   ),
                 ],
               ],

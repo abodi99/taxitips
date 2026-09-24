@@ -20,7 +20,10 @@ Affärsmodellen är B2B: taxibolag betalar en Stripe-prenumeration per
 **billicens** (en registrerad bil med ett baslän). Förare ansluter sin telefon
 med en engångskod från företagets administratör -- bolagskoden ger inte längre
 åtkomst, den skickar en ansökan. Ingen App Store-prenumeration, ingen IAP.
-Se `docs/fleet-abonnemang.md`.
+**Appen säljer ingenting**: inga priser, köpknappar eller betallänkar. Nya
+kunder registrerar sig i appen och får ett kortfritt prov; betalning sker
+utanför appen (säljare, faktura, kundportalen på webben). Skälet och reglerna:
+`docs/fleet-abonnemang.md` §9c.
 
 ## 2. Var koden ligger
 
@@ -74,7 +77,9 @@ Kundlivscykeln i `taxitips-backend/fleet/`:
 
 | Fil | Ansvar |
 |---|---|
-| `access.py` | **Åtkomstkontrollen.** Sex frågor per begäran, svaret bär alltid skälet. |
+| `access.py` | **Åtkomstkontrollen.** Sex frågor per begäran, svaret bär alltid skälet. Spärrar prövas först. |
+| `accounts.py` | Spärrar (företag, konto, e-post) och kontokatalogen. |
+| `registration.py` | Självregistrering från appen: företag + kortfritt prov, ingen betalning. |
 | `pricing.py` | **Enda prismotorn.** Heltal ören, volymnivå, introduktion, proportionering, moms. |
 | `pairing.py` | Engångskod -> godkänd telefon. Hashade hemligheter. Spärr. |
 | `sessions.py` | Skiftbyte. En telefon per licens, en bil per telefon -- via databasen. |
@@ -290,7 +295,10 @@ notiser, evenemang och riskgranskningar över ALLA bolag. Kräver en aktiv rad i
 den än är. `support` läser, `sales` säljer (företag, paket, prov, kuponger,
 förare, betallänkar, uppsägning till periodens slut), `platform_admin` gör allt
 och ensam det som ger åtkomst utan betalning (kuponger, betald utanför Stripe,
-avsluta direkt). Säljflödet: `docs/fleet-abonnemang.md` §9b. Grundaren
+avsluta direkt). Säljflödet: `docs/fleet-abonnemang.md` §9b. Spärrar av
+företag, konton och e-postadresser, personalroller och egna evenemang
+(manuellt eller CSV/JSON): §9d. Kundsidan visar "Kundens väg" -- sex steg från
+företag till betalning, med nästa steg markerat. Grundaren
 (`bbf6ca6c-…`) är platform_admin. Konton skapade med Google har inget lösenord
 och Google-inloggning är inte konfigurerad i produktionens Supabase Auth, så
 adminwebben loggar in med en e-postlänk.
@@ -337,8 +345,8 @@ Utrullningen styrs av `FLEET_ENFORCE_LICENSES`, som är AV tills
 Tester — båda ska vara gröna innan något deployas:
 
 ```bash
-cd taxitips-backend && CELERY_TASK_ALWAYS_EAGER=1 ./.venv/bin/python manage.py test   # 855
-cd taxitips-app && flutter test && flutter analyze                                     # 66
+cd taxitips-backend && CELERY_TASK_ALWAYS_EAGER=1 ./.venv/bin/python manage.py test   # 903
+cd taxitips-app && flutter test && flutter analyze                                     # 72
 cd taxitips-web && npx vite build                                                      # index + portal + admin
 ```
 

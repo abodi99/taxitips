@@ -284,6 +284,29 @@ String distanceText(num? km) {
   return '${km.round()} km';
 }
 
+String dateText(DateTime? date, {DateTime? now}) {
+  if (date == null) return '';
+  final current = now ?? DateTime.now();
+  final yesterday = current.subtract(const Duration(days: 1));
+  
+  final time = '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  
+  if (date.year == current.year && date.month == current.month && date.day == current.day) {
+    return 'Idag $time';
+  } else if (date.year == yesterday.year && date.month == yesterday.month && date.day == yesterday.day) {
+    return 'Igår $time';
+  }
+  
+  const months = ['jan', 'feb', 'mar', 'apr', 'maj', 'jun', 'jul', 'aug', 'sep', 'okt', 'nov', 'dec'];
+  final monthName = months[date.month - 1];
+  
+  if (date.year == current.year) {
+    return '${date.day} $monthName $time';
+  }
+  
+  return '${date.day} $monthName ${date.year} $time';
+}
+
 /// "Nu", "5 min", "2 tim" -- hur färskt något är.
 String ageText(DateTime? start, {DateTime? now}) {
   if (start == null) return '';

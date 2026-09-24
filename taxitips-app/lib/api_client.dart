@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/foundation.dart';
@@ -100,6 +101,15 @@ class ApiClient {
   String? get _accessToken {
     try {
       return _sb.auth.currentSession?.accessToken;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Den inloggade ägarens e-post, ur Supabase-sessionen.
+  String? get currentUserEmail {
+    try {
+      return _sb.auth.currentUser?.email;
     } catch (_) {
       return null;
     }
@@ -321,56 +331,111 @@ class ApiClient {
     });
   }
 
+  static const _pendingRegistrationKey = 'tt_pending_registration';
+
+  /// Registrering: konto i Supabase Auth, sedan företaget på servern
+  /// (POST /api/fleet/register) med en kortfri provperiod.
+  ///
+  /// **Ingen betalning i appen.** Förr skapades bolaget direkt i `companies`
+  /// och köparen skickades till Stripe Checkout härifrån. Ett köp av en digital
+  /// tjänst i appen är det Apple och Google kräver sina egna betalsystem för;
+  /// avtal och faktura sköts i stället mellan TaxiTips och företaget
+  /// (fleet/registration.py).
+  ///
+  /// Kräver Supabase att e-posten bekräftas får appen ingen session än. Då
+  /// sparas företagsuppgifterna här, och registreringen görs klart vid första
+  /// inloggningen (`completePendingRegistration`).
   Future<Map<String, dynamic>> signup({
     required String name,
     required String email,
     required String password,
     required String orgNumber,
-    String? companyName,
-    int seats = 1,
-    bool startCheckout = true,
-    String? successUrl,
-    String? cancelUrl,
+    required String companyName,
+    String? phone,
   }) async {
     await ensureInitialized();
+    final company = {
+      'orgNumber': orgNumber,
+      'companyName': companyName,
+      'contactName': name,
+      if (phone != null && phone.isNotEmpty) 'contactPhone': phone,
+    };
     final auth = await _sb.auth.signUp(
       email: email,
       password: password,
       data: {'name': name},
     );
-    final userId = auth.user?.id;
-    if (userId == null) throw ApiException(400, 'Kunde inte skapa konto');
-
-    final company = await _sb
-        .from('companies')
-        .insert({
-          'name': companyName ?? name,
-          'email': email,
-          'org_number': orgNumber,
-          'join_code': _randomJoinCode(),
-          'seats': seats,
-          'status': 'trial',
-        })
-        .select()
-        .single();
-
-    await _sb.from('company_members').insert({
-      'company_id': company['id'],
-      'user_id': userId,
-      'role': 'company_owner',
-      'status': 'active',
-    });
-
-    await saveSession(auth.session?.accessToken);
+    if (auth.user == null) throw ApiException(400, 'Kunde inte skapa konto');
     await saveCredentials(email, password);
-    final result = await me();
-    if (!startCheckout) return result;
-    final checkout = await createCheckoutSession(seats: seats);
-    return {
-      ...result,
-      'checkout': {...checkout, 'mode': 'stripe'},
-    };
+    final session = auth.session;
+    if (session == null) {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_pendingRegistrationKey, jsonEncode(company));
+      return {'needsConfirmation': true, 'email': email};
+    }
+    await saveSession(session.accessToken);
+    return registerCompany(company);
   }
+
+  Future<Map<String, dynamic>> registerCompany(Map<String, dynamic> company) async {
+    final token = _accessToken;
+    if (token == null) throw ApiException(401, 'Logga in för att fortsätta.');
+    final result = await _fleet.ownerPost('register', company, accessToken: token);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_pendingRegistrationKey);
+    return result;
+  }
+
+  /// Registreringen som väntade på att e-posten bekräftades. Tyst när inget
+  /// väntar; ett fel (t.ex. orgnr som redan finns) lämnas till den som frågar.
+  Future<Map<String, dynamic>?> completePendingRegistration() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_pendingRegistrationKey);
+    if (raw == null || _accessToken == null) return null;
+    return registerCompany(Map<String, dynamic>.from(jsonDecode(raw) as Map));
+  }
+
+  // --- Företagets administration (den nya modellen, fleet/api.py) ---------
+
+  Future<Map<String, dynamic>> _owner(
+    String path, [
+    Map<String, dynamic>? body,
+  ]) async {
+    await ensureInitialized();
+    final token = _accessToken;
+    if (token == null) throw ApiException(401, 'Logga in för att fortsätta.');
+    return body == null
+        ? _fleet.ownerGet(path, accessToken: token)
+        : _fleet.ownerPost(path, body, accessToken: token);
+  }
+
+  /// Bilar, licenser, län, telefoner, prov och period -- och om företaget
+  /// har åtkomst just nu, med skälet.
+  Future<Map<String, dynamic>> fleetCompany() => _owner('company');
+
+  Future<Map<String, dynamic>> addTrialVehicle({
+    required String plate,
+    required String baseCounty,
+  }) => _owner('trial/vehicles', {
+    'vehicles': [
+      {'plate': plate, 'baseCounty': baseCounty},
+    ],
+  });
+
+  /// Engångskod för en förares telefon, för en bestämd bil. Gäller i fem
+  /// minuter och visas bara en gång (fleet/pairing.py).
+  Future<Map<String, dynamic>> issuePairingCode({
+    required String licenseId,
+    required String vehicleId,
+    String label = '',
+  }) => _owner('pairing-codes', {
+    'license_id': licenseId,
+    'vehicle_id': vehicleId,
+    'label': label,
+  });
+
+  Future<Map<String, dynamic>> blockPhone(String approvalId) =>
+      _owner('approvals/$approvalId/block', {'reason': 'owner_block'});
 
   String _randomJoinCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
@@ -542,6 +607,30 @@ class ApiClient {
       }
     }
     await ensureInitialized();
+    // Inloggad ägare/administratör: samma servern som förarens väg, via
+    // företagsöversikten. Den gamla RPC:n läser `companies.status`, som är
+    // `inactive` för varje företag i den nya modellen -- en ny provkund fick
+    // därför "provperioden har gått ut" innan den ens kopplat en telefon.
+    if (backend != null && _accessToken != null) {
+      try {
+        final overview = await fleetCompany();
+        final access = Map<String, dynamic>.from(overview['access'] as Map? ?? {});
+        final licensed = <String>{
+          for (final l in (overview['licenses'] as List?) ?? const [])
+            if (l is Map)
+              for (final c in (l['counties'] as List?) ?? const []) c.toString(),
+        };
+        return {
+          'ok': true,
+          'entitled': access['ok'] == true,
+          'reason': access['reason'],
+          'message': access['message'],
+          'licensedCounties': licensed.toList()..sort(),
+        };
+      } catch (e) {
+        debugPrint('ApiClient[entitlements] owner: $e');
+      }
+    }
     // current_entitlement() also accepts an authenticated owner/manager session
     // (no device pairing needed) via auth.uid() -- so only short-circuit when
     // there's neither a device token nor a logged-in user, since the RPC would
@@ -564,23 +653,6 @@ class ApiClient {
   Future<Map<String, dynamic>> publicConfig() async => {
     'supabaseUrl': supabaseUrl,
   };
-  Future<Map<String, dynamic>> pricing() async => {
-    'plans': [
-      {
-        'plan': 'driver',
-        'interval': 'month',
-        'unitAmount': 19900,
-        'currency': 'sek',
-        'displayName': 'Taxi Tips Driver',
-        'priceId': 'price_1U7cJrP67HXLcerWkJ3vKy7I',
-      },
-    ],
-  };
-  Future<Map<String, dynamic>> lookupCompany(String org) async => {
-    'orgNumber': org,
-    'name': null,
-  };
-
   Future<Map<String, dynamic>> getAreas() async {
     final meData = await me();
     final company = meData['company'] as Map<String, dynamic>?;
@@ -1600,52 +1672,9 @@ class ApiClient {
     'backend': _backend == null ? 'supabase' : 'django',
   };
 
-  Future<Map<String, dynamic>> _invokeFunction(
-    String name, {
-    Map<String, dynamic>? body,
-  }) async {
-    await ensureInitialized();
-    try {
-      final res = await _sb.functions.invoke(name, body: body);
-      final data = res.data;
-      if (data is Map<String, dynamic>) {
-        final error = data['error']?.toString();
-        if (error != null && error.isNotEmpty) {
-          throw ApiException(500, error);
-        }
-        return data;
-      }
-      return <String, dynamic>{};
-    } on ApiException {
-      rethrow;
-    } catch (e) {
-      throw ApiException(
-        500,
-        e.toString().replaceFirst('FunctionException: ', ''),
-      );
-    }
-  }
-
-  Future<Map<String, dynamic>> billingPortal() =>
-      _invokeFunction('billing-portal');
-
-  Future<Map<String, dynamic>> createCheckoutSession({required int seats}) =>
-      _invokeFunction('create-checkout-session', body: {'seats': seats});
-
-  Future<Map<String, dynamic>> updateBillingQuantity(int seats) async {
-    await ensureInitialized();
-    final meData = await me();
-    final company = meData['company'] as Map<String, dynamic>?;
-    if (company == null) throw ApiException(400, 'Inget bolag');
-    final res = await _invokeFunction(
-      'update-subscription-quantity',
-      body: {'seats': seats},
-    );
-    return {
-      'quantity': res['quantity'] ?? seats,
-      'synced': res['synced'] == true,
-    };
-  }
+  // Ingen köp- eller betalväg här med avsikt: avtal och faktura sköts mellan
+  // TaxiTips och företaget, utanför appen (fleet/registration.py). De gamla
+  // anropen till Stripe Checkout och kundportalen är borttagna.
 
   Future<Map<String, dynamic>> listMembers() async {
     final meData = await me();
