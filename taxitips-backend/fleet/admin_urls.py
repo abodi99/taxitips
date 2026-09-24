@@ -6,7 +6,7 @@ det här inte är kundens väg.
 
 from django.urls import path
 
-from fleet import admin_accounts, admin_api, admin_sales
+from fleet import admin_accounts, admin_api, admin_sales, admin_vehicles
 
 urlpatterns = [
     path("overview", admin_api.overview),
@@ -25,6 +25,9 @@ urlpatterns = [
     path("companies/<uuid:company_id>/pairing-code", admin_api.issue_code),
     path("companies/<uuid:company_id>/test-push", admin_api.test_push),
     path("approvals/<uuid:approval_id>/block", admin_api.block_approval),
+    path("licenses/<uuid:license_id>/vehicle", admin_vehicles.change_vehicle),
+    path("licenses/<uuid:license_id>/counties", admin_vehicles.set_trial_counties),
+    path("licenses/<uuid:license_id>/remove", admin_vehicles.remove_license),
     path("orders/<uuid:order_id>/payment-link", admin_sales.order_payment_link),
     path("orders/<uuid:order_id>/refresh", admin_sales.order_refresh),
     path("orders/<uuid:order_id>/mark-paid", admin_sales.order_mark_paid),

@@ -918,6 +918,18 @@ class _DriverScreenState extends State<DriverScreen>
     _mapFocus.move(lat, lon, kClusterUntilZoom);
   }
 
+  /// Zooma med knapp, för den som kör med en hand eller har handskar på.
+  /// Mitten ligger kvar; bara zoomnivån ändras, inom kartans gränser.
+  void _zoomBy(double delta) {
+    try {
+      final camera = _mapController.camera;
+      final zoom = (camera.zoom + delta).clamp(3.0, 18.0);
+      _mapController.move(camera.center, zoom);
+    } catch (_) {
+      // Google Maps-varianten har ingen flutter_map-kontroller: inget att zooma.
+    }
+  }
+
   /// Kollar entitlement separat från _load så att ett fel här inte döljer
   /// alert-datan (t.ex. i demo-läge finns ingen deviceToken alls).
   Future<void> _checkEntitlement() async {
@@ -2827,6 +2839,11 @@ class _DriverScreenState extends State<DriverScreen>
                             Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
+                                _ZoomButtons(
+                                  onZoomIn: () => _zoomBy(1),
+                                  onZoomOut: () => _zoomBy(-1),
+                                ),
+                                const SizedBox(height: 10),
                                 FloatingActionButton.small(
                                   heroTag: 'legend_fab',
                                   onPressed: () => showMapLegend(context),
@@ -3936,6 +3953,46 @@ class _EntitlementBanner extends StatelessWidget {
                 ],
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Plus och minus i en stapel, samma vita stil som kartans andra knappar.
+class _ZoomButtons extends StatelessWidget {
+  const _ZoomButtons({required this.onZoomIn, required this.onZoomOut});
+
+  final VoidCallback onZoomIn;
+  final VoidCallback onZoomOut;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.white,
+      elevation: 4,
+      borderRadius: BorderRadius.circular(14),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          IconButton(
+            tooltip: 'Zooma in',
+            onPressed: onZoomIn,
+            iconSize: 26,
+            color: TbColors.ink,
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            icon: const Icon(Icons.add),
+          ),
+          Container(width: 28, height: 1, color: TbColors.line),
+          IconButton(
+            tooltip: 'Zooma ut',
+            onPressed: onZoomOut,
+            iconSize: 26,
+            color: TbColors.ink,
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            icon: const Icon(Icons.remove),
           ),
         ],
       ),

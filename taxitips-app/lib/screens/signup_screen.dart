@@ -202,7 +202,11 @@ class SignupScreenState extends State<SignupScreen> {
                   ),
                   const SizedBox(height: 32),
                   if (_confirmEmail != null)
-                    _ConfirmCard(email: _confirmEmail!, onLogin: widget.onLogin)
+                    _ConfirmCard(
+                      email: _confirmEmail!,
+                      onLogin: widget.onLogin,
+                      onResend: () => widget.api.resendConfirmation(_confirmEmail!),
+                    )
                   else
                   Container(
                     padding: const EdgeInsets.all(32),
@@ -481,11 +485,42 @@ class _Step extends StatelessWidget {
 
 /// Kontot är skapat men e-posten måste bekräftas först. Företagsuppgifterna
 /// ligger sparade i telefonen och registreras vid första inloggningen.
-class _ConfirmCard extends StatelessWidget {
-  const _ConfirmCard({required this.email, required this.onLogin});
+class _ConfirmCard extends StatefulWidget {
+  const _ConfirmCard({
+    required this.email,
+    required this.onLogin,
+    required this.onResend,
+  });
 
   final String email;
   final VoidCallback onLogin;
+  final Future<void> Function() onResend;
+
+  @override
+  State<_ConfirmCard> createState() => _ConfirmCardState();
+}
+
+class _ConfirmCardState extends State<_ConfirmCard> {
+  String? _note;
+  bool _busy = false;
+
+  Future<void> _resend() async {
+    setState(() {
+      _busy = true;
+      _note = null;
+    });
+    try {
+      await widget.onResend();
+      _note = 'Skickat igen.';
+    } catch (e) {
+      // Supabase begränsar hur ofta samma adress får ett nytt mejl.
+      _note = e.toString().contains('seconds')
+          ? 'Vänta en minut och försök igen.'
+          : 'Det gick inte att skicka. Försök igen om en stund.';
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -512,20 +547,31 @@ class _ConfirmCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            'Vi har skickat en länk till $email. Öppna den och logga sedan in '
-            'här — då skapas företaget och provperioden.',
+            'Vi skickade en länk till ${widget.email}. Tryck på länken, '
+            'kom tillbaka hit och logga in.',
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.grey.shade700, height: 1.4),
           ),
+          const SizedBox(height: 6),
+          Text(
+            'Syns inget? Titta i skräpposten.',
+            textAlign: TextAlign.center,
+            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
+          ),
           const SizedBox(height: 24),
           FilledButton(
-            onPressed: onLogin,
+            onPressed: widget.onLogin,
             style: FilledButton.styleFrom(
               backgroundColor: TbColors.ink,
               foregroundColor: TbColors.foam,
               minimumSize: const Size.fromHeight(52),
             ),
-            child: const Text('Till inloggningen'),
+            child: const Text('Logga in'),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: _busy ? null : _resend,
+            child: Text(_note ?? 'Skicka mejlet igen'),
           ),
         ],
       ),

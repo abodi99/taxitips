@@ -42,6 +42,14 @@ export const admin = {
   deleteEvent: (id) => request(`/api/admin/events/${id}/delete`, { method: "POST", body: {} }),
   venues: (q) => request(`/api/admin/events/venues?q=${encodeURIComponent(q)}`),
 
+  /* --- Bilar (fleet/admin_vehicles.py) --- */
+  changeVehicle: (licenseId, plate, mode = "permanent") =>
+    request(`/api/admin/licenses/${licenseId}/vehicle`, { method: "POST", body: { plate, mode } }),
+  setTrialCounties: (licenseId, base, extras) =>
+    request(`/api/admin/licenses/${licenseId}/counties`, { method: "POST", body: { base, extras } }),
+  removeLicense: (licenseId, reason) =>
+    request(`/api/admin/licenses/${licenseId}/remove`, { method: "POST", body: { reason } }),
+
   /* --- Konton och spärrar (fleet/admin_accounts.py) --- */
   accounts: (q) => request(`/api/admin/accounts?q=${encodeURIComponent(q)}`),
   blocks: () => request("/api/admin/blocks"),

@@ -214,35 +214,7 @@ export function kund(d, config = null) {
 
     ${salesPanel(d, config)}
 
-    <div class="card">
-      <h2>Licenser och bilar</h2>
-      ${d.licenses.length ? d.licenses.map((l) => `
-        <div style="border-bottom:1px solid var(--line);padding:0.75rem 0">
-          <b>${esc(l.vehicle || "—")}</b> ${pill(l.status)}
-          ${l.assignmentKind === "temporary" ? '<span class="pill pill-warn">Ersättningsbil</span>' : ""}
-          <div class="muted">Län: ${(l.counties ?? []).map((c) => esc(countyName(c))).join(", ") || "—"}
-            ${l.scheduledBaseCounty ? ` · baslän byts till ${esc(countyName(l.scheduledBaseCounty))}` : ""}</div>
-          <div>I tjänst: ${l.activePhone
-            ? `${esc(l.activePhone.label)} sedan ${esc(dateTime(l.activePhone.since))}`
-            : '<span class="muted">ingen</span>'}</div>
-          ${(l.approvals ?? []).filter((a) => a.status === "active").map((a) => `
-            <div class="btn-row">
-              <span>${esc(a.label || "Telefon")} · godkänd ${esc(date(a.approvedAt))}</span>
-              <button class="btn btn-danger" data-action="block" data-approval="${esc(a.id)}">Spärra</button>
-            </div>`).join("")}
-          ${["active", "trial", "pending_cancel"].includes(l.status) ? `<div class="btn-row">
-            <button class="btn btn-primary" data-action="code" data-license="${esc(l.id)}"
-              data-plate="${esc(l.vehicle)}">Lägg till förare</button>
-            ${config?.canSell && l.status === "active" ? `
-              <select data-county-for="${esc(l.id)}" aria-label="Län">${(config.counties ?? [])
-                .filter((c) => !(l.counties ?? []).includes(c.code))
-                .map((c) => `<option value="${esc(c.code)}">${esc(c.name)}</option>`).join("")}</select>
-              <button class="btn btn-quiet" data-action="lic-add-county" data-license="${esc(l.id)}">+ Län</button>
-              <button class="btn btn-quiet" data-action="lic-cancel" data-license="${esc(l.id)}"
-                data-plate="${esc(l.vehicle)}">Avsluta bilen vid förnyelse</button>` : ""}
-          </div>` : ""}
-        </div>`).join("") : '<p class="muted">Inga licenser.</p>'}
-    </div>
+    ${carsCard(d, config)}
 
     <div class="card">
       <h2>Telefoner</h2>
@@ -363,6 +335,100 @@ function membersCard(d, config) {
             </div>` : ""}</td>
           </tr>`).join("")}</tbody></table></div>`
         : '<p class="muted">Inga inloggade konton än. Bjud in kundens administratör ovan.</p>'}
+    </div>`;
+}
+
+const LICENSE_OPEN = ["active", "trial", "pending_cancel"];
+
+function countySelect(counties, selected, attrs) {
+  return `<select ${attrs}>${(counties ?? [])
+    .map((c) => `<option value="${esc(c.code)}" ${c.code === selected ? "selected" : ""}>${esc(c.name)}</option>`)
+    .join("")}</select>`;
+}
+
+/**
+ * Bilarna, en i taget: regnr, län, förare och vad man kan göra. Provbilar
+ * ändras direkt (de kostar inget); betalda bilar ändras via offerten, så att
+ * fakturan följer med -- samma regel som i fleet/admin_vehicles.py.
+ */
+function carsCard(d, config) {
+  const all = d.licenses ?? [];
+  const open = all.filter((l) => LICENSE_OPEN.includes(l.status));
+  const closed = all.length - open.length;
+  const sell = !!config?.canSell;
+  const manage = !!config?.canManage;
+  const counties = config?.counties ?? [];
+  const name = (code) => countyName(code);
+  return `
+    <div class="card">
+      <h2>Bilar, län och förare <span class="muted">(${esc(open.length)})</span></h2>
+      ${open.length ? open.map((l) => {
+        const trial = l.status === "trial";
+        const extras = l.extraCounties ?? [];
+        const phones = (l.approvals ?? []).filter((a) => a.status === "active");
+        return `
+        <div class="car">
+          <div class="car-head">
+            <b class="plate">${esc(l.vehicle || "—")}</b> ${pill(l.status)}
+            ${l.assignmentKind === "temporary" ? '<span class="pill pill-warn">Ersättningsbil</span>' : ""}
+          </div>
+          <div class="muted">Baslän: <b>${esc(name(l.baseCounty))}</b>
+            ${extras.length ? ` · Extra: ${extras.map((c) => esc(name(c))).join(", ")}` : ""}
+            ${l.scheduledBaseCounty ? ` · byts till ${esc(name(l.scheduledBaseCounty))} vid förnyelse` : ""}</div>
+          <div class="muted">Kör nu: ${l.activePhone
+            ? `${esc(l.activePhone.label)} sedan ${esc(dateTime(l.activePhone.since))}` : "ingen"}</div>
+
+          <div class="car-drivers">
+            ${phones.length ? phones.map((a) => `
+              <div class="driver-row"><span>📱 ${esc(a.label || "Telefon")} <span class="muted">· godkänd ${esc(date(a.approvedAt))}</span></span>
+                <button class="btn btn-quiet btn-small" data-action="block" data-approval="${esc(a.id)}">Spärra</button></div>`).join("")
+              : '<p class="muted">Inga förare kopplade.</p>'}
+            <button class="btn btn-primary btn-small" data-action="code" data-license="${esc(l.id)}"
+              data-plate="${esc(l.vehicle)}">+ Förare (ge kod)</button>
+          </div>
+
+          ${sell ? `<details class="car-edit"><summary>Ändra bilen</summary>
+            <div class="car-actions">
+              <div class="inline-field">
+                <input id="plate-${esc(l.id)}" placeholder="Nytt regnr" autocomplete="off" />
+                <button class="btn btn-quiet btn-small" data-action="car-plate" data-license="${esc(l.id)}" data-mode="permanent">Byt bil</button>
+                <button class="btn btn-quiet btn-small" data-action="car-plate" data-license="${esc(l.id)}" data-mode="temporary">Ersättningsbil</button>
+                ${l.assignmentKind === "temporary" ? `<button class="btn btn-quiet btn-small" data-action="car-return" data-license="${esc(l.id)}">Tillbaka till ordinarie</button>` : ""}
+              </div>
+              ${trial ? `
+                <div class="inline-field">
+                  <label class="sr" for="base-${esc(l.id)}">Baslän</label>
+                  ${countySelect(counties, l.baseCounty, `id="base-${esc(l.id)}" aria-label="Baslän"`)}
+                  <select id="extras-${esc(l.id)}" multiple aria-label="Extra län" size="3">${counties
+                    .filter((c) => c.code !== l.baseCounty)
+                    .map((c) => `<option value="${esc(c.code)}" ${extras.includes(c.code) ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>
+                  <button class="btn btn-quiet btn-small" data-action="car-trial-counties" data-license="${esc(l.id)}">Spara län</button>
+                </div>
+                <p class="muted">Vänster: baslän. Höger: extra län (håll Ctrl eller ⌘ för flera). Provbil: länen kostar inget och ändras direkt.</p>` : l.status === "active" ? `
+                <div class="inline-field">
+                  ${countySelect(counties.filter((c) => !(l.counties ?? []).includes(c.code)), "", `data-county-for="${esc(l.id)}" aria-label="Lägg till län"`)}
+                  <button class="btn btn-quiet btn-small" data-action="lic-add-county" data-license="${esc(l.id)}">+ Län (offert)</button>
+                </div>
+                ${extras.length ? `<div class="inline-field">
+                  <select data-remove-county-for="${esc(l.id)}" aria-label="Ta bort län">${extras
+                    .map((c) => `<option value="${esc(c)}">${esc(name(c))}</option>`).join("")}</select>
+                  <button class="btn btn-quiet btn-small" data-action="lic-remove-county" data-license="${esc(l.id)}">− Län vid förnyelse</button>
+                </div>` : ""}
+                <div class="inline-field">
+                  ${countySelect(counties, l.baseCounty, `data-base-for="${esc(l.id)}" aria-label="Nytt baslän"`)}
+                  <button class="btn btn-quiet btn-small" data-action="lic-base" data-license="${esc(l.id)}">Byt baslän vid förnyelse</button>
+                </div>` : ""}
+              <div class="btn-row">
+                ${l.status === "active" ? `<button class="btn btn-quiet btn-small" data-action="lic-cancel" data-license="${esc(l.id)}"
+                  data-plate="${esc(l.vehicle)}">Avsluta vid förnyelse</button>` : ""}
+                ${trial || manage ? `<button class="btn btn-danger btn-small" data-action="car-remove" data-license="${esc(l.id)}"
+                  data-plate="${esc(l.vehicle)}" data-trial="${trial ? "1" : ""}">Ta bort bilen nu</button>` : ""}
+              </div>
+            </div>
+          </details>` : ""}
+        </div>`;
+      }).join("") : '<p class="muted">Inga bilar. Lägg till bilar under Sälj paket ovan (prov eller beställning).</p>'}
+      ${closed ? `<p class="muted">${esc(closed)} borttagen/borttagna bil(ar) visas inte.</p>` : ""}
     </div>`;
 }
 

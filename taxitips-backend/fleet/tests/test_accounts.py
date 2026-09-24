@@ -306,3 +306,51 @@ class LegacyCompanyOverviewTests(_Base):
         owner = self.make_owner(company)
         self.call("get", "/api/fleet/company", str(owner.user_id))
         self.assertFalse(access.company_window(company.id).ok)
+
+
+@override_settings(SUPABASE_JWT_SECRET=SECRET)
+class AdminVehicleTests(_Base):
+    def trial_company(self):
+        user = str(uuid.uuid4())
+        self.call("post", "/api/fleet/register", user, {
+            "orgNumber": "5560360793", "companyName": "Prov AB",
+            "vehicles": [{"plate": "AAA111", "baseCounty": "12"}],
+        }, email="prov@example.test")
+        return License.objects.get()
+
+    def test_a_trial_car_gets_new_plate_counties_and_can_be_removed(self):
+        lic = self.trial_company()
+        r = self.call("post", f"/api/admin/licenses/{lic.id}/vehicle", self.admin_id, {"plate": "bbb 222"})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertEqual(r.json()["plate"], "BBB222")
+        r = self.call("post", f"/api/admin/licenses/{lic.id}/counties", self.admin_id,
+                      {"base": "13", "extras": ["12", "13"]})
+        self.assertEqual(r.json(), {"ok": True, "base": "13", "extras": ["12"]})
+        self.assertEqual(sorted(access.license_counties(lic.id)), ["12", "13"])
+        self.assertEqual(self.call("post", f"/api/admin/licenses/{lic.id}/remove", self.admin_id, {}).status_code, 400)
+        r = self.call("post", f"/api/admin/licenses/{lic.id}/remove", self.admin_id, {"reason": "Fel bil"})
+        self.assertEqual(r.status_code, 200, r.content)
+        lic.refresh_from_db()
+        self.assertEqual(lic.status, License.Status.CANCELED)
+
+    def test_a_paid_car_is_changed_through_the_order_not_directly(self):
+        data = self.full_setup()
+        lic = data["license"]
+        r = self.call("post", f"/api/admin/licenses/{lic.id}/counties", self.admin_id, {"base": "13"})
+        self.assertEqual(r.json()["reason"], "paid_license")
+        sales_id = str(uuid.uuid4())
+        StaffRole.objects.create(user_id=sales_id, role=StaffRole.Role.SALES)
+        r = self.call("post", f"/api/admin/licenses/{lic.id}/remove", sales_id, {"reason": "x"})
+        self.assertEqual(r.status_code, 403)
+
+    def test_a_stripe_billed_car_is_not_removed_directly(self):
+        from fleet.models import Subscription
+
+        data = self.full_setup()
+        Subscription.objects.filter(company_id=data["company"].id).update(stripe_subscription_id="sub_1")
+        r = self.call("post", f"/api/admin/licenses/{data['license'].id}/remove", self.admin_id, {"reason": "x"})
+        self.assertEqual(r.json()["reason"], "stripe_billed")
+        r = self.call("post", f"/api/admin/licenses/{data['license'].id}/remove", self.admin_id, {"reason": "x"})
+        Subscription.objects.filter(company_id=data["company"].id).update(stripe_subscription_id="")
+        r = self.call("post", f"/api/admin/licenses/{data['license'].id}/remove", self.admin_id, {"reason": "Betalt utanför Stripe, kunden sålde bilen"})
+        self.assertEqual(r.status_code, 200, r.content)

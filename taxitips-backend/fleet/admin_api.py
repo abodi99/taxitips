@@ -210,7 +210,9 @@ def companies(request):
     if q:
         digits = "".join(ch for ch in q if ch.isdigit())
         filters = Q(name__icontains=q) | Q(join_code__iexact=q)
-        if digits:
+        # Bara när frågan ser ut som ett orgnr: "E2E Taxi" hade annars sökt på
+        # "2" och gett varje bolag med en tvåa i organisationsnumret.
+        if len(digits) >= 4:
             filters |= Q(org_number__icontains=digits)
         rows = rows.filter(filters)
     rows = list(rows[:_LIST_LIMIT])
@@ -287,6 +289,11 @@ def company_detail(request, company_id):
             "baseCounty": lic.base_county,
             "scheduledBaseCounty": lic.scheduled_base_county,
             "counties": list(access.license_counties(lic.id, now)),
+            "extraCounties": [
+                c.county_code for c in LicenseCounty.objects.filter(
+                    license=lic, kind=LicenseCounty.Kind.EXTRA
+                ).exclude(active_to__lte=now)
+            ],
             "activePhone": (
                 {"deviceId": str(session.device_id), "label": sessions.holder_label(session),
                  "since": _iso(session.started_at)}

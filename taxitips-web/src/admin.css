@@ -471,3 +471,65 @@ details.card > summary::-webkit-details-marker {
     font-size: 1.3rem;
   }
 }
+
+/* --- Bilar -------------------------------------------------------------- */
+
+.car {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  margin-top: 0.75rem;
+}
+.car-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.2rem;
+}
+.plate {
+  font-family: var(--font-mono);
+  font-size: 1.1rem;
+  letter-spacing: 0.04em;
+}
+.car-drivers {
+  margin: 0.6rem 0 0.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  align-items: flex-start;
+}
+.driver-row {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+.car-edit {
+  margin-top: 0.5rem;
+}
+.car-edit > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.car-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+.car-actions .inline-field {
+  flex-wrap: wrap;
+}
+.car-actions select,
+.car-actions input {
+  width: auto;
+  min-width: 160px;
+}
+.btn-small {
+  padding: 0.35rem 0.8rem;
+  font-size: 0.9rem;
+}
+.sr {
+  position: absolute;
+  left: -9999px;
+}

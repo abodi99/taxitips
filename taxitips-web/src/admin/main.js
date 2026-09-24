@@ -794,6 +794,56 @@ async function salesAction(action, ds) {
       return quotedOrder({ addCounties: [{ licenseId: ds.license, county }] });
     }
 
+    case "lic-remove-county": {
+      const county = document.querySelector(`[data-remove-county-for="${ds.license}"]`)?.value;
+      if (!county) return;
+      return quotedOrder({ removeCounties: [{ licenseId: ds.license, county }] });
+    }
+
+    case "lic-base": {
+      const county = document.querySelector(`[data-base-for="${ds.license}"]`)?.value;
+      if (!county) return;
+      return quotedOrder({ baseCountyChanges: [{ licenseId: ds.license, county }] });
+    }
+
+    case "car-plate": {
+      const plate = document.getElementById(`plate-${ds.license}`)?.value.trim();
+      if (!plate) throw new ApiError(400, "Skriv det nya registreringsnumret.", "plate_required");
+      const temporary = ds.mode === "temporary";
+      if (!confirm(temporary
+        ? `Ersättningsbil ${plate}? Länen följer med. Förarna behöver en ny kod för ersättningsbilen.`
+        : `Byt till ${plate}? Länen och perioden följer med. Förarna behöver en ny kod.`)) return;
+      const result = await admin.changeVehicle(ds.license, plate, ds.mode);
+      flash(`Bilen är nu ${result.plate}. Ge förarna en ny kod.`);
+      return render();
+    }
+
+    case "car-return":
+      await admin.changeVehicle(ds.license, "", "return");
+      flash("Tillbaka till den ordinarie bilen.");
+      return render();
+
+    case "car-trial-counties": {
+      const base = document.getElementById(`base-${ds.license}`)?.value;
+      const extras = [...(document.getElementById(`extras-${ds.license}`)?.selectedOptions ?? [])].map((o) => o.value);
+      await admin.setTrialCounties(ds.license, base, extras);
+      flash("Länen är sparade.");
+      return render();
+    }
+
+    case "car-remove": {
+      const reason = prompt(
+        (ds.trial
+          ? `Ta bort provbilen ${ds.plate} nu? Förarna i bilen förlorar åtkomsten direkt.`
+          : `Ta bort den BETALDA bilen ${ds.plate} nu? Förarna förlorar åtkomsten direkt. Ingen återbetalning görs automatiskt.`) +
+          "\n\nSkäl (obligatoriskt):",
+      );
+      if (!reason) return;
+      await admin.removeLicense(ds.license, reason);
+      flash(`${ds.plate} är borttagen.`);
+      return render();
+    }
+
     case "lic-cancel": {
       if (!confirm(`Avsluta licensen för ${ds.plate} vid nästa förnyelse? Bilen fungerar perioden ut.`)) return;
       return quotedOrder({ cancelLicenseIds: [ds.license] });

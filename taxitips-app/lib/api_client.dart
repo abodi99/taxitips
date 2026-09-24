@@ -377,6 +377,12 @@ class ApiClient {
     return registerCompany(company);
   }
 
+  /// Nytt bekräftelsemejl när det första inte kom fram (skräppost, fel adress).
+  Future<void> resendConfirmation(String email) async {
+    await ensureInitialized();
+    await _sb.auth.resend(type: OtpType.signup, email: email);
+  }
+
   Future<Map<String, dynamic>> registerCompany(Map<String, dynamic> company) async {
     final token = _accessToken;
     if (token == null) throw ApiException(401, 'Logga in för att fortsätta.');
