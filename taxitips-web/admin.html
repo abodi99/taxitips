@@ -54,17 +54,13 @@
 
     <div id="app" class="admin-shell" hidden>
       <nav class="admin-side" aria-label="Adminvyer">
-        <p class="side-group">Försäljning</p>
-        <button class="tab" data-view="oversikt" aria-current="page">Översikt</button>
-        <button class="tab" data-view="kunder">Kunder</button>
-        <button class="tab" data-view="nykund">Ny kund</button>
-        <button class="tab" data-view="abonnemang">Abonnemang</button>
+        <button class="tab tab-main" data-view="oversikt" aria-current="page">Hem</button>
+        <button class="tab tab-main" data-view="kunder">Kunder</button>
+        <button class="tab tab-main" data-view="evenemang">Evenemang</button>
+        <p class="side-group">Mer</p>
         <button class="tab" data-view="kuponger">Kuponger</button>
-        <p class="side-group">Drift</p>
-        <button class="tab" data-view="evenemang">Evenemang</button>
         <button class="tab" data-view="notiser">Notiser</button>
         <button class="tab" data-view="granskning">Granskningar</button>
-        <p class="side-group">Konton</p>
         <button class="tab" data-view="konton">Konton och spärrar</button>
         <button class="tab" data-view="personal">Personal</button>
       </nav>
@@ -80,9 +76,9 @@
     <p class="muted" id="codeFor"></p>
     <p class="code" id="codeValue"></p>
     <p class="code-timer" id="codeTimer" aria-live="polite"></p>
-    <p class="muted">Läs upp koden för föraren, som öppnar appen och skriver in
-      den under <em>Anslut telefonen</em>. Visas bara en gång. En ny kod för
-      samma bil ersätter den här, så ta förarna i samma bil en i taget.</p>
+    <p class="muted">Läs upp koden. Föraren öppnar appen, trycker <em>Jag är förare</em>
+      och skriver in den. Koden visas bara en gång, och en ny kod för samma bil
+      ersätter den här – ta förarna i samma bil en i taget.</p>
     <form method="dialog" class="btn-row">
       <button class="btn btn-quiet" value="next" id="codeNext">Nästa förare i samma bil</button>
       <button class="btn btn-primary" value="done">Klar</button>

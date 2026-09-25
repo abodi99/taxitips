@@ -297,8 +297,11 @@ förare, betallänkar, uppsägning till periodens slut), `platform_admin` gör a
 och ensam det som ger åtkomst utan betalning (kuponger, betald utanför Stripe,
 avsluta direkt). Säljflödet: `docs/fleet-abonnemang.md` §9b. Spärrar av
 företag, konton och e-postadresser, personalroller och egna evenemang
-(manuellt eller CSV/JSON): §9d. Kundsidan visar "Kundens väg" -- sex steg från
-företag till betalning, med nästa steg markerat. Grundaren
+(manuellt eller CSV/JSON): §9d. Adminwebben är byggd som en cykel: **Hem** är en
+att-göra-lista (en rad per kund som behöver något), **Kunder** en lista med filter,
+och en kund är fem steg -- Företag, Bilar, Förare, Kundkonto, Betalning -- ett i taget
+med "Nästa". Reglerna för vad som är klart och nästa steg bor på ett ställe
+(`src/admin/views.js`, `STEPS`/`attention`). Grundaren
 (`bbf6ca6c-…`) är platform_admin. Konton skapade med Google har inget lösenord
 och Google-inloggning är inte konfigurerad i produktionens Supabase Auth, så
 adminwebben loggar in med en e-postlänk.

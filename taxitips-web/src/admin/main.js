@@ -40,6 +40,9 @@ const state = {
   events: { q: "", hidden: false, days: 14, source: "", open: "" },
   eventImport: null,
   accountQuery: "",
+  // Kundens cykel: vilket steg som är öppet, och listans filter.
+  companyTab: "",
+  kundFilter: "alla",
   // Säljflödet: län, prislista, Stripe-läge och vad den inloggade får göra.
   config: null,
   lookup: null,
@@ -81,18 +84,17 @@ async function renderView() {
   try {
     if (!state.config) state.config = await admin.salesConfig();
     if (state.companyId) {
-      el.view.innerHTML = views.kund(await admin.company(state.companyId), state.config);
+      el.view.innerHTML = views.kund(await admin.company(state.companyId), state.config, state.companyTab);
       return;
     }
     switch (state.view) {
-      case "oversikt":
-        el.view.innerHTML = views.oversikt(await admin.overview());
+      case "oversikt": {
+        const [overview, list] = await Promise.all([admin.overview(), admin.companies()]);
+        el.view.innerHTML = views.oversikt(overview, list);
         break;
+      }
       case "kunder":
-        el.view.innerHTML = views.kunder(await admin.companies(state.query), state.query);
-        break;
-      case "abonnemang":
-        el.view.innerHTML = views.abonnemang(await admin.companies());
+        el.view.innerHTML = views.kunder(await admin.companies(state.query), state.query, state.kundFilter);
         break;
       case "nykund":
         el.view.innerHTML = sales.nyKund(state.config, state.lookup, state.lookupOrg);
@@ -287,6 +289,7 @@ for (const tab of el.tabs) {
   tab.addEventListener("click", () => {
     state.view = tab.dataset.view;
     state.companyId = null;
+    state.companyTab = "";
     setTab(state.view);
     render();
   });
@@ -341,6 +344,11 @@ el.view.addEventListener("submit", async (event) => {
         state.lookup = null;
         state.lookupOrg = "";
         state.companyId = created.companyId;
+        // Företaget är upplagt och kontrollerat av säljaren: nästa steg är bilarna.
+        state.companyTab = "bilar";
+        state.view = "kunder";
+        setTab("kunder");
+        flash("Företaget är upplagt. Lägg till bilarna.");
         break;
       }
       case "profileForm":
@@ -401,6 +409,17 @@ async function act(action, ds) {
   switch (action) {
     case "back":
       state.companyId = null;
+      state.companyTab = "";
+      return render();
+
+    case "kund-tab":
+      state.companyTab = ds.tab;
+      await render();
+      window.scrollTo({ top: 0 });
+      return;
+
+    case "kund-filter":
+      state.kundFilter = ds.filter;
       return render();
 
     case "extend": {
@@ -469,7 +488,8 @@ async function act(action, ds) {
     case "goto":
       state.view = ds.view;
       state.companyId = null;
-      setTab(state.view);
+      state.companyTab = "";
+      setTab(ds.view === "nykund" ? "kunder" : ds.view);
       return render();
 
     /* --- Konton och spärrar --- */
@@ -710,6 +730,7 @@ async function salesAction(action, ds) {
   switch (action) {
     case "open-company":
       state.companyId = ds.id;
+      state.companyTab = ds.tab || "";
       state.view = "kunder";
       setTab("kunder");
       return render();

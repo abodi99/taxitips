@@ -231,6 +231,38 @@ def companies(request):
         for row in Device.objects.filter(company_id__in=ids)
         .values("company_id").annotate(n=Count("id"))
     }
+    # Det som behövs för att säga vad som är nästa steg för varje kund, utan
+    # att adminwebben måste öppna varje bolag (Hem, "Att göra").
+    phone_counts = {
+        row["company_id"]: row["n"]
+        for row in DeviceApproval.objects.filter(
+            company_id__in=ids, status=DeviceApproval.Status.ACTIVE
+        ).values("company_id").annotate(n=Count("id"))
+    }
+    member_counts = {
+        row["company_id"]: row["n"]
+        for row in CompanyMember.objects.filter(company_id__in=ids, status="active")
+        .values("company_id").annotate(n=Count("id"))
+    }
+    unpaid_orders = {
+        row["company_id"]: row["n"]
+        for row in Order.objects.filter(company_id__in=ids, status="pending_payment")
+        .values("company_id").annotate(n=Count("id"))
+    }
+    verification = {
+        p.company_id: p.verification_status
+        for p in CompanyProfile.objects.filter(company_id__in=ids)
+    }
+    open_trials = {}
+    for t in Trial.objects.filter(
+        company_id__in=ids, status__in=[Trial.Status.PENDING, Trial.Status.ACTIVE]
+    ).order_by("created_at"):
+        open_trials[t.company_id] = t
+    suspended = {
+        str(b.value) for b in AccountBlock.objects.filter(
+            kind=AccountBlock.Kind.COMPANY, lifted_at__isnull=True, value__in=[str(i) for i in ids]
+        )
+    }
 
     out = []
     for company in rows:
@@ -250,6 +282,17 @@ def companies(request):
             "accessOk": window.ok,
             "accessReason": window.reason,
             "createdAt": _iso(company.created_at),
+            "verificationStatus": verification.get(company.id, ""),
+            "phones": phone_counts.get(company.id, 0),
+            "members": member_counts.get(company.id, 0),
+            "unpaidOrders": unpaid_orders.get(company.id, 0),
+            "hadPayment": bool(sub and sub.had_successful_payment),
+            "suspended": str(company.id) in suspended,
+            "trial": (
+                {"status": open_trials[company.id].status,
+                 "endsAt": _iso(open_trials[company.id].ends_at)}
+                if company.id in open_trials else None
+            ),
         })
     return _json(request, {"ok": True, "companies": out, "truncated": len(rows) >= _LIST_LIMIT})
 

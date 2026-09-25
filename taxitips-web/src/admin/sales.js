@@ -57,19 +57,13 @@ export function stripeNotice(config) {
   const stripe = config?.stripe ?? {};
   if (stripe.available) {
     const problems = stripe.problems ?? [];
-    return `<div class="notice">
-      <b>Stripe: ${stripe.mode === "live" ? "skarpt läge" : "testläge"}.</b>
-      Betallänkar och fakturor skapas i Stripe, och paketet aktiveras när Stripe
-      bekräftar betalningen.
-      ${problems.length ? `<ul>${problems.map((p) => `<li class="error">${esc(p)}</li>`).join("")}</ul>` : ""}
-    </div>`;
+    return problems.length
+      ? `<p class="error">Stripe: ${problems.map((p) => esc(p)).join(" · ")}</p>`
+      : `<p class="muted">Stripe (${stripe.mode === "live" ? "skarpt" : "test"}): betallänk och faktura skapas automatiskt.</p>`;
   }
-  return `<div class="notice notice-danger">
-    <b>Stripe är inte kopplat här</b> <span class="muted mono">${esc(stripe.reason ?? "")}</span><br />
-    Betallänkar går inte att skapa. En beställning kan läggas som
-    <em>betalas senare</em>; en plattformsadministratör markerar den betald när
-    kunden betalat utanför Stripe. Prov och kuponger fungerar som vanligt.
-  </div>`;
+  // En rad, inte en röd ruta: det är ett känt läge, inte ett fel just nu.
+  return `<p class="muted"><b>Stripe är inte kopplat.</b> Välj <em>Betalas senare</em>, fakturera kunden
+    själv och tryck <em>Markera betald</em> under Betalning när pengarna kommit.</p>`;
 }
 
 /* --- Ny kund ---------------------------------------------------------- */
@@ -201,130 +195,131 @@ export function quoteBox(q) {
     </div>`;
 }
 
-export function salesPanel(d, config) {
-  if (!config) return "";
+/**
+ * Kundsidans byggstenar. Varje steg i kundens cykel (views.js:kund) visar en
+ * av dem -- tidigare låg alla på samma sida och det gick att gå vilse.
+ */
+
+/** Steg Bilar: lägg till bilar som prov, med kupong eller som beställning. */
+export function addCarsBlock(d, config) {
+  if (!config?.canSell) return "";
   const counties = config.counties ?? [];
-  const canSell = !!config.canSell;
-  const canManage = !!config.canManage;
   const stripeOk = !!config.stripe?.available;
   const paying = isPaying(d);
   const trialOpen = d.trial && ["pending", "active"].includes(d.trial.status);
-  const s = d.subscription;
-  const profile = d.profile ?? {};
-  const address = profile.billingAddress ?? {};
   const defaultPayment = stripeOk ? "stripe_card" : "later";
   const payOption = (value) =>
     `<option value="${value}" ${value === defaultPayment ? "selected" : ""}
       ${value !== "later" && !stripeOk ? "disabled" : ""}>${esc(PAYMENT_LABEL[value])}</option>`;
-
-  if (!canSell) {
-    return `<div class="card"><p class="muted">Din roll kan läsa men inte sälja eller ändra.</p></div>`;
-  }
-
   return `
-    <div class="card sales-card" id="salesPanel">
-      <h2>${paying ? "Ändra paketet" : "Sälj paket"}</h2>
-      ${stripeNotice(config)}
-
-      <h3>${paying ? "Lägg till bilar" : "Bilar och län"}</h3>
+    <div class="card" id="salesPanel">
+      <h2>Lägg till bilar</h2>
       <p class="muted">Pris per bil ${esc(money(config.price?.baseOre))}
         (${esc(money(config.price?.volumeOre))} från ${esc(config.price?.volumeThreshold)} bilar),
         extra län ${esc(money(config.price?.extraCountyOre))} per bil och månad, exkl. moms.</p>
       <div id="pkgRows">${vehicleRow(counties, 0)}</div>
       <div class="btn-row">
         <button class="btn btn-quiet" type="button" data-action="pkg-add-row">+ En bil till</button>
-        <button class="btn btn-primary" type="button" data-action="pkg-quote">Räkna pris</button>
       </div>
-      <div id="pkgQuote"></div>
 
       <div class="start-grid">
         ${!paying ? `
         <div class="start-option">
-          <h4>Provperiod</h4>
-          <p class="muted">${esc(config.trial?.days)} dagar, kortfritt, högst ${esc(config.trial?.vehicleLimit)} bilar.
-            Startar när första telefonen ansluts. Slutar utan kostnad om inget beställs.</p>
-          <button class="btn btn-quiet" type="button" data-action="pkg-trial">
+          <h4>${trialOpen ? "Lägg till i provet" : "Starta gratis prov"}</h4>
+          <p class="muted">${esc(config.trial?.days)} dagar, högst ${esc(config.trial?.vehicleLimit)} bilar.
+            Startar när första telefonen kopplas. Kostar inget.</p>
+          <button class="btn btn-primary" type="button" data-action="pkg-trial">
             ${trialOpen ? "Lägg till provbilar" : "Starta prov"}</button>
         </div>` : ""}
 
         <div class="start-option">
-          <h4>Kupong</h4>
-          <p class="muted">${paying
-            ? "Gratisdagar: nästa debitering flyttas (Stripe) eller perioden förlängs."
-            : "Tillfällig åtkomst i kupongens antal dagar. Bilarna ovan används."}</p>
-          <div class="inline-field">
-            <input id="couponCode" placeholder="KUPONGKOD" autocomplete="off" />
-            <button class="btn btn-quiet" type="button" data-action="pkg-coupon">Lös in</button>
-          </div>
-        </div>
-
-        <div class="start-option">
           <h4>Beställ</h4>
+          ${stripeNotice(config)}
+          <button class="btn btn-quiet" type="button" data-action="pkg-quote">1. Räkna pris</button>
+          <div id="pkgQuote"></div>
           <label>Betalning<select id="pkgPayment">
             ${payOption("stripe_card")}${payOption("stripe_invoice")}${payOption("later")}
           </select></label>
           <label>Förfallodagar (faktura)<input id="pkgDue" type="number" min="1" max="60" value="14" /></label>
           <label class="check"><input id="pkgAccepted" type="checkbox" />
             Kunden har godkänt antal, pris och betalningsdatum</label>
-          <button class="btn btn-primary" type="button" data-action="pkg-order">Lägg beställning</button>
+          <button class="btn btn-primary" type="button" data-action="pkg-order">2. Lägg beställning</button>
+        </div>
+
+        <div class="start-option">
+          <h4>Kupong</h4>
+          <p class="muted">${paying
+            ? "Gratisdagar: nästa debitering flyttas eller perioden förlängs."
+            : "Tillfällig åtkomst i kupongens antal dagar, för bilarna ovan."}</p>
+          <div class="inline-field">
+            <input id="couponCode" placeholder="KUPONGKOD" autocomplete="off" />
+            <button class="btn btn-quiet" type="button" data-action="pkg-coupon">Lös in</button>
+          </div>
         </div>
       </div>
       <div id="pkgResult"></div>
-    </div>
+    </div>`;
+}
 
-    <div class="grid">
-      <div class="card">
-        <h2>Kundens administratör</h2>
-        <p class="muted">Bjud in den som ska sköta kontot i kundportalen. Hen får en
-          inloggningslänk, och kontot knyts till bolaget vid första inloggningen.</p>
-        <div class="inline-field">
-          <input id="ownerEmail" type="email" value="${esc(profile.contactEmail ?? "")}" placeholder="namn@bolaget.se" />
-          <button class="btn btn-quiet" type="button" data-action="owner-invite">Bjud in</button>
-        </div>
-        ${(d.ownerInvites ?? []).length ? `<ul class="plain">${d.ownerInvites.map((i) => `
-          <li>${esc(i.email)} ${i.status === "consumed"
-            ? '<span class="pill pill-ok">Inloggad</span>'
-            : i.status === "pending" ? `<span class="pill pill-warn">Väntar</span> <span class="muted">till ${esc(date(i.expiresAt))}</span>`
-            : '<span class="pill">Återkallad</span>'}</li>`).join("")}</ul>` : ""}
-        ${(d.members ?? []).length ? `<p class="muted">${esc(d.members.length)} konto(n) kopplade till bolaget.</p>` : ""}
+/** Steg Kundkonto: bjud in den som sköter kontot i kundportalen och appen. */
+export function ownerBlock(d) {
+  const profile = d.profile ?? {};
+  return `
+    <div class="card">
+      <h2>Bjud in kundens administratör</h2>
+      <p class="muted">Personen får en inloggningslänk och kopplas till företaget när hen loggar in.
+        Sedan kan hen själv koppla förare i appen.</p>
+      <div class="inline-field">
+        <input id="ownerEmail" type="email" value="${esc(profile.contactEmail ?? "")}" placeholder="namn@bolaget.se" />
+        <button class="btn btn-primary" type="button" data-action="owner-invite">Skicka inbjudan</button>
       </div>
+      ${(d.ownerInvites ?? []).length ? `<ul class="plain">${d.ownerInvites.map((i) => `
+        <li>${esc(i.email)} ${i.status === "consumed"
+          ? '<span class="pill pill-ok">Inloggad</span>'
+          : i.status === "pending" ? `<span class="pill pill-warn">Väntar</span> <span class="muted">till ${esc(date(i.expiresAt))}</span>`
+          : '<span class="pill">Återkallad</span>'}</li>`).join("")}</ul>` : ""}
+    </div>`;
+}
 
-      <div class="card">
-        <h2>Uppsägning</h2>
-        ${s?.cancelAtPeriodEnd ? `
-          <p><span class="pill pill-warn">Uppsagt</span> Åtkomsten gäller till ${esc(date(s.accessUntil))}.</p>
-          <div class="btn-row"><button class="btn btn-quiet" type="button" data-action="undo-cancel">Ångra uppsägningen</button></div>
-        ` : s && ["active", "trialing", "past_due"].includes(s.status) ? `
-          <p class="muted">Till periodens slut: kunden behåller åtkomsten den betalda perioden ut, och Stripe debiterar inte igen.</p>
-          <div class="btn-row"><button class="btn btn-quiet" type="button" data-action="cancel-period">Säg upp till periodens slut</button></div>
-        ` : '<p class="muted">Inget löpande abonnemang att säga upp.</p>'}
-        ${canManage ? `
-          <p class="muted">Avsluta direkt: åtkomsten upphör nu, alla licenser avslutas och Stripe
-            slutar debitera. Ingen återbetalning görs automatiskt.</p>
-          <div class="btn-row"><button class="btn btn-danger" type="button" data-action="terminate-now">Avsluta direkt</button></div>` : ""}
-      </div>
-    </div>
+/** Steg Betalning: säga upp, ångra, avsluta direkt. */
+export function cancelBlock(d, config) {
+  if (!config?.canSell) return "";
+  const s = d.subscription;
+  return `
+    <div class="card">
+      <h2>Uppsägning</h2>
+      ${s?.cancelAtPeriodEnd ? `
+        <p><span class="pill pill-warn">Uppsagt</span> Åtkomsten gäller till ${esc(date(s.accessUntil))}.</p>
+        <div class="btn-row"><button class="btn btn-quiet" type="button" data-action="undo-cancel">Ångra uppsägningen</button></div>
+      ` : s && ["active", "trialing", "past_due"].includes(s.status) ? `
+        <p class="muted">Kunden behåller åtkomsten den betalda perioden ut, sedan debiteras inget mer.</p>
+        <div class="btn-row"><button class="btn btn-quiet" type="button" data-action="cancel-period">Säg upp till periodens slut</button></div>
+      ` : '<p class="muted">Inget löpande abonnemang att säga upp.</p>'}
+    </div>`;
+}
 
-    <details class="card">
-      <summary><h2 style="display:inline">Kund- och fakturauppgifter</h2></summary>
-      <form id="profileForm" class="form-grid">
-        <label>Företagsnamn<input name="name" value="${esc(d.company.name)}" /></label>
-        <label>Juridiskt namn<input name="legalName" value="${esc(profile.legalName ?? "")}" /></label>
-        <label>Kontaktperson<input name="contactName" value="${esc(profile.contactName ?? "")}" /></label>
-        <label>Roll<input name="contactRole" value="${esc(profile.contactRole ?? "")}" /></label>
-        <label>E-post<input name="contactEmail" type="email" value="${esc(profile.contactEmail ?? "")}" /></label>
-        <label>Telefon<input name="contactPhone" value="${esc(profile.contactPhone ?? "")}" /></label>
-        <label>Fakturamejl<input name="billingEmail" type="email" value="${esc(profile.billingEmail ?? "")}" /></label>
-        <label>Er referens<input name="billingReference" value="${esc(profile.billingReference ?? "")}" /></label>
-        <label>Gatuadress<input name="line1" value="${esc(address.line1 ?? "")}" /></label>
-        <label>Postnummer<input name="postalCode" value="${esc(address.postal_code ?? "")}" /></label>
-        <label>Ort<input name="city" value="${esc(address.city ?? "")}" /></label>
-        <p class="muted span-2">Organisationsnumret (${esc(profile.orgNumber ?? d.company.orgNumber ?? "")}) ändras inte här:
-          ett nytt organisationsnummer är en ny avtalspart. Verifiering: ${esc(profile.verificationNote || "—")}</p>
-        <div class="btn-row span-2"><button class="btn btn-primary" type="submit">Spara uppgifter</button></div>
-      </form>
-    </details>
-  `;
+/** Steg Företag: kund- och fakturauppgifter. */
+export function profileBlock(d) {
+  const profile = d.profile ?? {};
+  const address = profile.billingAddress ?? {};
+  return `
+    <form id="profileForm" class="card form-grid">
+      <h2 class="span-2">Uppgifter</h2>
+      <label>Företagsnamn<input name="name" value="${esc(d.company.name)}" /></label>
+      <label>Juridiskt namn<input name="legalName" value="${esc(profile.legalName ?? "")}" /></label>
+      <label>Kontaktperson<input name="contactName" value="${esc(profile.contactName ?? "")}" /></label>
+      <label>Roll<input name="contactRole" value="${esc(profile.contactRole ?? "")}" /></label>
+      <label>E-post<input name="contactEmail" type="email" value="${esc(profile.contactEmail ?? "")}" /></label>
+      <label>Telefon<input name="contactPhone" value="${esc(profile.contactPhone ?? "")}" /></label>
+      <label>Fakturamejl<input name="billingEmail" type="email" value="${esc(profile.billingEmail ?? "")}" /></label>
+      <label>Er referens<input name="billingReference" value="${esc(profile.billingReference ?? "")}" /></label>
+      <label>Gatuadress<input name="line1" value="${esc(address.line1 ?? "")}" /></label>
+      <label>Postnummer<input name="postalCode" value="${esc(address.postal_code ?? "")}" /></label>
+      <label>Ort<input name="city" value="${esc(address.city ?? "")}" /></label>
+      <p class="muted span-2">Orgnr ${esc(profile.orgNumber ?? d.company.orgNumber ?? "")} ändras inte här:
+        ett nytt orgnr är en ny avtalspart.</p>
+      <div class="btn-row span-2"><button class="btn btn-primary" type="submit">Spara</button></div>
+    </form>`;
 }
 
 export function profileBody(form) {

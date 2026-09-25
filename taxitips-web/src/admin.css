@@ -533,3 +533,206 @@ details.card > summary::-webkit-details-marker {
   position: absolute;
   left: -9999px;
 }
+
+/* --- Cykeln: steg, filter, att göra ------------------------------------
+   En kund är fem steg. Bara ett steg visas åt gången; stegraden visar vad
+   som är klart och var man är, och varje steg slutar med "Nästa". */
+
+.admin-side .tab-main {
+  font-size: 1.02rem;
+}
+
+.steps {
+  display: flex;
+  gap: 0.35rem;
+  margin: 0 0 1rem;
+  overflow-x: auto;
+  padding-bottom: 2px;
+}
+.step {
+  all: unset;
+  box-sizing: border-box;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 0.9rem;
+  border-radius: var(--radius-pill);
+  background: var(--vit);
+  border: 1px solid var(--line);
+  cursor: pointer;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.step:hover {
+  border-color: var(--line-strong);
+}
+.step:focus-visible {
+  outline: 3px solid var(--guld);
+}
+.step-num {
+  display: inline-grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border-radius: 50%;
+  background: var(--ljusgra-djup);
+  font-size: 0.8rem;
+}
+.step.done .step-num {
+  background: var(--ok);
+  color: var(--vit);
+}
+.step.current {
+  background: var(--midnatt);
+  color: var(--vit);
+  border-color: var(--midnatt);
+}
+.step.current .step-num {
+  background: var(--guld);
+  color: var(--midnatt);
+}
+.step-more {
+  margin-left: auto;
+  color: var(--ink-soft);
+}
+.step-panel {
+  animation: panel-in 160ms ease-out;
+}
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .step-panel { animation: none; }
+}
+.step-next {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.25rem;
+}
+.linklike {
+  all: unset;
+  cursor: pointer;
+  color: var(--ink);
+  text-decoration: underline;
+  font-weight: 600;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1rem;
+}
+.chip {
+  all: unset;
+  box-sizing: border-box;
+  padding: 0.4rem 0.85rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  background: var(--vit);
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+.chip[aria-selected="true"] {
+  background: var(--midnatt);
+  color: var(--vit);
+  border-color: var(--midnatt);
+}
+.chip[aria-selected="true"] .muted {
+  color: rgba(255, 255, 255, 0.75);
+}
+.chip:focus-visible {
+  outline: 3px solid var(--guld);
+}
+
+.list-card {
+  padding: 0.4rem;
+}
+.cust-row,
+.todo-row {
+  all: unset;
+  box-sizing: border-box;
+  display: grid;
+  width: 100%;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 10px;
+  cursor: pointer;
+}
+.cust-row {
+  grid-template-columns: minmax(0, 1.6fr) auto auto minmax(0, 1.4fr);
+}
+.cust-row + .cust-row {
+  border-top: 1px solid var(--line);
+}
+.cust-row:hover,
+.todo-row:hover {
+  background: var(--ljusgra);
+}
+.cust-row:focus-visible,
+.todo-row:focus-visible {
+  outline: 3px solid var(--guld);
+}
+.cust-main,
+.todo-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.cust-steps {
+  display: inline-flex;
+  gap: 3px;
+}
+.cust-steps i {
+  width: 14px;
+  height: 6px;
+  border-radius: 3px;
+  background: var(--ljusgra-djup);
+}
+.cust-steps i.on {
+  background: var(--ok);
+}
+.cust-next {
+  font-size: 0.9rem;
+}
+
+ul.todo {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+ul.todo li + li {
+  border-top: 1px solid var(--line);
+}
+.todo-row {
+  grid-template-columns: auto minmax(0, 1fr) auto;
+}
+.todo-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--skiffer);
+}
+.todo-dot.lvl-2 {
+  background: var(--guld-djup);
+}
+.todo-dot.lvl-3 {
+  background: var(--danger);
+}
+.todo-go {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .cust-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+  .cust-steps,
+  .cust-next {
+    grid-column: 1 / -1;
+  }
+}

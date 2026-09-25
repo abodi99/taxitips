@@ -1,5 +1,5 @@
 import { countyName, date, dateTime, money } from "../portal/api.js";
-import { ordersCard, redemptionsCard, salesPanel } from "./sales.js";
+import { addCarsBlock, cancelBlock, ordersCard, ownerBlock, profileBlock, redemptionsCard } from "./sales.js";
 
 /**
  * Adminwebbens vyer, som rena funktioner från data till HTML.
@@ -54,48 +54,151 @@ function kpi(label, value, { alert = false, view = "" } = {}) {
   return `<${tag} class="kpi${alert ? " kpi-alert" : ""}"${attrs}><span>${esc(label)}</span><b>${value}</b></${tag}>`;
 }
 
-export function oversikt(d) {
+/* --- Kundens cykel ----------------------------------------------------
+ *
+ * Fem steg, i den ordning en kund faktiskt går igenom dem. Samma regler
+ * används för listan (vad är nästa steg för varje kund?) och för kundsidan
+ * (vilket steg öppnas, vad är klart). En sanning, två vyer.
+ */
+
+export const STEPS = [
+  { id: "foretag", title: "Företag", todo: "Kontrollera behörighet" },
+  { id: "bilar", title: "Bilar", todo: "Lägg till bilar" },
+  { id: "forare", title: "Förare", todo: "Koppla förare" },
+  { id: "konto", title: "Kundkonto", todo: "Bjud in kundens admin" },
+  { id: "betalning", title: "Betalning", todo: "Ordna betalning" },
+];
+
+/** Vilka steg är klara, räknat ur listraden (GET /api/admin/companies). */
+function doneFromRow(c) {
+  const paying = ["active", "past_due"].includes(c.subscriptionStatus) && c.hadPayment;
+  return {
+    // Utan profil är det en kund från före självregistreringen: inget att kontrollera.
+    foretag: c.verificationStatus === "verified" || !c.verificationStatus,
+    bilar: (c.licenses ?? 0) > 0,
+    forare: (c.phones ?? 0) > 0,
+    konto: (c.members ?? 0) > 0,
+    betalning: paying,
+  };
+}
+
+/** Samma sak ur kundsidans svar (GET /api/admin/companies/<id>). */
+function doneFromDetail(d) {
+  const open = (d.licenses ?? []).filter((l) => LICENSE_OPEN.includes(l.status));
+  const s = d.subscription;
+  return {
+    foretag: !d.profile || d.profile.verificationStatus === "verified",
+    bilar: open.length > 0,
+    forare: open.some((l) => (l.approvals ?? []).some((a) => a.status === "active")),
+    konto: (d.members ?? []).some((m) => m.status === "active"),
+    betalning: !!(s && ["active", "past_due"].includes(s.status) && s.hadSuccessfulPayment),
+  };
+}
+
+function firstOpen(done) {
+  return STEPS.find((st) => !done[st.id]) ?? null;
+}
+
+const ACCESS_TEXT = {
+  trial_not_started: "provet startar när första telefonen kopplas",
+  trial_ended: "provet är slut",
+  company_suspended: "avstängt",
+  past_due: "betalningen saknas",
+  period_expired: "perioden har gått ut",
+  canceled: "uppsagt",
+  no_subscription: "inget abonnemang",
+  company_inactive: "inget prov eller abonnemang än",
+  unknown_company: "företaget saknas",
+};
+
+/** Status i ett ord, för listan och kundsidans rubrik. */
+function customerStatus(c, { suspended, trial, subscriptionStatus, accessOk }) {
+  if (suspended) return ["pill-danger", "Avstängd"];
+  if (subscriptionStatus === "past_due") return ["pill-danger", "Obetald"];
+  if (subscriptionStatus === "active") return ["pill-ok", "Betalande"];
+  if (trial?.status === "active") return ["pill-warn", "Prov pågår"];
+  if (trial?.status === "pending") return ["pill-warn", "Prov väntar"];
+  if (subscriptionStatus === "canceled") return ["", "Avslutad"];
+  return accessOk ? ["pill-ok", "Aktiv"] : ["", "Ny"];
+}
+
+function statusPill([cls, label]) {
+  return `<span class="pill ${cls}">${esc(label)}</span>`;
+}
+
+/** Det som faktiskt kräver någon: en rad per kund, med skälet först. */
+function attention(c) {
+  const days = c.trial?.endsAt ? Math.ceil((new Date(c.trial.endsAt) - Date.now()) / 86400000) : null;
+  if (c.suspended) return null;
+  if (c.subscriptionStatus === "past_due") return { why: "Betalningen har inte kommit in", step: "betalning", level: 3 };
+  if (c.unpaidOrders) return { why: "Beställning väntar på betalning", step: "betalning", level: 2 };
+  if (c.verificationStatus === "unverified") return { why: "Registrerade sig själv – kontrollera behörigheten", step: "foretag", level: 2 };
+  if (c.trial?.status === "active" && days !== null && days <= 3) return { why: `Provet slutar om ${Math.max(days, 0)} dag(ar) – dags att sälja`, step: "betalning", level: 2 };
+  if (c.trial && !c.phones && c.licenses) return { why: "Har bilar men ingen förare kopplad", step: "forare", level: 1 };
+  if (c.trial && !c.licenses) return { why: "Har inga bilar än", step: "bilar", level: 1 };
+  return null;
+}
+
+/* --- Hem ---------------------------------------------------------------- */
+
+export function oversikt(d, list = { companies: [] }) {
   const subs = d.subscriptions ?? {};
-  const push = d.push24h ?? {};
-  const pastDue = subs.past_due ?? 0;
+  const todo = (list.companies ?? [])
+    .map((c) => ({ c, a: attention(c) }))
+    .filter((x) => x.a)
+    .sort((x, y) => y.a.level - x.a.level);
   return `
     <div class="page-head">
-      <div><h1>Översikt</h1><p class="muted">Uppdaterad ${esc(dateTime(d.generatedAt))}.</p></div>
+      <div><h1>Hem</h1><p class="muted">Det här behöver göras. Tryck på en rad för att gå direkt till rätt steg.</p></div>
       <button class="btn btn-primary" data-action="goto" data-view="nykund">+ Ny kund</button>
     </div>
+
+    <div class="card">
+      <h2>Att göra <span class="muted">(${esc(todo.length)})</span></h2>
+      ${todo.length ? `<ul class="todo">${todo.map(({ c, a }) => `
+        <li><button class="todo-row" data-action="open-company" data-id="${esc(c.id)}" data-tab="${esc(a.step)}">
+          <span class="todo-dot lvl-${a.level}" aria-hidden="true"></span>
+          <span class="todo-main"><b>${esc(c.name)}</b><span class="muted">${esc(a.why)}</span></span>
+          <span class="todo-go">${esc(STEPS.find((st) => st.id === a.step)?.title ?? "")} →</span>
+        </button></li>`).join("")}</ul>`
+        : '<p class="muted">Inget att göra just nu. 🎉</p>'}
+      ${d.reviewsOpen ? `<p><button class="btn btn-quiet" data-action="goto" data-view="granskning">
+        ${esc(d.reviewsOpen)} riskgranskning(ar) väntar →</button></p>` : ""}
+    </div>
+
     <div class="kpis">
-      ${kpi("MRR (exkl. moms)", esc(money(d.mrrOre, d.currency)))}
-      ${kpi("Bolag", esc(d.companies), { view: "kunder" })}
-      ${kpi("Aktiva abonnemang", esc(subs.active ?? 0), { view: "abonnemang" })}
-      ${kpi("Aktiva prov", esc(d.trialsActive), { view: "abonnemang" })}
-      ${kpi("Aktiva licenser", esc(d.licensesActive))}
-      ${kpi("I tjänst just nu", esc(d.sessionsActive))}
-    </div>
-    <div class="card">
-      <h2>Behöver uppmärksamhet</h2>
-      <div class="kpis" style="margin:0.5rem 0 0">
-        ${kpi("Förfallna abonnemang", `${esc(pastDue)}<small class="muted"> (${esc(d.graceOpen)} i frist)</small>`,
-          { alert: pastDue > 0, view: "abonnemang" })}
-        ${kpi("Obekräftade företag", esc(d.unverifiedCompanies ?? 0),
-          { alert: (d.unverifiedCompanies ?? 0) > 0, view: "kunder" })}
-        ${kpi("Öppna granskningar", esc(d.reviewsOpen), { alert: d.reviewsOpen > 0, view: "granskning" })}
-        ${kpi("Aktiva spärrar", esc(d.blocksActive ?? 0), { view: "konton" })}
-        ${kpi("Väntar i utkorgen", esc(d.outboxPending))}
-      </div>
-    </div>
-    <div class="card">
-      <h2>Notiser senaste dygnet</h2>
-      <p>${Object.keys(push).length
-        ? Object.entries(push).map(([s, n]) => `${pill(s)} ${esc(n)}`).join(" &nbsp; ")
-        : '<span class="muted">Inga notiser senaste dygnet.</span>'}</p>
+      ${kpi("Kunder", esc(d.companies), { view: "kunder" })}
+      ${kpi("Betalande", esc(subs.active ?? 0), { view: "kunder" })}
+      ${kpi("Prov", esc(d.trialsActive), { view: "kunder" })}
+      ${kpi("MRR exkl. moms", esc(money(d.mrrOre, d.currency)))}
+      ${kpi("Förare i tjänst nu", esc(d.sessionsActive))}
     </div>
   `;
 }
 
-/* --- Kunder ----------------------------------------------------------- */
+/* --- Kunder ------------------------------------------------------------- */
 
-export function kunder(list, query = "") {
-  const rows = list.companies ?? [];
+const FILTERS = [
+  ["alla", "Alla"],
+  ["atgard", "Behöver åtgärd"],
+  ["prov", "Prov"],
+  ["betalande", "Betalande"],
+  ["avstangda", "Avstängda"],
+];
+
+function matchesFilter(c, filter) {
+  switch (filter) {
+    case "atgard": return !!attention(c);
+    case "prov": return !!c.trial;
+    case "betalande": return ["active", "past_due"].includes(c.subscriptionStatus);
+    case "avstangda": return !!c.suspended;
+    default: return true;
+  }
+}
+
+export function kunder(list, query = "", filter = "alla") {
+  const all = list.companies ?? [];
+  const rows = all.filter((c) => matchesFilter(c, filter));
   return `
     <div class="page-head">
       <h1>Kunder</h1>
@@ -103,145 +206,199 @@ export function kunder(list, query = "") {
     </div>
     <form class="toolbar" id="searchForm">
       <label class="visually-hidden" for="q">Sök</label>
-      <input id="q" name="q" value="${esc(query)}" placeholder="Namn, orgnr eller bolagskod" />
-      <button class="btn btn-primary" type="submit">Sök</button>
+      <input id="q" name="q" value="${esc(query)}" placeholder="Sök namn eller orgnr" />
+      <button class="btn btn-quiet" type="submit">Sök</button>
     </form>
-    ${list.truncated ? '<p class="muted">Visar de första 200. Sök för att smalna av.</p>' : ""}
-    <div class="card">
-      <table>
-        <thead><tr>
-          <th>Bolag</th><th>Abonnemang</th><th>Åtkomst</th>
-          <th>Licenser</th><th>Telefoner</th><th>Period slut</th>
-        </tr></thead>
-        <tbody>${rows.map((c) => `
-          <tr class="row-link" data-company="${esc(c.id)}">
-            <td data-label="Bolag"><b>${esc(c.name)}</b><br />
-              <span class="muted mono">${esc(c.orgNumber || "—")} · ${esc(c.joinCode)}</span></td>
-            <td data-label="Abonnemang">${pill(c.subscriptionStatus)}
-              ${c.cancelAtPeriodEnd ? '<br /><span class="pill pill-warn">Uppsagt</span>' : ""}</td>
-            <td data-label="Åtkomst">${c.accessReason === "company_suspended"
-              ? '<span class="pill pill-danger">Avstängt</span>'
-              : c.accessOk ? '<span class="ok">Ja</span>' : '<span class="error">Nej</span>'}<br /><span class="muted mono">${esc(c.accessReason)}</span></td>
-            <td data-label="Licenser">${esc(c.licenses)}</td>
-            <td data-label="Telefoner">${esc(c.devices)}</td>
-            <td data-label="Period slut">${esc(date(c.periodEnd))}</td>
-          </tr>`).join("")}</tbody>
-      </table>
-      ${rows.length ? "" : '<p class="muted">Inga bolag hittades.</p>'}
+    <div class="chips" role="tablist" aria-label="Filter">
+      ${FILTERS.map(([id, label]) => `<button class="chip" role="tab" data-action="kund-filter" data-filter="${id}"
+        aria-selected="${id === filter}">${esc(label)} <span class="muted">${esc(all.filter((c) => matchesFilter(c, id)).length)}</span></button>`).join("")}
+    </div>
+    <div class="card list-card">
+      ${rows.length ? rows.map((c) => {
+        const done = doneFromRow(c);
+        const next = firstOpen(done);
+        const a = attention(c);
+        return `
+        <button class="cust-row" data-action="open-company" data-id="${esc(c.id)}" data-tab="${esc(a?.step ?? next?.id ?? "foretag")}">
+          <span class="cust-main"><b>${esc(c.name)}</b>
+            <span class="muted mono">${esc(c.orgNumber || "—")}</span></span>
+          <span class="cust-steps" aria-label="Steg klara">${STEPS.map((st) =>
+            `<i class="${done[st.id] ? "on" : ""}" title="${esc(st.title)}"></i>`).join("")}</span>
+          <span class="cust-status">${statusPill(customerStatus(c, c))}</span>
+          <span class="cust-next muted">${esc(a?.why ?? (next ? next.todo : "Klar"))}</span>
+        </button>`;
+      }).join("") : '<p class="muted">Inga kunder här.</p>'}
     </div>
   `;
 }
 
-export function kund(d, config = null) {
+/* --- En kund ------------------------------------------------------------ */
+
+export function kund(d, config = null, tab = "") {
   const c = d.company;
-  const s = d.subscription;
-  const access = d.access ?? {};
+  const done = doneFromDetail(d);
+  const next = firstOpen(done);
+  const active = STEPS.some((st) => st.id === tab) || tab === "mer" ? tab : (next?.id ?? "betalning");
+  const idx = STEPS.findIndex((st) => st.id === active);
+  let after = idx >= 0 ? STEPS.slice(idx + 1).find((st) => !done[st.id]) ?? STEPS[idx + 1] : null;
+  // Förare utan bil går inte: då är nästa steg Bilar, inte framåt.
+  if (active === "forare" && !done.bilar) after = STEPS[1];
+  const status = customerStatus(c, {
+    suspended: !!d.suspension, trial: d.trial, subscriptionStatus: d.subscription?.status,
+    accessOk: d.access?.ok,
+  });
+  const panel = {
+    foretag: () => stepForetag(d, config),
+    bilar: () => stepBilar(d, config),
+    forare: () => stepForare(d),
+    konto: () => stepKonto(d, config),
+    betalning: () => stepBetalning(d, config),
+    mer: () => stepMer(d, config),
+  }[active]();
+
   return `
     <button class="back-link" data-action="back">← Alla kunder</button>
     <div class="page-head">
-      <div><h1>${esc(c.name)}</h1>
-        <p class="muted mono">${esc(c.orgNumber || "—")} · ${esc(c.id)}</p></div>
-      ${d.profile ? verificationPill(d.profile.verificationStatus) : ""}
+      <div><h1>${esc(c.name)} ${statusPill(status)}</h1>
+        <p class="muted"><span class="mono">${esc(c.orgNumber || "—")}</span>${d.access?.ok
+          ? (d.access.validUntil ? ` · tips på till ${esc(date(d.access.validUntil))}` : " · tips på")
+          : ` · inga tips: ${esc(ACCESS_TEXT[d.access?.reason] ?? d.access?.reason ?? "")}`}</p></div>
+      ${next && next.id !== active ? `<button class="btn btn-primary" data-action="kund-tab" data-tab="${esc(next.id)}">
+        Nästa steg: ${esc(next.todo)} →</button>` : ""}
     </div>
 
     ${d.suspension ? `
       <div class="suspended-banner" role="alert">
-        <b>Företaget är avstängt</b> sedan ${esc(dateTime(d.suspension.createdAt))}
-        ${d.suspension.createdByEmail ? `av ${esc(d.suspension.createdByEmail)}` : ""}.
-        Skäl: ${esc(d.suspension.reason)}. Inga telefoner eller inloggningar får data.
-        ${config?.canManage ? `<div><button class="btn btn-quiet" data-action="block-lift"
-          data-block="${esc(d.suspension.id)}">Häv avstängningen</button></div>` : ""}
+        <b>Företaget är avstängt.</b> ${esc(d.suspension.reason)}
+        ${config?.canManage ? `<button class="btn btn-quiet" data-action="block-lift" data-block="${esc(d.suspension.id)}">Häv avstängningen</button>` : ""}
       </div>` : ""}
 
-    <div class="card">
-      <h2>Kundens väg</h2>
-      ${journey(d)}
-    </div>
+    <nav class="steps" aria-label="Kundens steg">
+      ${STEPS.map((st, i) => `
+        <button class="step ${done[st.id] ? "done" : ""} ${st.id === active ? "current" : ""}"
+          data-action="kund-tab" data-tab="${st.id}" aria-current="${st.id === active ? "step" : "false"}">
+          <span class="step-num">${done[st.id] ? "✓" : i + 1}</span>
+          <span class="step-title">${esc(st.title)}</span>
+        </button>`).join("")}
+      <button class="step step-more ${active === "mer" ? "current" : ""}" data-action="kund-tab" data-tab="mer">Mer</button>
+    </nav>
 
+    <section class="step-panel">
+      ${panel}
+      ${after ? `<div class="step-next"><button class="btn btn-quiet" data-action="kund-tab" data-tab="${esc(after.id)}">
+        Nästa: ${esc(after.title)} →</button></div>` : ""}
+    </section>
+  `;
+}
+
+function stepForetag(d, config) {
+  const p = d.profile ?? {};
+  return `
     ${verificationCard(d, config)}
-
-    <div class="notice ${access.ok ? "" : "notice-danger"}">
-      <b>Åtkomst: ${access.ok ? "Ja" : "Nej"}</b> — <span class="mono">${esc(access.reason)}</span>
-      ${access.validUntil ? `, gäller till ${esc(dateTime(access.validUntil))}` : ""}
-    </div>
-
-    <div class="grid">
-      <div class="card">
-        <h2>Bolag</h2>
-        <dl class="kv">
-          <dt>Orgnr</dt><dd class="mono">${esc(c.orgNumber || "—")}</dd>
-          <dt>Bolagskod</dt><dd class="mono">${esc(c.joinCode)}</dd>
-          <dt>E-post</dt><dd>${esc(c.email || "—")}</dd>
-          <dt>Gammal status</dt><dd class="mono">${esc(c.legacyStatus)} / ${esc(c.legacySubscriptionStatus)}</dd>
-          <dt>Stripe-kund</dt><dd class="mono">${esc(c.stripeCustomerId || "—")}</dd>
-          <dt>Skapad</dt><dd>${esc(date(c.createdAt))}</dd>
-          ${d.profile ? `<dt>Verifiering</dt><dd>${esc(d.profile.verificationStatus)}</dd>` : ""}
-          ${d.profile?.legacyAccessUntil ? `<dt>Övergång till</dt><dd>${esc(date(d.profile.legacyAccessUntil))}</dd>` : ""}
-        </dl>
-      </div>
-
-      <div class="card">
-        <h2>Abonnemang</h2>
-        ${s ? `
-          <dl class="kv">
-            <dt>Status</dt><dd>${pill(s.status)}</dd>
-            <dt>Period</dt><dd>${esc(date(s.periodStart))} – ${esc(date(s.periodEnd))}</dd>
-            <dt>Månadsbelopp</dt><dd>${esc(money(s.monthlyOre))} exkl. moms</dd>
-            <dt>Prisversion</dt><dd class="mono">${esc(s.priceVersion)}</dd>
-            ${s.introEndsAt ? `<dt>Intro slutar</dt><dd>${esc(date(s.introEndsAt))}</dd>` : ""}
-            ${s.graceUntil ? `<dt>Frist till</dt><dd>${esc(dateTime(s.graceUntil))}</dd>` : ""}
-            ${s.cancelAtPeriodEnd ? `<dt>Uppsagt</dt><dd>till ${esc(date(s.accessUntil))}</dd>` : ""}
-            <dt>Stripe</dt><dd class="mono">${esc(s.stripeSubscriptionId || "—")}</dd>
-          </dl>` : '<p class="muted">Inget abonnemang i den nya modellen.</p>'}
-        ${config?.canManage ? `
-        <h3 style="margin-top:1rem">Supportåtgärd</h3>
-        <p class="muted">Ändrar appens rättigheter, inte Stripe. Loggas.</p>
-        <div class="btn-row">
-          <button class="btn btn-quiet" data-action="extend" data-days="7">+7 dagar</button>
-          <button class="btn btn-quiet" data-action="extend" data-days="30">+30 dagar</button>
-          <button class="btn btn-quiet" data-action="test-push">Testnotis</button>
-        </div>` : ""}
-      </div>
-    </div>
-
-    ${d.trial ? `
-      <div class="card">
-        <h2>${d.trial.source === "coupon" ? "Tillfällig åtkomst" : "Prov"}</h2>
-        <p>${pill(d.trial.status)} ${esc(TRIAL_SOURCE[d.trial.source] ?? d.trial.source)} ·
-          ${d.trial.startedAt ? `${esc(dateTime(d.trial.startedAt))} – ${esc(dateTime(d.trial.endsAt))}` : "startar när första telefonen ansluts"}
-          · ${esc(d.trial.vehicles ?? 0)} av högst ${esc(d.trial.vehicleLimit)} bilar</p>
-      </div>` : ""}
-
-    ${salesPanel(d, config)}
-
-    ${carsCard(d, config)}
-
     <div class="card">
-      <h2>Telefoner</h2>
-      <table><thead><tr><th>Telefon</th><th>Push</th><th>Körområde</th><th>Senast sedd</th></tr></thead>
-      <tbody>${d.devices.map((dv) => `
-        <tr>
-          <td data-label="Telefon">${esc(dv.label)} <span class="muted mono">${esc(dv.kind)}</span></td>
-          <td data-label="Push">${dv.hasPush ? '<span class="ok">Ja</span>' : '<span class="error">Nej</span>'}</td>
-          <td data-label="Körområde">${(dv.counties ?? []).map((c) => esc(countyName(c))).join(", ") || "—"}</td>
-          <td data-label="Senast sedd">${esc(dateTime(dv.lastSeenAt))}</td>
-        </tr>`).join("")}</tbody></table>
+      <h2>Företaget</h2>
+      <dl class="kv">
+        <dt>Kontakt</dt><dd>${esc(p.contactName || "—")} ${p.contactRole ? `<span class="muted">(${esc(p.contactRole)})</span>` : ""}</dd>
+        <dt>E-post</dt><dd>${esc(p.contactEmail || "—")}</dd>
+        <dt>Telefon</dt><dd>${esc(p.contactPhone || "—")}</dd>
+        <dt>Behörighet</dt><dd>${p.verificationStatus ? verificationPill(p.verificationStatus) : "—"}</dd>
+      </dl>
     </div>
+    ${config?.canSell ? `<details class="card"><summary><h2 style="display:inline">Ändra uppgifter</h2></summary>${profileBlock(d)}</details>` : ""}
+  `;
+}
 
-    ${membersCard(d, config)}
+function stepBilar(d, config) {
+  return `${carsCard(d, config, { drivers: false })}${addCarsBlock(d, config)}`;
+}
+
+function stepForare(d) {
+  const open = (d.licenses ?? []).filter((l) => LICENSE_OPEN.includes(l.status));
+  if (!open.length) {
+    return `<div class="card"><h2>Förare</h2><p class="muted">Lägg till en bil först.</p>
+      <button class="btn btn-primary" data-action="kund-tab" data-tab="bilar">Till Bilar →</button></div>`;
+  }
+  return `
+    <div class="card">
+      <h2>Förare</h2>
+      <p class="muted">Ge föraren en kod. Föraren öppnar appen, trycker <b>Jag är förare</b> och skriver in koden.
+        Koden gäller i 5 minuter.</p>
+      ${open.map((l) => {
+        const phones = (l.approvals ?? []).filter((a) => a.status === "active");
+        return `
+        <div class="car">
+          <div class="car-head"><b class="plate">${esc(l.vehicle || "—")}</b>
+            <span class="muted">${l.activePhone ? `kör nu: ${esc(l.activePhone.label)}` : "ingen kör just nu"}</span></div>
+          ${phones.map((a) => `
+            <div class="driver-row"><span>📱 ${esc(a.label || "Telefon")} <span class="muted">· ${esc(date(a.approvedAt))}</span></span>
+              <button class="btn btn-quiet btn-small" data-action="block" data-approval="${esc(a.id)}">Spärra</button></div>`).join("")}
+          <button class="btn btn-primary btn-small" data-action="code" data-license="${esc(l.id)}"
+            data-plate="${esc(l.vehicle)}">+ Förare (ge kod)</button>
+        </div>`;
+      }).join("")}
+    </div>`;
+}
+
+function stepKonto(d, config) {
+  return `${ownerBlock(d)}${membersCard(d, config)}`;
+}
+
+function stepBetalning(d, config) {
+  const s = d.subscription;
+  const t = d.trial;
+  return `
+    <div class="card">
+      <h2>Betalning</h2>
+      <dl class="kv">
+        <dt>Läge</dt><dd>${s ? pill(s.status) : "—"}
+          ${t && ["pending", "active"].includes(t.status) ? `<span class="pill pill-warn">Prov ${t.startedAt ? `till ${esc(date(t.endsAt))}` : "startar vid första telefonen"}</span>` : ""}</dd>
+        ${s?.periodEnd ? `<dt>Betalt till</dt><dd>${esc(date(s.periodEnd))}</dd>` : ""}
+        ${s?.monthlyOre ? `<dt>Per månad</dt><dd>${esc(money(s.monthlyOre))} exkl. moms</dd>` : ""}
+      </dl>
+      <p class="muted">Ny beställning (fler bilar eller län) görs under <button class="linklike" data-action="kund-tab" data-tab="bilar">Bilar</button>.</p>
+    </div>
     ${ordersCard(d.orders, config)}
     ${redemptionsCard(d.couponRedemptions)}
-    ${dangerZone(d, config)}
+    ${cancelBlock(d, config)}
+  `;
+}
 
+function stepMer(d, config) {
+  return `
+    ${config?.canManage ? `
     <div class="card">
-      <h2>Händelselogg</h2>
+      <h2>Supportåtgärder</h2>
+      <p class="muted">Ändrar appens rättigheter, inte Stripe. Loggas.</p>
+      <div class="btn-row">
+        <button class="btn btn-quiet" data-action="extend" data-days="7">+7 dagar</button>
+        <button class="btn btn-quiet" data-action="extend" data-days="30">+30 dagar</button>
+        <button class="btn btn-quiet" data-action="test-push">Skicka testnotis</button>
+      </div>
+    </div>` : ""}
+    <div class="card">
+      <h2>Telefoner</h2>
+      <table><thead><tr><th>Telefon</th><th>Notiser</th><th>Senast sedd</th></tr></thead>
+      <tbody>${(d.devices ?? []).map((dv) => `
+        <tr><td data-label="Telefon">${esc(dv.label)}</td>
+          <td data-label="Notiser">${dv.hasPush ? '<span class="ok">Ja</span>' : '<span class="muted">Nej</span>'}</td>
+          <td data-label="Senast sedd">${esc(dateTime(dv.lastSeenAt))}</td></tr>`).join("")}</tbody></table>
+    </div>
+    ${dangerZone(d, config)}
+    ${config?.canManage && !["canceled"].includes(d.subscription?.status) ? `
+    <div class="card danger-zone">
+      <h2>Avsluta direkt</h2>
+      <p class="muted">Åtkomsten upphör nu, alla bilar och förarpass avslutas och Stripe slutar debitera.
+        Ingen återbetalning görs automatiskt.</p>
+      <div class="btn-row"><button class="btn btn-danger" data-action="terminate-now">Avsluta direkt</button></div>
+    </div>` : ""}
+    <details class="card"><summary><h2 style="display:inline">Händelselogg</h2></summary>
       <table><thead><tr><th>När</th><th>Vad</th><th>Av</th></tr></thead>
-      <tbody>${d.audit.map((e) => `
+      <tbody>${(d.audit ?? []).map((e) => `
         <tr><td data-label="När">${esc(dateTime(e.at))}</td>
           <td data-label="Vad"><span class="mono">${esc(e.action)}</span>
             <div class="audit-detail">${esc(JSON.stringify(e.detail))}</div></td>
           <td data-label="Av">${esc(e.actorKind)}</td></tr>`).join("")}</tbody></table>
-    </div>
+    </details>
   `;
 }
 
@@ -255,39 +412,6 @@ const VERIFICATION = {
 function verificationPill(status) {
   const [cls, label] = VERIFICATION[status] ?? ["", status];
   return `<span class="pill ${cls}">${esc(label)}</span>`;
-}
-
-/**
- * Kundens väg, steg för steg: det som gör en kund betalande och körande.
- * Räknas ur samma svar som resten av sidan -- inget eget tillstånd -- och
- * markerar första steget som inte är klart, så att säljaren ser vad som står
- * näst på tur.
- */
-function journey(d) {
-  const licenses = d.licenses ?? [];
-  const members = (d.members ?? []).filter((m) => m.status === "active");
-  const invites = (d.ownerInvites ?? []).filter((i) => i.status === "pending");
-  const phones = licenses.some((l) => (l.approvals ?? []).some((a) => a.status === "active"));
-  const s = d.subscription;
-  const paid = s && ["active", "past_due"].includes(s.status) && s.hadSuccessfulPayment;
-  const unpaid = (d.orders ?? []).some((o) => o.status === "pending_payment");
-  const trialOn = d.trial && ["pending", "active"].includes(d.trial.status);
-  const steps = [
-    ["Företag", "Uppgifter och orgnr", !!d.profile, "Upplagt"],
-    ["Behörighet", "Kontrollerad företrädare", d.profile?.verificationStatus === "verified", "Kontrollerad"],
-    ["Bilar", `${licenses.length} bil(ar) med licens`, licenses.length > 0, `${licenses.length} bil(ar)`],
-    ["Kundens admin", members.length ? "Loggar in i portalen" : invites.length ? "Inbjudan skickad" : "Ingen inbjuden",
-      members.length > 0, "Inloggad"],
-    ["Förare", "Telefon kopplad till bil", phones, "Kopplade"],
-    ["Betalning", paid ? "Betalt" : unpaid ? "Väntar på betalning" : trialOn ? "Prov pågår" : "Ingen beställning",
-      !!paid, "Betalar"],
-  ];
-  const next = steps.findIndex((step) => !step[2]);
-  return `<ol class="journey">${steps.map(([title, hint, done, doneText], i) => `
-    <li class="${done ? "done" : i === next ? "next" : ""}">
-      <b>${i + 1}. ${esc(title)}</b>
-      <span class="step-state">${done ? `✓ ${esc(doneText)}` : esc(hint)}</span>
-    </li>`).join("")}</ol>`;
 }
 
 function verificationCard(d, config) {
@@ -351,7 +475,7 @@ function countySelect(counties, selected, attrs) {
  * ändras direkt (de kostar inget); betalda bilar ändras via offerten, så att
  * fakturan följer med -- samma regel som i fleet/admin_vehicles.py.
  */
-function carsCard(d, config) {
+function carsCard(d, config, { drivers = true } = {}) {
   const all = d.licenses ?? [];
   const open = all.filter((l) => LICENSE_OPEN.includes(l.status));
   const closed = all.length - open.length;
@@ -361,7 +485,7 @@ function carsCard(d, config) {
   const name = (code) => countyName(code);
   return `
     <div class="card">
-      <h2>Bilar, län och förare <span class="muted">(${esc(open.length)})</span></h2>
+      <h2>Bilar <span class="muted">(${esc(open.length)})</span></h2>
       ${open.length ? open.map((l) => {
         const trial = l.status === "trial";
         const extras = l.extraCounties ?? [];
@@ -378,14 +502,14 @@ function carsCard(d, config) {
           <div class="muted">Kör nu: ${l.activePhone
             ? `${esc(l.activePhone.label)} sedan ${esc(dateTime(l.activePhone.since))}` : "ingen"}</div>
 
-          <div class="car-drivers">
+          ${drivers ? `<div class="car-drivers">
             ${phones.length ? phones.map((a) => `
               <div class="driver-row"><span>📱 ${esc(a.label || "Telefon")} <span class="muted">· godkänd ${esc(date(a.approvedAt))}</span></span>
                 <button class="btn btn-quiet btn-small" data-action="block" data-approval="${esc(a.id)}">Spärra</button></div>`).join("")
               : '<p class="muted">Inga förare kopplade.</p>'}
             <button class="btn btn-primary btn-small" data-action="code" data-license="${esc(l.id)}"
               data-plate="${esc(l.vehicle)}">+ Förare (ge kod)</button>
-          </div>
+          </div>` : ""}
 
           ${sell ? `<details class="car-edit"><summary>Ändra bilen</summary>
             <div class="car-actions">
@@ -427,7 +551,7 @@ function carsCard(d, config) {
             </div>
           </details>` : ""}
         </div>`;
-      }).join("") : '<p class="muted">Inga bilar. Lägg till bilar under Sälj paket ovan (prov eller beställning).</p>'}
+      }).join("") : '<p class="muted">Inga bilar än. Lägg till nedan.</p>'}
       ${closed ? `<p class="muted">${esc(closed)} borttagen/borttagna bil(ar) visas inte.</p>` : ""}
     </div>`;
 }
@@ -442,30 +566,6 @@ function dangerZone(d, config) {
         allt som förut. Stripe påverkas inte — säg upp abonnemanget ovan om debiteringen också ska sluta.</p>
       <div class="btn-row"><button class="btn btn-danger" data-action="suspend">Stäng av företaget</button></div>
     </div>`;
-}
-
-/* --- Abonnemang ------------------------------------------------------- */
-
-export function abonnemang(list) {
-  const rows = (list.companies ?? []).filter((c) => c.subscriptionStatus !== "none");
-  const order = { past_due: 0, trialing: 1, active: 2, canceled: 3 };
-  rows.sort((a, b) => (order[a.subscriptionStatus] ?? 9) - (order[b.subscriptionStatus] ?? 9));
-  return `
-    <p class="muted">Förfallna först. Klicka på ett bolag för detaljer och supportåtgärder.</p>
-    <div class="card"><table>
-      <thead><tr><th>Bolag</th><th>Status</th><th>Period slut</th><th>Licenser</th><th>Åtkomst</th></tr></thead>
-      <tbody>${rows.map((c) => `
-        <tr class="row-link" data-company="${esc(c.id)}">
-          <td data-label="Bolag"><b>${esc(c.name)}</b></td>
-          <td data-label="Status">${pill(c.subscriptionStatus)}
-            ${c.cancelAtPeriodEnd ? '<span class="pill pill-warn">Uppsagt</span>' : ""}</td>
-          <td data-label="Period slut">${esc(date(c.periodEnd))}</td>
-          <td data-label="Licenser">${esc(c.licenses)}</td>
-          <td data-label="Åtkomst">${c.accessOk ? '<span class="ok">Ja</span>' : '<span class="error">Nej</span>'}</td>
-        </tr>`).join("")}</tbody>
-    </table>
-    ${rows.length ? "" : '<p class="muted">Inga abonnemang i den nya modellen än.</p>'}</div>
-  `;
 }
 
 /* --- Notiser ---------------------------------------------------------- */
