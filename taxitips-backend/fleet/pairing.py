@@ -47,6 +47,7 @@ from fleet.models import (
     RiskConfig,
     RiskSignal,
     Vehicle,
+    VehicleSession,
 )
 
 # Inga tvetydiga tecken: 0/O och 1/I är samma sak när koden läses upp i telefon.
@@ -267,9 +268,25 @@ def redeem_code(
     # Ominstallation eller ny bil: tidigare godkännanden för SAMMA licens
     # ersätts, övriga bilar rörs inte -- en telefon får vara godkänd för flera
     # bilar (§3 talar om byten mellan två bilar på samma telefon).
-    DeviceApproval.objects.filter(
+    replaced = list(DeviceApproval.objects.filter(
         device_id=device.id, license=license, status=DeviceApproval.Status.ACTIVE
-    ).update(status=DeviceApproval.Status.REPLACED, revoked_at=now, revoke_reason="repaired")
+    ).values_list("id", flat=True))
+    DeviceApproval.objects.filter(id__in=replaced).update(
+        status=DeviceApproval.Status.REPLACED, revoked_at=now, revoke_reason="repaired"
+    )
+    # Ett pass som hörde till det utbytta godkännandet stängs. Annars pekade
+    # det på ett godkännande som inte längre gäller: förarvyn nekades med
+    # "Telefonen är spärrad av din administratör" medan notiserna fortsatte
+    # (2026-09-25). Föraren väljer bilen igen och får ett nytt pass.
+    if replaced:
+        from fleet import sessions as _sessions
+
+        for open_session in VehicleSession.objects.filter(
+            device_id=device.id, approval_id__in=replaced, ended_at__isnull=True
+        ):
+            _sessions.end_session(
+                open_session, reason=VehicleSession.EndReason.LICENSE_CHANGE, now=now,
+            )
 
     approval = DeviceApproval.objects.create(
         company_id=pairing.company_id,

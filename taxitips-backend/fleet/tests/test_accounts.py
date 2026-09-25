@@ -16,6 +16,7 @@ import time
 import uuid
 
 from django.test import Client, RequestFactory, override_settings
+from django.utils import timezone
 
 from billing.models import Company, CompanyMember
 from fleet import access, accounts
@@ -354,3 +355,77 @@ class AdminVehicleTests(_Base):
         Subscription.objects.filter(company_id=data["company"].id).update(stripe_subscription_id="")
         r = self.call("post", f"/api/admin/licenses/{data['license'].id}/remove", self.admin_id, {"reason": "Betalt utanför Stripe, kunden sålde bilen"})
         self.assertEqual(r.status_code, 200, r.content)
+
+
+class RepairedPhoneTests(FleetTestCase):
+    """
+    En telefon som kopplas igen med en ny kod fick förut ett pass på det utbytta
+    godkännandet: vyn sa "spärrad av din administratör" medan notiserna kom.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from fleet import pairing, sessions
+
+        self.pairing, self.sessions = pairing, sessions
+        self.data = self.full_setup()
+        self.install = f"install-{uuid.uuid4().hex}"
+
+    def pair(self):
+        issued = self.pairing.issue_code(
+            license=self.data["license"], vehicle=self.data["vehicle"],
+            created_by=self.data["owner"].user_id, label="Ali",
+        )
+        return self.pairing.redeem_code(code=issued.code, installation_id=self.install, label="Ali")
+
+    def driver(self, secret):
+        return access.resolve(RequestFactory().get("/api/alerts", headers={"X-Device-Token": secret}))
+
+    def test_pairing_again_closes_the_old_session_and_asks_for_the_car(self):
+        from fleet.push_gate import can_receive
+        from billing.models import Device
+
+        first = self.pair()
+        self.sessions.start_session(device_id=first.device_id, license_id=self.data["license"].id)
+        self.assertTrue(self.driver(first.secret).ok)
+
+        second = self.pair()
+        result = self.driver(second.secret)
+        self.assertEqual(result.reason, "no_active_session")
+        self.assertTrue(result.needs_session)
+        device = Device.objects.get(id=second.device_id)
+        self.assertFalse(can_receive(device).ok)
+
+        self.sessions.start_session(device_id=second.device_id, license_id=self.data["license"].id)
+        self.assertTrue(self.driver(second.secret).ok)
+
+    def test_a_phone_already_stuck_heals_instead_of_saying_blocked(self):
+        from fleet.models import DeviceApproval, VehicleSession
+
+        first = self.pair()
+        self.sessions.start_session(device_id=first.device_id, license_id=self.data["license"].id)
+        # Läget från före rättningen: godkännandet utbytt, passet öppet.
+        DeviceApproval.objects.filter(device_id=first.device_id).update(
+            status=DeviceApproval.Status.REPLACED
+        )
+        DeviceApproval.objects.create(
+            company_id=self.data["company"].id, device_id=first.device_id,
+            license=self.data["license"], vehicle=self.data["vehicle"], label="Ali",
+            approved_at=timezone.now(),
+        )
+        result = self.driver(first.secret)
+        self.assertEqual(result.reason, "no_active_session")
+        self.assertFalse(VehicleSession.objects.filter(
+            device_id=first.device_id, ended_at__isnull=True
+        ).exists())
+
+    def test_a_real_block_still_says_blocked(self):
+        from fleet.models import DeviceApproval
+
+        first = self.pair()
+        self.sessions.start_session(device_id=first.device_id, license_id=self.data["license"].id)
+        DeviceApproval.objects.filter(device_id=first.device_id).update(
+            status=DeviceApproval.Status.BLOCKED
+        )
+        # En riktig spärr läks aldrig till ett bilval.
+        self.assertIn(self.driver(first.secret).reason, ("device_blocked", "device_not_approved"))

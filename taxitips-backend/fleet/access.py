@@ -427,11 +427,33 @@ def _driver_access(token: str, now) -> Access:
         )
 
     if session.approval.status != DeviceApproval.Status.ACTIVE:
-        # Spärren tog effekt mellan sessionens start och nu.
+        if session.approval.status == DeviceApproval.Status.BLOCKED:
+            # Spärren tog effekt mellan sessionens start och nu.
+            return Access(
+                False, "device_blocked", kind="driver",
+                company_id=str(device.company_id), device_id=str(device.id),
+                message="Telefonen är spärrad av din administratör.",
+            )
+        # Godkännandet byttes ut (ny kod, ny bil) men passet stod kvar -- ett
+        # läge som telefoner hamnade i före 2026-09-25. Det är ingen spärr:
+        # passet stängs och föraren får välja bil igen, med det nya godkännandet.
+        from fleet import sessions
+
+        sessions.end_session(session, reason=VehicleSession.EndReason.LICENSE_CHANGE, now=now)
         return Access(
-            False, "device_blocked", kind="driver",
+            False, "no_active_session", kind="driver",
             company_id=str(device.company_id), device_id=str(device.id),
-            message="Telefonen är spärrad av din administratör.",
+            needs_session=True,
+            available_licenses=tuple(
+                {
+                    "licenseId": str(a.license_id),
+                    "vehicleId": str(a.vehicle_id),
+                    "plate": a.vehicle.plate,
+                    "label": a.label or a.vehicle.label,
+                }
+                for a in approvals
+            ),
+            message="Välj vilken bil du kör.",
         )
 
     if session.license.status not in (

@@ -65,11 +65,16 @@ def can_receive(device, snapshot: dict | None = None, *, now=None) -> Verdict:
 
     session = VehicleSession.objects.filter(
         device_id=device.id, ended_at__isnull=True
-    ).select_related("license").first()
+    ).select_related("license", "approval").first()
     if session is None:
         # Telefonen är inte i tjänst i någon bil. Att väcka den vore att
         # skicka ut ett skyddat tips till någon som inte kan öppna det.
         return Verdict(False, "no_active_session")
+    if session.approval.status != DeviceApproval.Status.ACTIVE:
+        # Samma prövning som förarvyn (access._driver_access): ett pass på ett
+        # utbytt eller spärrat godkännande ger ingen data, och då inte heller
+        # en notis om data föraren inte kan öppna.
+        return Verdict(False, "session_approval_inactive")
     if session.license.status not in (
         License.Status.ACTIVE, License.Status.TRIAL, License.Status.PENDING_CANCEL
     ):
