@@ -12,3 +12,6 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Google Maps-nyckeln (se app/build.gradle.kts). Aldrig i git.
+maps.properties

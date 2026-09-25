@@ -2,11 +2,15 @@ import java.util.Properties
 
 // Google Maps-nyckeln: android/local.properties (MAPS_API_KEY=...) eller miljövariabeln
 // MAPS_API_KEY. Aldrig i git. Utan nyckel byggs appen ändå; kartan i appen använder då
-// flutter_map (se lib/widgets/traffic_map.dart och --dart-define=GOOGLE_MAPS=true).
+// flutter_map (se lib/widgets/google_signal_map.dart och --dart-define=GOOGLE_MAPS=true).
+// android/maps.properties går före: Flutter skriver om local.properties vid varje bygge
+// och tappade nyckeln en gång (2026-09-25), vilket gav en tom karta.
 val mapsApiKey: String = run {
     val props = Properties()
-    val file = rootProject.file("local.properties")
-    if (file.exists()) file.inputStream().use { props.load(it) }
+    for (name in listOf("local.properties", "maps.properties")) {
+        val file = rootProject.file(name)
+        if (file.exists()) file.inputStream().use { props.load(it) }
+    }
     props.getProperty("MAPS_API_KEY") ?: System.getenv("MAPS_API_KEY") ?: ""
 }
 
