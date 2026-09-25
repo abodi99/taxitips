@@ -1,6 +1,18 @@
 <!DOCTYPE html>
 <html lang="sv">
 <head>
+  <script>
+    // Bekräftelselänkar som skickades innan appen pekade på /bekraftad landar
+    // här med ?code=... eller #access_token/#error. Skicka dem vidare till
+    // sidan som säger att e-posten är bekräftad, i stället för marknadssidan.
+    (function () {
+      var q = window.location.search, h = window.location.hash;
+      if (/[?&]code=/.test(q) || /(access_token|error_description|type=signup)/.test(h) || /[?&]error_description=/.test(q)) {
+        window.location.replace("/bekraftad" + q + h);
+      }
+    })();
+  </script>
+
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Taxi Tips — Hitta fler kunder. Tjäna mer.</title>

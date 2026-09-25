@@ -333,6 +333,11 @@ class ApiClient {
 
   static const _pendingRegistrationKey = 'tt_pending_registration';
 
+  /// Dit bekräftelselänken i mejlet leder: en sida som säger att e-posten är
+  /// bekräftad och att nästa steg är att logga in i appen. Samma värd som
+  /// Supabases SITE_URL, så den godtas utan en egen rad i tillåtelselistan.
+  static const _confirmedPage = 'https://taxitips.se/bekraftad';
+
   /// Registrering: konto i Supabase Auth, sedan företaget på servern
   /// (POST /api/fleet/register) med en kortfri provperiod.
   ///
@@ -364,6 +369,7 @@ class ApiClient {
       email: email,
       password: password,
       data: {'name': name},
+      emailRedirectTo: _confirmedPage,
     );
     if (auth.user == null) throw ApiException(400, 'Kunde inte skapa konto');
     await saveCredentials(email, password);
@@ -380,7 +386,11 @@ class ApiClient {
   /// Nytt bekräftelsemejl när det första inte kom fram (skräppost, fel adress).
   Future<void> resendConfirmation(String email) async {
     await ensureInitialized();
-    await _sb.auth.resend(type: OtpType.signup, email: email);
+    await _sb.auth.resend(
+      type: OtpType.signup,
+      email: email,
+      emailRedirectTo: _confirmedPage,
+    );
   }
 
   Future<Map<String, dynamic>> registerCompany(Map<String, dynamic> company) async {
