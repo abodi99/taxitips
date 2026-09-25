@@ -194,9 +194,14 @@ Förarkartan i appen (ombyggd 2026-09-21, för förare med begränsad svenska):
   Android, Apple Kartor på iPhone). Appen har ingen egen ruttplanering.
 * **Följ**: tips på servern (`OpportunityFavorite`), evenemang på telefonen
   (`followed_events.dart`, en kopia per evenemang, rensas dagen efter).
-* Google Maps-varianten (`traffic_map.dart`, `--dart-define=GOOGLE_MAPS=true` + `MAPS_API_KEY`)
-  finns kvar men har inte den nya designen. Maps är inte aktiverat i GCP-projektet
-  `taxibehov` (Static Maps svarar 403).
+* **Google-kartan med trafiklager** (`google_signal_map.dart`) är förvald på Android:
+  samma symboler och gruppering som flutter_map-kartan (widgetarna renderas till bilder)
+  plus Googles trafiklager. Kräver `"GOOGLE_MAPS": "true"` i `dart_defines.local.json`
+  och nyckeln i `android/maps.properties` (`MAPS_API_KEY=…`, git-ignorerad; local.properties
+  skrivs om av Flutter). Nyckeln är begränsad till paketet och upload-nyckelns SHA-1
+  `A8:70:…:C1:F3`; en Play-signerad version behöver Play-signeringsnyckelns SHA-1 också.
+  iOS-nyckeln ligger i `ios/Flutter/Maps.xcconfig` (git-ignorerad) men iPhone använder
+  än så länge flutter_map. Utan flaggan eller nyckeln ritas flutter_map som förut.
 
 Pipeline-vyn (localhost:4000) har en sida per tjänst: `/tag`, `/kollektivtrafik`, `/vag`, `/flyg`,
 `/farjor`, `/evenemang`, `/vader`, och en översikt på `/`. Varje sida visar källorna och deras
