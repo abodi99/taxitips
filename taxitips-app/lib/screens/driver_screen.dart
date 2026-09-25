@@ -27,7 +27,7 @@ import '../widgets/map_legend_sheet.dart';
 import '../widgets/signal_card.dart';
 import '../widgets/signal_map.dart';
 import '../widgets/vehicle_session_sheet.dart';
-import '../widgets/traffic_map.dart';
+import '../widgets/google_signal_map.dart';
 
 class DriverScreen extends StatefulWidget {
   const DriverScreen({
@@ -56,7 +56,6 @@ class _DriverScreenState extends State<DriverScreen>
   // Anti-overload: max tips i listan (prioritetssorterade). Kartan har egen
   // gräns så nålarna inte täcker varandra.
   static const int _maxVisibleSignals = 5000;
-  static const int _maxMapPins = 40;
 
   Map<String, dynamic>? _data;
   String? _error;
@@ -920,15 +919,7 @@ class _DriverScreenState extends State<DriverScreen>
 
   /// Zooma med knapp, för den som kör med en hand eller har handskar på.
   /// Mitten ligger kvar; bara zoomnivån ändras, inom kartans gränser.
-  void _zoomBy(double delta) {
-    try {
-      final camera = _mapController.camera;
-      final zoom = (camera.zoom + delta).clamp(3.0, 18.0);
-      _mapController.move(camera.center, zoom);
-    } catch (_) {
-      // Google Maps-varianten har ingen flutter_map-kontroller: inget att zooma.
-    }
-  }
+  void _zoomBy(double delta) => _mapFocus.zoomBy(delta);
 
   /// Kollar entitlement separat från _load så att ett fel här inte döljer
   /// alert-datan (t.ex. i demo-läge finns ingen deviceToken alls).
@@ -1384,9 +1375,6 @@ class _DriverScreenState extends State<DriverScreen>
     });
   }
 
-  bool _hasMapCoords(Map<String, dynamic> a) =>
-      a['lat'] is num && a['lon'] is num;
-
   /// Poäng 0–100 som slidaren filtrerar på. worth_it först, annars demand.
   double _alertScore(Map<String, dynamic> a) {
     final worth = (a['worth_it_score'] as num?)?.toDouble();
@@ -1476,19 +1464,6 @@ class _DriverScreenState extends State<DriverScreen>
         )
         .toList();
     _sortByPriority(list);
-    return list;
-  }
-
-  /// Trafikverkets olyckor och avstängningar i området, för kartans trafiklager. Förbi
-  /// poängfiltret: en olycka på vägen dit är värd att se även när den inte är ett tips.
-  List<Map<String, dynamic>> get _roadIncidents => _geoFilter(
-    _rawActive,
-  ).where(isRoadIncident).where(_hasMapCoords).take(80).toList();
-
-  /// Kartans pinnar — bara tips med lat/lon.
-  List<Map<String, dynamic>> get _mapOpportunities {
-    final list = _listOpportunities.where(_hasMapCoords).toList();
-    if (list.length > _maxMapPins) return list.take(_maxMapPins).toList();
     return list;
   }
 
@@ -2074,13 +2049,6 @@ class _DriverScreenState extends State<DriverScreen>
     }
   }
 
-  // No scheduled-event data source exists yet (api_client.dart's taxi() always
-  // returns events: []) -- HotspotMap still accepts an events list for when
-  // that's built, so keep passing an empty one rather than changing its API.
-  List<Map<String, dynamic>> get _mapEvents => _eventsVisible
-      .where((e) => e['lat'] != null && e['lon'] != null)
-      .toList();
-
   bool _alertNear(Map<String, dynamic> a, List<Map<String, dynamic>> stats) {
     final lat = (a['lat'] as num?)?.toDouble();
     final lon = (a['lon'] as num?)?.toDouble();
@@ -2630,24 +2598,16 @@ class _DriverScreenState extends State<DriverScreen>
                 children: [
                   // 1. Karta (underst)
                   Positioned.fill(
-                    child: kGoogleMapsEnabled
-                        ? TrafficMap(
+                    child: useGoogleMaps
+                        ? GoogleSignalMap(
+                            items: _mapItems,
                             focus: _mapFocus,
-                            opportunities: _mapOpportunities,
-                            incidents: _roadIncidents,
-                            events: _mapEvents,
-                            ferries: _showFerries ? _ferryShips : const [],
-                            ferryTerminals: _showFerries
+                            ferries: _mapShowsFerries ? _ferryShips : const [],
+                            ferryTerminals: _mapShowsFerries
                                 ? _ferryTerminals
                                 : const [],
-                            userLat: _userLat,
-                            userLon: _userLon,
                             onSelectFerry: _openFerry,
-                            onSelectEvent: _openEvent,
-                            onSelectOpportunity: (o) {
-                              _focusOpportunity(o);
-                              _openAlertDetail(o);
-                            },
+                            selectedId: _selectedId,
                           )
                         : SignalMap(
                             items: _mapItems,
