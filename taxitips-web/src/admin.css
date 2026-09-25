@@ -343,7 +343,7 @@ button.kpi:hover {
 /* En bilrad: regnr, etikett, baslän, extra län, ta bort. */
 .pkg-row {
   display: grid;
-  grid-template-columns: 1fr 1fr 1fr 1.3fr auto;
+  grid-template-columns: 1fr 1fr 1fr auto;
   gap: 0.5rem;
   align-items: end;
   padding: 0.5rem 0;
@@ -735,4 +735,99 @@ ul.todo li + li {
   .cust-next {
     grid-column: 1 / -1;
   }
+}
+
+/* --- Län per bil ---------------------------------------------------------- */
+
+.car-tools {
+  margin-left: auto;
+  display: inline-flex;
+  gap: 0.35rem;
+}
+.county-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.6rem 0 0.4rem;
+}
+.county-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.4rem 0.3rem 0.75rem;
+  border-radius: var(--radius-pill);
+  background: var(--ljusgra);
+  border: 1px solid var(--line);
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+.county-chip.base {
+  background: var(--midnatt);
+  color: var(--vit);
+  border-color: var(--midnatt);
+  padding-right: 0.75rem;
+}
+.county-chip.base small {
+  font-weight: 500;
+  opacity: 0.8;
+}
+.chip-x {
+  all: unset;
+  cursor: pointer;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  display: inline-grid;
+  place-items: center;
+  font-size: 0.75rem;
+  color: var(--ink-soft);
+}
+.chip-x:hover {
+  background: color-mix(in srgb, var(--danger) 14%, transparent);
+  color: var(--danger);
+}
+.chip-x:focus-visible {
+  outline: 3px solid var(--guld);
+}
+.county-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.county-add select {
+  width: auto;
+  min-width: 170px;
+  padding: 0.4rem 0.6rem;
+}
+.car-pending {
+  border-color: var(--guld-djup);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--guld) 30%, transparent);
+}
+.pending-change {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px dashed var(--line-strong);
+}
+.pending-change h4 {
+  margin: 0 0 0.25rem;
+}
+.pkg-extras {
+  grid-column: 1 / -1;
+}
+.pkg-extras > summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.25rem 0;
+}
+.county-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+  gap: 0.1rem 1rem;
+  padding: 0.4rem 0;
+}
+.county-grid label.check {
+  margin: 0.2rem 0;
+  font-weight: 500;
 }

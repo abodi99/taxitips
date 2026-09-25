@@ -332,6 +332,7 @@ def company_detail(request, company_id):
             "baseCounty": lic.base_county,
             "scheduledBaseCounty": lic.scheduled_base_county,
             "counties": list(access.license_counties(lic.id, now)),
+            "endsAt": _iso(lic.ends_at),
             "extraCounties": [
                 c.county_code for c in LicenseCounty.objects.filter(
                     license=lic, kind=LicenseCounty.Kind.EXTRA

@@ -1,5 +1,5 @@
 import { countyName, date, dateTime, money } from "../portal/api.js";
-import { addCarsBlock, cancelBlock, ordersCard, ownerBlock, profileBlock, redemptionsCard } from "./sales.js";
+import { addCarsBlock, cancelBlock, ordersCard, ownerBlock, profileBlock, quoteBox, redemptionsCard } from "./sales.js";
 
 /**
  * Adminwebbens vyer, som rena funktioner från data till HTML.
@@ -234,7 +234,7 @@ export function kunder(list, query = "", filter = "alla") {
 
 /* --- En kund ------------------------------------------------------------ */
 
-export function kund(d, config = null, tab = "") {
+export function kund(d, config = null, tab = "", pending = null) {
   const c = d.company;
   const done = doneFromDetail(d);
   const next = firstOpen(done);
@@ -249,7 +249,7 @@ export function kund(d, config = null, tab = "") {
   });
   const panel = {
     foretag: () => stepForetag(d, config),
-    bilar: () => stepBilar(d, config),
+    bilar: () => stepBilar(d, config, pending),
     forare: () => stepForare(d),
     konto: () => stepKonto(d, config),
     betalning: () => stepBetalning(d, config),
@@ -308,8 +308,8 @@ function stepForetag(d, config) {
   `;
 }
 
-function stepBilar(d, config) {
-  return `${carsCard(d, config, { drivers: false })}${addCarsBlock(d, config)}`;
+function stepBilar(d, config, pending) {
+  return `${carsCard(d, config, pending)}${addCarsBlock(d, config)}`;
 }
 
 function stepForare(d) {
@@ -464,92 +464,82 @@ function membersCard(d, config) {
 
 const LICENSE_OPEN = ["active", "trial", "pending_cancel"];
 
-function countySelect(counties, selected, attrs) {
-  return `<select ${attrs}>${(counties ?? [])
-    .map((c) => `<option value="${esc(c.code)}" ${c.code === selected ? "selected" : ""}>${esc(c.name)}</option>`)
-    .join("")}</select>`;
-}
-
 /**
- * Bilarna, en i taget: regnr, län, förare och vad man kan göra. Provbilar
- * ändras direkt (de kostar inget); betalda bilar ändras via offerten, så att
- * fakturan följer med -- samma regel som i fleet/admin_vehicles.py.
+ * Bilarna, en kort per bil: regnr, län som chips och vad man kan göra.
+ *
+ * Provbilar kostar inget och ändras direkt. En betald bils ändring visas
+ * först som en offert i kortet -- beloppet räknas av serverns prismotor
+ * (fleet/pricing.py), aldrig här -- och verkställs när säljaren bekräftat att
+ * kunden godkänt. Samma regel som i fleet/admin_vehicles.py.
  */
-function carsCard(d, config, { drivers = true } = {}) {
+function carsCard(d, config, pending = null) {
   const all = d.licenses ?? [];
   const open = all.filter((l) => LICENSE_OPEN.includes(l.status));
   const closed = all.length - open.length;
   const sell = !!config?.canSell;
   const manage = !!config?.canManage;
   const counties = config?.counties ?? [];
+  const extraPrice = money(config?.price?.extraCountyOre);
   const name = (code) => countyName(code);
   return `
     <div class="card">
       <h2>Bilar <span class="muted">(${esc(open.length)})</span></h2>
+      <p class="muted">Varje bil har ett <b>baslän</b> som ingår i priset. <b>Extra län</b> kostar
+        ${esc(extraPrice)} per bil och månad exkl. moms (gratis under provet).</p>
       ${open.length ? open.map((l) => {
         const trial = l.status === "trial";
         const extras = l.extraCounties ?? [];
-        const phones = (l.approvals ?? []).filter((a) => a.status === "active");
+        const free = counties.filter((c) => !(l.counties ?? []).includes(c.code) && c.code !== l.baseCounty);
+        const mine = pending?.licenseId === l.id ? pending : null;
+        const data = `data-license="${esc(l.id)}" data-base="${esc(l.baseCounty)}" data-extras="${esc(extras.join(","))}" data-plate="${esc(l.vehicle)}" data-trial="${trial ? "1" : ""}"`;
         return `
-        <div class="car">
+        <div class="car ${mine ? "car-pending" : ""}">
           <div class="car-head">
             <b class="plate">${esc(l.vehicle || "—")}</b> ${pill(l.status)}
             ${l.assignmentKind === "temporary" ? '<span class="pill pill-warn">Ersättningsbil</span>' : ""}
+            ${sell ? `<span class="car-tools">
+              <button class="btn btn-quiet btn-small" data-action="car-plate-ask" ${data}>Byt regnr</button>
+              ${l.status !== "pending_cancel" ? `<button class="btn btn-danger btn-small" data-action="car-remove" ${data}>Ta bort bil</button>` : ""}
+            </span>` : ""}
           </div>
-          <div class="muted">Baslän: <b>${esc(name(l.baseCounty))}</b>
-            ${extras.length ? ` · Extra: ${extras.map((c) => esc(name(c))).join(", ")}` : ""}
-            ${l.scheduledBaseCounty ? ` · byts till ${esc(name(l.scheduledBaseCounty))} vid förnyelse` : ""}</div>
-          <div class="muted">Kör nu: ${l.activePhone
-            ? `${esc(l.activePhone.label)} sedan ${esc(dateTime(l.activePhone.since))}` : "ingen"}</div>
 
-          ${drivers ? `<div class="car-drivers">
-            ${phones.length ? phones.map((a) => `
-              <div class="driver-row"><span>📱 ${esc(a.label || "Telefon")} <span class="muted">· godkänd ${esc(date(a.approvedAt))}</span></span>
-                <button class="btn btn-quiet btn-small" data-action="block" data-approval="${esc(a.id)}">Spärra</button></div>`).join("")
-              : '<p class="muted">Inga förare kopplade.</p>'}
-            <button class="btn btn-primary btn-small" data-action="code" data-license="${esc(l.id)}"
-              data-plate="${esc(l.vehicle)}">+ Förare (ge kod)</button>
+          <div class="county-chips" aria-label="Län för ${esc(l.vehicle)}">
+            <span class="county-chip base" title="Ingår i bilens pris">${esc(name(l.baseCounty))} <small>baslän</small></span>
+            ${extras.map((c) => `<span class="county-chip">${esc(name(c))}
+              ${sell ? `<button class="chip-x" data-action="county-remove" data-county="${esc(c)}" ${data}
+                aria-label="Ta bort ${esc(name(c))}" title="Ta bort ${esc(name(c))}">✕</button>` : ""}</span>`).join("")}
+            ${l.scheduledBaseCounty ? `<span class="muted">baslän byts till ${esc(name(l.scheduledBaseCounty))} vid förnyelse</span>` : ""}
+          </div>
+
+          ${sell && l.status !== "pending_cancel" ? `
+          <div class="county-add">
+            <select data-add-county="${esc(l.id)}" aria-label="Välj län att lägga till">
+              <option value="">+ Lägg till län …</option>
+              ${free.map((c) => `<option value="${esc(c.code)}">${esc(c.name)}</option>`).join("")}
+            </select>
+            <button class="btn btn-quiet btn-small" data-action="county-add" ${data}>Lägg till</button>
+            <span class="muted">${trial ? "gratis under provet" : `+${esc(extraPrice)}/mån`}</span>
+            <select data-base-for="${esc(l.id)}" aria-label="Byt baslän">
+              <option value="">Byt baslän …</option>
+              ${counties.filter((c) => c.code !== l.baseCounty).map((c) => `<option value="${esc(c.code)}">${esc(c.name)}</option>`).join("")}
+            </select>
+            <button class="btn btn-quiet btn-small" data-action="base-change" ${data}>Byt</button>
           </div>` : ""}
 
-          ${sell ? `<details class="car-edit"><summary>Ändra bilen</summary>
-            <div class="car-actions">
-              <div class="inline-field">
-                <input id="plate-${esc(l.id)}" placeholder="Nytt regnr" autocomplete="off" />
-                <button class="btn btn-quiet btn-small" data-action="car-plate" data-license="${esc(l.id)}" data-mode="permanent">Byt bil</button>
-                <button class="btn btn-quiet btn-small" data-action="car-plate" data-license="${esc(l.id)}" data-mode="temporary">Ersättningsbil</button>
-                ${l.assignmentKind === "temporary" ? `<button class="btn btn-quiet btn-small" data-action="car-return" data-license="${esc(l.id)}">Tillbaka till ordinarie</button>` : ""}
-              </div>
-              ${trial ? `
-                <div class="inline-field">
-                  <label class="sr" for="base-${esc(l.id)}">Baslän</label>
-                  ${countySelect(counties, l.baseCounty, `id="base-${esc(l.id)}" aria-label="Baslän"`)}
-                  <select id="extras-${esc(l.id)}" multiple aria-label="Extra län" size="3">${counties
-                    .filter((c) => c.code !== l.baseCounty)
-                    .map((c) => `<option value="${esc(c.code)}" ${extras.includes(c.code) ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select>
-                  <button class="btn btn-quiet btn-small" data-action="car-trial-counties" data-license="${esc(l.id)}">Spara län</button>
-                </div>
-                <p class="muted">Vänster: baslän. Höger: extra län (håll Ctrl eller ⌘ för flera). Provbil: länen kostar inget och ändras direkt.</p>` : l.status === "active" ? `
-                <div class="inline-field">
-                  ${countySelect(counties.filter((c) => !(l.counties ?? []).includes(c.code)), "", `data-county-for="${esc(l.id)}" aria-label="Lägg till län"`)}
-                  <button class="btn btn-quiet btn-small" data-action="lic-add-county" data-license="${esc(l.id)}">+ Län (offert)</button>
-                </div>
-                ${extras.length ? `<div class="inline-field">
-                  <select data-remove-county-for="${esc(l.id)}" aria-label="Ta bort län">${extras
-                    .map((c) => `<option value="${esc(c)}">${esc(name(c))}</option>`).join("")}</select>
-                  <button class="btn btn-quiet btn-small" data-action="lic-remove-county" data-license="${esc(l.id)}">− Län vid förnyelse</button>
-                </div>` : ""}
-                <div class="inline-field">
-                  ${countySelect(counties, l.baseCounty, `data-base-for="${esc(l.id)}" aria-label="Nytt baslän"`)}
-                  <button class="btn btn-quiet btn-small" data-action="lic-base" data-license="${esc(l.id)}">Byt baslän vid förnyelse</button>
-                </div>` : ""}
-              <div class="btn-row">
-                ${l.status === "active" ? `<button class="btn btn-quiet btn-small" data-action="lic-cancel" data-license="${esc(l.id)}"
-                  data-plate="${esc(l.vehicle)}">Avsluta vid förnyelse</button>` : ""}
-                ${trial || manage ? `<button class="btn btn-danger btn-small" data-action="car-remove" data-license="${esc(l.id)}"
-                  data-plate="${esc(l.vehicle)}" data-trial="${trial ? "1" : ""}">Ta bort bilen nu</button>` : ""}
-              </div>
+          ${l.status === "pending_cancel" ? `<p class="muted">Bilen avslutas vid nästa förnyelse${l.endsAt ? ` (${esc(date(l.endsAt))})` : ""}.</p>` : ""}
+
+          ${mine ? `
+          <div class="pending-change" role="region" aria-label="Offert">
+            <h4>${esc(mine.label)}</h4>
+            ${quoteBox(mine.quote)}
+            <label class="check"><input id="pendingAccepted" type="checkbox" />
+              Kunden har godkänt ändringen och priset</label>
+            <div class="btn-row">
+              <button class="btn btn-primary" data-action="pending-confirm">Bekräfta</button>
+              <button class="btn btn-quiet" data-action="pending-cancel">Avbryt</button>
+              ${mine.allowNow && manage ? `<button class="btn btn-danger" data-action="car-remove-now" ${data}>Ta bort nu i stället (ingen återbetalning)</button>` : ""}
             </div>
-          </details>` : ""}
+          </div>` : ""}
         </div>`;
       }).join("") : '<p class="muted">Inga bilar än. Lägg till nedan.</p>'}
       ${closed ? `<p class="muted">${esc(closed)} borttagen/borttagna bil(ar) visas inte.</p>` : ""}

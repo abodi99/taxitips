@@ -159,23 +159,29 @@ export function vehicleRow(counties, index = 0) {
     <div class="pkg-row" data-row="${index}">
       <label>Regnr<input name="plate" placeholder="ABC123" autocomplete="off" /></label>
       <label>Etikett <span class="muted">(valfri)</span><input name="label" placeholder="Bil 12" /></label>
-      <label>Baslän<select name="baseCounty">${countyOptions(counties, "14")}</select></label>
-      <label>Extra län <span class="muted">(Ctrl/⌘ för flera)</span>
-        <select name="extraCounties" multiple size="4">${countyOptions(counties)}</select></label>
+      <label>Baslän <span class="muted">(ingår)</span><select name="baseCounty">${countyOptions(counties, "14")}</select></label>
       <button class="btn btn-quiet" type="button" data-action="pkg-remove-row" data-row="${index}" title="Ta bort raden">✕</button>
+      <details class="pkg-extras">
+        <summary>+ Extra län <span class="muted">(valfritt)</span></summary>
+        <div class="county-grid">${counties.map((c) => `
+          <label class="check"><input type="checkbox" name="extraCounties" value="${esc(c.code)}" /> ${esc(c.name)}</label>`).join("")}</div>
+      </details>
     </div>`;
 }
 
 export function readVehicles(root) {
   return [...root.querySelectorAll(".pkg-row")]
-    .map((row) => ({
-      plate: row.querySelector('[name="plate"]').value.trim(),
-      label: row.querySelector('[name="label"]').value.trim(),
-      baseCounty: row.querySelector('[name="baseCounty"]').value,
-      extraCounties: [...row.querySelector('[name="extraCounties"]').selectedOptions]
-        .map((o) => o.value)
-        .filter((c) => c !== row.querySelector('[name="baseCounty"]').value),
-    }))
+    .map((row) => {
+      const base = row.querySelector('[name="baseCounty"]').value;
+      return {
+        plate: row.querySelector('[name="plate"]').value.trim(),
+        label: row.querySelector('[name="label"]').value.trim(),
+        baseCounty: base,
+        extraCounties: [...row.querySelectorAll('[name="extraCounties"]:checked')]
+          .map((o) => o.value)
+          .filter((c) => c !== base),
+      };
+    })
     .filter((v) => v.plate);
 }
 

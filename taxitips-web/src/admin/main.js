@@ -43,6 +43,9 @@ const state = {
   // Kundens cykel: vilket steg som är öppet, och listans filter.
   companyTab: "",
   kundFilter: "alla",
+  // En betald bils ändring som väntar på kundens godkännande: offerten visas
+  // i bilens kort tills säljaren bekräftar eller avbryter.
+  pending: null,
   // Säljflödet: län, prislista, Stripe-läge och vad den inloggade får göra.
   config: null,
   lookup: null,
@@ -84,7 +87,9 @@ async function renderView() {
   try {
     if (!state.config) state.config = await admin.salesConfig();
     if (state.companyId) {
-      el.view.innerHTML = views.kund(await admin.company(state.companyId), state.config, state.companyTab);
+      el.view.innerHTML = views.kund(
+        await admin.company(state.companyId), state.config, state.companyTab, state.pending,
+      );
       return;
     }
     switch (state.view) {
@@ -410,10 +415,12 @@ async function act(action, ds) {
     case "back":
       state.companyId = null;
       state.companyTab = "";
+      state.pending = null;
       return render();
 
     case "kund-tab":
       state.companyTab = ds.tab;
+      state.pending = null;
       await render();
       window.scrollTo({ top: 0 });
       return;
@@ -815,6 +822,94 @@ async function salesAction(action, ds) {
       return quotedOrder({ addCounties: [{ licenseId: ds.license, county }] });
     }
 
+    /* --- Bilens län och borttagning (Bilar-steget) --- */
+
+    case "county-add": {
+      const county = document.querySelector(`[data-add-county="${ds.license}"]`)?.value;
+      if (!county) throw new ApiError(400, "Välj ett län i listan först.", "county_required");
+      if (ds.trial) {
+        const extras = [...splitList(ds.extras), county];
+        await admin.setTrialCounties(ds.license, ds.base, extras);
+        flash(`${countyLabel(county)} är tillagt på ${ds.plate}. Gratis under provet.`);
+        return render();
+      }
+      return prepareChange(ds.license, { addCounties: [{ licenseId: ds.license, county }] },
+        `Lägg till ${countyLabel(county)} på ${ds.plate}`);
+    }
+
+    case "county-remove": {
+      if (ds.trial) {
+        if (!confirm(`Ta bort ${countyLabel(ds.county)} från ${ds.plate}?`)) return;
+        const extras = splitList(ds.extras).filter((c) => c !== ds.county);
+        await admin.setTrialCounties(ds.license, ds.base, extras);
+        flash(`${countyLabel(ds.county)} är borttaget från ${ds.plate}.`);
+        return render();
+      }
+      return prepareChange(ds.license, { removeCounties: [{ licenseId: ds.license, county: ds.county }] },
+        `Ta bort ${countyLabel(ds.county)} från ${ds.plate} vid nästa förnyelse`);
+    }
+
+    case "base-change": {
+      const county = document.querySelector(`[data-base-for="${ds.license}"]`)?.value;
+      if (!county) throw new ApiError(400, "Välj det nya baslänet i listan först.", "county_required");
+      if (ds.trial) {
+        const extras = splitList(ds.extras).filter((c) => c !== county);
+        await admin.setTrialCounties(ds.license, county, extras);
+        flash(`${ds.plate} har nu ${countyLabel(county)} som baslän.`);
+        return render();
+      }
+      return prepareChange(ds.license, { baseCountyChanges: [{ licenseId: ds.license, county }] },
+        `Byt baslän på ${ds.plate} till ${countyLabel(county)} vid nästa förnyelse`);
+    }
+
+    case "car-plate-ask": {
+      const plate = prompt(`Nytt registreringsnummer för ${ds.plate}?\n\nLänen och perioden följer med. Förarna behöver en ny kod.`);
+      if (!plate) return;
+      const result = await admin.changeVehicle(ds.license, plate.trim(), "permanent");
+      flash(`Bilen är nu ${result.plate}. Ge förarna en ny kod under Förare.`);
+      return render();
+    }
+
+    case "car-remove": {
+      if (ds.trial) {
+        const reason = prompt(`Ta bort provbilen ${ds.plate}? Förarna i bilen förlorar åtkomsten direkt.\n\nSkäl:`);
+        if (!reason) return;
+        await admin.removeLicense(ds.license, reason);
+        flash(`${ds.plate} är borttagen.`);
+        return render();
+      }
+      return prepareChange(ds.license, { cancelLicenseIds: [ds.license] },
+        `Avsluta ${ds.plate} vid nästa förnyelse – ingen mer debitering för bilen`, { allowNow: true });
+    }
+
+    case "car-remove-now": {
+      const reason = prompt(`Ta bort ${ds.plate} NU? Förarna förlorar åtkomsten direkt. Ingen återbetalning görs automatiskt.\n\nSkäl:`);
+      if (!reason) return;
+      await admin.removeLicense(ds.license, reason);
+      state.pending = null;
+      flash(`${ds.plate} är borttagen.`);
+      return render();
+    }
+
+    case "pending-confirm": {
+      const pending = state.pending;
+      if (!pending) return;
+      if (!document.getElementById("pendingAccepted")?.checked) {
+        throw new ApiError(400, "Kryssa i att kunden har godkänt ändringen och priset.", "acceptance_required");
+      }
+      const result = await admin.order(companyId, {
+        ...pending.change,
+        accepted: true,
+        payment: state.config?.stripe?.available ? "stripe_card" : "later",
+      });
+      state.pending = null;
+      return orderResult(result);
+    }
+
+    case "pending-cancel":
+      state.pending = null;
+      return render();
+
     case "lic-remove-county": {
       const county = document.querySelector(`[data-remove-county-for="${ds.license}"]`)?.value;
       if (!county) return;
@@ -849,19 +944,6 @@ async function salesAction(action, ds) {
       const extras = [...(document.getElementById(`extras-${ds.license}`)?.selectedOptions ?? [])].map((o) => o.value);
       await admin.setTrialCounties(ds.license, base, extras);
       flash("Länen är sparade.");
-      return render();
-    }
-
-    case "car-remove": {
-      const reason = prompt(
-        (ds.trial
-          ? `Ta bort provbilen ${ds.plate} nu? Förarna i bilen förlorar åtkomsten direkt.`
-          : `Ta bort den BETALDA bilen ${ds.plate} nu? Förarna förlorar åtkomsten direkt. Ingen återbetalning görs automatiskt.`) +
-          "\n\nSkäl (obligatoriskt):",
-      );
-      if (!reason) return;
-      await admin.removeLicense(ds.license, reason);
-      flash(`${ds.plate} är borttagen.`);
       return render();
     }
 
@@ -964,6 +1046,24 @@ async function salesAction(action, ds) {
     default:
       return;
   }
+}
+
+function splitList(value) {
+  return String(value || "").split(",").filter(Boolean);
+}
+
+function countyLabel(code) {
+  return (state.config?.counties ?? []).find((c) => c.code === code)?.name ?? code;
+}
+
+/**
+ * En betald bils ändring: hämta offerten från servern och visa den i bilens
+ * kort. Inget verkställs förrän säljaren bekräftat att kunden godkänt.
+ */
+async function prepareChange(licenseId, change, label, { allowNow = false } = {}) {
+  const quote = await admin.quote(state.companyId, change);
+  state.pending = { licenseId, change, label, quote, allowNow };
+  return render();
 }
 
 /** Ändring på en befintlig licens: offert, bekräftelse, beställning. */
