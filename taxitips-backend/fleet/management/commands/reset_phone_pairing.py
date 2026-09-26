@@ -75,7 +75,9 @@ class Command(BaseCommand):
                 raise CommandError(f"Ingen bil {plate} i ett annat bolag.")
             stuck_license = License.objects.filter(
                 assignments__vehicle=vehicle, assignments__ended_at__isnull=True,
-                status__in=[License.Status.ACTIVE, License.Status.TRIAL],
+                status__in=[
+                    License.Status.ACTIVE, License.Status.TRIAL, License.Status.PENDING_CANCEL,
+                ],
             ).first()
             if stuck_license is None:
                 raise CommandError(f"{plate} har ingen aktiv licens.")
