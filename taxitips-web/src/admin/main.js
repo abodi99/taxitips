@@ -75,26 +75,41 @@ function setTab(view) {
 }
 
 async function render() {
+  const seq = ++renderSeq;
   clearError();
   el.view.innerHTML = '<p class="muted">Laddar …</p>';
   const note = state.flash;
   state.flash = null;
   try {
-    await renderView();
+    await renderView(seq);
   } finally {
-    if (note) el.view.insertAdjacentHTML("afterbegin", `<p class="ok flash" role="status">${sales.esc(note)}</p>`);
+    if (note && seq === renderSeq) {
+      el.view.insertAdjacentHTML("afterbegin", `<p class="ok flash" role="status">${sales.esc(note)}</p>`);
+    }
   }
 }
 
-async function renderView() {
+/**
+ * Varje navigering får ett nummer, och bara den senaste får rita. Utan det
+ * vann den som svarade SIST: Hem (tre anrop) laddade fortfarande när man
+ * klickade på Support, och när Hem till slut svarade skrevs supportsidan över
+ * -- menyn stod på Support men svarsrutan var borta (2026-09-26).
+ */
+let renderSeq = 0;
+
+async function renderView(seq) {
+  const current = () => seq === renderSeq;
+  const paint = (html) => {
+    if (current()) el.view.innerHTML = html;
+  };
   // Supportsidan hämtar i bakgrunden; den ska sluta när man går därifrån.
   support.stop();
   try {
     if (!state.config) state.config = await admin.salesConfig();
     if (state.companyId) {
-      el.view.innerHTML = views.kund(
+      paint(views.kund(
         await admin.company(state.companyId), state.config, state.companyTab, state.pending,
-      );
+      ));
       return;
     }
     switch (state.view) {
@@ -105,13 +120,13 @@ async function renderView() {
           admin.supportSummary().catch(() => ({ waiting: 0 })),
         ]);
         setSupportCount(sup.waiting ?? 0);
-        el.view.innerHTML = views.oversikt(overview, list, sup.waiting ?? 0);
+        paint(views.oversikt(overview, list, sup.waiting ?? 0));
         break;
       }
       case "support":
+        if (!current()) return;
         support.mount(el.view, {
           threadId: state.supportThread,
-          canReply: !!state.config?.canSupport,
           onOpenCompany: (id) => {
             state.companyId = id;
             state.companyTab = "";
@@ -125,43 +140,44 @@ async function renderView() {
         state.supportThread = null;
         break;
       case "kunder":
-        el.view.innerHTML = views.kunder(await admin.companies(state.query), state.query, state.kundFilter);
+        paint(views.kunder(await admin.companies(state.query), state.query, state.kundFilter));
         break;
       case "nykund":
-        el.view.innerHTML = sales.nyKund(state.config, state.lookup, state.lookupOrg);
+        paint(sales.nyKund(state.config, state.lookup, state.lookupOrg));
         break;
       case "kuponger":
-        el.view.innerHTML = sales.kuponger(await admin.coupons(), state.config);
+        paint(sales.kuponger(await admin.coupons(), state.config));
         break;
       case "notiser":
-        el.view.innerHTML = views.notiser(await admin.notifications(state.pushStatus), state.pushStatus);
+        paint(views.notiser(await admin.notifications(state.pushStatus), state.pushStatus));
         break;
       case "evenemang":
-        el.view.innerHTML = views.evenemang(
+        paint(views.evenemang(
           await admin.events(state.events), state.events, state.config, state.eventImport,
-        );
+        ));
         break;
       case "konton": {
         const q = state.accountQuery;
         const [found, blocks] = await Promise.all([q ? admin.accounts(q) : null, admin.blocks()]);
-        el.view.innerHTML = acc.konton(found, blocks, q, state.config);
+        paint(acc.konton(found, blocks, q, state.config));
         break;
       }
       case "personal":
-        el.view.innerHTML = acc.personal(await admin.staff(), state.config);
+        paint(acc.personal(await admin.staff(), state.config));
         break;
       case "granskning":
-        el.view.innerHTML = views.granskning(await admin.reviews("open"));
+        paint(views.granskning(await admin.reviews("open")));
         break;
       default:
-        el.view.innerHTML = "";
+        paint("");
     }
   } catch (error) {
-    el.view.innerHTML = "";
+    if (!current()) return;
+    paint("");
     if (error instanceof ApiError && error.reason === "not_staff") {
-      el.view.innerHTML = `<div class="card"><h2>Ingen adminbehörighet</h2>
+      paint(`<div class="card"><h2>Ingen adminbehörighet</h2>
         <p>Kontot är inloggat men har ingen roll i plattformens personal.
-        Kunder använder <a href="/portal">kundportalen</a>.</p></div>`;
+        Kunder använder <a href="/portal">kundportalen</a>.</p></div>`);
       return;
     }
     showError(error);
@@ -1131,7 +1147,6 @@ async function quotedOrder(change) {
   const box = document.createElement("div");
   box.innerHTML = sales.quoteBox(quote);
   if (!confirm(`${box.innerText}\n\nHar kunden godkänt det här?`)) return;
-  const stripeOk = !!state.config?.stripe?.available;
   const result = await admin.order(state.companyId, {
     ...change,
     accepted: true,

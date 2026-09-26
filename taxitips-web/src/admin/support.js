@@ -64,12 +64,11 @@ function messageItem(m) {
  * @param {HTMLElement} container  vyn (#view)
  * @param {object} opts
  *   threadId      konversationen att öppna direkt (t.ex. från kundsidan)
- *   canReply      personalen får svara (ADMIN_SUPPORT)
  *   onOpenCompany kundsidan för ett bolag
  *   onError       adminwebbens gemensamma felvisning
  *   onWaiting     antalet som väntar på svar, för menyns räknare
  */
-export function mount(container, { threadId = null, canReply = false, onOpenCompany, onError, onWaiting }) {
+export function mount(container, { threadId = null, onOpenCompany, onError, onWaiting }) {
   stop();
   const st = { status: "open", q: "", selected: threadId, threads: [], detail: null, timers: [], stopped: false };
 
@@ -124,16 +123,15 @@ export function mount(container, { threadId = null, canReply = false, onOpenComp
         </div>
         <div class="btn-row">
           ${t.companyId ? `<button class="btn btn-quiet btn-small" data-sup="company">Kundsidan</button>` : ""}
-          ${canReply ? `<button class="btn btn-quiet btn-small" data-sup="${closed ? "reopen" : "close"}">
-            ${closed ? "Öppna igen" : "Avsluta"}</button>` : ""}
+          <button class="btn btn-quiet btn-small" data-sup="${closed ? "reopen" : "close"}">
+            ${closed ? "Öppna igen" : "Avsluta"}</button>
         </div>
       </header>
       <ol id="supMessages" class="sup-messages"></ol>
-      ${canReply ? `
       <form id="supForm" class="sup-form">
         <textarea id="supBody" rows="3" maxlength="2000" placeholder="Skriv ett svar … (Ctrl+Enter skickar)" required></textarea>
         <button class="btn btn-primary" type="submit">Skicka</button>
-      </form>` : '<p class="muted">Din roll kan läsa men inte svara.</p>'}`;
+      </form>`;
     renderMessages(true);
   }
 
@@ -160,7 +158,9 @@ export function mount(container, { threadId = null, canReply = false, onOpenComp
     if (!st.selected) return;
     const before = st.detail?.messages?.length ?? -1;
     const previousStatus = st.detail?.thread?.status;
-    const res = await admin.supportThread(st.selected, canReply);
+    // Servern avgör vem som får svara och markera läst (ADMIN_SUPPORT); sidan
+    // gissar inte. En gissning här stängde en gång ute en plattformsadmin.
+    const res = await admin.supportThread(st.selected, true);
     if (st.stopped) return;
     st.detail = res;
     if (shell || res.thread.status !== previousStatus) renderChatShell();

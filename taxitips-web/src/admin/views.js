@@ -266,7 +266,7 @@ export function kund(d, config = null, tab = "", pending = null) {
           ? (d.access.validUntil ? ` · tips på till ${esc(date(d.access.validUntil))}` : " · tips på")
           : ` · inga tips: ${esc(ACCESS_TEXT[d.access?.reason] ?? d.access?.reason ?? "")}`}</p></div>
       <div class="btn-row">
-        ${config?.canSupport ? `<button class="btn btn-quiet" data-action="support-start">Chatta med kunden</button>` : ""}
+        <button class="btn btn-quiet" data-action="support-start">Chatta med kunden</button>
         ${next && next.id !== active ? `<button class="btn btn-primary" data-action="kund-tab" data-tab="${esc(next.id)}">
           Nästa steg: ${esc(next.todo)} →</button>` : ""}
       </div>
