@@ -388,13 +388,22 @@ class _DriverScreenState extends State<DriverScreen>
   /// Skriver huvudskärmens län och kommuner till devices.notify_prefs. De äldre
   /// fälten (marknader och orter) töms, så att de inte filtrerar notiserna utan
   /// att gå att se eller ändra.
+  ///
+  /// Inget valt betyder "alla bilens län", inte "inga län": då skickas
+  /// licensens län, och är de inte kända än skickas ingenting. Förut skickades
+  /// en tom lista, som skrev över länen parkopplingen just satt -- och en
+  /// telefon utan län får inga notiser alls (core/notify.py, `no_area`).
   Future<void> _syncNotifyRegionsFromFilter() async {
     if (widget.api.deviceToken == null) return;
+    final counties = _counties.isEmpty && _municipalities.isEmpty
+        ? _licensedCounties
+        : _counties;
+    if (counties == null) return;
     try {
       await widget.api.saveNotifyPrefs(
         regions: const [],
         cities: const [],
-        counties: _counties.toList()..sort(),
+        counties: counties.toList()..sort(),
         municipalities: _municipalities.toList()..sort(),
       );
     } catch (_) {

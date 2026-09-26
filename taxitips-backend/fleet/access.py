@@ -378,8 +378,23 @@ def _driver_access(token: str, now) -> Access:
 
     window = company_window(device.company_id, now)
 
+    # Bara godkännanden och pass hos telefonens EGET företag. En telefon som
+    # flyttats till ett nytt bolag körde annars vidare på det gamla bolagets
+    # bil och län (2026-09-26). fleet/pairing.py:redeem_code släpper dem vid
+    # flytten; det här läker telefoner som flyttades innan dess.
+    stale = VehicleSession.objects.filter(
+        device_id=device.id, ended_at__isnull=True
+    ).exclude(company_id=device.company_id)
+    if stale.exists():
+        from fleet import sessions
+
+        for old in stale:
+            sessions.end_session(old, reason=VehicleSession.EndReason.LICENSE_CHANGE, now=now)
     approvals = list(
-        DeviceApproval.objects.filter(device_id=device.id, status=DeviceApproval.Status.ACTIVE)
+        DeviceApproval.objects.filter(
+            device_id=device.id, status=DeviceApproval.Status.ACTIVE,
+            company_id=device.company_id,
+        )
         .select_related("vehicle", "license")
     )
     if not approvals:

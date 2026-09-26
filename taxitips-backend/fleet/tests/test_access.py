@@ -322,18 +322,24 @@ class PairingDefaultsTests(FleetTestCase):
         device = Device.objects.get(id=result.device_id)
         self.assertEqual(sorted(device.notify_prefs.get("counties", [])), ["12", "14"])
 
-    def test_an_existing_choice_is_not_overwritten(self):
+    def test_an_old_choice_from_another_car_is_replaced(self):
+        """Ett län från en tidigare bil fick förut ligga kvar; licensen släppte
+        inte igenom det, och föraren fick varken rätt län eller något alls."""
         data = self.full_setup(county="14")
         device = self.make_device(data["company"])
         Device = type(device)
-        Device.objects.filter(id=device.id).update(notify_prefs={"counties": ["01"]})
+        Device.objects.filter(id=device.id).update(
+            notify_prefs={"counties": ["12"], "municipalities": ["1283", "1480"], "cities": ["Helsingborg"]}
+        )
         issued = pairing.issue_code(
             license=data["license"], vehicle=data["vehicle"], created_by=None
         )
         pairing.redeem_code(code=issued.code, installation_id=device.token)
 
         device.refresh_from_db()
-        self.assertEqual(device.notify_prefs["counties"], ["01"])
+        self.assertEqual(device.notify_prefs["counties"], ["14"])
+        self.assertEqual(device.notify_prefs["municipalities"], ["1480"])
+        self.assertEqual(device.notify_prefs["cities"], [])
 
 
 class PushRegistrationTests(FleetTestCase):

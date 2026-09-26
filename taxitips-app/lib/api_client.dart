@@ -732,7 +732,32 @@ class ApiClient {
       throw ApiException(500, 'Servern gav ingen enhetsnyckel.');
     }
     await saveDevice(secret);
+    await clearLocalAreaFilter();
     return data;
+  }
+
+  /// Nycklarna för listans länsfilter (driver_screen.dart).
+  static const _areaFilterKeys = [
+    'tb_filter_counties',
+    'tb_filter_municipalities',
+    'tb_filter_regions',
+    'tb_filter_cities',
+    'tb_filter_region',
+    'tb_filter_place',
+  ];
+
+  /// En ny bil har egna län. Ett sparat filter från förra bilen (Skåne) låg
+  /// förut kvar, synkades till servern och tömde körområdet för den nya
+  /// (Stockholm) -- 2026-09-26. Tomt filter betyder "alla bilens län".
+  Future<void> clearLocalAreaFilter() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      for (final key in _areaFilterKeys) {
+        await prefs.remove(key);
+      }
+    } catch (_) {
+      // Bäst-effort: filtret rensas också mot licensen när listan laddas.
+    }
   }
 
   /// Bolagskoden hittar företaget och lägger en ANSÖKAN. Ingen token, ingen

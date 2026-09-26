@@ -126,9 +126,9 @@ class FleetFixture:
         )
         return approval, secret
 
-    def full_setup(self, *, plate="ABC123", county="12"):
+    def full_setup(self, *, plate="ABC123", county="12", company=None):
         """Bolag med abonnemang, en licens och en godkänd telefon."""
-        company = self.make_company()
+        company = company or self.make_company()
         owner = self.make_owner(company)
         subscription = self.make_subscription(company)
         vehicle, license = self.make_license(company, plate=plate, county=county)

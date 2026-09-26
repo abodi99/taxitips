@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api_client.dart';
+import '../push_service.dart';
 import '../signal_kinds.dart';
 import '../theme.dart';
 import 'settings_ui.dart';
@@ -273,6 +274,41 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     }
   }
 
+  // ── Ägaren kör själv ───────────────────────────────────────────────────
+
+  /// Kopplar DEN HÄR telefonen till bilen, utan att logga ut. Samma
+  /// engångskod som för en förare -- skapas och löses in direkt här, så att
+  /// godkännandet, spärren och revisionen är desamma. Förut fick ägaren logga
+  /// ut, välja "Anslut telefonen" och klistra in sin egen kod (2026-09-26).
+  Future<void> _driveMyself(Map<String, dynamic> license) async {
+    final plate = license['vehicle']?.toString() ?? 'bilen';
+    final vehicleId = license['vehicleId']?.toString();
+    if (vehicleId == null) {
+      _snack('Bilen saknas på licensen. Kontakta support.', isError: true);
+      return;
+    }
+    try {
+      final issued = await widget.api.issuePairingCode(
+        licenseId: license['licenseId'].toString(),
+        vehicleId: vehicleId,
+        label: 'Min telefon',
+      );
+      final paired = await widget.api.pairWithCode(
+        code: issued['code'].toString(),
+        label: 'Min telefon',
+      );
+      unawaited(registerForPush(widget.api));
+      await _reload();
+      _snack(
+        paired['sessionStarted'] == true
+            ? 'Den här telefonen kör nu $plate'
+            : 'Telefonen är kopplad till $plate. Välj bilen i listan.',
+      );
+    } catch (e) {
+      _snack(_cleanError(e), isError: true);
+    }
+  }
+
   // ── Provbil ────────────────────────────────────────────────────────────
 
   Future<void> _addTrialCar() async {
@@ -402,6 +438,23 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                     style: TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),
+              if (canManage) ...[
+                const SizedBox(height: 10),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size.fromHeight(52),
+                  ),
+                  onPressed: () {
+                    Navigator.pop(ctx);
+                    _driveMyself(license);
+                  },
+                  icon: const Icon(Icons.phone_android),
+                  label: const Text(
+                    'Kör bilen själv med den här telefonen',
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
@@ -506,8 +559,8 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
           const Padding(
             padding: EdgeInsets.fromLTRB(4, 8, 4, 0),
             child: Text(
-              'Tryck på en bil för att koppla en förare. Föraren öppnar appen, '
-              'väljer "Anslut telefonen" och skriver in koden.',
+              'Tryck på en bil för att koppla en förare, eller för att köra '
+              'den själv med den här telefonen.',
               style: TextStyle(color: TbColors.muted, fontSize: 13, height: 1.35),
             ),
           ),

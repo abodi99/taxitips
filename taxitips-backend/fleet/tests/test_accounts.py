@@ -27,7 +27,9 @@ from fleet.models import (
     KnownAccount,
     License,
     StaffRole,
+    Subscription,
     Trial,
+    VehicleSession,
 )
 from fleet.tests.base import FleetTestCase
 
@@ -381,23 +383,69 @@ class RepairedPhoneTests(FleetTestCase):
     def driver(self, secret):
         return access.resolve(RequestFactory().get("/api/alerts", headers={"X-Device-Token": secret}))
 
-    def test_pairing_again_closes_the_old_session_and_asks_for_the_car(self):
-        from fleet.push_gate import can_receive
-        from billing.models import Device
+    def test_pairing_again_replaces_the_old_session_with_the_paired_car(self):
+        from fleet.models import VehicleSession
 
         first = self.pair()
-        self.sessions.start_session(device_id=first.device_id, license_id=self.data["license"].id)
+        self.assertTrue(first.session_started)
         self.assertTrue(self.driver(first.secret).ok)
+        first_session = VehicleSession.objects.get(device_id=first.device_id, ended_at__isnull=True)
 
         second = self.pair()
-        result = self.driver(second.secret)
-        self.assertEqual(result.reason, "no_active_session")
-        self.assertTrue(result.needs_session)
-        device = Device.objects.get(id=second.device_id)
-        self.assertFalse(can_receive(device).ok)
-
-        self.sessions.start_session(device_id=second.device_id, license_id=self.data["license"].id)
+        self.assertTrue(second.session_started)
+        self.assertFalse(self.driver(first.secret).ok)
         self.assertTrue(self.driver(second.secret).ok)
+        first_session.refresh_from_db()
+        self.assertIsNotNone(first_session.ended_at)
+        self.assertEqual(VehicleSession.objects.filter(
+            device_id=second.device_id, ended_at__isnull=True
+        ).count(), 1)
+
+    def test_a_phone_moved_to_another_company_leaves_the_old_car_and_counties(self):
+        """
+        2026-09-26: ägaren registrerade ett nytt bolag, kopplade sin telefon till
+        Stockholmsbilen -- och fick testbolagets Skånelän, eftersom det gamla
+        godkännandet och passet stod kvar.
+        """
+        from billing.models import Device
+        from fleet.models import DeviceApproval, VehicleSession
+
+        old = self.pair()
+        self.assertTrue(self.driver(old.secret).ok)
+
+        other = self.make_company(name="Nytt Bolag AB", org_number="5564879764")
+        new_data = self.full_setup(company=other, county="01", plate="STH001")
+        issued = self.pairing.issue_code(
+            license=new_data["license"], vehicle=new_data["vehicle"], created_by=None,
+        )
+        moved = self.pairing.redeem_code(code=issued.code, installation_id=self.install)
+
+        self.assertFalse(DeviceApproval.objects.filter(
+            device_id=moved.device_id, company_id=self.data["company"].id,
+            status=DeviceApproval.Status.ACTIVE,
+        ).exists())
+        self.assertFalse(VehicleSession.objects.filter(
+            device_id=moved.device_id, company_id=self.data["company"].id, ended_at__isnull=True,
+        ).exists())
+        result = self.driver(moved.secret)
+        self.assertTrue(result.ok, result.reason)
+        self.assertEqual(tuple(result.counties), ("01",))
+        self.assertEqual(Device.objects.get(id=moved.device_id).notify_prefs["counties"], ["01"])
+
+    def test_a_phone_stuck_on_another_companys_car_heals(self):
+        """Läget före rättningen: telefonen flyttad, gamla passet öppet."""
+        from billing.models import Device
+        from fleet.models import VehicleSession
+
+        first = self.pair()
+        other = self.make_company(name="Nytt Bolag AB", org_number="5564879764")
+        self.full_setup(company=other, county="01", plate="STH001")
+        Device.objects.filter(id=first.device_id).update(company_id=other.id)
+        result = self.driver(first.secret)
+        self.assertEqual(result.reason, "device_not_approved")
+        self.assertFalse(VehicleSession.objects.filter(
+            device_id=first.device_id, ended_at__isnull=True
+        ).exists())
 
     def test_a_phone_already_stuck_heals_instead_of_saying_blocked(self):
         from fleet.models import DeviceApproval, VehicleSession
@@ -429,3 +477,76 @@ class RepairedPhoneTests(FleetTestCase):
         )
         # En riktig spärr läks aldrig till ett bilval.
         self.assertIn(self.driver(first.secret).reason, ("device_blocked", "device_not_approved"))
+
+
+class ResetPhonePairingTests(FleetTestCase):
+    """`manage.py reset_phone_pairing`: momentet "Kör bilen själv" går att prova igen."""
+
+    def setUp(self):
+        super().setUp()
+        from fleet import pairing
+
+        self.pairing = pairing
+        self.install = f"install-{uuid.uuid4().hex}"
+        # Det gamla testbolaget i Skåne, och ägarens nya bolag i Stockholm.
+        self.old = self.full_setup(plate="TEST01", county="12")
+        new_company = self.make_company(name="Nytt Bolag AB", org_number="5564879764")
+        self.new = self.full_setup(company=new_company, county="01", plate="KEE351")
+        Subscription.objects.filter(company_id=new_company.id).update(had_successful_payment=False)
+
+    def drive_myself(self):
+        issued = self.pairing.issue_code(
+            license=self.new["license"], vehicle=self.new["vehicle"], created_by=None,
+        )
+        return self.pairing.redeem_code(code=issued.code, installation_id=self.install)
+
+    def driver(self, secret):
+        return access.resolve(RequestFactory().get("/api/alerts", headers={"X-Device-Token": secret}))
+
+    def reset(self, *extra):
+        from io import StringIO
+
+        from django.core.management import call_command
+
+        out = StringIO()
+        call_command("reset_phone_pairing", "--company", "Nytt Bolag AB", *extra, stdout=out)
+        return out.getvalue()
+
+    def test_the_moment_can_be_run_again_and_again(self):
+        first = self.drive_myself()
+        self.assertEqual(tuple(self.driver(first.secret).counties), ("01",))
+
+        self.reset()
+        # Appens gamla nyckel känns inte igen -> ägarens inloggning gäller igen.
+        self.assertEqual(self.driver(first.secret).reason, "unknown_device_token")
+
+        second = self.drive_myself()
+        result = self.driver(second.secret)
+        self.assertTrue(result.ok, result.reason)
+        self.assertEqual(tuple(result.counties), ("01",))
+
+    def test_the_old_bug_can_be_recreated_and_is_healed_by_pairing(self):
+        from billing.models import Device
+
+        self.drive_myself()
+        self.reset("--stuck-on", "TEST01")
+        device = Device.objects.get(token=self.install)
+        self.assertTrue(VehicleSession.objects.filter(
+            device_id=device.id, company_id=self.old["company"].id, ended_at__isnull=True,
+        ).exists())
+
+        again = self.drive_myself()
+        result = self.driver(again.secret)
+        self.assertTrue(result.ok, result.reason)
+        self.assertEqual(tuple(result.counties), ("01",))
+        self.assertEqual(Device.objects.get(id=device.id).notify_prefs["counties"], ["01"])
+
+    def test_a_paying_company_is_refused(self):
+        from django.core.management.base import CommandError
+
+        self.drive_myself()
+        Subscription.objects.filter(company_id=self.new["company"].id).update(
+            had_successful_payment=True
+        )
+        with self.assertRaises(CommandError):
+            self.reset()

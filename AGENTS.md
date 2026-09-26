@@ -343,7 +343,11 @@ adminwebben loggar in med en e-postlänk.
 
 Testverktyg: `manage.py seed_test_company` (testbolag + anslutningskod, utan
 Stripe) och `manage.py send_test_push --company "…"` (genom samma mottagargrind
-som riktiga notiser, med skäl per telefon).
+som riktiga notiser, med skäl per telefon). `manage.py reset_phone_pairing --company "…"
+[--stuck-on TEST01]` återställer ett testbolags telefoner till "inloggad
+administratör, ingen telefon kopplad", så att "Kör bilen själv med den här
+telefonen" kan provas igen; `--stuck-on` återskapar felet med ett annat bolags
+bil kvar. Vägrar röra ett bolag som betalat.
 
 Kundlivscykeln (konton, billicenser, abonnemang): **`docs/fleet-abonnemang.md`**
 -- datamodellen, affärsreglerna, utrullningsordningen och återställningen.
@@ -464,7 +468,10 @@ Var och en av dem är skriven efter att ha gått sönder på riktigt.
     Python. Två förare som trycker "Ta över" samtidigt läser båda innan
     någon skriver. En avslutad session återupplivas aldrig: `heartbeat()`
     rör bara en öppen rad, annars tar en gammal telefon tillbaka bilen genom
-    en bakgrundsuppdatering.
+    en bakgrundsuppdatering. **En telefon hör till ett företag:** parkopplas
+    den till ett annat släpps det gamla bolagets godkännanden och pass, och
+    körområdet sätts till den nya bilens län (`fleet/pairing.py:redeem_code`).
+    Annars körde telefonen vidare på förra bolagets bil och län (2026-09-26).
 18. **Belopp räknas på servern, i heltal ören.** `fleet/pricing.py` är den
     enda prismotorn. En andra i klienten kan visa rätt när fakturan blir fel.
 19. **Djangos tabeller nås aldrig via PostgREST.** Supabase ger varje ny

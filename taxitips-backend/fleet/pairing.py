@@ -184,6 +184,7 @@ class PairedDevice:
     approval_id: str
     secret: str
     plate: str
+    session_started: bool = False
 
     def as_dict(self) -> dict:
         return {
@@ -196,6 +197,7 @@ class PairedDevice:
             # plattformens säkra lagring; servern har bara hashen.
             "deviceToken": self.secret,
             "plate": self.plate,
+            "sessionStarted": self.session_started,
         }
 
 
@@ -265,6 +267,21 @@ def redeem_code(
     )
     PairingCode.objects.filter(id=pairing.id).update(consumed_by_device=device.id)
 
+    from fleet import sessions as _sessions
+
+    # En telefon hör till ETT företag (`devices.company_id`, som
+    # `_upsert_device` just flyttade). Godkännanden hos ett annat företag
+    # släpps, och deras pass stängs. Annars körde telefonen vidare på det
+    # gamla bolagets bil och län: en ägare som registrerat ett nytt bolag och
+    # kopplat sin telefon till Stockholmsbilen fick Skånetips från testbolaget
+    # (2026-09-26) -- och ett bolag hade kunnat se ett annat bolags licens.
+    moved = list(DeviceApproval.objects.filter(
+        device_id=device.id, status=DeviceApproval.Status.ACTIVE
+    ).exclude(company_id=pairing.company_id).values_list("id", flat=True))
+    DeviceApproval.objects.filter(id__in=moved).update(
+        status=DeviceApproval.Status.REPLACED, revoked_at=now, revoke_reason="moved_company"
+    )
+
     # Ominstallation eller ny bil: tidigare godkännanden för SAMMA licens
     # ersätts, övriga bilar rörs inte -- en telefon får vara godkänd för flera
     # bilar (§3 talar om byten mellan två bilar på samma telefon).
@@ -278,15 +295,12 @@ def redeem_code(
     # det på ett godkännande som inte längre gäller: förarvyn nekades med
     # "Telefonen är spärrad av din administratör" medan notiserna fortsatte
     # (2026-09-25). Föraren väljer bilen igen och får ett nytt pass.
-    if replaced:
-        from fleet import sessions as _sessions
-
-        for open_session in VehicleSession.objects.filter(
-            device_id=device.id, approval_id__in=replaced, ended_at__isnull=True
-        ):
-            _sessions.end_session(
-                open_session, reason=VehicleSession.EndReason.LICENSE_CHANGE, now=now,
-            )
+    for open_session in VehicleSession.objects.filter(
+        device_id=device.id, approval_id__in=replaced + moved, ended_at__isnull=True
+    ):
+        _sessions.end_session(
+            open_session, reason=VehicleSession.EndReason.LICENSE_CHANGE, now=now,
+        )
 
     approval = DeviceApproval.objects.create(
         company_id=pairing.company_id,
@@ -313,17 +327,24 @@ def redeem_code(
         approval=approval,
     )
 
-    # Körområdet: en nyparkopplad telefon ärver licensens län.
+    # Körområdet: en nyparkopplad telefon får licensens län -- alltid, inte
+    # bara när inget var valt.
     #
-    # Utan det här är `notify_prefs` tomt, och varje notiskandidat faller på
-    # `no_area` i core/notify.py -- telefonen är parkopplad, betald och
-    # godkänd, och får ändå ingenting. Det ser ut som att pushen är trasig.
-    # Föraren kan smalna av i inställningarna efteråt; rättigheten är ändå
-    # licensens, så valet kan aldrig vidga åtkomsten (se fleet/access.py).
+    # Utan län faller varje notiskandidat på `no_area` i core/notify.py:
+    # telefonen är parkopplad, betald och godkänd, och får ändå ingenting.
+    # Och ett gammalt val från en tidigare bil (Skåne) låg förut kvar när
+    # telefonen kopplades till en Stockholmsbil; licensen släppte inte igenom
+    # Skåne, så föraren fick varken rätt län eller något alls. Föraren kan
+    # smalna av i inställningarna efteråt; rättigheten är ändå licensens.
+    counties = list(license_counties_for(license, now))
     prefs = dict(device.notify_prefs or {})
-    if not (prefs.get("counties") or prefs.get("regions") or prefs.get("municipalities")):
-        prefs["counties"] = list(license_counties_for(license, now))
-        Device.objects.filter(id=device.id).update(notify_prefs=prefs)
+    prefs["counties"] = counties
+    prefs["municipalities"] = [
+        m for m in (prefs.get("municipalities") or []) if str(m)[:2] in counties
+    ]
+    prefs["regions"] = []
+    prefs["cities"] = []
+    Device.objects.filter(id=device.id).update(notify_prefs=prefs)
 
     RiskSignal.objects.create(
         company_id=pairing.company_id, kind=RiskSignal.Kind.PAIRING,
@@ -341,10 +362,20 @@ def redeem_code(
             "approval_id": str(approval.id), "plate": vehicle.plate,
         },
     )
+    # Koden gällde en bestämd bil, så telefonen tar den direkt: ett extra
+    # "välj bil" direkt efter att administratören valt bilen var ett steg för
+    # mycket. Har en annan telefon bilen frågar appen som vanligt (Ta över).
+    session_started = False
+    try:
+        _sessions.start_session(device_id=device.id, license_id=license.id, now=now)
+        session_started = True
+    except _sessions.SessionError:
+        pass
     return PairedDevice(
         device_id=str(device.id), company_id=str(pairing.company_id),
         vehicle_id=str(vehicle.id), license_id=str(license.id),
         approval_id=str(approval.id), secret=secret, plate=vehicle.plate,
+        session_started=session_started,
     )
 
 

@@ -226,7 +226,7 @@ class _SplashScreen extends StatelessWidget {
   }
 }
 
-class _AppShell extends StatelessWidget {
+class _AppShell extends StatefulWidget {
   const _AppShell({
     required this.api,
     required this.onLogout,
@@ -238,26 +238,43 @@ class _AppShell extends StatelessWidget {
   final VoidCallback onLeftDevice;
 
   @override
+  State<_AppShell> createState() => _AppShellState();
+}
+
+class _AppShellState extends State<_AppShell> {
+  /// Byts när telefonen kopplats till en bil från inställningarna ("Kör
+  /// bilen själv"). Förarskärmen byggs då om från början, med den nya bilens
+  /// län och pass -- annars låg den gamla vyn kvar tills appen startades om.
+  int _driverEpoch = 0;
+
+  Future<void> _openSettings(BuildContext context) async {
+    final tokenBefore = widget.api.deviceToken;
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SettingsScreen(
+          api: widget.api,
+          onLogout: widget.onLogout,
+          onLeftDevice: () {
+            Navigator.of(context).pop();
+            widget.onLeftDevice();
+          },
+        ),
+      ),
+    );
+    if (mounted && widget.api.deviceToken != tokenBefore) {
+      setState(() => _driverEpoch++);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       body: DriverScreen(
-        api: api,
+        key: ValueKey(_driverEpoch),
+        api: widget.api,
         demo: false,
-        onLeftDevice: onLeftDevice,
-        onOpenSettings: () {
-          Navigator.of(context).push(
-            MaterialPageRoute<void>(
-              builder: (_) => SettingsScreen(
-                api: api,
-                onLogout: onLogout,
-                onLeftDevice: () {
-                  Navigator.of(context).pop();
-                  onLeftDevice();
-                },
-              ),
-            ),
-          );
-        },
+        onLeftDevice: widget.onLeftDevice,
+        onOpenSettings: () => _openSettings(context),
       ),
     );
   }
