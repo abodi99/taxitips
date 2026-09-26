@@ -975,7 +975,7 @@ async function salesAction(action, ds) {
       const result = await admin.order(companyId, {
         ...pending.change,
         accepted: true,
-        payment: state.config?.stripe?.available ? "stripe_card" : "later",
+        payment: "stripe_card",
       });
       state.pending = null;
       return orderResult(result);
@@ -1095,16 +1095,6 @@ async function salesAction(action, ds) {
       return render();
     }
 
-    case "order-paid": {
-      const note = prompt(
-        "Markera betald utanför Stripe. Paketet aktiveras direkt.\n\nHur betalade kunden? (t.ex. fakturanummer)",
-      );
-      if (!note) return;
-      await admin.markPaid(ds.order, note);
-      flash("Ordern är markerad som betald och paketet är aktivt.");
-      return render();
-    }
-
     case "order-cancel": {
       if (!confirm("Avbryta den obetalda ordern? En faktura i Stripe makuleras.")) return;
       await admin.cancelOrder(ds.order, "Avbruten av säljare");
@@ -1150,7 +1140,7 @@ async function quotedOrder(change) {
   const result = await admin.order(state.companyId, {
     ...change,
     accepted: true,
-    payment: stripeOk ? "stripe_card" : "later",
+    payment: "stripe_card",
   });
   return orderResult(result);
 }

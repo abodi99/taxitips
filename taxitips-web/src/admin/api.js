@@ -115,8 +115,6 @@ export const admin = {
     }),
   refreshOrder: (orderId) =>
     request(`/api/admin/orders/${orderId}/refresh`, { method: "POST", body: {} }),
-  markPaid: (orderId, note) =>
-    request(`/api/admin/orders/${orderId}/mark-paid`, { method: "POST", body: { note } }),
   cancelOrder: (orderId, reason) =>
     request(`/api/admin/orders/${orderId}/cancel`, { method: "POST", body: { reason } }),
   coupons: () => request("/api/admin/coupons"),

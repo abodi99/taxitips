@@ -299,8 +299,9 @@ notiser, evenemang och riskgranskningar över ALLA bolag. Kräver en aktiv rad i
 `fleet_staff_role` -- en kunds roll i `company_members` ger ingenting där, hur hög
 den än är. `support` läser, `sales` säljer (företag, paket, prov, kuponger,
 förare, betallänkar, uppsägning till periodens slut), `platform_admin` gör allt
-och ensam det som ger åtkomst utan betalning (kuponger, betald utanför Stripe,
-avsluta direkt). Säljflödet: `docs/fleet-abonnemang.md` §9b. Spärrar av
+och ensam det som ger åtkomst utan betalning (kuponger, avsluta direkt). **All
+betalning går genom Stripe** (kort eller Stripe-faktura); "betalas senare" och
+"markera betald utanför Stripe" är borttagna 2026-09-26. Säljflödet: `docs/fleet-abonnemang.md` §9b. Spärrar av
 företag, konton och e-postadresser, personalroller och egna evenemang
 (manuellt eller CSV/JSON): §9d. Adminwebben är byggd som en cykel: **Hem** är en
 att-göra-lista (en rad per kund som behöver något), **Kunder** en lista med filter,
@@ -311,7 +312,6 @@ med "Nästa". Reglerna för vad som är klart och nästa steg bor på ett ställ
 och Google-inloggning är inte konfigurerad i produktionens Supabase Auth, så
 adminwebben loggar in med en e-postlänk.
 
-**Driftfällor i produktion (2026-09-21):**
 **Supportchatten** (`fleet/support.py`, 2026-09-26): användare skriver i appen
 (Inställningar -> Chatta med support), personalen svarar under **Support** i
 adminwebben. Bara text. En konversation per användare: kontot om appen är
@@ -321,6 +321,7 @@ ett spärrat konto får inte. Svaret blir en notis (`send_support_reply_push`,
 förbi förarens notisfilter). Olästa räknas mot `customer_read_at`/`staff_read_at`,
 inga räknare. Tabellerna är stängda för PostgREST (migration 0006).
 
+**Driftfällor i produktion (2026-09-21):**
 
 * **Push skickas från workern** (`taxitips-celery-worker`, beats `push-cycle`).
   Workern fick `FIREBASE_SERVICE_ACCOUNT_JSON` (base64) 2026-09-21 och den

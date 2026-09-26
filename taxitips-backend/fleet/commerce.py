@@ -8,11 +8,13 @@ används av BÅDE kundportalen (fleet/api.py) och adminwebbens säljflöde
 (fleet/admin_sales.py) -- två vägar till samma beställning ska inte kunna ta
 betalt på två olika sätt.
 
-**Rättigheter ges fortfarande bara av en bekräftad betalning.** Att skapa en
+**Rättigheter ges bara av en betalning som Stripe bekräftat.** Att skapa en
 betallänk ändrar ingenting; webhooken (fleet/webhook_events.py) eller
 avstämningen här (`refresh_payment`, som läser fakturans status från Stripes
-API) verkställer ordern. Den enda vägen förbi är `mark_paid_manually`, som
-kräver plattformsadministratör, en anteckning och loggas.
+API) verkställer ordern. Det finns ingen väg förbi: all betalning går genom
+Stripe, så att varje krona som gett åtkomst har en faktura i Stripe och
+avstämningen har något att stämma av mot. (Den tidigare "betald utanför
+Stripe"-markeringen är borttagen av just det skälet.)
 
 **Uppsägning hos oss går alltid igenom, även när Stripe inte går att nå.**
 Kundens uppsägning får inte blockeras av ett nätverksfel. Svaret säger då
@@ -23,9 +25,7 @@ abonnemang kunden sagt upp.
 
 from __future__ import annotations
 
-import calendar
 import logging
-from datetime import datetime
 
 from django.db import transaction
 from django.utils import timezone
@@ -37,21 +37,12 @@ log = logging.getLogger(__name__)
 
 PAYMENT_CARD = "stripe_card"
 PAYMENT_INVOICE = "stripe_invoice"
-PAYMENT_LATER = "later"
-PAYMENT_CHOICES = (PAYMENT_CARD, PAYMENT_INVOICE, PAYMENT_LATER)
+PAYMENT_CHOICES = (PAYMENT_CARD, PAYMENT_INVOICE)
 
 _COLLECTION = {
     PAYMENT_CARD: "charge_automatically",
     PAYMENT_INVOICE: "send_invoice",
 }
-
-
-def add_month(value: datetime) -> datetime:
-    """Samma dag nästa månad, eller månadens sista dag om den inte finns."""
-    year = value.year + (value.month // 12)
-    month = value.month % 12 + 1
-    day = min(value.day, calendar.monthrange(year, month)[1])
-    return value.replace(year=year, month=month, day=day)
 
 
 def _stripe_failure(exc: Exception) -> orders.OrderError:
@@ -88,21 +79,23 @@ def place_order(
     `payment`:
     * `stripe_card` -- betalsida med kort; kortet sparas för förnyelserna.
     * `stripe_invoice` -- Stripe mejlar en faktura med förfallodag.
-    * `later` -- ordern väntar; betallänken skapas senare, eller så markerar
-      en administratör den betald utanför Stripe.
 
-    Returnerar ordern och vad som hände med betalningen. Kan Stripe inte nås
-    ligger ordern kvar som `pending_payment` -- ingenting är ändrat -- och svaret
-    säger varför.
+    Kostar ändringen något nu och Stripe inte är kopplat i miljön vägras
+    beställningen innan något sparas: en order som inte går att betala hade
+    bara väntat tills någon gav åtkomst på annat sätt. Svarar Stripe med ett
+    fel (nätverk, tillfälligt) ligger ordern kvar som `pending_payment` --
+    ingenting är ändrat -- och svaret säger varför; betallänken kan skapas igen.
     """
     if payment not in PAYMENT_CHOICES:
-        raise orders.OrderError("invalid_payment", "Okänt betalsätt.")
+        raise orders.OrderError("invalid_payment", "Välj kort eller faktura via Stripe.")
+    if plan.immediate and plan.quote.now.total_ore > 0 and not stripe_sync.available():
+        raise _stripe_failure(stripe_sync.StripeUnavailable(stripe_sync.status()["reason"]))
     order = orders.create_order(
         company_id, plan, created_by=created_by, idempotency=idempotency, actor_kind=actor_kind
     )
     info = {"requested": False, "paymentUrl": order.stripe_payment_url or None, "stripeError": None}
 
-    if order.status == Order.Status.PENDING_PAYMENT and payment != PAYMENT_LATER:
+    if order.status == Order.Status.PENDING_PAYMENT:
         try:
             info["paymentUrl"] = request_payment(
                 order, payment=payment, days_until_due=days_until_due
@@ -170,51 +163,6 @@ def refresh_payment(order: Order) -> dict:
         "amountPaidOre": invoice.get("amount_paid"),
         "paymentUrl": invoice.get("hosted_invoice_url") or order.stripe_payment_url or None,
     }
-
-
-@transaction.atomic
-def mark_paid_manually(order: Order, *, actor_user_id, note: str, now=None) -> Order:
-    """
-    Kunden har betalat utanför Stripe (t.ex. en faktura från bokföringen).
-
-    Kräver en anteckning -- den är det enda spåret när någon senare frågar
-    varför ett företag fick licenser utan en betalning i Stripe. Vägrar om
-    ordern har en öppen Stripe-faktura: då hade kunden kunnat betala två gånger.
-    Saknar företaget en löpande period startar en ny månad från nu.
-    """
-    now = now or timezone.now()
-    note = (note or "").strip()
-    if not note:
-        raise orders.OrderError(
-            "note_required", "Skriv hur kunden betalade (t.ex. fakturanummer)."
-        )
-    locked = Order.objects.select_for_update().get(id=order.id)
-    if locked.status != Order.Status.PENDING_PAYMENT:
-        raise orders.OrderError(
-            "order_not_payable", "Ordern väntar inte på betalning.", status=409,
-            detail={"status": locked.status},
-        )
-    if locked.stripe_invoice_id:
-        raise orders.OrderError(
-            "stripe_invoice_open",
-            "Ordern har en faktura i Stripe. Kontrollera betalningen eller avbryt ordern först.",
-            status=409,
-        )
-
-    orders.mark_order_paid(locked, now=now)
-    subscription = orders.get_or_create_subscription(locked.company_id)
-    if not subscription.current_period_end or subscription.current_period_end <= now:
-        orders.record_successful_payment(
-            subscription, period_start=now, period_end=add_month(now), now=now
-        )
-    audit.record(
-        "order_marked_paid_manually", company_id=locked.company_id,
-        actor_user_id=actor_user_id, actor_kind="platform_admin",
-        subject_type="order", subject_id=locked.id,
-        detail={"note": note[:500], "total_now_ore": locked.total_now_ore},
-    )
-    locked.refresh_from_db()
-    return locked
 
 
 def cancel_order(order: Order, *, actor_user_id, reason: str = "") -> Order:

@@ -357,6 +357,8 @@ STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET", "")
 # Båda tomma i utveckling; `fleet.stripe_sync.check_billing_config()` listar
 # vad som fattas innan modellen får gå i produktion.
 STRIPE_PRODUCT_ID = os.environ.get("STRIPE_PRODUCT_ID", "")
+# Extra län som egen produkt, så att paketet syns rad för rad i Stripe.
+STRIPE_EXTRA_COUNTY_PRODUCT_ID = os.environ.get("STRIPE_EXTRA_COUNTY_PRODUCT_ID", "")
 STRIPE_VAT_TAX_RATE_ID = os.environ.get("STRIPE_VAT_TAX_RATE_ID", "")
 # Spärr mot att den här koden rör riktiga abonnemang. Måste sättas till "1"
 # uttryckligen innan en livenyckel används -- se fleet/stripe_sync.py.

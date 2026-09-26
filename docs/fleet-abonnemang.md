@@ -236,10 +236,16 @@ liveinformationen är spärrad** — `/api/fleet/orders/list` kräver
 
 ## 9. Stripe
 
-* **Beloppen räknas hos oss.** Abonnemanget i Stripe är en post med
-  `price_data` och vårt månadsbelopp; uppgraderingar debiteras som egna
-  engångsposter, och prenumerationen uppdateras med
-  `proration_behavior="none"` så att Stripe inte lägger på sin egen.
+* **Beloppen räknas hos oss, paketet syns i Stripe.** Abonnemanget har en rad
+  per rad i vår uträkning -- "TaxiTips billicens" × antal bilar och "TaxiTips
+  extra län" × antal extra län, med vårt styckpris i `price_data` -- och en
+  beskrivning som "3 bilar (ABC123, …) · Stockholms län, Skåne län"
+  (`stripe_sync.package_summary`). I Stripe: *Produkter → TaxiTips billicens*
+  visar alla kunder som har paketet, och kunden visar sina rader. Uppgraderingar
+  debiteras som egna engångsposter, och prenumerationen uppdateras med
+  `proration_behavior="none"` så att Stripe inte lägger på sin egen. **Paket
+  ändras i adminwebben, aldrig i Stripes dashboard** -- Stripe speglar det vi
+  räknat, och en ändring där hade gett en faktura kunden aldrig godkänt.
 * **Inga subscription schedules.** En uppsägning ska inte behöva leta rätt på
   och avbryta ett schema först. Finns ett ändå (skapat i dashboarden) släpps
   det innan uppsägningen.
@@ -279,10 +285,16 @@ liveinformationen är spärrad** — `/api/fleet/orders/list` kräver
 | `STRIPE_SECRET_KEY` | — |
 | `STRIPE_WEBHOOK_SECRET` | signaturverifiering |
 | `STRIPE_VAT_TAX_RATE_ID` | **utan den saknar fakturorna moms** |
-| `STRIPE_PRODUCT_ID` | prenumerationsposterna får annars ingen produkt |
+| `STRIPE_PRODUCT_ID` | produkten "TaxiTips billicens" (`prod_VKh8MBT5eucO4s` i live) |
+| `STRIPE_EXTRA_COUNTY_PRODUCT_ID` | produkten "TaxiTips extra län" (`prod_VKh8UBYKoumgvv` i live) |
 
 `STRIPE_ALLOW_LIVE=1` krävs innan koden får röra en livenyckel. Spärren finns
 för att den här modulen byggdes utan tillstånd att röra riktiga abonnemang.
+
+Webhooken till backend (`we_1UK1jcP67HXLcerWb984w5Q6`, API-version
+`2024-12-18.acacia` -- den koden är skriven mot) skapades 2026-09-26. Den gamla
+till Supabase-funktionen finns kvar; båda tar emot samma händelser och skriver
+idempotent.
 
 ---
 
@@ -296,8 +308,8 @@ i `taxitips-web/src/admin/sales.js`. Testat i `fleet/tests/test_sales.py`.
 | Lägga upp företag | säljare | Giltigt orgnr (Luhn), en gång per orgnr, dokumenterad kontroll av kontaktpersonen (`verification_note`). `companies.status = inactive` — den nya modellen styr. |
 | Prov | säljare | Samma regler som självregistrering: 14 dagar, högst 3 bilar, ett per orgnr och 24 månader, startar vid första telefonen. Provbilar får prova extra län gratis. |
 | Kupong | admin skapar, säljare löser in | Utan betalande abonnemang: tillfällig åtkomst (`Trial.source = coupon`, startar direkt). Med abonnemang i Stripe: nästa debitering flyttas (`trial_end`). Betalt utanför Stripe: perioden förlängs. En gång per bolag och kupong. |
-| Beställning | säljare | Offert först, kundens godkännande intygat. Betalning: kort, faktura eller *senare*. |
-| Markera betald utanför Stripe | admin | Kräver anteckning; vägras om ordern har en Stripe-faktura. Ny månad från nu om perioden saknas. |
+| Beställning | säljare | Offert först, kundens godkännande intygat. Betalning **bara via Stripe**: kort (betallänk) eller Stripe-faktura. Utan Stripe i miljön vägras beställningen innan något sparas. |
+| ~~Markera betald utanför Stripe~~ | -- | **Borttaget 2026-09-26.** All betalning går genom Stripe, så att varje betalning som gett åtkomst har en faktura att stämma av mot. |
 | Förare | säljare | Engångskod per bil och förare (5 min, §2). En kod per bil i taget. |
 | Kundens administratör | säljare | Inbjudan per e-post (`OwnerInvite`); kontot knyts vid första inloggningen i portalen (`/api/fleet/claim-invite`), med adressen ur den verifierade JWT:n. |
 | Uppsägning till periodens slut | säljare | Hos oss och i Stripe. |
@@ -312,8 +324,8 @@ betalning.
 
 **Inget säljs i appen.** Ingen pris, ingen köpknapp, ingen länk till betalning
 -- varken på iPhone eller Android. Avtal, beställning och faktura sköts mellan
-TaxiTips och företaget: av en säljare i adminwebben (betallänk, Stripe-faktura
-eller *betald utanför Stripe*) eller i kundportalen på webben. Skälet:
+TaxiTips och företaget: av en säljare i adminwebben (betallänk eller Stripe-faktura
+-- all betalning går genom Stripe) eller i kundportalen på webben. Skälet:
 
 * Apple 3.1.3(c) *Enterprise Services*: en tjänst som säljs direkt till
   företag för deras anställda får betalas utanför in-app-köp. Konsumentköp

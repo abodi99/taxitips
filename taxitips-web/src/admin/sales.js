@@ -19,7 +19,6 @@ export const esc = (value) =>
 const PAYMENT_LABEL = {
   stripe_card: "Kort via Stripe (betallänk)",
   stripe_invoice: "Faktura via Stripe (mejlas)",
-  later: "Betalas senare / utanför Stripe",
 };
 
 const ORDER_STATUS = {
@@ -61,9 +60,10 @@ export function stripeNotice(config) {
       ? `<p class="error">Stripe: ${problems.map((p) => esc(p)).join(" · ")}</p>`
       : `<p class="muted">Stripe (${stripe.mode === "live" ? "skarpt" : "test"}): betallänk och faktura skapas automatiskt.</p>`;
   }
-  // En rad, inte en röd ruta: det är ett känt läge, inte ett fel just nu.
-  return `<p class="muted"><b>Stripe är inte kopplat.</b> Välj <em>Betalas senare</em>, fakturera kunden
-    själv och tryck <em>Markera betald</em> under Betalning när pengarna kommit.</p>`;
+  // All betalning går genom Stripe. Utan Stripe går det inte att beställa --
+  // prov och kuponger fungerar som vanligt.
+  return `<p class="error"><b>Stripe är inte kopplat.</b> Beställningar kan inte tas betalt för
+    förrän det är det${stripe.reason ? ` (${esc(stripe.reason)})` : ""}. Prov och kuponger fungerar.</p>`;
 }
 
 /* --- Ny kund ---------------------------------------------------------- */
@@ -213,10 +213,8 @@ export function addCarsBlock(d, config) {
   const stripeOk = !!config.stripe?.available;
   const paying = isPaying(d);
   const trialOpen = d.trial && ["pending", "active"].includes(d.trial.status);
-  const defaultPayment = stripeOk ? "stripe_card" : "later";
   const payOption = (value) =>
-    `<option value="${value}" ${value === defaultPayment ? "selected" : ""}
-      ${value !== "later" && !stripeOk ? "disabled" : ""}>${esc(PAYMENT_LABEL[value])}</option>`;
+    `<option value="${value}" ${value === "stripe_card" ? "selected" : ""}>${esc(PAYMENT_LABEL[value])}</option>`;
   return `
     <div class="card" id="salesPanel">
       <h2>Lägg till bilar</h2>
@@ -241,15 +239,16 @@ export function addCarsBlock(d, config) {
         <div class="start-option">
           <h4>Beställ</h4>
           ${stripeNotice(config)}
+          ${stripeOk ? `
           <button class="btn btn-quiet" type="button" data-action="pkg-quote">1. Räkna pris</button>
           <div id="pkgQuote"></div>
           <label>Betalning<select id="pkgPayment">
-            ${payOption("stripe_card")}${payOption("stripe_invoice")}${payOption("later")}
+            ${payOption("stripe_card")}${payOption("stripe_invoice")}
           </select></label>
           <label>Förfallodagar (faktura)<input id="pkgDue" type="number" min="1" max="60" value="14" /></label>
           <label class="check"><input id="pkgAccepted" type="checkbox" />
             Kunden har godkänt antal, pris och betalningsdatum</label>
-          <button class="btn btn-primary" type="button" data-action="pkg-order">2. Lägg beställning</button>
+          <button class="btn btn-primary" type="button" data-action="pkg-order">2. Lägg beställning</button>` : ""}
         </div>
 
         <div class="start-option">
@@ -348,7 +347,6 @@ export function profileBody(form) {
 
 export function ordersCard(orders, config) {
   const canSell = !!config?.canSell;
-  const canManage = !!config?.canManage;
   const stripeOk = !!config?.stripe?.available;
   if (!orders?.length) return `<div class="card"><h2>Beställningar</h2><p class="muted">Inga beställningar.</p></div>`;
   return `
@@ -372,7 +370,6 @@ export function ordersCard(orders, config) {
             ${canSell && o.status === "pending_payment" ? `<div class="btn-row">
               ${o.stripeInvoiceId ? `<button class="btn btn-quiet" data-action="order-refresh" data-order="${esc(o.id)}">Kontrollera betalning</button>` : ""}
               ${!o.stripeInvoiceId && stripeOk ? `<button class="btn btn-quiet" data-action="order-link" data-order="${esc(o.id)}">Skapa betallänk</button>` : ""}
-              ${!o.stripeInvoiceId && canManage ? `<button class="btn btn-quiet" data-action="order-paid" data-order="${esc(o.id)}">Markera betald</button>` : ""}
               <button class="btn btn-danger" data-action="order-cancel" data-order="${esc(o.id)}">Avbryt</button>
             </div>` : ""}
           </td>

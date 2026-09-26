@@ -304,16 +304,10 @@ class SalesPermissionTests(SalesTestCase):
         self.assertEqual(response.json()["reason"], "not_staff")
 
     def test_sales_cannot_give_access_without_payment(self):
-        """Kuponger, betald-markering och direktavslut är administratörens."""
+        """Kuponger och direktavslut är administratörens."""
         company = self.new_company()
-        order = Order.objects.create(
-            company_id=company.id, kind=Order.Kind.ADD_LICENSE,
-            status=Order.Status.PENDING_PAYMENT,
-            price_version=Subscription.objects.get(company_id=company.id).price_version,
-        )
         for path, body in (
             ("/api/admin/coupons/new", {"days": 30}),
-            (f"/api/admin/orders/{order.id}/mark-paid", {"note": "betald"}),
             (f"/api/admin/companies/{company.id}/cancel", {"immediate": True, "reason": "x"}),
         ):
             with self.subTest(path=path):
@@ -633,11 +627,28 @@ class OrderTests(SalesTestCase):
         response = self.order(company, accepted=False)
         self.assertEqual(response.json()["reason"], "acceptance_required")
 
-    def test_without_stripe_the_order_waits_and_nothing_is_granted(self):
+    def test_without_stripe_nothing_is_ordered_and_nothing_is_granted(self):
+        """En order som inte kan betalas via Stripe sparas inte alls."""
         company = self.new_company()
-        body = self.order(company).json()
+        response = self.order(company)
+        self.assertEqual(response.status_code, 503)
+        self.assertEqual(response.json()["reason"], "stripe_unavailable")
+        self.assertFalse(Order.objects.filter(company_id=company.id).exists())
+        self.assertFalse(License.objects.filter(company_id=company.id).exists())
+
+    def test_a_stripe_error_keeps_the_order_waiting_for_a_new_link(self):
+        """Stripe kopplat men svarar med fel: ordern väntar, inget ges."""
+        company = self.new_company()
+        fake = FakeStripe()
+
+        def down(**kw):
+            raise ConnectionError("Stripe svarar inte")
+
+        fake.Subscription.create = down
+        with stripe_connected(fake):
+            body = self.order(company).json()
         self.assertEqual(body["order"]["status"], "pending_payment")
-        self.assertEqual(body["payment"]["stripeError"]["reason"], "stripe_unavailable")
+        self.assertEqual(body["payment"]["stripeError"]["reason"], "stripe_error")
         self.assertFalse(License.objects.filter(company_id=company.id).exists())
 
     def test_the_first_order_creates_the_subscription_and_a_payment_link(self):
@@ -648,7 +659,12 @@ class OrderTests(SalesTestCase):
         self.assertTrue(body["payment"]["requested"], body)
         self.assertTrue(body["payment"]["paymentUrl"].startswith("https://invoice.stripe.test/"))
         create = [c for c in fake.calls if c[0] == "Subscription.create"][0][1]
-        self.assertEqual(create["items"][0]["price_data"]["unit_amount"], 2 * 79900 + 2 * 19900)
+        # Paketet rad för rad i Stripe: två billicenser och två extra län, med
+        # vårt styckpris -- inte ett klumpbelopp.
+        lines = [(i["price_data"]["unit_amount"], i["quantity"]) for i in create["items"]]
+        self.assertEqual(lines, [(79900, 2), (19900, 2)])
+        self.assertEqual(sum(u * q for u, q in lines), 2 * 79900 + 2 * 19900)
+        self.assertEqual(create["description"], "2 bilar (H1, H2) · Hallands län, Västra Götalands län")
         self.assertEqual(create["collection_method"], "charge_automatically")
         customer = [c for c in fake.calls if c[0] == "Customer.create"][0][1]
         self.assertEqual(customer["email"], "faktura@gbgtaxi.test")
@@ -704,6 +720,37 @@ class OrderTests(SalesTestCase):
         self.assertIn("Invoice.send_invoice", fake.names())
         self.assertTrue(body["payment"]["paymentUrl"])
 
+    def test_lines_that_do_not_divide_evenly_become_one_line(self):
+        """Hellre ett klumpbelopp i Stripe än ett belopp kunden inte godkänt."""
+        from fleet import stripe_sync
+
+        items = stripe_sync._items_from_lines(
+            [{"key": "prorated_licenses_base", "quantity": 3, "unit_price_ore": 79900,
+              "amount_ore": 123457, "label": "Billicenser"}],
+            currency="SEK", amount_ore=123457,
+        )
+        self.assertEqual(len(items), 1)
+        self.assertEqual((items[0]["price_data"]["unit_amount"], items[0]["quantity"]), (123457, 1))
+
+    def test_a_resync_replaces_the_stripe_lines_with_the_package(self):
+        from fleet import stripe_sync
+
+        data = self.full_setup()
+        Subscription.objects.filter(id=data["subscription"].id).update(
+            stripe_customer_id="cus_fake", stripe_subscription_id="sub_live"
+        )
+        fake = FakeStripe()
+        with stripe_connected(fake), self.settings(
+            STRIPE_PRODUCT_ID="prod_lic", STRIPE_EXTRA_COUNTY_PRODUCT_ID="prod_extra"
+        ):
+            stripe_sync.sync_company_amount(data["company"].id)
+        modify = [c for c in fake.calls if c[0] == "Subscription.modify"][-1][2]
+        self.assertIn({"id": "si_x", "deleted": True}, modify["items"])
+        new = [i for i in modify["items"] if "price_data" in i]
+        self.assertEqual({i["price_data"]["product"] for i in new} - {"prod_extra"}, {"prod_lic"})
+        self.assertEqual(modify["proration_behavior"], "none")
+        self.assertTrue(modify["description"].startswith("1 bil"))
+
     def test_an_upgrade_is_charged_separately_and_the_monthly_amount_waits_for_payment(self):
         data = self.full_setup()
         Subscription.objects.filter(id=data["subscription"].id).update(
@@ -717,32 +764,20 @@ class OrderTests(SalesTestCase):
         self.assertNotIn("Subscription.create", fake.names())
         self.assertNotIn("Subscription.modify", fake.names())
 
-    def test_marking_paid_outside_stripe_needs_an_admin_and_a_note(self):
-        company = self.new_company()
-        order_id = self.order(company, payment="later").json()["order"]["id"]
-        path = f"/api/admin/orders/{order_id}/mark-paid"
-        self.assertEqual(self.post(path, {"note": "Fortnox 1001"}).status_code, 403)
-        self.assertEqual(
-            self.post(path, {"note": " "}, user=self.admin_id).json()["reason"], "note_required"
-        )
-        response = self.post(path, {"note": "Fortnox 1001"}, user=self.admin_id)
-        self.assertEqual(response.json()["order"]["status"], "applied", response.content)
-        subscription = Subscription.objects.get(company_id=company.id)
-        self.assertEqual(subscription.status, SubscriptionStatus.ACTIVE)
-        self.assertGreater(subscription.current_period_end, timezone.now() + timedelta(days=27))
-        self.assertTrue(AuditEvent.objects.filter(
-            action="order_marked_paid_manually", company_id=company.id
-        ).exists())
-
-    def test_an_order_with_a_stripe_invoice_cannot_be_marked_paid_by_hand(self):
+    def test_every_payment_goes_through_stripe(self):
+        """Inget "betalas senare" och ingen betald-markering utanför Stripe."""
         company = self.new_company()
         fake = FakeStripe()
+        with stripe_connected(fake):
+            response = self.order(company, payment="later")
+        self.assertEqual(response.json()["reason"], "invalid_payment")
+        self.assertFalse(Order.objects.filter(company_id=company.id).exists())
         with stripe_connected(fake):
             order_id = self.order(company).json()["order"]["id"]
         response = self.post(
             f"/api/admin/orders/{order_id}/mark-paid", {"note": "x"}, user=self.admin_id
         )
-        self.assertEqual(response.json()["reason"], "stripe_invoice_open")
+        self.assertEqual(response.status_code, 404)
 
     def test_canceling_an_unpaid_first_order_voids_the_invoice_and_the_subscription(self):
         company = self.new_company()

@@ -37,7 +37,6 @@ urlpatterns = [
     path("licenses/<uuid:license_id>/remove", admin_vehicles.remove_license),
     path("orders/<uuid:order_id>/payment-link", admin_sales.order_payment_link),
     path("orders/<uuid:order_id>/refresh", admin_sales.order_refresh),
-    path("orders/<uuid:order_id>/mark-paid", admin_sales.order_mark_paid),
     path("orders/<uuid:order_id>/cancel", admin_sales.order_cancel),
     path("sales/config", admin_sales.config),
     path("sales/lookup", admin_sales.lookup),

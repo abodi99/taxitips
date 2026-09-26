@@ -9,7 +9,10 @@ aktiv `StaffRole` krävs, och varje vy kontrollerar sin egen behörighet.
   företag, offerter, beställningar med betallänk, prov, lösa in kuponger,
   bjuda in kundens administratör, säga upp till periodens slut.
 * `ADMIN_MANAGE` (plattformsadministratör): skapa och stänga av kuponger,
-  markera en order betald utanför Stripe, avsluta ett abonnemang direkt.
+  avsluta ett abonnemang direkt.
+
+All betalning går genom Stripe (kort eller faktura). Det finns ingen väg att
+markera en order betald utanför Stripe -- se fleet/commerce.py.
 
 Logiken bor i fleet/sales.py och fleet/commerce.py; här finns bara
 behörighet, tolkning av anropet och svarets form.
@@ -84,10 +87,10 @@ def config(request):
         "ok": True,
         "canSell": principal.can(Perm.ADMIN_SELL),
         "canManage": principal.can(Perm.ADMIN_MANAGE),
+        "canSupport": principal.can(Perm.ADMIN_SUPPORT),
         "counties": [{"code": code, "name": name} for code, name in areas.COUNTIES],
         "price": {
             "id": price.id, "label": price.label, "currency": price.currency,
-        "canSupport": principal.can(Perm.ADMIN_SUPPORT),
             "vatRateBp": price.vat_rate_bp, "baseOre": price.base_price_ore,
             "volumeOre": price.volume_price_ore, "volumeThreshold": price.volume_threshold,
             "extraCountyOre": price.extra_county_price_ore,
@@ -173,7 +176,7 @@ def create_order(request, company_id):
     POST /api/admin/companies/<id>/orders
 
     {"addVehicles": [...], ..., "accepted": true, "payment": "stripe_card" |
-    "stripe_invoice" | "later", "daysUntilDue": 14}
+    "stripe_invoice", "daysUntilDue": 14}
 
     `accepted` betyder att kunden i telefon har godkänt antal, pris och datum
     -- samma krav som i kundportalen (§6). Säljaren intygar det; det loggas.
@@ -222,19 +225,6 @@ def order_refresh(request, order_id):
     result = commerce.refresh_payment(order)
     order.refresh_from_db()
     return _json(request, {"ok": True, **result, "order": _order_row(order)})
-
-
-@csrf_exempt
-@require_POST
-@handle
-def order_mark_paid(request, order_id):
-    """POST /api/admin/orders/<id>/mark-paid {"note": "..."} -- betald utanför Stripe."""
-    principal = _staff(request, Perm.ADMIN_MANAGE)
-    order = _order_or_404(order_id)
-    order = commerce.mark_paid_manually(
-        order, actor_user_id=principal.user_id, note=str(_body(request).get("note", ""))
-    )
-    return _json(request, {"ok": True, "order": _order_row(order)})
 
 
 @csrf_exempt

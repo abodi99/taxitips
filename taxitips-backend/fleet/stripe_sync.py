@@ -6,8 +6,13 @@ Stripe: kund, abonnemang, engångsdebiteringar och avstämning.
 att förklara rad för rad. Stripes egen proration räknar om på sitt sätt, och då
 hade fakturan och det kunden godkände kunnat skilja sig åt. Därför:
 
-* Abonnemanget i Stripe är EN post med `price_data` och vårt uträknade
-  månadsbelopp. Antalet bilar ligger i metadata, inte i `quantity`.
+* Abonnemanget i Stripe har EN rad per rad i vår uträkning: "TaxiTips
+  billicens" × antal bilar och "TaxiTips extra län" × antal extra län, med
+  vårt styckpris i `price_data`. Stripes egen prislogik (nivåer, proration)
+  används inte -- volympriset räknas här och skickas som styckpris. Då syns
+  paketet i Stripe (produkt, antal, pris per kund) utan att Stripe och
+  fakturan kan räkna olika. Går raderna inte jämnt ut (styckpris × antal ≠
+  radens belopp) skickas beloppet som en rad, hellre än ett fel belopp.
 * Varje uppgradering mitt i perioden debiteras som en EGEN engångspost med vårt
   proportionerade belopp, och prenumerationen uppdateras med
   `proration_behavior="none"` så att Stripe inte lägger på sin egen.
@@ -152,20 +157,27 @@ class SyncResult:
 
 
 def sync_subscription_amount(
-    subscription: Subscription, *, monthly_amount_ore: int, licenses: int, extra_counties: int
+    subscription: Subscription, *, quote, licenses: int, extra_counties: int
 ) -> SyncResult:
     """
-    Speglar det uträknade månadsbeloppet till Stripe.
+    Speglar paketet (vår månadsuträkning) till Stripe.
 
     `proration_behavior="none"`: proportioneringen är redan debiterad som en
     egen post (se `charge_order`). Utan flaggan hade Stripe lagt på sin egen
     och kunden fått betala tillägget två gånger.
+
+    Raderna ersätts helt: de gamla tas bort och de nya läggs till i samma
+    anrop. Att försöka para ihop gamla och nya rader hade misslyckats när en
+    rad byter produkt, t.ex. från introduktionspris till volympris.
     """
     stripe = _client()
     company = Company.objects.get(id=subscription.company_id)
     customer_id = ensure_customer(company, subscription)
     price = subscription.price_version
-    item = _monthly_item(subscription, monthly_amount_ore)
+    items = _items_from_lines(
+        [line.as_dict() for line in quote.lines], currency=price.currency,
+        amount_ore=quote.amount_ore,
+    )
 
     metadata = {
         "company_id": str(subscription.company_id),
@@ -173,27 +185,73 @@ def sync_subscription_amount(
         "extra_counties": str(extra_counties),
         "price_version": price.id,
     }
+    description = package_summary(subscription.company_id)
 
     if subscription.stripe_subscription_id:
         current = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
-        item_id = current["items"]["data"][0]["id"] if current["items"]["data"] else None
+        old = [{"id": row["id"], "deleted": True} for row in current["items"]["data"]]
         stripe.Subscription.modify(
             subscription.stripe_subscription_id,
-            items=[{"id": item_id, **item}] if item_id else [item],
+            items=old + items,
             proration_behavior="none",
             metadata=metadata,
+            description=description,
         )
-        return SyncResult(subscription.stripe_subscription_id, monthly_amount_ore, created=False)
+        return SyncResult(subscription.stripe_subscription_id, quote.amount_ore, created=False)
 
     created = stripe.Subscription.create(
         customer=customer_id,
-        items=[item],
+        items=items,
         metadata=metadata,
+        description=description,
         payment_behavior="default_incomplete",
         idempotency_key=f"sub:{subscription.company_id}:{price.id}",
     )
     Subscription.objects.filter(id=subscription.id).update(stripe_subscription_id=created.id)
-    return SyncResult(created.id, monthly_amount_ore, created=True)
+    return SyncResult(created.id, quote.amount_ore, created=True)
+
+
+def package_summary(company_id, *, adding: list[dict] | None = None) -> str:
+    """
+    Paketet i klartext för Stripes dashboard: "3 bilar (ABC123, DEF456,
+    GHI789) · Stockholm, Skåne". Det är det man ser i abonnemangslistan och på
+    kunden -- utan det står bara ett belopp där.
+
+    `adding` är bilarna i en obetald beställning (`Order.request.addVehicles`).
+    Vid den första beställningen finns inga licenser ännu -- de skapas när
+    betalningen kommit -- och utan dem hade det stått "0 bilar".
+    """
+    from core import areas
+    from fleet import licensing, sessions
+    from fleet.models import LicenseCounty
+
+    now = timezone.now()
+    licenses = list(licensing.active_licenses(company_id))
+    plates = []
+    for license in licenses:
+        vehicle = sessions.current_vehicle(license)
+        if vehicle is not None:
+            plates.append(vehicle.plate)
+    codes = sorted({
+        row.county_code
+        for row in LicenseCounty.objects.filter(license__in=licenses, active_from__lte=now)
+        .exclude(active_to__lte=now)
+    })
+    count = len(licenses)
+    for spec in adding or []:
+        count += 1
+        if spec.get("plate"):
+            plates.append(str(spec["plate"]))
+        codes = sorted(set(codes) | {
+            str(c) for c in [spec.get("baseCounty"), *(spec.get("extraCounties") or [])] if c
+        })
+    counties = ", ".join(areas.COUNTY_NAMES.get(c, c) for c in codes)
+    cars = f"{count} {'bil' if count == 1 else 'bilar'}"
+    if plates:
+        cars += f" ({', '.join(sorted(plates))})"
+    text = f"{cars} · {counties}" if counties else cars
+    # Stripes gräns för beskrivningen är 500 tecken.
+    return text if len(text) <= 500 else text[:497] + "…"
 
 
 COLLECTION_METHODS = ("charge_automatically", "send_invoice")
@@ -291,7 +349,13 @@ def collect_order(
     if not subscription.stripe_subscription_id:
         created = stripe.Subscription.create(
             customer=customer_id,
-            items=[_monthly_item(subscription, order.amount_now_ore)],
+            items=_items_from_lines(
+                order.lines or [], currency=order.currency,
+                amount_ore=order.amount_now_ore,
+            ),
+            description=package_summary(
+                order.company_id, adding=(order.request or {}).get("addVehicles") or [],
+            ),
             metadata={
                 "company_id": str(order.company_id),
                 "order_id": str(order.id),
@@ -343,24 +407,62 @@ def _invoice_url(invoice_id: str) -> str:
     return getattr(invoice, "hosted_invoice_url", "") or ""
 
 
-def _monthly_item(subscription: Subscription, amount_ore: int) -> dict:
-    price = subscription.price_version
+def _product_for(line_key: str) -> str:
+    """Stripe-produkten för en rad i uträkningen: billicens eller extra län."""
+    key = line_key.removeprefix("prorated_")
+    if key == "extra_counties":
+        return getattr(settings, "STRIPE_EXTRA_COUNTY_PRODUCT_ID", "") or ""
+    return getattr(settings, "STRIPE_PRODUCT_ID", "") or ""
+
+
+def _recurring_item(*, currency: str, unit_amount: int, quantity: int, product: str, name: str) -> dict:
     price_data = {
-        "currency": price.currency.lower(),
-        "unit_amount": int(amount_ore),
+        "currency": currency.lower(),
+        "unit_amount": int(unit_amount),
         "recurring": {"interval": "month"},
     }
-    product = getattr(settings, "STRIPE_PRODUCT_ID", "") or ""
     if product:
         price_data["product"] = product
     else:
         # Utan produkt-id kräver Stripe ett produktnamn i price_data.
-        price_data["product_data"] = {"name": "TaxiTips billicenser"}
-    item = {"price_data": price_data, "quantity": 1}
+        price_data["product_data"] = {"name": name}
+    item = {"price_data": price_data, "quantity": int(quantity)}
     rates = _vat_tax_rates()
     if rates:
         item["tax_rates"] = rates
     return item
+
+
+def _items_from_lines(lines: list[dict], *, currency: str, amount_ore: int) -> list[dict]:
+    """
+    Abonnemangsraderna i Stripe, en per rad i vår uträkning.
+
+    Faller tillbaka på EN rad med hela beloppet om raderna inte går jämnt ut:
+    en proportionerad rad (styckpris × antal ≠ belopp) eller en summa som inte
+    stämmer. Kunden ska betala exakt det hen godkände; att paketet syns snyggt
+    i Stripe är andrahandsmålet.
+    """
+    items = []
+    total = 0
+    for line in lines:
+        quantity = int(line.get("quantity") or 0)
+        unit = int(line.get("unit_price_ore") or 0)
+        amount = int(line.get("amount_ore") or 0)
+        if quantity <= 0 or unit * quantity != amount:
+            items = []
+            break
+        total += amount
+        key = str(line.get("key") or "")
+        items.append(_recurring_item(
+            currency=currency, unit_amount=unit, quantity=quantity,
+            product=_product_for(key), name=str(line.get("label") or "TaxiTips"),
+        ))
+    if items and total == int(amount_ore):
+        return items
+    return [_recurring_item(
+        currency=currency, unit_amount=int(amount_ore), quantity=1,
+        product=_product_for("licenses"), name="TaxiTips billicenser",
+    )]
 
 
 def fetch_invoice(invoice_id: str) -> dict:
@@ -421,8 +523,7 @@ def sync_company_amount(company_id) -> SyncResult | None:
         subscription.price_version, licenses=licenses, extra_counties=extras, intro=intro_next
     )
     return sync_subscription_amount(
-        subscription, monthly_amount_ore=quote.amount_ore, licenses=licenses,
-        extra_counties=extras,
+        subscription, quote=quote, licenses=licenses, extra_counties=extras,
     )
 
 
@@ -637,6 +738,10 @@ def check_billing_config() -> list[str]:
         )
     if not getattr(settings, "STRIPE_PRODUCT_ID", ""):
         problems.append(
-            "STRIPE_PRODUCT_ID saknas -- prenumerationsposterna får ingen produkt."
+            "STRIPE_PRODUCT_ID saknas -- billicenserna får ingen produkt i Stripe."
+        )
+    if not getattr(settings, "STRIPE_EXTRA_COUNTY_PRODUCT_ID", ""):
+        problems.append(
+            "STRIPE_EXTRA_COUNTY_PRODUCT_ID saknas -- extra län får ingen produkt i Stripe."
         )
     return problems
