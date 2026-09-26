@@ -141,7 +141,7 @@ function attention(c) {
 
 /* --- Hem ---------------------------------------------------------------- */
 
-export function oversikt(d, list = { companies: [] }) {
+export function oversikt(d, list = { companies: [] }, supportWaiting = 0) {
   const subs = d.subscriptions ?? {};
   const todo = (list.companies ?? [])
     .map((c) => ({ c, a: attention(c) }))
@@ -155,6 +155,8 @@ export function oversikt(d, list = { companies: [] }) {
 
     <div class="card">
       <h2>Att göra <span class="muted">(${esc(todo.length)})</span></h2>
+      ${supportWaiting ? `<p><button class="btn btn-primary" data-action="goto" data-view="support">
+        ${esc(supportWaiting)} ${supportWaiting === 1 ? "fråga väntar" : "frågor väntar"} på svar i supporten →</button></p>` : ""}
       ${todo.length ? `<ul class="todo">${todo.map(({ c, a }) => `
         <li><button class="todo-row" data-action="open-company" data-id="${esc(c.id)}" data-tab="${esc(a.step)}">
           <span class="todo-dot lvl-${a.level}" aria-hidden="true"></span>
@@ -263,8 +265,11 @@ export function kund(d, config = null, tab = "", pending = null) {
         <p class="muted"><span class="mono">${esc(c.orgNumber || "—")}</span>${d.access?.ok
           ? (d.access.validUntil ? ` · tips på till ${esc(date(d.access.validUntil))}` : " · tips på")
           : ` · inga tips: ${esc(ACCESS_TEXT[d.access?.reason] ?? d.access?.reason ?? "")}`}</p></div>
-      ${next && next.id !== active ? `<button class="btn btn-primary" data-action="kund-tab" data-tab="${esc(next.id)}">
-        Nästa steg: ${esc(next.todo)} →</button>` : ""}
+      <div class="btn-row">
+        ${config?.canSupport ? `<button class="btn btn-quiet" data-action="support-start">Chatta med kunden</button>` : ""}
+        ${next && next.id !== active ? `<button class="btn btn-primary" data-action="kund-tab" data-tab="${esc(next.id)}">
+          Nästa steg: ${esc(next.todo)} →</button>` : ""}
+      </div>
     </div>
 
     ${d.suspension ? `

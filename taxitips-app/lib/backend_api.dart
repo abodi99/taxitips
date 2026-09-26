@@ -525,4 +525,50 @@ class BackendApi {
         .timeout(_timeout);
     return _decode(res, path);
   }
+
+  // Supportchatten (/api/support). Båda bevisen följer med: servern väljer
+  // kontot om appen är inloggad, annars telefonen (fleet/support.py).
+
+  /// Konversationen. `markRead` när chatten visas: då är svaren lästa.
+  Future<Map<String, dynamic>> supportConversation({
+    String? deviceToken,
+    String? accessToken,
+    bool markRead = false,
+  }) async {
+    final res = await _client
+        .get(
+          Uri.parse('$baseUrl/api/support${markRead ? '?markRead=1' : ''}'),
+          headers: _headers(deviceToken: deviceToken, accessToken: accessToken),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'supportConversation');
+  }
+
+  Future<Map<String, dynamic>> supportUnread({
+    String? deviceToken,
+    String? accessToken,
+  }) async {
+    final res = await _client
+        .get(
+          Uri.parse('$baseUrl/api/support/unread'),
+          headers: _headers(deviceToken: deviceToken, accessToken: accessToken),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'supportUnread');
+  }
+
+  Future<Map<String, dynamic>> supportSend({
+    required String body,
+    String? deviceToken,
+    String? accessToken,
+  }) async {
+    final res = await _client
+        .post(
+          Uri.parse('$baseUrl/api/support/messages'),
+          headers: _headers(deviceToken: deviceToken, accessToken: accessToken),
+          body: jsonEncode({'body': body}),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'supportSend');
+  }
 }

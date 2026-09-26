@@ -87,6 +87,7 @@ def config(request):
         "counties": [{"code": code, "name": name} for code, name in areas.COUNTIES],
         "price": {
             "id": price.id, "label": price.label, "currency": price.currency,
+        "canSupport": principal.can(Perm.ADMIN_SUPPORT),
             "vatRateBp": price.vat_rate_bp, "baseOre": price.base_price_ore,
             "volumeOre": price.volume_price_ore, "volumeThreshold": price.volume_threshold,
             "extraCountyOre": price.extra_county_price_ore,

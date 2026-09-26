@@ -34,6 +34,9 @@ PAIRING_ISSUE = Limit("pairing_issue", limit=20, window_seconds=3600)
 SIGNUP = Limit("signup", limit=5, window_seconds=3600)
 JOIN_LOOKUP = Limit("join_lookup", limit=10, window_seconds=3600)
 INVITE_REDEEM = Limit("invite_redeem", limit=10, window_seconds=3600)
+# Supportchatten: en människa som skriver många korta rader i rad ska inte
+# stoppas, ett skript som fyller supportens inkorg ska det.
+SUPPORT_MESSAGE = Limit("support_message", limit=30, window_seconds=600)
 
 
 def _bucket(limit: Limit, identity: str) -> str:

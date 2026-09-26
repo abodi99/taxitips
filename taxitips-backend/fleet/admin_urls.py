@@ -6,7 +6,7 @@ det här inte är kundens väg.
 
 from django.urls import path
 
-from fleet import admin_accounts, admin_api, admin_sales, admin_vehicles
+from fleet import admin_accounts, admin_api, admin_sales, admin_support, admin_vehicles
 
 urlpatterns = [
     path("overview", admin_api.overview),
@@ -14,6 +14,13 @@ urlpatterns = [
     path("companies/new", admin_sales.create_company),
     path("companies/<uuid:company_id>", admin_api.company_detail),
     path("companies/<uuid:company_id>/profile", admin_sales.update_profile),
+    path("companies/<uuid:company_id>/support", admin_support.start_with_company),
+    # Supportchatten
+    path("support/threads", admin_support.threads),
+    path("support/summary", admin_support.summary),
+    path("support/threads/<uuid:thread_id>", admin_support.thread_detail),
+    path("support/threads/<uuid:thread_id>/messages", admin_support.reply),
+    path("support/threads/<uuid:thread_id>/status", admin_support.set_status),
     path("companies/<uuid:company_id>/quote", admin_sales.quote),
     path("companies/<uuid:company_id>/orders", admin_sales.create_order),
     path("companies/<uuid:company_id>/trial", admin_sales.start_trial),

@@ -736,6 +736,57 @@ class ApiClient {
     return data;
   }
 
+  // ── Supportchatten ──────────────────────────────────────────────────────
+
+  /// Chatten kräver den nya backenden och antingen inloggning eller en
+  /// parkopplad telefon. Utan dem finns ingen att svara.
+  bool get canUseSupport =>
+      _backend != null && (deviceToken != null || _accessToken != null);
+
+  BackendApi _supportBackend() {
+    final backend = _backend;
+    if (backend == null) {
+      throw ApiException(503, 'Supportchatten är inte tillgänglig här.');
+    }
+    return backend;
+  }
+
+  Future<Map<String, dynamic>> supportConversation({
+    bool markRead = false,
+  }) async {
+    final backend = _supportBackend();
+    if (deviceToken == null) await loadTokens();
+    return backend.supportConversation(
+      deviceToken: deviceToken,
+      accessToken: _accessToken,
+      markRead: markRead,
+    );
+  }
+
+  /// Antal olästa svar. 0 vid fel: en badge ska aldrig bli ett felmeddelande.
+  Future<int> supportUnread() async {
+    if (!canUseSupport) return 0;
+    try {
+      final body = await _supportBackend().supportUnread(
+        deviceToken: deviceToken,
+        accessToken: _accessToken,
+      );
+      return (body['unread'] as num?)?.toInt() ?? 0;
+    } catch (_) {
+      return 0;
+    }
+  }
+
+  Future<Map<String, dynamic>> sendSupportMessage(String body) async {
+    final backend = _supportBackend();
+    if (deviceToken == null) await loadTokens();
+    return backend.supportSend(
+      body: body,
+      deviceToken: deviceToken,
+      accessToken: _accessToken,
+    );
+  }
+
   /// Nycklarna för listans länsfilter (driver_screen.dart).
   static const _areaFilterKeys = [
     'tb_filter_counties',

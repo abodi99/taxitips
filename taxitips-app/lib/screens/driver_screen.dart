@@ -15,6 +15,7 @@ import '../analytics.dart';
 import '../api_client.dart';
 import '../widgets/ferry_event_widgets.dart';
 import 'events_screen.dart';
+import 'support_chat_screen.dart';
 import '../push_service.dart';
 import '../severity_labels.dart';
 import '../theme.dart';
@@ -170,6 +171,8 @@ class _DriverScreenState extends State<DriverScreen>
   Set<String> _cities = {};
   // Körområde i län (SCB-kod). Styr listan när platsen saknas och alla notiser.
   Set<String> _counties = {};
+  // Olästa svar i supportchatten: en prick på kugghjulet.
+  int _supportUnread = 0;
   // Kommuner (SCB-kod) som förfinar ett valt län. Inga valda = hela länet.
   Set<String> _municipalities = {};
   // Kommunerna per län, från /api/notify-prefs första gången länsvalet öppnas.
@@ -480,9 +483,31 @@ class _DriverScreenState extends State<DriverScreen>
 
   /// Öppnar tipset en notis handlade om. Först ur det laddade flödet
   /// (direkt, ingen nätväg), annars hämtat från servern.
+  Future<void> _openSupportChat() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SupportChatScreen(api: widget.api),
+      ),
+    );
+    await _refreshSupportUnread();
+  }
+
+  Future<void> _refreshSupportUnread() async {
+    if (widget.demo) return;
+    final unread = await widget.api.supportUnread();
+    if (mounted && unread != _supportUnread) {
+      setState(() => _supportUnread = unread);
+    }
+  }
+
   Future<void> _openFromNotification() async {
     final message = takeOpenedMessage();
     if (message == null) return;
+    // Ett svar från supporten öppnar chatten, inte ett tips.
+    if (message.data['type'] == 'support_reply') {
+      if (mounted) await _openSupportChat();
+      return;
+    }
     final id = message.data['opportunity_id']?.toString() ?? '';
     // En testnotis eller en notis utan tips: att appen öppnas räcker.
     if (id.isEmpty) return;
@@ -528,7 +553,9 @@ class _DriverScreenState extends State<DriverScreen>
           content: Text(body.isEmpty ? title : '$title\n$body'),
           duration: const Duration(seconds: 8),
           behavior: SnackBarBehavior.floating,
-          action: (message.data['opportunity_id']?.toString() ?? '').isEmpty
+          action: message.data['type'] == 'support_reply'
+              ? SnackBarAction(label: 'Öppna', onPressed: _openSupportChat)
+              : (message.data['opportunity_id']?.toString() ?? '').isEmpty
               ? null
               : SnackBarAction(
                   label: 'Visa',
@@ -541,6 +568,10 @@ class _DriverScreenState extends State<DriverScreen>
                 ),
         ),
       );
+    if (message.data['type'] == 'support_reply') {
+      unawaited(_refreshSupportUnread());
+      return;
+    }
     _load(silent: true);
   }
 
@@ -749,6 +780,7 @@ class _DriverScreenState extends State<DriverScreen>
       // Färjor och evenemang i samma område; ett fel där får inte dölja tipsen.
       unawaited(_loadFerries());
       unawaited(_loadEvents());
+      unawaited(_refreshSupportUnread());
     } catch (e) {
       if (!mounted || seq != _loadSeq) return;
       setState(() => _error = _friendly(e));
@@ -2688,10 +2720,18 @@ class _DriverScreenState extends State<DriverScreen>
                                             const SizedBox(width: 48),
                                           if (widget.onOpenSettings != null)
                                             IconButton(
-                                              icon: const Icon(
-                                                Icons.settings_outlined,
+                                              icon: Badge(
+                                                isLabelVisible:
+                                                    _supportUnread > 0,
+                                                backgroundColor:
+                                                    TbColors.danger,
+                                                child: const Icon(
+                                                  Icons.settings_outlined,
+                                                ),
                                               ),
-                                              tooltip: 'Inställningar',
+                                              tooltip: _supportUnread > 0
+                                                  ? 'Inställningar – nytt svar från supporten'
+                                                  : 'Inställningar',
                                               color: TbColors.ink,
                                               onPressed: widget.onOpenSettings!,
                                             )

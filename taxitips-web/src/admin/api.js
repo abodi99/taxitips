@@ -42,6 +42,23 @@ export const admin = {
   deleteEvent: (id) => request(`/api/admin/events/${id}/delete`, { method: "POST", body: {} }),
   venues: (q) => request(`/api/admin/events/venues?q=${encodeURIComponent(q)}`),
 
+  /* --- Supportchatten (fleet/admin_support.py) --- */
+  supportSummary: () => request("/api/admin/support/summary"),
+  supportThreads: (status = "open", q = "") => {
+    const params = new URLSearchParams({ status });
+    if (q) params.set("q", q);
+    return request(`/api/admin/support/threads?${params}`);
+  },
+  // markRead bara för den som kan svara; servern kontrollerar det också.
+  supportThread: (id, markRead = false) =>
+    request(`/api/admin/support/threads/${id}${markRead ? "?markRead=1" : ""}`),
+  supportReply: (id, body) =>
+    request(`/api/admin/support/threads/${id}/messages`, { method: "POST", body: { body } }),
+  supportStatus: (id, status) =>
+    request(`/api/admin/support/threads/${id}/status`, { method: "POST", body: { status } }),
+  supportStart: (companyId) =>
+    request(`/api/admin/companies/${companyId}/support`, { method: "POST", body: {} }),
+
   /* --- Bilar (fleet/admin_vehicles.py) --- */
   changeVehicle: (licenseId, plate, mode = "permanent") =>
     request(`/api/admin/licenses/${licenseId}/vehicle`, { method: "POST", body: { plate, mode } }),

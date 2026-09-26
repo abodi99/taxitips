@@ -2,6 +2,7 @@ import { ApiError, supabase } from "../portal/api.js";
 import * as acc from "./accounts.js";
 import { admin } from "./api.js";
 import * as sales from "./sales.js";
+import * as support from "./support.js";
 import * as views from "./views.js";
 
 /**
@@ -52,6 +53,8 @@ const state = {
   lookupOrg: "",
   // Den senaste offerten, så att beställningen skickar exakt det kunden hörde.
   quotedChange: null,
+  // Supportchatten: en konversation att öppna direkt (från kundsidan).
+  supportThread: null,
 };
 
 function showError(error) {
@@ -84,6 +87,8 @@ async function render() {
 }
 
 async function renderView() {
+  // Supportsidan hämtar i bakgrunden; den ska sluta när man går därifrån.
+  support.stop();
   try {
     if (!state.config) state.config = await admin.salesConfig();
     if (state.companyId) {
@@ -94,10 +99,31 @@ async function renderView() {
     }
     switch (state.view) {
       case "oversikt": {
-        const [overview, list] = await Promise.all([admin.overview(), admin.companies()]);
-        el.view.innerHTML = views.oversikt(overview, list);
+        const [overview, list, sup] = await Promise.all([
+          admin.overview(), admin.companies(),
+          // Hem ska fungera även om supporten inte svarar.
+          admin.supportSummary().catch(() => ({ waiting: 0 })),
+        ]);
+        setSupportCount(sup.waiting ?? 0);
+        el.view.innerHTML = views.oversikt(overview, list, sup.waiting ?? 0);
         break;
       }
+      case "support":
+        support.mount(el.view, {
+          threadId: state.supportThread,
+          canReply: !!state.config?.canSupport,
+          onOpenCompany: (id) => {
+            state.companyId = id;
+            state.companyTab = "";
+            state.view = "kunder";
+            setTab("kunder");
+            render();
+          },
+          onError: showError,
+          onWaiting: setSupportCount,
+        });
+        state.supportThread = null;
+        break;
       case "kunder":
         el.view.innerHTML = views.kunder(await admin.companies(state.query), state.query, state.kundFilter);
         break;
@@ -187,9 +213,32 @@ async function boot() {
 // ska bara startas en gång, annars renderas allt två gånger i otakt.
 let entered = false;
 
+/**
+ * Räknaren på Support i menyn: frågor som väntar på svar. Hämtas var 30:e
+ * sekund medan fliken syns, så att en ny fråga märks utan att man står på
+ * supportsidan.
+ */
+function setSupportCount(n) {
+  const badge = document.getElementById("supportCount");
+  if (!badge) return;
+  badge.textContent = String(n);
+  badge.hidden = !n;
+}
+
+async function refreshSupportCount() {
+  if (document.hidden) return;
+  try {
+    setSupportCount((await admin.supportSummary()).waiting ?? 0);
+  } catch {
+    // Räknaren är en hjälp, inte ett felmeddelande.
+  }
+}
+
 async function enterApp(session) {
   if (entered) return;
   entered = true;
+  refreshSupportCount();
+  setInterval(refreshSupportCount, 30_000);
   el.login.hidden = true;
   el.app.hidden = false;
   el.logout.hidden = false;
@@ -491,6 +540,16 @@ async function act(action, ds) {
 
     case "event-template":
       return downloadTemplate();
+
+    case "support-start": {
+      const started = await admin.supportStart(state.companyId);
+      state.supportThread = started.thread.id;
+      state.companyId = null;
+      state.companyTab = "";
+      state.view = "support";
+      setTab("support");
+      return render();
+    }
 
     case "goto":
       state.view = ds.view;

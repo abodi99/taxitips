@@ -46,6 +46,7 @@ from fleet import (
     roles,
     sales,
     sessions,
+    support,
     trials,
 )
 from fleet.models import (
@@ -86,6 +87,7 @@ _DOMAIN_ERRORS = (
     ratelimit.RateLimited,
     ownership.OwnershipError,
     sales.SalesError,
+    support.SupportError,
     PermissionDenied,
 )
 

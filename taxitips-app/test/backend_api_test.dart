@@ -257,6 +257,26 @@ void main() {
     expect(body, {'enabled': false});
   });
 
+  test('supportchatten bär båda bevisen; servern väljer kontot', () async {
+    final api = BackendApi(
+      baseUrl: 'http://localhost:8000',
+      client: respond({'ok': true, 'messages': [], 'unread': 0}),
+    );
+    await api.supportSend(
+      body: 'Hej, en fråga',
+      deviceToken: 'dev-1',
+      accessToken: 'jwt-1',
+    );
+    await api.supportConversation(deviceToken: 'dev-1', markRead: true);
+    expect(seen.first.url.path, '/api/support/messages');
+    expect(seen.first.headers['X-Device-Token'], 'dev-1');
+    expect(seen.first.headers['Authorization'], 'Bearer jwt-1');
+    expect(jsonDecode(seen.first.body)['body'], 'Hej, en fråga');
+    expect(seen.last.url.path, '/api/support');
+    expect(seen.last.url.queryParameters['markRead'], '1');
+    expect(seen.last.headers.containsKey('Authorization'), isFalse);
+  });
+
   test('ägarens vägar bär inloggningen, aldrig en förartoken', () async {
     final api = BackendApi(
       baseUrl: 'http://localhost:8000',

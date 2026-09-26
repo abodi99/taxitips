@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -8,6 +10,7 @@ import '../widgets/company_settings_panel.dart';
 import '../widgets/notification_log_sheet.dart';
 import '../widgets/notify_prefs_sheet.dart';
 import '../widgets/settings_ui.dart';
+import 'support_chat_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -29,6 +32,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _loading = true;
   String? _error;
   int _companyPanelEpoch = 0;
+  int _supportUnread = 0;
 
   // Office
   final _name = TextEditingController();
@@ -57,11 +61,26 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.dispose();
   }
 
+  Future<void> _openSupportChat() async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => SupportChatScreen(api: widget.api),
+      ),
+    );
+    final unread = await widget.api.supportUnread();
+    if (mounted) setState(() => _supportUnread = unread);
+  }
+
   Future<void> _load() async {
     setState(() {
       _loading = true;
       _error = null;
     });
+    unawaited(
+      widget.api.supportUnread().then((n) {
+        if (mounted) setState(() => _supportUnread = n);
+      }),
+    );
     try {
       if (_isOffice) {
         // Servern (GET /api/fleet/company), inte PostgREST: företag som skapats
@@ -364,13 +383,30 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ],
                     ),
                     const SizedBox(height: 20),
+                  ],
+                  if (widget.api.canUseSupport) ...[
                     const SettingsGroupLabel('Support'),
                     SettingsGroup(
                       children: [
                         SettingsNavRow(
-                          icon: Icons.support_agent_outlined,
-                          title: 'Kontakta oss',
-                          subtitle: 'hej@taxitips.se · taxitips.se',
+                          icon: Icons.chat_bubble_outline,
+                          iconColor: TbColors.taxiDeep,
+                          title: 'Chatta med support',
+                          subtitle: _supportUnread > 0
+                              ? 'Du har ${_supportUnread == 1 ? 'ett nytt svar' : '$_supportUnread nya svar'}'
+                              : 'Frågor om appen, bilar och förare',
+                          trailing: _supportUnread > 0
+                              ? Badge.count(
+                                  count: _supportUnread,
+                                  backgroundColor: TbColors.danger,
+                                )
+                              : null,
+                          onTap: _openSupportChat,
+                        ),
+                        SettingsNavRow(
+                          icon: Icons.mail_outline,
+                          title: 'Mejla oss',
+                          subtitle: 'hej@taxitips.se',
                           trailingIcon: Icons.open_in_new,
                           onTap: _openSupport,
                         ),

@@ -53,6 +53,10 @@ class Perm:
     # betalning -- markera betald utanför Stripe, avsluta direkt, skapa
     # kuponger, ändra status för hand -- kräver ADMIN_MANAGE.
     ADMIN_SELL = "admin_sell"
+    # Supportchatten: svara användare och avsluta konversationer. Flyttar
+    # varken pengar eller rättigheter, så den kräver inte tvåfaktor och ges
+    # till alla personalroller -- supportrollen hade annars bara kunnat läsa.
+    ADMIN_SUPPORT = "admin_support"
 
 
 OWNER = "company_owner"
@@ -88,12 +92,12 @@ ROLE_PERMISSIONS: dict[str, frozenset[str]] = {
 # betalning utöver prov och kuponger som administratören redan skapat.
 STAFF_PERMISSIONS: dict[str, frozenset[str]] = {
     StaffRole.Role.SALES: frozenset({
-        Perm.CREATE_SALES_INVITE, Perm.ADMIN_VIEW, Perm.ADMIN_SELL,
+        Perm.CREATE_SALES_INVITE, Perm.ADMIN_VIEW, Perm.ADMIN_SELL, Perm.ADMIN_SUPPORT,
     }),
-    StaffRole.Role.SUPPORT: frozenset({Perm.VIEW_COMPANY, Perm.ADMIN_VIEW}),
+    StaffRole.Role.SUPPORT: frozenset({Perm.VIEW_COMPANY, Perm.ADMIN_VIEW, Perm.ADMIN_SUPPORT}),
     StaffRole.Role.PLATFORM_ADMIN: frozenset({
         Perm.VIEW_COMPANY, Perm.REVIEW_CASES, Perm.CREATE_SALES_INVITE,
-        Perm.ADMIN_VIEW, Perm.ADMIN_MANAGE, Perm.ADMIN_SELL,
+        Perm.ADMIN_VIEW, Perm.ADMIN_MANAGE, Perm.ADMIN_SELL, Perm.ADMIN_SUPPORT,
     }),
 }
 

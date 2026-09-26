@@ -1178,3 +1178,92 @@ class AccountBlock(models.Model):
                 name="fleet_one_active_block",
             ),
         ]
+
+
+class SupportThread(models.Model):
+    """
+    Supportchatten: EN konversation per användare, som öppnas igen när
+    användaren skriver.
+
+    Användaren är antingen ett inloggat konto (ägare, administratör) eller en
+    förartelefon -- förare har inget konto, bara en parkopplad telefon. En
+    konversation per bolag hade låtit förarna läsa varandras och ägarens frågor.
+
+    `company_id` och `requester_label` är en ögonblicksbild för supportens
+    lista. Ett konto utan företag (registreringen är inte klar) kan ändå skriva:
+    det är just då frågorna uppstår.
+    """
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Öppen"
+        CLOSED = "closed", "Avslutad"
+
+    class Requester(models.TextChoices):
+        MEMBER = "member", "Konto"
+        DEVICE = "device", "Förartelefon"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    company_id = models.UUIDField(null=True, blank=True)
+    requester_kind = models.CharField(max_length=10, choices=Requester.choices)
+    user_id = models.UUIDField(null=True, blank=True)
+    device_id = models.UUIDField(null=True, blank=True)
+    requester_label = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.OPEN)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_message_at = models.DateTimeField(null=True, blank=True)
+    last_customer_message_at = models.DateTimeField(null=True, blank=True)
+    last_staff_message_at = models.DateTimeField(null=True, blank=True)
+    # Olästa räknas mot de här: användarens läsning mot supportens svar, och
+    # tvärtom. Ingen räknare som kan glida isär från meddelandena.
+    customer_read_at = models.DateTimeField(null=True, blank=True)
+    staff_read_at = models.DateTimeField(null=True, blank=True)
+    closed_at = models.DateTimeField(null=True, blank=True)
+    closed_by = models.UUIDField(null=True, blank=True)
+
+    class Meta:
+        db_table = "fleet_support_thread"
+        indexes = [
+            models.Index(fields=["status", "-last_message_at"]),
+            models.Index(fields=["company_id"]),
+        ]
+        constraints = [
+            # En konversation per konto och per telefon. Två samtidiga första
+            # meddelanden får inte skapa två trådar som supporten svarar i var
+            # för sig.
+            models.UniqueConstraint(
+                fields=["user_id"], condition=Q(user_id__isnull=False),
+                name="fleet_support_one_thread_per_user",
+            ),
+            models.UniqueConstraint(
+                fields=["device_id"], condition=Q(device_id__isnull=False),
+                name="fleet_support_one_thread_per_device",
+            ),
+            models.CheckConstraint(
+                condition=(
+                    Q(requester_kind="member", user_id__isnull=False, device_id__isnull=True)
+                    | Q(requester_kind="device", device_id__isnull=False, user_id__isnull=True)
+                ),
+                name="fleet_support_requester_matches_kind",
+            ),
+        ]
+
+
+class SupportMessage(models.Model):
+    """Ett meddelande i supportchatten. Bara text; inga filer (beslut 2026-09-26)."""
+
+    class Sender(models.TextChoices):
+        CUSTOMER = "customer", "Användaren"
+        STAFF = "staff", "Support"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    thread = models.ForeignKey(SupportThread, on_delete=models.CASCADE, related_name="messages")
+    sender = models.CharField(max_length=10, choices=Sender.choices)
+    # Vem som skrev: kontot (användare eller personal) eller telefonen.
+    author_user_id = models.UUIDField(null=True, blank=True)
+    author_device_id = models.UUIDField(null=True, blank=True)
+    body = models.TextField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "fleet_support_message"
+        indexes = [models.Index(fields=["thread", "created_at"])]

@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../api_client.dart';
 import '../push_service.dart';
@@ -462,13 +461,6 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     );
   }
 
-  Future<void> _openSupport() async {
-    final ok = await launchUrl(
-      Uri.parse('mailto:hej@taxitips.se?subject=TaxiTips%20support'),
-    );
-    if (!ok) _snack('Mejla hej@taxitips.se', isError: true);
-  }
-
   // ── Bygget ─────────────────────────────────────────────────────────────
 
   @override
@@ -565,19 +557,6 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
             ),
           ),
 
-        const SizedBox(height: 20),
-        const SettingsGroupLabel('Support'),
-        SettingsGroup(
-          children: [
-            SettingsNavRow(
-              icon: Icons.support_agent_outlined,
-              title: 'Kontakta TaxiTips',
-              subtitle: 'Fler bilar, kollegor och frågor · hej@taxitips.se',
-              trailingIcon: Icons.mail_outline,
-              onTap: _openSupport,
-            ),
-          ],
-        ),
       ],
     );
   }

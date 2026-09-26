@@ -58,3 +58,52 @@ def reconcile_stripe(limit: int = 200) -> dict:
             len(discrepancies), discrepancies[:10],
         )
     return {"checked": checked, "discrepancies": discrepancies}
+
+
+@shared_task(name="fleet.tasks.send_support_reply_push")
+def send_support_reply_push(thread_id: str, message_id: str) -> dict:
+    """
+    Notis till användaren när supporten svarat.
+
+    Går förbi förarens notisinställningar (paus, län, nivå): de gäller tips,
+    och ett svar på en fråga användaren själv ställt är inte ett tips. Texten
+    är början av svaret, så att det går att läsa utan att öppna appen.
+    """
+    from django.conf import settings
+
+    from billing import fcm
+    from fleet import support
+    from fleet.models import SupportMessage, SupportThread
+
+    thread = SupportThread.objects.filter(id=thread_id).first()
+    message = SupportMessage.objects.filter(id=message_id, thread_id=thread_id).first()
+    if thread is None or message is None:
+        return {"sent": 0, "skipped": "missing"}
+    devices = support.device_push_targets(thread)
+    if not devices:
+        return {"sent": 0, "skipped": "no_push_token"}
+
+    service_account = fcm.load_service_account(
+        getattr(settings, "FIREBASE_SERVICE_ACCOUNT_JSON", "") or ""
+    )
+    if not service_account:
+        log.warning("fleet.support: FIREBASE_SERVICE_ACCOUNT_JSON saknas, ingen notis")
+        return {"sent": 0, "skipped": "no_service_account"}
+    try:
+        access_token = fcm.get_access_token(service_account)
+    except Exception as exc:
+        log.warning("fleet.support: fcm-inloggningen misslyckades: %s", exc)
+        return {"sent": 0, "error": "auth_failed"}
+
+    preview = message.body if len(message.body) <= 140 else message.body[:137] + "…"
+    sent = 0
+    for device in devices:
+        result = fcm.send_push(
+            service_account, access_token, token=device.push_token,
+            title="Svar från TaxiTips support", body=preview,
+            data={"type": "support_reply", "threadId": str(thread.id)},
+            collapse_key=f"support-{thread.id}",
+        )
+        if result.get("ok"):
+            sent += 1
+    return {"sent": sent, "devices": len(devices)}

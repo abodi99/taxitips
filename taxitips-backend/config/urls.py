@@ -8,6 +8,7 @@ from maritime import views as maritime_views
 from core.views import health, pipeline_health
 from events import api as events_api
 from events import live as events_live
+from fleet import support_api
 
 urlpatterns = [
     path("health", health),
@@ -46,6 +47,10 @@ urlpatterns = [
     # Kundlivscykeln: parkoppling, skiftbyte, bilar, licenser, län,
     # beställningar och uppsägning. Se fleet/urls.py.
     path("api/fleet/", include("fleet.urls")),
+    # Supportchatten, användarens sida (kontot eller telefonen).
+    path("api/support", support_api.conversation),
+    path("api/support/unread", support_api.unread),
+    path("api/support/messages", support_api.send),
     # Plattformens egen back-office. Kräver StaffRole -- se fleet/admin_api.py.
     path("api/admin/", include("fleet.admin_urls")),
     path("billing/", include("billing.urls")),

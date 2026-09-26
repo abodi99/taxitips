@@ -312,6 +312,15 @@ och Google-inloggning är inte konfigurerad i produktionens Supabase Auth, så
 adminwebben loggar in med en e-postlänk.
 
 **Driftfällor i produktion (2026-09-21):**
+**Supportchatten** (`fleet/support.py`, 2026-09-26): användare skriver i appen
+(Inställningar -> Chatta med support), personalen svarar under **Support** i
+adminwebben. Bara text. En konversation per användare: kontot om appen är
+inloggad, annars förartelefonen -- aldrig per bolag, så att förare inte läser
+varandras frågor. Varken betalning eller godkänd telefon krävs för att skriva;
+ett spärrat konto får inte. Svaret blir en notis (`send_support_reply_push`,
+förbi förarens notisfilter). Olästa räknas mot `customer_read_at`/`staff_read_at`,
+inga räknare. Tabellerna är stängda för PostgREST (migration 0006).
+
 
 * **Push skickas från workern** (`taxitips-celery-worker`, beats `push-cycle`).
   Workern fick `FIREBASE_SERVICE_ACCOUNT_JSON` (base64) 2026-09-21 och den
