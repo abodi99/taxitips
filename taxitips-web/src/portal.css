@@ -310,3 +310,16 @@ th {
     color: var(--ink-soft);
   }
 }
+
+/* "Fortsätt med provbilarna" -- målet för länken i mejlen om provslut. */
+.continue-card {
+  border: 2px solid var(--guld);
+}
+.continue-card.is-highlighted {
+  box-shadow: 0 0 0 4px rgba(252, 163, 17, 0.35);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .continue-card.is-highlighted {
+    transition: box-shadow 0.4s ease;
+  }
+}

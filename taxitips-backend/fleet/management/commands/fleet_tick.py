@@ -69,21 +69,29 @@ class Command(BaseCommand):
             except Exception as exc:
                 self.stderr.write(f"{company_id}: kunde inte verkställa: {exc}")
 
-        # 2) Prov som löpt ut. Utan beställning avslutas de utan debitering.
+        # 2) Prov som löpt ut. Utan beställning avslutas de utan debitering, och
+        # kunden får ett mejl med vägen tillbaka.
         for trial in Trial.objects.filter(status=Trial.Status.ACTIVE, ends_at__lte=now):
             if not dry:
                 trials.end_trial(trial, reason="trial_period_over", converted=False, now=now)
+                company = Company.objects.filter(id=trial.company_id).first()
+                notifications.trial_ended(
+                    trial.company_id, (company.email if company else ""), trial
+                )
             report["trials_ended"] += 1
 
-        # 3) Påminnelse tre dagar före provslut.
+        # 3) Påminnelser före provslut: tre dagar före, och sista dygnet. Varje
+        # stadium skickas en gång (nyckeln i utkorgen), fast kommandot körs
+        # varje timme.
         soon = now + timedelta(days=3)
         for trial in Trial.objects.filter(
             status=Trial.Status.ACTIVE, ends_at__gt=now, ends_at__lte=soon
         ):
             if not dry:
                 company = Company.objects.filter(id=trial.company_id).first()
+                stage = "1d" if trial.ends_at <= now + timedelta(days=1) else "3d"
                 notifications.trial_ending(
-                    trial.company_id, (company.email if company else ""), trial
+                    trial.company_id, (company.email if company else ""), trial, stage=stage,
                 )
             report["trials_warned"] += 1
 

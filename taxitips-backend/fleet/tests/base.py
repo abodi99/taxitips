@@ -141,11 +141,15 @@ class FleetFixture:
         }
 
 
-# Inga anrop till Bolagsverket från testerna, även när en lokal .env har
-# nycklarna: ett test som går mot ett riktigt register är långsamt, beror på
-# nätet och förbrukar kvot. Testerna som prövar registret mockar svaret och
-# slår på nycklarna själva (fleet/tests/test_bolagsverket.py).
-@override_settings(BOLAGSVERKET_CLIENT_ID="", BOLAGSVERKET_CLIENT_SECRET="")
+# Inga anrop till Bolagsverket och inga riktiga mejl från testerna, även när
+# en lokal .env har nycklarna: ett test som går mot ett riktigt register eller
+# en riktig SMTP-server är långsamt, beror på nätet -- och ett mejl kan nå en
+# människa. Testerna som prövar dem mockar och slår på nycklarna själva
+# (test_bolagsverket.py, test_onboarding_mail.py).
+@override_settings(
+    BOLAGSVERKET_CLIENT_ID="", BOLAGSVERKET_CLIENT_SECRET="",
+    FLEET_SMTP_USER="", FLEET_SMTP_PASSWORD="",
+)
 class FleetTestCase(FleetFixture, TestCase):
     @classmethod
     def setUpClass(cls):
@@ -163,7 +167,10 @@ class FleetTestCase(FleetFixture, TestCase):
         RiskConfig.current()
 
 
-@override_settings(BOLAGSVERKET_CLIENT_ID="", BOLAGSVERKET_CLIENT_SECRET="")
+@override_settings(
+    BOLAGSVERKET_CLIENT_ID="", BOLAGSVERKET_CLIENT_SECRET="",
+    FLEET_SMTP_USER="", FLEET_SMTP_PASSWORD="",
+)
 class FleetTransactionTestCase(FleetFixture, TransactionTestCase):
     """
     För det som måste köras med riktiga, samtidiga transaktioner.

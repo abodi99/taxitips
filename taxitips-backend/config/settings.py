@@ -308,6 +308,9 @@ CELERY_BEAT_SCHEDULE = {
     # uteblivet tick kan aldrig ge extra åtkomst (se fleet/management/commands/
     # fleet_tick.py).
     "fleet-tick": {"task": "fleet.tasks.fleet_tick", "schedule": 60 * 60},
+    # Utkorgen oftare än en gång i timmen: ett "provet har startat" ska komma
+    # medan kunden fortfarande sitter med appen, inte en timme senare.
+    "fleet-outbox": {"task": "fleet.tasks.send_outbox", "schedule": 120},
     # Avstämning mot Stripe. Rapporterar avvikelser, rättar inget.
     "fleet-reconcile-stripe": {
         "task": "fleet.tasks.reconcile_stripe", "schedule": 6 * 60 * 60
@@ -398,6 +401,15 @@ FLEET_TWO_FACTOR_REQUIRED_FROM = os.environ.get("FLEET_TWO_FACTOR_REQUIRED_FROM"
 # Sändaren för utkorgen (bekräftelser, påminnelser). Tom = raderna skrivs men
 # skickas inte, så en utvecklingsmiljö aldrig kan nå en riktig mottagare.
 FLEET_OUTBOX_SENDER = os.environ.get("FLEET_OUTBOX_SENDER", "")
+# Utkorgens SMTP (fleet/mailer.py). Utan användare och lösenord skickas inget.
+FLEET_SMTP_HOST = os.environ.get("FLEET_SMTP_HOST", "smtp.hostinger.com")
+FLEET_SMTP_PORT = int(os.environ.get("FLEET_SMTP_PORT", "465") or 465)
+FLEET_SMTP_USER = os.environ.get("FLEET_SMTP_USER", "")
+FLEET_SMTP_PASSWORD = os.environ.get("FLEET_SMTP_PASSWORD", "")
+FLEET_MAIL_FROM = os.environ.get("FLEET_MAIL_FROM", "")
+FLEET_MAIL_REPLY_TO = os.environ.get("FLEET_MAIL_REPLY_TO", "hej@taxitips.se")
+# Kundportalen, som mejlen länkar till. Betalning sker där, aldrig i appen (§9c).
+FLEET_PORTAL_URL = os.environ.get("FLEET_PORTAL_URL", "https://taxitips.se/portal")
 
 # Samma variabelnamn som taxitips-api/worker/src/fcmPush.js, för kontinuitet
 # -- samma Firebase-projekt backar båda tjänsterna.

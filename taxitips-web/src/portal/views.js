@@ -32,6 +32,26 @@ function statusPill(status) {
 
 /* --- Översikt ---------------------------------------------------------- */
 
+/**
+ * "Fortsätt med provbilarna": dit mejlen före och efter provslut länkar
+ * (portal#fortsatt). Bilarna kommer från servern (trials.continue_vehicles);
+ * priset visas i offerten innan något godkänns, som vid varje köp (§6).
+ */
+function continueCard(data) {
+  const cars = data.continueVehicles ?? [];
+  const canBuy = (data.permissions ?? []).includes("purchase");
+  if (!cars.length || !canBuy) return "";
+  const n = cars.length;
+  return `<div class="card continue-card" id="fortsatt">
+      <h2>Fortsätt med ${esc(n)} ${n === 1 ? "bil" : "bilar"}</h2>
+      <p>${cars.map((c) => `<b>${esc(c.plate)}</b>`).join(", ")}</p>
+      <p class="muted">Du ser priset per månad och vad som betalas nu innan du
+        godkänner. Betalningen sker på Stripes betalsida med kort eller faktura;
+        med kort dras beloppet sedan automatiskt varje månad.</p>
+      <div class="btn-row"><button class="btn btn-primary" data-action="continue-trial">Visa pris och fortsätt</button></div>
+    </div>`;
+}
+
 export function oversikt(data) {
   const sub = data.subscription ?? {};
   const trial = data.trial;
@@ -79,6 +99,8 @@ export function oversikt(data) {
       <div class="stat"><span class="muted">Extra län</span><b>${esc(data.extraCountyCount ?? 0)}</b></div>
       <div class="stat"><span class="muted">Nästa betalning</span><b>${esc(date(sub.currentPeriodEnd))}</b></div>
     </div>
+
+    ${continueCard(data)}
 
     ${
       trial

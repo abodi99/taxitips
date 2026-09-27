@@ -512,6 +512,8 @@ def company_overview(request):
             if trial else None
         ),
         "licenses": rows,
+        # "Fortsätt med provbilarna" -- dit mejlen före och efter provslut länkar.
+        "continueVehicles": trials.continue_vehicles(company_id),
         "licenseCount": licensing.billable_license_count(company_id),
         "extraCountyCount": licensing.extra_county_count(company_id, now),
         "pendingChanges": pending,

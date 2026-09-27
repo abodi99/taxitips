@@ -321,6 +321,15 @@ ett spärrat konto får inte. Svaret blir en notis (`send_support_reply_push`,
 förbi förarens notisfilter). Olästa räknas mot `customer_read_at`/`staff_read_at`,
 inga räknare. Tabellerna är stängda för PostgREST (migration 0006).
 
+**Automatisk onboarding och mejl** (2026-09-27): registrering i appen (org.nr ->
+Bolagsverket) -> kortfritt prov -> mejl tre dagar före och sista dygnet med pris
+och länken `taxitips.se/portal#fortsatt` -> kortet "Fortsätt med provbilarna" i
+kundportalen -> Stripes betalsida. Kunden har inget eget Stripe-konto; betalningen
+sker aldrig i appen (§9c). Utkorgen skickas via Hostingers SMTP (`fleet/mailer.py`,
+`FLEET_SMTP_USER`/`FLEET_SMTP_PASSWORD`, beat `fleet-outbox` varannan minut).
+Tillfälliga fel tas om i två dygn; rader äldre än tre dygn skickas aldrig (utkorgen
+fylldes i månader utan avsändare). SPF, DKIM och DMARC för taxitips.se finns redan.
+
 **Driftfällor i produktion (2026-09-21):**
 
 * **Push skickas från workern** (`taxitips-celery-worker`, beats `push-cycle`).

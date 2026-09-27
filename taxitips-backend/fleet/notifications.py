@@ -12,15 +12,23 @@ avregistrering från marknadsföring tystar aldrig en faktura som misslyckats
 (§10). Det är inte en artighet -- ett företag som inte får veta att betalningen
 föll förlorar åtkomsten utan förvarning.
 
-**Testutskick går till sandbox.** Utan `FLEET_OUTBOX_SENDER` konfigurerad
-skrivs raden men skickas inte, och statusen blir `pending`. Ingen riktig
-mottagare kan nås av misstag från en utvecklingsmiljö.
+**Testutskick går till sandbox.** Utan avsändare -- varken
+`FLEET_OUTBOX_SENDER` eller SMTP-uppgifter (fleet/mailer.py) -- skrivs raden
+men skickas inte, och statusen blir `pending`. Ingen riktig mottagare kan nås
+av misstag från en utvecklingsmiljö.
+
+**Ett misslyckat utskick tas om.** Ett tillfälligt fel (anslutning, 4xx,
+inloggning) lämnar raden `pending` med felet, och nästa körning försöker igen i
+upp till två dygn. Bara ett permanent fel -- fel adress, avvisat innehåll --
+blir `failed` direkt. Förut blev varje fel slutgiltigt, och en kort
+SMTP-störning hade kostat kunden påminnelsen om att provet slutar.
 """
 
 from __future__ import annotations
 
 import hashlib
 import logging
+from datetime import timedelta
 
 from django.conf import settings
 from django.utils import timezone
@@ -79,7 +87,16 @@ def send_pending(limit: int = 50, sender=None) -> dict:
     if sender is None:
         return {"sent": 0, "skipped": "no_sender"}
 
-    sent = failed = 0
+    from fleet.mailer import PermanentMailError
+
+    sent = failed = retry = 0
+    now = timezone.now()
+    # Gamla rader skickas aldrig. Utkorgen fylldes i månader utan avsändare,
+    # och när SMTP slogs på hade den första körningen annars mejlat "provet
+    # har startat" till bolag vars prov tog slut för länge sedan.
+    stale = OutboxMessage.objects.filter(
+        status=OutboxMessage.Status.PENDING, created_at__lt=now - STALE_AFTER
+    ).update(status=OutboxMessage.Status.FAILED, error="stale: för gammalt för att skicka")
     rows = OutboxMessage.objects.filter(status=OutboxMessage.Status.PENDING).order_by(
         "created_at"
     )[:limit]
@@ -87,22 +104,35 @@ def send_pending(limit: int = 50, sender=None) -> dict:
         try:
             sender(row)
         except Exception as exc:
-            failed += 1
-            OutboxMessage.objects.filter(id=row.id).update(
-                status=OutboxMessage.Status.FAILED, error=str(exc)[:500]
+            permanent = isinstance(exc, PermanentMailError) or (
+                row.created_at and now - row.created_at > RETRY_WINDOW
             )
+            if permanent:
+                failed += 1
+                OutboxMessage.objects.filter(id=row.id).update(
+                    status=OutboxMessage.Status.FAILED, error=str(exc)[:500]
+                )
+            else:
+                retry += 1
+                OutboxMessage.objects.filter(id=row.id).update(error=str(exc)[:500])
             continue
         sent += 1
         OutboxMessage.objects.filter(id=row.id).update(
             status=OutboxMessage.Status.SENT, sent_at=timezone.now(), error=""
         )
-    return {"sent": sent, "failed": failed}
+    return {"sent": sent, "failed": failed, "retry": retry, "stale": stale}
+
+
+RETRY_WINDOW = timedelta(days=2)
+STALE_AFTER = timedelta(days=3)
 
 
 def _configured_sender():
     path = getattr(settings, "FLEET_OUTBOX_SENDER", "") or ""
     if not path:
-        return None
+        from fleet import mailer
+
+        return mailer.send if mailer.configured() else None
     module_name, _, attr = path.rpartition(".")
     try:
         module = __import__(module_name, fromlist=[attr])
@@ -119,26 +149,123 @@ def _money(ore: int) -> str:
     return f"{ore // 100:,}".replace(",", " ") + f",{ore % 100:02d} kr"
 
 
+def portal_url(anchor: str = "") -> str:
+    base = (getattr(settings, "FLEET_PORTAL_URL", "") or "https://taxitips.se/portal").rstrip("/")
+    return f"{base}#{anchor}" if anchor else base
+
+
+def trial_offer(company_id, trial) -> dict | None:
+    """
+    Vad det kostar att fortsätta med provbilarna -- räknat med samma motor och
+    samma anrop som offerten i portalen (orders.plan_change), så att mejlet och
+    betalsidan aldrig visar olika belopp. None om det inte går att räkna (inga
+    provbilar, eller ett fel): då skickas mejlet utan pris hellre än med fel pris.
+    """
+    from fleet import orders, sessions
+    from fleet.models import License
+
+    specs, plates = [], []
+    for license in License.objects.filter(trial=trial, status=License.Status.TRIAL):
+        vehicle = sessions.current_vehicle(license)
+        if vehicle is None:
+            continue
+        specs.append(orders.VehicleSpec(plate=vehicle.plate, base_county=license.base_county))
+        plates.append(vehicle.plate)
+    if not specs:
+        return None
+    try:
+        plan = orders.plan_change(company_id, add_vehicles=specs)
+    except Exception as exc:  # en påminnelse får aldrig fällas av prisuträkningen
+        log.warning("fleet.notifications: kunde inte räkna provets pris: %s", exc)
+        return None
+    return {
+        "count": len(specs), "plates": sorted(plates),
+        "monthly_ore": plan.quote.next_period.amount_ore,
+        "monthly_total_ore": plan.quote.next_period.total_ore,
+    }
+
+
+def _offer_lines(offer: dict | None) -> str:
+    if not offer:
+        return (
+            "Vill ni fortsätta väljer ni bilarna och betalar i kundportalen, med kort "
+            "eller faktura:\n"
+        )
+    cars = f"{offer['count']} {'bil' if offer['count'] == 1 else 'bilar'}"
+    return (
+        f"Vill ni fortsätta med era {cars} ({', '.join(offer['plates'])})? Det kostar "
+        f"{_money(offer['monthly_ore'])} i månaden exkl. moms "
+        f"({_money(offer['monthly_total_ore'])} inkl. moms). Ni betalar med kort eller "
+        "faktura, och med kort dras beloppet sedan automatiskt varje månad.\n"
+    )
+
+
+_SIGNATURE = (
+    "\nFrågor? Svara på det här mejlet eller chatta med oss i appen "
+    "(Inställningar -> Chatta med support).\n\nHälsningar\nTaxiTips"
+)
+
+
 def trial_started(company_id, to_address: str, trial) -> OutboxMessage | None:
     return queue(
         category="trial_started", company_id=company_id, to_address=to_address,
-        subject="Provperioden har börjat",
+        subject="Välkommen – provperioden har startat",
         body=(
-            f"Provperioden gäller till {trial.ends_at:%Y-%m-%d %H:%M}. "
-            f"Den omfattar högst {trial.vehicle_limit} bilar. "
-            "Utan en beställning avslutas provet utan debitering."
+            "Hej!\n\n"
+            f"Provperioden har startat och gäller till {trial.ends_at:%Y-%m-%d}. "
+            f"Den omfattar upp till {trial.vehicle_limit} bilar och kostar ingenting.\n\n"
+            "Så kommer ni igång:\n"
+            "1. Lägg till bilarna i appen (Inställningar -> Bilar och förare).\n"
+            "2. Tryck på en bil och välj \"Koppla en förare\" -- föraren skriver in koden.\n"
+            "3. Kör ni själva: \"Kör bilen själv med den här telefonen\".\n\n"
+            "Innan provet slutar får ni ett mejl med vad det kostar att fortsätta. "
+            "Gör ni ingenting avslutas provet utan kostnad.\n\n"
+            f"Kundportalen: {portal_url()}\n"
+            + _SIGNATURE
         ),
         key_parts=(company_id, trial.id),
     )
 
 
-def trial_ending(company_id, to_address: str, trial) -> OutboxMessage | None:
+def trial_ending(company_id, to_address: str, trial, *, stage: str = "3d") -> OutboxMessage | None:
+    """
+    Påminnelse före provslut: `3d` tre dagar före och `1d` sista dygnet. Två
+    olika rader i utkorgen (stadiet ingår i nyckeln), men varje stadium bara
+    en gång.
+    """
+    offer = trial_offer(company_id, trial)
+    when = "i morgon" if stage == "1d" else f"{trial.ends_at:%Y-%m-%d}"
+    subject = (
+        "Sista dagen med provet – fortsätt med ett klick"
+        if stage == "1d" else "Provperioden slutar snart"
+    )
     return queue(
         category="trial_ending", company_id=company_id, to_address=to_address,
-        subject="Provperioden tar snart slut",
+        subject=subject,
         body=(
-            f"Provet avslutas {trial.ends_at:%Y-%m-%d}. Beställ de bilar som ska "
-            "fortsätta, annars avslutas provet utan debitering."
+            "Hej!\n\n"
+            f"Provperioden slutar {when}.\n\n"
+            + _offer_lines(offer)
+            + f"\nFortsätt här: {portal_url('fortsatt')}\n\n"
+            "Gör ni ingenting avslutas provet utan kostnad, och förarna slutar få tips.\n"
+            + _SIGNATURE
+        ),
+        payload={"stage": stage, "offer": offer or {}},
+        key_parts=(company_id, trial.id, stage),
+    )
+
+
+def trial_ended(company_id, to_address: str, trial) -> OutboxMessage | None:
+    """Provet löpte ut utan beställning. Dörren står öppen: samma länk."""
+    return queue(
+        category="trial_ended", company_id=company_id, to_address=to_address,
+        subject="Provperioden är slut",
+        body=(
+            "Hej!\n\n"
+            "Provperioden är slut och ingenting har debiterats. Förarna får inga fler "
+            "tips förrän ni har valt vilka bilar som ska fortsätta.\n\n"
+            f"Fortsätt när ni vill: {portal_url('fortsatt')}\n"
+            + _SIGNATURE
         ),
         key_parts=(company_id, trial.id),
     )

@@ -304,3 +304,37 @@ def consume_invite(invite: SalesInvite, *, company_id, now=None) -> SalesInvite:
         raise TrialError("invalid_invite", "Inbjudan är ogiltig eller redan använd.")
     invite.refresh_from_db()
     return invite
+
+
+def continue_vehicles(company_id) -> list[dict]:
+    """
+    Bilarna kunden fortsätter med i kundportalen ("Fortsätt med provbilarna"):
+    det pågående provets bilar, eller -- när provet löpt ut utan beställning --
+    bilarna i det senaste provet. Mejlen före och efter provslut länkar hit,
+    så båda fallen måste ge en lista. Tomt när bolaget redan betalar.
+    """
+    from fleet import licensing, sessions
+
+    if licensing.active_licenses(company_id).exists():
+        return []
+    trial = active_trial(company_id) or (
+        Trial.objects.filter(company_id=company_id, status=Trial.Status.ENDED)
+        .order_by("-created_at").first()
+    )
+    if trial is None:
+        return []
+    wanted = (
+        [License.Status.TRIAL] if trial.status in (Trial.Status.PENDING, Trial.Status.ACTIVE)
+        else [License.Status.CANCELED]
+    )
+    out, seen = [], set()
+    for license in License.objects.filter(trial=trial, status__in=wanted).order_by("created_at"):
+        vehicle = sessions.current_vehicle(license) or (
+            license.assignments.order_by("-started_at").first().vehicle
+            if license.assignments.exists() else None
+        )
+        if vehicle is None or vehicle.plate in seen:
+            continue
+        seen.add(vehicle.plate)
+        out.append({"plate": vehicle.plate, "baseCounty": license.base_county})
+    return out

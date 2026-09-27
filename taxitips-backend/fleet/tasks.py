@@ -107,3 +107,11 @@ def send_support_reply_push(thread_id: str, message_id: str) -> dict:
         if result.get("ok"):
             sent += 1
     return {"sent": sent, "devices": len(devices)}
+
+
+@shared_task(name="fleet.tasks.send_outbox")
+def send_outbox() -> dict:
+    """Skickar utkorgen. Gör ingenting utan konfigurerad avsändare."""
+    from fleet import notifications
+
+    return notifications.send_pending()

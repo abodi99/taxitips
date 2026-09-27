@@ -32,6 +32,28 @@ const el = {
 
 let state = { view: "oversikt", data: null, orders: null };
 
+/**
+ * Länken i mejlen om provslut (portal#fortsatt). Ankaret försvinner när
+ * kunden loggar in med e-postlänk -- den skickar tillbaka till sidan utan
+ * det -- så önskan sparas här och läses efter inloggningen.
+ */
+const CONTINUE_KEY = "tt_portal_continue";
+try {
+  if (window.location.hash === "#fortsatt") sessionStorage.setItem(CONTINUE_KEY, "1");
+} catch {
+  // Utan sessionStorage fungerar länken bara när kunden redan är inloggad.
+}
+
+function takeContinueWish() {
+  try {
+    const wanted = sessionStorage.getItem(CONTINUE_KEY) === "1" || window.location.hash === "#fortsatt";
+    sessionStorage.removeItem(CONTINUE_KEY);
+    return wanted;
+  } catch {
+    return window.location.hash === "#fortsatt";
+  }
+}
+
 function showError(error) {
   const message =
     error instanceof ApiError ? error.message : "Något gick fel. Prova igen.";
@@ -64,7 +86,15 @@ async function enterApp(session) {
   el.app.hidden = false;
   el.logout.hidden = false;
   el.whoami.textContent = session.user?.email ?? "";
+  const wantsContinue = takeContinueWish();
+  if (wantsContinue) state.view = "oversikt";
   await refresh();
+  if (wantsContinue) {
+    const card = document.getElementById("fortsatt");
+    card?.scrollIntoView({ behavior: "smooth", block: "center" });
+    card?.classList.add("is-highlighted");
+    card?.querySelector("button")?.focus({ preventScroll: true });
+  }
 }
 
 async function refresh() {
@@ -288,6 +318,15 @@ async function handle(action, ctx) {
       );
       return buy({
         baseCountyChanges: [{ licenseId: ctx.license, county, immediate: now }],
+      });
+    }
+    case "continue-trial": {
+      const cars = state.data?.continueVehicles ?? [];
+      if (!cars.length) return;
+      return buy({
+        addVehicles: cars.map((c) => ({
+          plate: c.plate, baseCounty: c.baseCounty, label: "", extraCounties: [],
+        })),
       });
     }
     case "add-license": {
