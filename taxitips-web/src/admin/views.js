@@ -1,5 +1,5 @@
 import { countyName, date, dateTime, money } from "../portal/api.js";
-import { addCarsBlock, cancelBlock, ordersCard, ownerBlock, profileBlock, quoteBox, redemptionsCard } from "./sales.js";
+import { addCarsBlock, cancelBlock, ordersCard, ownerBlock, profileBlock, quoteBox, redemptionsCard, registryBlock } from "./sales.js";
 
 /**
  * Adminwebbens vyer, som rena funktioner från data till HTML.
@@ -308,6 +308,17 @@ function stepForetag(d, config) {
         <dt>Telefon</dt><dd>${esc(p.contactPhone || "—")}</dd>
         <dt>Behörighet</dt><dd>${p.verificationStatus ? verificationPill(p.verificationStatus) : "—"}</dd>
       </dl>
+    </div>
+    <div class="card">
+      <div class="card-head">
+        <h2>Bolagsverket</h2>
+        ${config?.canSell && (p.country ?? "SE") === "SE" ? `<div class="btn-row">
+          <button class="btn btn-quiet btn-small" data-action="registry-refresh">Hämta igen</button>
+          ${p.registry?.found ? `<button class="btn btn-quiet btn-small" data-action="registry-refresh" data-overwrite="1">Använd registrets adress</button>` : ""}
+        </div>` : ""}
+      </div>
+      ${p.registry ? registryBlock(p.registry, { checkedAt: p.registryCheckedAt })
+        : '<p class="muted">Inte uppslaget än. Tryck på <b>Hämta igen</b>.</p>'}
     </div>
     ${config?.canSell ? `<details class="card"><summary><h2 style="display:inline">Ändra uppgifter</h2></summary>${profileBlock(d)}</details>` : ""}
   `;

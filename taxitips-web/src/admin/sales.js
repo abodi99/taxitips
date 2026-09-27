@@ -66,6 +66,39 @@ export function stripeNotice(config) {
     förrän det är det${stripe.reason ? ` (${esc(stripe.reason)})` : ""}. Prov och kuponger fungerar.</p>`;
 }
 
+/* --- Bolagsverket ------------------------------------------------------ */
+
+const REGISTRY_PILL = {
+  active: ["pill-ok", "Aktivt"],
+  inactive: ["pill-warn", "Ej verksamt"],
+  winding_up: ["pill-warn", "Avveckling pågår"],
+  deregistered: ["pill-danger", "Avregistrerat"],
+};
+
+/** Vad Bolagsverket säger om bolaget: namn, form, status, adress och bransch. */
+export function registryBlock(r, { checkedAt = "" } = {}) {
+  if (!r) return "";
+  if (!r.found) {
+    return `<p class="muted">Bolagsverket har inget bolag med det numret
+      (t.ex. en enskild firma). Fyll i uppgifterna för hand.</p>`;
+  }
+  const [cls, label] = REGISTRY_PILL[r.status] ?? ["", r.statusText || r.status];
+  const a = r.address ?? {};
+  const address = [a.line1, a.line2, [a.postal_code, a.city].filter(Boolean).join(" ")]
+    .filter(Boolean).join(", ");
+  return `
+    <dl class="kv">
+      <dt>Namn</dt><dd><b>${esc(r.name)}</b></dd>
+      <dt>Status</dt><dd><span class="pill ${cls}">${esc(label)}</span>
+        ${r.status !== "active" ? `<span class="muted">${esc(r.statusText)}</span>` : ""}</dd>
+      <dt>Form</dt><dd>${esc(r.legalForm || "—")}</dd>
+      <dt>Registrerat</dt><dd>${esc(r.registeredAt || "—")}</dd>
+      <dt>Postadress</dt><dd>${esc(address || "—")}</dd>
+      ${(r.sni ?? []).length ? `<dt>Bransch</dt><dd>${(r.sni ?? []).map((s) => esc(`${s.text} (${s.code})`)).join("<br>")}</dd>` : ""}
+    </dl>
+    <p class="muted">Från Bolagsverket${checkedAt ? `, hämtat ${esc(new Date(checkedAt).toLocaleString("sv-SE"))}` : ""}.</p>`;
+}
+
 /* --- Ny kund ---------------------------------------------------------- */
 
 export function nyKund(config, lookup = null, orgValue = "") {
@@ -75,6 +108,7 @@ export function nyKund(config, lookup = null, orgValue = "") {
   }
   const found = lookup?.existingCompany;
   const trial = lookup?.trial;
+  const reg = lookup?.registry?.found ? lookup.registry : null;
   return `
     <div class="card">
       <h2>Ny kund</h2>
@@ -93,6 +127,10 @@ export function nyKund(config, lookup = null, orgValue = "") {
           </div>` : ""}
         ${lookup.valid && !found ? `
           <p class="ok">${esc(lookup.orgNumber)} är giltigt och finns inte hos oss.</p>
+          ${lookup.registry ? registryBlock(lookup.registry) : ""}
+          ${lookup.registryError ? `<p class="muted">${esc(lookup.registryError)}</p>` : ""}
+          ${lookup.registry?.status === "deregistered"
+            ? '<p class="error">Bolaget är avregistrerat. Lägg bara upp det om du vet varför.</p>' : ""}
           <p>${trial?.eligible
             ? '<span class="pill pill-ok">Får provperiod</span>'
             : `<span class="pill pill-warn">Ingen provperiod</span> <span class="muted">${esc(trial?.message ?? "")}</span>`}</p>` : ""}
@@ -103,8 +141,9 @@ export function nyKund(config, lookup = null, orgValue = "") {
     <form id="companyForm" class="card form-grid">
       <h2 class="span-2">Företaget</h2>
       <input type="hidden" name="orgNumber" value="${esc(lookup.normalized)}" />
-      <label>Företagsnamn (som kunden kallar det)<input name="name" required /></label>
-      <label>Juridiskt namn <span class="muted">(om annat)</span><input name="legalName" /></label>
+      <label>Företagsnamn (som kunden kallar det)<input name="name" required value="${esc(reg?.name ?? "")}" /></label>
+      <label>Juridiskt namn <span class="muted">${reg?.found ? "(från Bolagsverket)" : "(om annat)"}</span>
+        <input name="legalName" value="${esc(reg?.name ?? "")}" /></label>
 
       <h3 class="span-2">Kontaktperson</h3>
       <label>Namn<input name="contactName" required autocomplete="off" /></label>
@@ -115,9 +154,10 @@ export function nyKund(config, lookup = null, orgValue = "") {
       <h3 class="span-2">Fakturering</h3>
       <label>Fakturamejl <span class="muted">(tomt = kontaktpersonens)</span><input name="billingEmail" type="email" /></label>
       <label>Er referens<input name="billingReference" /></label>
-      <label>Gatuadress<input name="line1" autocomplete="off" /></label>
-      <label>Postnummer<input name="postalCode" inputmode="numeric" /></label>
-      <label>Ort<input name="city" /></label>
+      <label>Gatuadress<input name="line1" autocomplete="off" value="${esc(reg?.address?.line1 ?? "")}" /></label>
+      <label>Postnummer<input name="postalCode" inputmode="numeric" value="${esc(reg?.address?.postal_code ?? "")}" /></label>
+      <label>Ort<input name="city" value="${esc(reg?.address?.city ?? "")}" /></label>
+      ${reg?.found ? '<p class="muted span-2">Namn och adress är ifyllda från Bolagsverket. Ändra om kunden vill ha fakturan någon annanstans.</p>' : ""}
 
       <label class="span-2">Hur kontrollerade du att personen får företräda bolaget?
         <textarea name="verificationNote" rows="2" required

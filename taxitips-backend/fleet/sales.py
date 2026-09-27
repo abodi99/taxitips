@@ -111,7 +111,22 @@ def lookup(org_number: str, country: str = "SE") -> dict:
     valid = orgnr.is_valid(org_number, country)
     existing = existing_company_for(org_number, country) if valid else None
     eligibility = trials.eligibility(country=country, org_number=org_number) if valid else None
+    registry = None
+    registry_error = ""
+    if valid and country == "SE":
+        from fleet import bolagsverket
+
+        if not bolagsverket.configured():
+            registry_error = "Bolagsverket är inte kopplat i den här miljön."
+        else:
+            info = bolagsverket.try_lookup(normalized)
+            if info is None:
+                registry_error = "Bolagsverket svarade inte. Fyll i uppgifterna för hand."
+            else:
+                registry = info.as_dict()
     return {
+        "registry": registry,
+        "registryError": registry_error,
         "orgNumber": orgnr.format_se(normalized) if country == "SE" else normalized,
         "normalized": normalized,
         "valid": valid,
@@ -155,12 +170,20 @@ def create_company(
     telefon får företräda bolaget.
     """
     country = (country or "SE").upper()
-    name = _clean(name, 200)
-    if not name:
-        raise SalesError("name_required", "Ange företagets namn.")
     if not orgnr.is_valid(org_number, country):
         raise SalesError("invalid_org_number", "Organisationsnumret går inte att tolka.")
     normalized = orgnr.normalize(org_number, country)
+    # Registret fyller i det säljaren lämnat tomt: namn, juridiskt namn och
+    # postadress. Säljaren får lägga upp ett avregistrerat bolag -- det kan
+    # finnas skäl -- men admin visar statusen i rött.
+    registry = None
+    if country == "SE":
+        from fleet import bolagsverket
+
+        registry = bolagsverket.try_lookup(normalized)
+    name = _clean(name, 200) or (registry.name if registry and registry.found else "")
+    if not name:
+        raise SalesError("name_required", "Ange företagets namn.")
     existing = existing_company_for(normalized, country)
     if existing is not None:
         raise SalesError(
@@ -198,6 +221,10 @@ def create_company(
         verification_status=VerificationStatus.VERIFIED,
         verification_note=note,
     )
+    if registry is not None:
+        from fleet import bolagsverket
+
+        bolagsverket.apply_to_profile(CompanyProfile.objects.get(company_id=company.id), registry)
     orders.get_or_create_subscription(company.id)
     audit.record(
         "sales_company_created", company_id=company.id, actor_user_id=actor_user_id,

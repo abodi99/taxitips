@@ -391,6 +391,8 @@ def company_detail(request, company_id):
              "contactPhone": profile.contact_phone, "billingEmail": profile.billing_email,
              "billingReference": profile.billing_reference,
              "billingAddress": profile.billing_address or {},
+             "registry": profile.registry or None,
+             "registryCheckedAt": _iso(profile.registry_checked_at),
              "legacyAccessUntil": _iso(profile.legacy_access_until),
              "legacyCounties": profile.legacy_counties}
             if profile else None

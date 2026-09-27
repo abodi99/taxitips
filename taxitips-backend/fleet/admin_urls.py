@@ -14,6 +14,7 @@ urlpatterns = [
     path("companies/new", admin_sales.create_company),
     path("companies/<uuid:company_id>", admin_api.company_detail),
     path("companies/<uuid:company_id>/profile", admin_sales.update_profile),
+    path("companies/<uuid:company_id>/registry", admin_sales.refresh_registry),
     path("companies/<uuid:company_id>/support", admin_support.start_with_company),
     # Supportchatten
     path("support/threads", admin_support.threads),

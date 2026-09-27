@@ -257,6 +257,18 @@ void main() {
     expect(body, {'enabled': false});
   });
 
+  test('Bolagsverket-uppslaget går utan inloggning, numret i query', () async {
+    final api = BackendApi(
+      baseUrl: 'http://localhost:8000',
+      client: respond({'ok': true, 'valid': true, 'available': true, 'registry': {'found': true}}),
+    );
+    await api.registryLookup('556012-5790');
+    expect(seen.single.url.path, '/api/fleet/registry');
+    expect(seen.single.url.queryParameters['orgNumber'], '556012-5790');
+    expect(seen.single.headers.containsKey('Authorization'), isFalse);
+    expect(seen.single.headers.containsKey('X-Device-Token'), isFalse);
+  });
+
   test('supportchatten bär båda bevisen; servern väljer kontot', () async {
     final api = BackendApi(
       baseUrl: 'http://localhost:8000',

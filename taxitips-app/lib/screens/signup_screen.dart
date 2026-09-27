@@ -33,6 +33,12 @@ class SignupScreenState extends State<SignupScreen> {
   final _phone = TextEditingController();
   String? _error;
   String? _lookupHint;
+  // Bolagsverkets svar för numret i fältet. Null = inte hämtat, eller gick
+  // inte att hämta; då skriver användaren företagsnamnet själv.
+  Map<String, dynamic>? _registry;
+  bool _registryChecked = false;
+  bool _lookingUp = false;
+  int _lookupSeq = 0;
   // Satt när Supabase kräver att e-posten bekräftas innan kontot kan logga in.
   String? _confirmEmail;
   bool _busy = false;
@@ -70,9 +76,9 @@ class SignupScreenState extends State<SignupScreen> {
   }
 
   /// Kontrollsiffran i ett svenskt organisations- eller personnummer (Luhn på
-  /// de tio sista siffrorna), samma regel som servern (fleet/orgnr.py). Bara
-  /// en kontroll av skrivfel: vem som äger numret prövas inte här, och appen
-  /// låtsas inte slå upp något namn.
+  /// de tio sista siffrorna), samma regel som servern (fleet/orgnr.py). Ett
+  /// nummer som klarar den slås upp hos Bolagsverket (`_checkOrg`); ett som
+  /// inte gör det skickas aldrig.
   static bool orgNumberLooksValid(String input) {
     var digits = input.replaceAll(RegExp(r'\D'), '');
     if (digits.length == 12) digits = digits.substring(2);
@@ -86,19 +92,39 @@ class SignupScreenState extends State<SignupScreen> {
     return sum % 10 == 0;
   }
 
-  void _checkOrg() {
+  Future<void> _checkOrg() async {
     final digits = _org.text.replaceAll(RegExp(r'\D'), '');
     if (!mounted) return;
+    final seq = ++_lookupSeq;
+    final valid = digits.length >= 10 && orgNumberLooksValid(_org.text);
     setState(() {
-      if (digits.length < 10) {
-        _lookupHint = null;
-      } else {
-        _lookupHint = orgNumberLooksValid(_org.text)
-            ? null
-            : 'Numret stämmer inte. Kontrollera siffrorna.';
-      }
+      _registry = null;
+      _registryChecked = false;
+      _lookingUp = valid;
+      _lookupHint = digits.length < 10 || valid
+          ? null
+          : 'Numret stämmer inte. Kontrollera siffrorna.';
+    });
+    if (!valid) return;
+    // Namn, adress och status hämtas från Bolagsverket; användaren behöver
+    // inte skriva av dem (fleet/bolagsverket.py).
+    final registry = await widget.api.registryLookup(_org.text.trim());
+    // Ett äldre svar får inte skriva över ett nyare: användaren kan ha
+    // fortsatt skriva medan uppslaget pågick.
+    if (!mounted || seq != _lookupSeq) return;
+    setState(() {
+      _registry = registry;
+      _registryChecked = true;
+      _lookingUp = false;
     });
   }
+
+  bool get _registryFound => _registry?['found'] == true;
+  bool get _registryBlocks => _registry?['blocksSignup'] == true;
+
+  /// Företagsnamnet behöver bara skrivas när registret inte har bolaget
+  /// (t.ex. en enskild firma) eller inte gick att nå.
+  bool get _needsCompanyName => _registryChecked && !_registryFound;
 
   @override
   void dispose() {
@@ -131,7 +157,8 @@ class SignupScreenState extends State<SignupScreen> {
         email: _email.text.trim(),
         password: _password.text,
         orgNumber: _org.text.trim(),
-        companyName: _name.text.trim(),
+        // Tomt när Bolagsverket har bolaget: servern tar namnet därifrån.
+        companyName: _needsCompanyName ? _name.text.trim() : '',
         phone: _phone.text.trim(),
       );
       if (data['needsConfirmation'] == true) {
@@ -152,7 +179,14 @@ class SignupScreenState extends State<SignupScreen> {
     if (!orgNumberLooksValid(_org.text)) {
       return 'Kontrollera organisationsnumret (10 siffror).';
     }
-    if (_name.text.trim().isEmpty) return 'Skriv företagets namn.';
+    if (_lookingUp) return 'Vänta, vi hämtar bolaget från Bolagsverket.';
+    if (_registryBlocks) {
+      return 'Bolaget är avregistrerat hos Bolagsverket och kan inte skapa ett konto.';
+    }
+    if (!_registryChecked) return 'Vänta, vi kontrollerar organisationsnumret.';
+    if (_needsCompanyName && _name.text.trim().isEmpty) {
+      return 'Skriv företagets namn.';
+    }
     if (_contact.text.trim().isEmpty) return 'Skriv ditt namn.';
     if (!_email.text.contains('@')) return 'Skriv en giltig e-postadress.';
     if (_password.text.length < 8) return 'Lösenordet behöver minst 8 tecken.';
@@ -287,17 +321,43 @@ class SignupScreenState extends State<SignupScreen> {
                             ),
                           ),
                         ],
-                        const SizedBox(height: 16),
-                        TextField(
-                          controller: _name,
-                          decoration: InputDecoration(
-                            labelText: 'Företagsnamn',
-                            prefixIcon: const Icon(Icons.business_outlined),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
+                        if (_lookingUp) ...[
+                          const SizedBox(height: 10),
+                          const Row(
+                            children: [
+                              SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                              SizedBox(width: 10),
+                              Text(
+                                'Hämtar bolaget från Bolagsverket …',
+                                style: TextStyle(color: TbColors.muted, fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        ],
+                        if (_registryFound) ...[
+                          const SizedBox(height: 10),
+                          _RegistryCard(registry: _registry!),
+                        ],
+                        if (_needsCompanyName) ...[
+                          const SizedBox(height: 16),
+                          TextField(
+                            controller: _name,
+                            decoration: InputDecoration(
+                              labelText: 'Företagsnamn',
+                              helperText: _registry == null
+                                  ? null
+                                  : 'Vi hittade inte bolaget hos Bolagsverket.',
+                              prefixIcon: const Icon(Icons.business_outlined),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
                             ),
                           ),
-                        ),
+                        ],
                         const SizedBox(height: 16),
                         TextField(
                           controller: _contact,
@@ -394,7 +454,7 @@ class SignupScreenState extends State<SignupScreen> {
                         ],
                         const SizedBox(height: 24),
                         FilledButton(
-                          onPressed: _busy ? null : _submit,
+                          onPressed: _busy || _registryBlocks ? null : _submit,
                           style: FilledButton.styleFrom(
                             backgroundColor: TbColors.ink,
                             foregroundColor: TbColors.foam,
@@ -572,6 +632,74 @@ class _ConfirmCardState extends State<_ConfirmCard> {
           TextButton(
             onPressed: _busy ? null : _resend,
             child: Text(_note ?? 'Skicka mejlet igen'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+
+/// Bolaget som Bolagsverket har det: namn, ort och form. Rött när det är
+/// avregistrerat, gult när en konkurs eller likvidation pågår.
+class _RegistryCard extends StatelessWidget {
+  const _RegistryCard({required this.registry});
+
+  final Map<String, dynamic> registry;
+
+  @override
+  Widget build(BuildContext context) {
+    final blocks = registry['blocksSignup'] == true;
+    final status = registry['status']?.toString() ?? '';
+    final warn = status == 'winding_up' || status == 'inactive';
+    final color = blocks
+        ? TbColors.danger
+        : (warn ? TbColors.taxiDeep : TbColors.live);
+    final details = [
+      registry['city']?.toString() ?? '',
+      registry['legalForm']?.toString() ?? '',
+    ].where((s) => s.isNotEmpty).join(' · ');
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: color.withValues(alpha: 0.4)),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            blocks ? Icons.block : (warn ? Icons.warning_amber : Icons.verified),
+            color: color,
+            size: 22,
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  registry['name']?.toString() ?? '',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w800,
+                    color: TbColors.ink,
+                  ),
+                ),
+                if (details.isNotEmpty)
+                  Text(details, style: const TextStyle(color: TbColors.muted)),
+                if (blocks || warn)
+                  Text(
+                    registry['statusText']?.toString() ?? '',
+                    style: TextStyle(color: color, fontWeight: FontWeight.w600),
+                  ),
+                if (!blocks && !warn)
+                  const Text(
+                    'Hämtat från Bolagsverket',
+                    style: TextStyle(color: TbColors.muted, fontSize: 12),
+                  ),
+              ],
+            ),
           ),
         ],
       ),

@@ -526,6 +526,21 @@ class BackendApi {
     return _decode(res, path);
   }
 
+  /// Bolaget bakom ett organisationsnummer enligt Bolagsverket: namn, ort,
+  /// form och status. Ingen inloggning -- registreringen sker innan kontot
+  /// finns (fleet/api.py:registry_lookup).
+  Future<Map<String, dynamic>> registryLookup(String orgNumber) async {
+    final res = await _client
+        .get(
+          Uri.parse('$baseUrl/api/fleet/registry').replace(
+            queryParameters: {'orgNumber': orgNumber},
+          ),
+          headers: _headers(),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'registryLookup');
+  }
+
   // Supportchatten (/api/support). Båda bevisen följer med: servern väljer
   // kontot om appen är inloggad, annars telefonen (fleet/support.py).
 

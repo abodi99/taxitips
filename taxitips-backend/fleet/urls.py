@@ -17,6 +17,8 @@ urlpatterns = [
     path("session", api.session_start),
     path("session/end", api.session_end),
     path("join-request", api.join_request),
+    # Registreringen: bolagets namn från Bolagsverket, före inloggning.
+    path("registry", api.registry_lookup),
     # Administratören
     path("company", api.company_overview),
     path("vehicles", api.create_vehicle),

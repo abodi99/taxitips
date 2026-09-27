@@ -76,6 +76,11 @@ class CompanyProfile(models.Model):
     billing_email = models.TextField(blank=True, default="")
     billing_reference = models.TextField(blank=True, default="")
     billing_address = models.JSONField(default=dict, blank=True)
+    # Senaste uppslaget hos Bolagsverket (fleet/bolagsverket.py): namn, form,
+    # status och adress som registret såg dem. Tomt = aldrig uppslaget, t.ex.
+    # när registret inte svarade vid registreringen.
+    registry = models.JSONField(default=dict, blank=True)
+    registry_checked_at = models.DateTimeField(null=True, blank=True)
 
     terms_version = models.CharField(max_length=32, blank=True, default="")
     terms_accepted_at = models.DateTimeField(null=True, blank=True)

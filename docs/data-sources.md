@@ -863,3 +863,38 @@ Ersatte API-SPORTS samma dag (det kontot var avstängt; koden är borttagen). `e
   en venue-entitet. `phq_labels` var tom trots att dokumentationen lovar etiketterna airport och delay.
 - Oplanerade: inga framtida förseningar i svaret. `first_seen` låg 60-75 min efter starten för CPH.
 - 90 dagar bakåt: 667 förseningar i Sverige och på CPH (17 anrop). CPH 25 (6 svåra), oftast 01-04.
+
+## Bolagsverket — värdefulla datamängder (företagsregistret) — integrerat 2026-09-27
+
+Används för att kunden ska ange så lite som möjligt: med organisationsnumret
+hämtas namn, juridisk form, status och postadress (`fleet/bolagsverket.py`).
+Gratis, inget avtal. Bolagsverkets egna dokumentationssidor ligger bakom en
+CAPTCHA; allt nedan är mätt mot API:t.
+
+- **Token:** `POST https://portal.api.bolagsverket.se/oauth2/token`,
+  `grant_type=client_credentials`, Basic auth med id:hemlighet, scope
+  `vardefulla-datamangder:read vardefulla-datamangder:ping`. Tokenen cachas till
+  60 s före `expires_in`.
+- **Uppslag:** `POST https://gw.api.bolagsverket.se/vardefulla-datamangder/v1/organisationer`
+  med `{"identitetsbeteckning": "5560125790"}` (tio siffror, utan bindestreck).
+- **Nycklar:** `BOLAGSVERKET_CLIENT_ID`, `BOLAGSVERKET_CLIENT_SECRET` (taxitips-backend).
+- **Svaret** är `{"organisationer": [ {...} ]}`. Varje block har `dataproducent`
+  (Bolagsverket eller SCB) och `fel`:
+  - `organisationsnamn.organisationsnamnLista[].namn` (typ `FORETAGSNAMN`)
+  - `organisationsform.{kod,klartext}` (AB/Aktiebolag); `juridiskForm` är SCB:s variant
+  - `postadressOrganisation.postadress.{utdelningsadress,coAdress,postnummer,postort,land}`
+    -- orten i VERSALER, postnumret utan mellanslag; storbolag har ofta bara box/postnummer
+  - `avregistreradOrganisation.avregistreringsdatum` + `avregistreringsorsak.klartext`
+  - `pagaendeAvvecklingsEllerOmstruktureringsforfarande` (konkurs, likvidation …)
+  - `verksamOrganisation.kod` JA/NEJ (SCB)
+  - `naringsgrenOrganisation.sni[].{kod,klartext}` -- tomma platser har kod `"     "`
+  - `organisationsdatum.registreringsdatum`
+- **Finns inte:** HTTP 200 med en rad där varje block har
+  `fel.typ = "ORGANISATION_FINNS_EJ"` och tom namnlista. **Fel kontrollsiffra:**
+  HTTP 400 (`detail`: "Identitetsbeteckning har ogiltig kontrollsiffra").
+  Vi skickar aldrig ett nummer som inte klarar Luhn.
+- **Enskilda firmor** (orgnr = personnummer) finns inte här -- då skriver
+  användaren namnet. Numret hashas i cachenyckeln.
+- **Cache:** ett dygn (en timme för "finns inte"). Uppslaget före inloggning
+  (`/api/fleet/registry`) bromsas med 30 per IP och 10 min, och 2000 per timme
+  totalt.

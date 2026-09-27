@@ -14,7 +14,7 @@ from datetime import timedelta
 
 from django.core.cache import cache
 from django.db import connection
-from django.test import TestCase, TransactionTestCase
+from django.test import TestCase, TransactionTestCase, override_settings
 from django.utils import timezone
 
 from billing.models import Company, CompanyMember, Device
@@ -141,6 +141,11 @@ class FleetFixture:
         }
 
 
+# Inga anrop till Bolagsverket från testerna, även när en lokal .env har
+# nycklarna: ett test som går mot ett riktigt register är långsamt, beror på
+# nätet och förbrukar kvot. Testerna som prövar registret mockar svaret och
+# slår på nycklarna själva (fleet/tests/test_bolagsverket.py).
+@override_settings(BOLAGSVERKET_CLIENT_ID="", BOLAGSVERKET_CLIENT_SECRET="")
 class FleetTestCase(FleetFixture, TestCase):
     @classmethod
     def setUpClass(cls):
@@ -158,6 +163,7 @@ class FleetTestCase(FleetFixture, TestCase):
         RiskConfig.current()
 
 
+@override_settings(BOLAGSVERKET_CLIENT_ID="", BOLAGSVERKET_CLIENT_SECRET="")
 class FleetTransactionTestCase(FleetFixture, TransactionTestCase):
     """
     För det som måste köras med riktiga, samtidiga transaktioner.

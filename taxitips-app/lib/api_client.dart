@@ -736,6 +736,21 @@ class ApiClient {
     return data;
   }
 
+  /// Bolagsverkets uppgifter för registreringen, eller null när de inte går
+  /// att få (ingen backend, nätfel, registret nere). Då skriver användaren
+  /// företagsnamnet själv -- ett uppslag får aldrig stoppa en registrering.
+  Future<Map<String, dynamic>?> registryLookup(String orgNumber) async {
+    final backend = _backend;
+    if (backend == null) return null;
+    try {
+      final body = await backend.registryLookup(orgNumber);
+      if (body['available'] != true || body['registry'] is! Map) return null;
+      return Map<String, dynamic>.from(body['registry'] as Map);
+    } catch (_) {
+      return null;
+    }
+  }
+
   // ── Supportchatten ──────────────────────────────────────────────────────
 
   /// Chatten kräver den nya backenden och antingen inloggning eller en

@@ -37,6 +37,11 @@ INVITE_REDEEM = Limit("invite_redeem", limit=10, window_seconds=3600)
 # Supportchatten: en människa som skriver många korta rader i rad ska inte
 # stoppas, ett skript som fyller supportens inkorg ska det.
 SUPPORT_MESSAGE = Limit("support_message", limit=30, window_seconds=600)
+# Bolagsverket-uppslaget före inloggning: per IP för att hindra att någon
+# använder oss som gratis proxy mot registret, och ett tak för alla
+# tillsammans så att en botnät-våg inte kan förbruka vår kvot.
+REGISTRY_LOOKUP = Limit("registry_lookup", limit=30, window_seconds=600)
+REGISTRY_LOOKUP_ALL = Limit("registry_lookup_all", limit=2000, window_seconds=3600)
 
 
 def _bucket(limit: Limit, identity: str) -> str:

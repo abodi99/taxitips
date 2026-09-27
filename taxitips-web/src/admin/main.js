@@ -557,6 +557,17 @@ async function act(action, ds) {
     case "event-template":
       return downloadTemplate();
 
+    case "registry-refresh": {
+      const overwrite = ds.overwrite === "1";
+      if (overwrite && !confirm("Ersätta fakturaadressen med adressen hos Bolagsverket?")) return;
+      const result = await admin.refreshRegistry(state.companyId, overwrite);
+      const r = result.registry;
+      flash(r.found
+        ? `Hämtat från Bolagsverket: ${r.name} (${r.statusText}).`
+        : "Bolagsverket har inget bolag med det numret.");
+      return render();
+    }
+
     case "support-start": {
       const started = await admin.supportStart(state.companyId);
       state.supportThread = started.thread.id;

@@ -188,6 +188,35 @@ def pair(request):
 
 @require_GET
 @handle
+def registry_lookup(request):
+    """
+    GET /api/fleet/registry?orgNumber=556677-8899
+
+    Registreringen i appen: användaren skriver organisationsnumret och ser
+    direkt bolagets namn och ort från Bolagsverket, i stället för att skriva
+    av dem. Körs innan kontot finns, därför utan inloggning -- men med broms
+    per IP-adress och ett tak för alla, och svaret säger bara det Bolagsverket
+    själv visar öppet (namn, ort, form, status). Inget om huruvida bolaget
+    redan är kund hos TaxiTips.
+    """
+    from fleet import bolagsverket
+
+    raw = request.GET.get("orgNumber", "")
+    if not orgnr.is_valid(raw, "SE"):
+        return _json(request, {"ok": True, "valid": False, "available": True, "registry": None})
+    if not bolagsverket.configured():
+        return _json(request, {"ok": True, "valid": True, "available": False, "registry": None})
+    ratelimit.enforce(ratelimit.REGISTRY_LOOKUP, bolagsverket.client_ip(request) or "unknown")
+    ratelimit.enforce(ratelimit.REGISTRY_LOOKUP_ALL, "all")
+    info = bolagsverket.try_lookup(orgnr.normalize(raw, "SE"))
+    return _json(request, {
+        "ok": True, "valid": True, "available": info is not None,
+        "registry": bolagsverket.public_view(info) if info is not None else None,
+    })
+
+
+@require_GET
+@handle
 def driver_status(request):
     """
     GET /api/fleet/me -- vad den här telefonen får, och vilken bil den kör.

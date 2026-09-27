@@ -915,3 +915,40 @@ class OwnerInviteTests(SalesTestCase):
         text = json.dumps(body)
         self.assertNotIn("code_hash", text)
         self.assertNotIn("token_hash", text)
+
+
+@override_settings(BOLAGSVERKET_CLIENT_ID="id", BOLAGSVERKET_CLIENT_SECRET="secret")
+class RegistryRefreshTests(SalesTestCase):
+    """Knappen "Hämta från Bolagsverket" på kundsidan."""
+
+    def setUp(self):
+        super().setUp()
+        from django.core.cache import cache
+
+        cache.clear()
+
+    def test_refresh_updates_the_legal_name_and_keeps_a_chosen_address(self):
+        from fleet.models import CompanyProfile
+        from fleet.tests.test_bolagsverket import VOLVO, registry
+
+        with registry(None, status=503):  # registret nere när bolaget lades upp
+            company = self.new_company(org="5560125790")
+        path = f"/api/admin/companies/{company.id}/registry"
+        with registry(VOLVO):
+            body = self.post(path).json()
+        self.assertEqual(body["registry"]["name"], "Aktiebolaget Volvo", body)
+        self.assertIn("legal_name", body["changed"])
+        profile = CompanyProfile.objects.get(company_id=company.id)
+        self.assertEqual(profile.legal_name, "Aktiebolaget Volvo")
+        # Säljarens fakturaadress står kvar ...
+        self.assertEqual(profile.billing_address["line1"], "Hamngatan 1")
+        # ... tills någon uttryckligen vill ha registrets.
+        with registry(VOLVO):
+            self.post(path, {"overwriteAddress": True})
+        profile.refresh_from_db()
+        self.assertEqual(profile.billing_address["line1"], "VAL 1")
+
+    def test_support_cannot_refresh(self):
+        company = self.make_company(name="Kund AB", org_number=ORG_2)
+        response = self.post(f"/api/admin/companies/{company.id}/registry", user=self.support_id)
+        self.assertEqual(response.status_code, 403)

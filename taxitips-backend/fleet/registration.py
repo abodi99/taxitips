@@ -14,6 +14,11 @@ debitering om inget beställs. En beställning läggs i kundportalen på webben
 eller av en säljare i adminwebben (betallänk, faktura eller betald utanför
 Stripe) -- aldrig i appen. Se docs/fleet-abonnemang.md §9b.
 
+**Så lite som möjligt från användaren.** Namn, juridiskt namn och postadress
+hämtas från Bolagsverket med organisationsnumret (fleet/bolagsverket.py).
+Företagsnamnet behöver bara skrivas när registret inte har bolaget -- en
+enskild firma -- eller inte svarar. Ett avregistrerat bolag får inget konto.
+
 **Vad som INTE bevisas.** Ett organisationsnummer och en e-post är inte bevis
 på att personen får företräda bolaget (§7). Profilen börjar därför som
 obekräftad och syns så i adminwebben; provet har samma gränser som annars
@@ -47,7 +52,7 @@ def register(
     user_id: str,
     email: str,
     org_number: str,
-    company_name: str,
+    company_name: str = "",
     contact_name: str = "",
     contact_phone: str = "",
     vehicles: list | None = None,
@@ -80,9 +85,25 @@ def register(
             "din e-postadress, eller kontakta TaxiTips.",
             status=409,
         )
-    name = sales._clean(company_name, 200)
+    registry = None
+    if country == "SE":
+        from fleet import bolagsverket
+
+        registry = bolagsverket.try_lookup(normalized)
+    if registry is not None and registry.blocks_signup:
+        raise sales.SalesError(
+            "company_deregistered",
+            f"{registry.name} är avregistrerat hos Bolagsverket ({registry.status_text}). "
+            "Kontakta TaxiTips om det är fel.",
+            status=409,
+        )
+    found = registry is not None and registry.found
+    name = sales._clean(company_name, 200) or (registry.name if found else "")
     if not name:
-        raise sales.SalesError("name_required", "Ange företagets namn.")
+        raise sales.SalesError(
+            "name_required",
+            "Vi hittade inte bolaget hos Bolagsverket. Skriv företagets namn.",
+        )
 
     company = Company.objects.create(
         id=uuid.uuid4(), name=name, email=email, org_number=normalized,
@@ -95,8 +116,15 @@ def register(
         company_id=company.id, country=country, org_number=normalized, legal_name=name,
         contact_name=sales._clean(contact_name, 200), contact_email=email,
         contact_phone=sales._clean(contact_phone, 40), billing_email=email,
-        verification_note="Självregistrering i appen. Behörigheten är inte kontrollerad.",
+        verification_note=(
+            "Självregistrering i appen. Behörigheten är inte kontrollerad."
+            + (f" Bolagsverket: {registry.name}, {registry.status_text}." if found else "")
+        ),
     )
+    if registry is not None:
+        from fleet import bolagsverket
+
+        bolagsverket.apply_to_profile(CompanyProfile.objects.get(company_id=company.id), registry, now=now)
     CompanyMember.objects.create(
         id=uuid.uuid4(), company_id=company.id, user_id=user_id,
         role="company_owner", status="active", created_at=now,
@@ -122,6 +150,9 @@ def register(
     audit.record(
         "self_registered", company_id=company.id, actor_user_id=user_id,
         actor_kind="customer", subject_type="company", subject_id=company.id,
-        detail={"org_number": normalized, "name": name, "trial": bool(trial)},
+        detail={
+            "org_number": normalized, "name": name, "trial": bool(trial),
+            "registry": (registry.status if registry else "unavailable"),
+        },
     )
     return Registration(company, trial, message, created=True)

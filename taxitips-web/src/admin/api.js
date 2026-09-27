@@ -42,6 +42,10 @@ export const admin = {
   deleteEvent: (id) => request(`/api/admin/events/${id}/delete`, { method: "POST", body: {} }),
   venues: (q) => request(`/api/admin/events/venues?q=${encodeURIComponent(q)}`),
 
+  /* --- Bolagsverket (fleet/admin_sales.py:refresh_registry) --- */
+  refreshRegistry: (companyId, overwriteAddress = false) =>
+    request(`/api/admin/companies/${companyId}/registry`, { method: "POST", body: { overwriteAddress } }),
+
   /* --- Supportchatten (fleet/admin_support.py) --- */
   supportSummary: () => request("/api/admin/support/summary"),
   supportThreads: (status = "open", q = "") => {

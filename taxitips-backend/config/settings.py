@@ -172,6 +172,13 @@ GTFS_SWEDEN3_STATIC_KEY = os.environ.get("GTFS_SWEDEN3_STATIC_KEY", "")
 GTFS_REGIONAL_RT_KEY = os.environ.get("GTFS_REGIONAL_RT_KEY", "")
 VASTTRAFIK_CLIENT_ID = os.environ.get("VASTTRAFIK_CLIENT_ID", "")
 VASTTRAFIK_CLIENT_SECRET = os.environ.get("VASTTRAFIK_CLIENT_SECRET", "")
+# Bolagsverket: OAuth2 client credentials (Basic auth med id:secret,
+# grant_type=client_credentials) mot token-URL:en nedan.
+BOLAGSVERKET_CLIENT_ID = os.environ.get("BOLAGSVERKET_CLIENT_ID", "")
+BOLAGSVERKET_CLIENT_SECRET = os.environ.get("BOLAGSVERKET_CLIENT_SECRET", "")
+BOLAGSVERKET_TOKEN_URL = os.environ.get(
+    "BOLAGSVERKET_TOKEN_URL", "https://portal.api.bolagsverket.se/oauth2/token"
+)
 # AISStream.io, fartygspositioner via WebSocket -- maritime/management/commands/run_ais_stream.py.
 AISSTREAM_API_KEY = os.environ.get("AISSTREAM_API_KEY", "")
 # Trafiklab ResRobot v2.1: tidtabell och reseplanerare, se core/sources/resrobot.py.
@@ -360,6 +367,18 @@ STRIPE_PRODUCT_ID = os.environ.get("STRIPE_PRODUCT_ID", "")
 # Extra län som egen produkt, så att paketet syns rad för rad i Stripe.
 STRIPE_EXTRA_COUNTY_PRODUCT_ID = os.environ.get("STRIPE_EXTRA_COUNTY_PRODUCT_ID", "")
 STRIPE_VAT_TAX_RATE_ID = os.environ.get("STRIPE_VAT_TAX_RATE_ID", "")
+# --- Bolagsverket (fleet/bolagsverket.py) -------------------------------
+# Värdefulla datamängder: namn, adress, form och status för ett orgnr. Utan
+# id/hemlighet hämtas inget och registreringen använder det användaren skrev.
+BOLAGSVERKET_CLIENT_ID = os.environ.get("BOLAGSVERKET_CLIENT_ID", "")
+BOLAGSVERKET_CLIENT_SECRET = os.environ.get("BOLAGSVERKET_CLIENT_SECRET", "")
+BOLAGSVERKET_TOKEN_URL = os.environ.get(
+    "BOLAGSVERKET_TOKEN_URL", "https://portal.api.bolagsverket.se/oauth2/token"
+)
+BOLAGSVERKET_API_URL = os.environ.get(
+    "BOLAGSVERKET_API_URL", "https://gw.api.bolagsverket.se/vardefulla-datamangder/v1"
+)
+
 # Spärr mot att den här koden rör riktiga abonnemang. Måste sättas till "1"
 # uttryckligen innan en livenyckel används -- se fleet/stripe_sync.py.
 STRIPE_ALLOW_LIVE = os.environ.get("STRIPE_ALLOW_LIVE", "")

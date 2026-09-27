@@ -27,7 +27,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from core import areas
 from core.api import _json
-from fleet import commerce, orders, pricing, sales, stripe_sync, trials
+from fleet import audit, commerce, orders, pricing, sales, stripe_sync, trials
 from fleet.admin_api import _body, _company_or_404, _iso, _staff, handle
 from fleet.models import Coupon, CouponRedemption, Order, RiskConfig
 from fleet.roles import Perm
@@ -115,6 +115,45 @@ def lookup(request):
 # ---------------------------------------------------------------------------
 # Företaget
 # ---------------------------------------------------------------------------
+
+
+@csrf_exempt
+@require_POST
+@handle
+def refresh_registry(request, company_id):
+    """
+    POST /api/admin/companies/<id>/registry {"overwriteAddress": false}
+
+    Hämtar bolaget från Bolagsverket igen: juridiskt namn, status och -- om
+    profilen saknar en, eller på begäran -- postadressen.
+    """
+    from fleet import bolagsverket
+    from fleet.models import CompanyProfile
+
+    principal = _staff(request, Perm.ADMIN_SELL)
+    company = _company_or_404(company_id)
+    profile = CompanyProfile.objects.filter(company_id=company.id).first()
+    if profile is None or (profile.country or "SE") != "SE" or not profile.org_number:
+        raise sales.SalesError("no_org_number", "Bolaget har inget svenskt organisationsnummer.")
+    if not bolagsverket.configured():
+        raise sales.SalesError(
+            "registry_unavailable", "Bolagsverket är inte kopplat i den här miljön.", status=503,
+        )
+    try:
+        info = bolagsverket.lookup(profile.org_number, refresh=True)
+    except bolagsverket.RegistryUnavailable as exc:
+        raise sales.SalesError(
+            "registry_unavailable", "Bolagsverket svarade inte. Försök igen om en stund.", status=502,
+        ) from exc
+    changed = bolagsverket.apply_to_profile(
+        profile, info, overwrite_address=bool(_body(request).get("overwriteAddress")),
+    )
+    audit.record(
+        "registry_refreshed", company_id=company.id, actor_user_id=principal.user_id,
+        actor_kind="sales", subject_type="company", subject_id=company.id,
+        detail={"changed": changed, "status": info.status, "found": info.found},
+    )
+    return _json(request, {"ok": True, "registry": info.as_dict(), "changed": changed})
 
 
 @csrf_exempt
