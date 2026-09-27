@@ -29,6 +29,9 @@ urlpatterns = [
     path("quote", api.quote),
     path("orders", api.create_order),
     path("orders/list", api.list_orders),
+    path("trial/commit", api.trial_commit),
+    path("trial/commit/cancel", api.trial_commit_cancel),
+    path("billing-portal", api.billing_portal),
     path("subscription/cancel", api.cancel),
     path("subscription/undo-cancel", api.undo_cancel),
     # Registrering och prov

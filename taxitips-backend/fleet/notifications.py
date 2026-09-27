@@ -188,15 +188,16 @@ def trial_offer(company_id, trial) -> dict | None:
 def _offer_lines(offer: dict | None) -> str:
     if not offer:
         return (
-            "Vill ni fortsätta väljer ni bilarna och betalar i kundportalen, med kort "
-            "eller faktura:\n"
+            "Vill ni fortsätta bekräftar ni bilarna och sparar kort i kundportalen. "
+            "Första månadsbeloppet dras när provet tar slut:\n"
         )
     cars = f"{offer['count']} {'bil' if offer['count'] == 1 else 'bilar'}"
     return (
         f"Vill ni fortsätta med era {cars} ({', '.join(offer['plates'])})? Det kostar "
         f"{_money(offer['monthly_ore'])} i månaden exkl. moms "
-        f"({_money(offer['monthly_total_ore'])} inkl. moms). Ni betalar med kort eller "
-        "faktura, och med kort dras beloppet sedan automatiskt varje månad.\n"
+        f"({_money(offer['monthly_total_ore'])} inkl. moms). Ni sparar kort i "
+        "kundportalen; första dragningen sker när provet tar slut, sedan automatiskt "
+        "varje månad tills ni säger upp.\n"
     )
 
 
@@ -213,14 +214,15 @@ def trial_started(company_id, to_address: str, trial) -> OutboxMessage | None:
         body=(
             "Hej!\n\n"
             f"Provperioden har startat och gäller till {trial.ends_at:%Y-%m-%d}. "
-            f"Den omfattar upp till {trial.vehicle_limit} bilar och kostar ingenting.\n\n"
+            f"Den omfattar upp till {trial.vehicle_limit} bilar och kostar ingenting under provet.\n\n"
             "Så kommer ni igång:\n"
             "1. Lägg till bilarna i appen (Inställningar -> Bilar och förare).\n"
             "2. Tryck på en bil och välj \"Koppla en förare\" -- föraren skriver in koden.\n"
             "3. Kör ni själva: \"Kör bilen själv med den här telefonen\".\n\n"
-            "Innan provet slutar får ni ett mejl med vad det kostar att fortsätta. "
-            "Gör ni ingenting avslutas provet utan kostnad.\n\n"
-            f"Kundportalen: {portal_url()}\n"
+            "För att fortsätta efter provet: bekräfta bilarna och spara kort i kundportalen. "
+            "Då dras första betalningen automatiskt när provet tar slut. Utan sparat kort "
+            "stängs åtkomsten utan debitering.\n\n"
+            f"Spara kort här: {portal_url('fortsatt')}\n"
             + _SIGNATURE
         ),
         key_parts=(company_id, trial.id),
@@ -229,41 +231,63 @@ def trial_started(company_id, to_address: str, trial) -> OutboxMessage | None:
 
 def trial_ending(company_id, to_address: str, trial, *, stage: str = "3d") -> OutboxMessage | None:
     """
-    Påminnelse före provslut: `3d` tre dagar före och `1d` sista dygnet. Två
-    olika rader i utkorgen (stadiet ingår i nyckeln), men varje stadium bara
-    en gång.
+    Påminnelse före provslut: `3d` / `1d`, samt `card_missing*` när kort saknas.
     """
     offer = trial_offer(company_id, trial)
-    when = "i morgon" if stage == "1d" else f"{trial.ends_at:%Y-%m-%d}"
-    subject = (
-        "Sista dagen med provet – fortsätt med ett klick"
-        if stage == "1d" else "Provperioden slutar snart"
-    )
-    return queue(
-        category="trial_ending", company_id=company_id, to_address=to_address,
-        subject=subject,
-        body=(
+    when = "i morgon" if stage.endswith("1d") or stage == "1d" else f"{trial.ends_at:%Y-%m-%d}"
+    if stage.startswith("card_missing"):
+        subject = "Spara kort så ni behåller tipsen efter provet"
+        body = (
+            "Hej!\n\n"
+            f"Provperioden gäller till {trial.ends_at:%Y-%m-%d}. "
+            "Ni har ännu inte sparat kort för auto-förnyelse.\n\n"
+            + _offer_lines(offer)
+            + f"\nBekräfta bilarna och spara kort här: {portal_url('fortsatt')}\n\n"
+            "Utan sparat kort stängs åtkomsten när provet tar slut -- utan debitering. "
+            "Med kort dras första månadsbeloppet automatiskt den dagen.\n"
+            + _SIGNATURE
+        )
+    elif stage == "1d" or stage.endswith("1d"):
+        subject = "Sista dagen med provet – spara kort för att fortsätta"
+        body = (
             "Hej!\n\n"
             f"Provperioden slutar {when}.\n\n"
             + _offer_lines(offer)
-            + f"\nFortsätt här: {portal_url('fortsatt')}\n\n"
-            "Gör ni ingenting avslutas provet utan kostnad, och förarna slutar få tips.\n"
+            + f"\nBekräfta bilarna och spara kort: {portal_url('fortsatt')}\n\n"
+            "Har ni redan sparat kort dras första betalningen automatiskt i morgon. "
+            "Utan kort stängs åtkomsten utan debitering.\n"
             + _SIGNATURE
-        ),
+        )
+    else:
+        subject = "Provperioden slutar snart"
+        body = (
+            "Hej!\n\n"
+            f"Provperioden slutar {when}.\n\n"
+            + _offer_lines(offer)
+            + f"\nBekräfta bilarna och spara kort: {portal_url('fortsatt')}\n\n"
+            "Med sparat kort fortsätter abonnemanget automatiskt. "
+            "Utan kort stängs åtkomsten utan debitering.\n"
+            + _SIGNATURE
+        )
+    return queue(
+        category="trial_ending", company_id=company_id, to_address=to_address,
+        subject=subject,
+        body=body,
         payload={"stage": stage, "offer": offer or {}},
         key_parts=(company_id, trial.id, stage),
     )
 
 
 def trial_ended(company_id, to_address: str, trial) -> OutboxMessage | None:
-    """Provet löpte ut utan beställning. Dörren står öppen: samma länk."""
+    """Provet löpte ut utan kort/commit. Dörren står öppen: samma länk."""
     return queue(
         category="trial_ended", company_id=company_id, to_address=to_address,
         subject="Provperioden är slut",
         body=(
             "Hej!\n\n"
             "Provperioden är slut och ingenting har debiterats. Förarna får inga fler "
-            "tips förrän ni har valt vilka bilar som ska fortsätta.\n\n"
+            "tips förrän ni har valt vilka bilar som ska fortsätta och betalat i "
+            "kundportalen.\n\n"
             f"Fortsätt när ni vill: {portal_url('fortsatt')}\n"
             + _SIGNATURE
         ),

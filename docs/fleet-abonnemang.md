@@ -205,9 +205,14 @@ order utan villkorsversion går inte att knyta till ett avtal i efterhand.
 * Provbilar är inte beställda licenser. Tre provbilar blir aldrig tre
   debiterade licenser utan en uttrycklig beställning av vilka bilar som
   fortsätter.
-* Kortfritt prov kräver en personlig engångsinbjudan från en säljare, giltig
-  sju dagar, med **dokumenterad verifierad företagskontakt** (obligatoriskt
-  fält). Utan aktiv betalbeställning avslutas provet utan debitering.
+* **Under provet** kostar det ingenting (kortfritt att *använda*). För
+  **auto-förnyelse** måste kunden i kundportalen bekräfta bilarna och spara
+  kort (`POST /api/fleet/trial/commit`). Då skapas ett Stripe-abonnemang med
+  `trial_end = Trial.ends_at`; första dragningen sker vid provslut. Utan
+  sparat kort avslutas provet utan debitering (`fleet_tick`).
+* Kortfritt *säljarinbjudan* (utan krav på kort under provet) kräver en
+  personlig engångsinbjudan från en säljare, giltig sju dagar, med
+  **dokumenterad verifierad företagskontakt** (obligatoriskt fält).
 
 ---
 
@@ -340,14 +345,19 @@ kundportal och en platsväljare med pris. Allt det är borttaget ur klienten.
 **Registreringen** (`POST /api/fleet/register`, `fleet/registration.py`):
 kontot skapas i Supabase Auth, sedan skapar servern företag, profil
 (`verification_status = unverified`), ägarmedlemskap, abonnemangsrad och ett
-**kortfritt** prov i en transaktion. Samma provregler som §7. Kräver Supabase
-att e-posten bekräftas sparas företagsuppgifterna i telefonen och registreringen
-görs klart vid första inloggningen. Ett orgnr som redan har ett konto tas inte
-över (`company_exists`); en spärrad e-post kommer inte in (`account_blocked`).
+prov i en transaktion (användningen under provet är kortfri). Samma provregler
+som §7. Kräver Supabase att e-posten bekräftas sparas företagsuppgifterna i
+telefonen och registreringen görs klart vid första inloggningen. Ett orgnr som
+redan har ett konto tas inte över (`company_exists`); en spärrad e-post kommer
+inte in (`account_blocked`).
 
 Ägaren lägger själv till provbilar upp till provets gräns
-(`POST /api/fleet/trial/vehicles`) och kopplar förare med engångskod. Fler bilar
-efter provet är en beställning, och den görs inte i appen.
+(`POST /api/fleet/trial/vehicles`) och kopplar förare med engångskod. **Fortsatt
+åtkomst efter provet** sker i kundportalen: bekräfta bilar + spara kort
+(`POST /api/fleet/trial/commit` → Stripe Checkout med `trial_end`). Appen visar
+bara en informativ länk till portalen — inga priser och ingen köpknapp.
+Efter provslut utan kort går det fortfarande att beställa och betala nu via
+`POST /api/fleet/orders`.
 
 Adminwebben visar obekräftade företag på översikten; en säljare markerar
 behörigheten som kontrollerad (`/api/admin/companies/<id>/verification`) med en

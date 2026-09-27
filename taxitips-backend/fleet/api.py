@@ -46,6 +46,7 @@ from fleet import (
     roles,
     sales,
     sessions,
+    stripe_sync,
     support,
     trials,
 )
@@ -193,10 +194,10 @@ def registry_lookup(request):
     GET /api/fleet/registry?orgNumber=556677-8899
 
     Registreringen i appen: användaren skriver organisationsnumret och ser
-    direkt bolagets namn och ort från Bolagsverket, i stället för att skriva
-    av dem. Körs innan kontot finns, därför utan inloggning -- men med broms
-    per IP-adress och ett tak för alla, och svaret säger bara det Bolagsverket
-    själv visar öppet (namn, ort, form, status). Inget om huruvida bolaget
+    direkt bolagets namn och postadress från Bolagsverket, i stället för att
+    skriva av dem. Enskild firma finns inte i registret -- då skriver kunden
+    bara firmanamnet. Körs innan kontot finns, därför utan inloggning -- men
+    med broms per IP-adress och ett tak för alla. Inget om huruvida bolaget
     redan är kund hos TaxiTips.
     """
     from fleet import bolagsverket
@@ -257,10 +258,24 @@ def driver_status(request):
             "isMine": bool(session and str(session.license_id) == str(approval.license_id)),
         })
 
+    company = Company.objects.filter(id=device.company_id).first()
+    # `device`/`company` behålls för appens äldre getDeviceMe-form (Inställningar
+    # och push-fallback). Parkopplade telefoner har ingen rad i devices.token som
+    # den gamla RPC:n device_by_token kan hitta — utan dem blev Inställningar
+    # PostgrestException.
     return _json(request, {
         "ok": True,
         "deviceId": str(device.id),
         "companyId": str(device.company_id),
+        "device": {
+            "id": str(device.id),
+            "label": device.label or "",
+            "company_id": str(device.company_id),
+        },
+        "company": {
+            "id": str(device.company_id),
+            "name": company.name if company else "",
+        },
         "credentialScheme": (credential.scheme if credential else "legacy_plaintext"),
         "vehicles": vehicles,
         "session": (
@@ -500,17 +515,7 @@ def company_overview(request):
             ),
             "renewalStopped": bool(subscription.renewal_stopped_at),
         },
-        "trial": (
-            {
-                "status": trial.status,
-                "startedAt": trial.started_at.isoformat() if trial.started_at else None,
-                "endsAt": trial.ends_at.isoformat() if trial.ends_at else None,
-                "vehicleLimit": trial.vehicle_limit,
-                "vehiclesUsed": trials.trial_vehicle_count(trial),
-                "requiresPaymentMethod": trial.requires_payment_method,
-            }
-            if trial else None
-        ),
+        "trial": _trial_payload(trial, company_id) if trial else None,
         "licenses": rows,
         # "Fortsätt med provbilarna" -- dit mejlen före och efter provslut länkar.
         "continueVehicles": trials.continue_vehicles(company_id),
@@ -535,6 +540,25 @@ def _access_summary(company_id, now) -> dict:
         "reason": window.reason,
         "message": "" if window.ok else access._window_message(window.reason),
         "validUntil": window.valid_until.isoformat() if window.valid_until else None,
+    }
+
+
+def _trial_payload(trial, company_id) -> dict:
+    commit = commerce.trial_commit_status(company_id)
+    return {
+        "status": trial.status,
+        "startedAt": trial.started_at.isoformat() if trial.started_at else None,
+        "endsAt": trial.ends_at.isoformat() if trial.ends_at else None,
+        "vehicleLimit": trial.vehicle_limit,
+        "vehiclesUsed": trials.trial_vehicle_count(trial),
+        "requiresPaymentMethod": trial.requires_payment_method,
+        "committed": commit["committed"],
+        "cardOnFile": commit["cardOnFile"],
+        "paymentUrl": commit["paymentUrl"],
+        "firstChargeAt": (
+            trial.ends_at.isoformat()
+            if trial.ends_at and commit["cardOnFile"] else None
+        ),
     }
 
 
@@ -723,6 +747,87 @@ def create_order(request):
         "lines": order.lines,
         "termsVersion": order.terms_version,
     })
+
+
+@csrf_exempt
+@require_POST
+@handle
+def trial_commit(request):
+    """
+    POST /api/fleet/trial/commit -- bekräfta provbilar och spara kort.
+
+    Under pågående Django-prov: skapar Stripe-abonnemang med trial_end =
+    provets slut. Kunden sparar kort via Checkout; debitering sker vid
+    provslut. Inget säljs i appen -- den här vägen är bara för portalen.
+    """
+    from django.conf import settings
+
+    principal = _principal(request, Perm.PURCHASE)
+    body = _body(request)
+    plan = _plan_from_body(principal.company_id, body)
+    if not body.get("accepted"):
+        raise orders.OrderError(
+            "acceptance_required",
+            "Godkänn vilka bilar som fortsätter och att kortet sparas.",
+        )
+    portal = getattr(settings, "FLEET_PORTAL_URL", "https://taxitips.se/portal").rstrip("/")
+    success = body.get("successUrl") or f"{portal}?trial_commit=ok#fortsatt"
+    cancel = body.get("cancelUrl") or f"{portal}?trial_commit=cancel#fortsatt"
+    order, info = commerce.commit_trial_continuation(
+        principal.company_id, plan, created_by=principal.user_id,
+        success_url=success, cancel_url=cancel,
+        idempotency=body.get("idempotency_key"),
+    )
+    return _json(request, {
+        "ok": True,
+        "orderId": str(order.id),
+        "status": order.status,
+        "paymentUrl": info.get("paymentUrl"),
+        "cardOnFile": info.get("cardOnFile", False),
+        "alreadyCommitted": info.get("alreadyCommitted", False),
+        "firstChargeAt": info.get("firstChargeAt"),
+        "nextPeriodTotalOre": order.next_period_total_ore,
+        "lines": order.lines,
+    })
+
+
+@csrf_exempt
+@require_POST
+@handle
+def trial_commit_cancel(request):
+    """POST /api/fleet/trial/commit/cancel -- ångra auto-förnyelse före första dragning."""
+    principal = _principal(request, Perm.PURCHASE)
+    result = commerce.cancel_trial_commit(
+        principal.company_id, actor_user_id=principal.user_id,
+    )
+    return _json(request, result)
+
+
+@csrf_exempt
+@require_POST
+@handle
+def billing_portal(request):
+    """
+    POST /api/fleet/billing-portal -- Stripes portal för kort och fakturor.
+
+    Antal bilar och uppsägning sköts i TaxiTips-portalen, inte här.
+    """
+    from django.conf import settings
+
+    principal = _principal(request, Perm.VIEW_BILLING)
+    body = _body(request)
+    subscription = orders.get_or_create_subscription(principal.company_id)
+    portal = getattr(settings, "FLEET_PORTAL_URL", "https://taxitips.se/portal").rstrip("/")
+    return_url = body.get("returnUrl") or f"{portal}#abonnemang"
+    try:
+        url = stripe_sync.billing_portal_url(subscription, return_url)
+    except stripe_sync.StripeUnavailable as exc:
+        raise orders.OrderError("stripe_unavailable", str(exc), status=503) from exc
+    except Exception as exc:
+        raise orders.OrderError(
+            "stripe_error", f"Stripe svarade med ett fel: {str(exc)[:300]}", status=502,
+        ) from exc
+    return _json(request, {"ok": True, "url": url})
 
 
 @require_GET

@@ -101,6 +101,18 @@ export const api = {
   quote: (change) => request("/api/fleet/quote", { method: "POST", body: change }),
   order: (change) =>
     request("/api/fleet/orders", { method: "POST", body: { ...change, accepted: true } }),
+  trialCommit: (change) =>
+    request("/api/fleet/trial/commit", {
+      method: "POST",
+      body: { ...change, accepted: true },
+    }),
+  trialCommitCancel: () =>
+    request("/api/fleet/trial/commit/cancel", { method: "POST", body: {} }),
+  billingPortal: (returnUrl) =>
+    request("/api/fleet/billing-portal", {
+      method: "POST",
+      body: returnUrl ? { returnUrl } : {},
+    }),
   cancel: (reason) =>
     request("/api/fleet/subscription/cancel", { method: "POST", body: { reason } }),
   undoCancel: () =>

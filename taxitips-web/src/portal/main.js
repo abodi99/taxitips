@@ -1,3 +1,4 @@
+import { promptAndSetPassword, sendPasswordReset } from "../auth_password.js";
 import { ApiError, api, supabase } from "./api.js";
 import * as views from "./views.js";
 import { quoteHtml } from "./views.js";
@@ -40,6 +41,8 @@ let state = { view: "oversikt", data: null, orders: null };
 const CONTINUE_KEY = "tt_portal_continue";
 try {
   if (window.location.hash === "#fortsatt") sessionStorage.setItem(CONTINUE_KEY, "1");
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("trial_commit") === "ok") sessionStorage.setItem(CONTINUE_KEY, "1");
 } catch {
   // Utan sessionStorage fungerar länken bara när kunden redan är inloggad.
 }
@@ -72,7 +75,25 @@ async function boot() {
     await enterApp(data.session);
   } else {
     el.login.hidden = false;
+    showAuthHashError();
   }
+}
+
+/** Visa GoTrue-fel från hash (#error=otp_expired …) efter en förbrukad mejllänk. */
+function showAuthHashError() {
+  const raw = window.location.hash.replace(/^#/, "");
+  if (!raw.includes("error=")) return;
+  const params = new URLSearchParams(raw);
+  const code = params.get("error_code") || params.get("error") || "";
+  const desc = params.get("error_description") || "";
+  let message = "Inloggningslänken fungerar inte längre.";
+  if (code === "otp_expired" || /expired|invalid/i.test(desc)) {
+    message =
+      "Länken är redan använd eller har gått ut. Begär en ny under Glömt lösenord.";
+  }
+  el.loginError.textContent = message;
+  el.loginError.hidden = false;
+  history.replaceState(null, "", window.location.pathname + window.location.search);
 }
 
 // Inloggningen triggar både formulärets svar och `onAuthStateChange`; appen
@@ -184,10 +205,45 @@ document.getElementById("magicLink")?.addEventListener("click", async () => {
   }
 });
 
-// Länken landar här med sessionen i URL:en; klienten plockar upp den själv.
-supabase().auth.onAuthStateChange((event, session) => {
+// Återställningsmejlet landar här. Utan PASSWORD_RECOVERY-steget ser det ut
+// som vanlig inloggning och användaren blir ombedd om det gamla lösenordet.
+supabase().auth.onAuthStateChange(async (event, session) => {
+  if (event === "PASSWORD_RECOVERY" && session) {
+    try {
+      await promptAndSetPassword(supabase());
+    } catch (error) {
+      alert(error?.message ?? "Kunde inte spara lösenordet.");
+      return;
+    }
+    if (el.app.hidden) await enterApp(session);
+    return;
+  }
   if (event === "SIGNED_IN" && session && el.app.hidden) {
-    enterApp(session);
+    await enterApp(session);
+  }
+});
+
+document.getElementById("forgotPassword")?.addEventListener("click", async () => {
+  el.loginError.hidden = true;
+  const email = String(new FormData(el.loginForm).get("email") ?? "").trim();
+  const sent = document.getElementById("magicSent");
+  if (!email) {
+    el.loginError.textContent = "Skriv din e-post först.";
+    el.loginError.hidden = false;
+    return;
+  }
+  try {
+    const { error } = await sendPasswordReset(
+      supabase(),
+      email,
+      `${window.location.origin}${window.location.pathname}`,
+    );
+    if (error) throw error;
+    sent.textContent = `Om ${email} har ett konto kommer en återställningslänk strax.`;
+    sent.hidden = false;
+  } catch (error) {
+    el.loginError.textContent = error?.message ?? "Kunde inte skicka länken.";
+    el.loginError.hidden = false;
   }
 });
 
@@ -323,11 +379,35 @@ async function handle(action, ctx) {
     case "continue-trial": {
       const cars = state.data?.continueVehicles ?? [];
       if (!cars.length) return;
-      return buy({
+      const change = {
         addVehicles: cars.map((c) => ({
           plate: c.plate, baseCounty: c.baseCounty, label: "", extraCounties: [],
         })),
-      });
+      };
+      const trial = state.data?.trial;
+      const activeTrial = trial && ["pending", "active"].includes(trial.status);
+      if (activeTrial) {
+        return commitTrial(change);
+      }
+      return buy(change);
+    }
+    case "cancel-trial-commit": {
+      if (
+        !confirm(
+          "Avbryta auto-förnyelse?\n\nKortet tas bort från fortsättningen. " +
+            "Provet gäller ut, sedan stängs åtkomsten utan debitering om ni " +
+            "inte sparar kort igen.",
+        )
+      )
+        return;
+      await api.trialCommitCancel();
+      state.orders = null;
+      return refresh();
+    }
+    case "billing-portal": {
+      const result = await api.billingPortal();
+      if (result.url) window.open(result.url, "_blank", "noopener");
+      return;
     }
     case "add-license": {
       const plate = prompt("Registreringsnummer för bilen:");
@@ -372,6 +452,44 @@ async function handle(action, ctx) {
     default:
       return;
   }
+}
+
+/**
+ * Under pågående prov: offert → commit (spara kort, debitering vid ends_at).
+ */
+async function commitTrial(change) {
+  const quote = await api.quote(change);
+  const summary = document.createElement("div");
+  summary.innerHTML = quoteHtml(quote);
+  const ends = state.data?.trial?.endsAt
+    ? new Date(state.data.trial.endsAt).toLocaleDateString("sv-SE")
+    : "provets slut";
+  const accepted = confirm(
+    `${summary.textContent}\n\n` +
+      `Godkänner du? Kortet sparas nu. Första dragningen sker ${ends} — ` +
+      `inget debiteras under provet.`,
+  );
+  if (!accepted) return;
+
+  const result = await api.trialCommit(change);
+  if (result.cardOnFile) {
+    alert(
+      "Kortet är redan sparat. Första dragningen sker när provet tar slut.",
+    );
+  } else if (result.paymentUrl) {
+    const go = confirm(
+      "Öppna Stripes sida och spara kortet nu?\n\n" +
+        "Ingen dragning sker förrän provperioden tar slut.",
+    );
+    if (go) window.open(result.paymentUrl, "_blank", "noopener");
+  } else {
+    alert(
+      "Kunde inte öppna betalsidan." +
+        (result.paymentError ? `\n\n${result.paymentError.message}` : ""),
+    );
+  }
+  state.orders = null;
+  return refresh();
 }
 
 /**

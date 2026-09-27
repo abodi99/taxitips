@@ -1,3 +1,4 @@
+import { promptAndSetPassword, sendPasswordReset } from "../auth_password.js";
 import { ApiError, supabase } from "../portal/api.js";
 import * as acc from "./accounts.js";
 import { admin } from "./api.js";
@@ -15,6 +16,23 @@ import * as views from "./views.js";
  *
  * Varje ändring bekräftas först och loggas av servern med vem som gjorde den.
  */
+
+/** Visa GoTrue-fel från hash (#error=otp_expired …) efter en förbrukad mejllänk. */
+function showAuthHashError() {
+  const raw = window.location.hash.replace(/^#/, "");
+  if (!raw.includes("error=")) return;
+  const params = new URLSearchParams(raw);
+  const code = params.get("error_code") || params.get("error") || "";
+  const desc = params.get("error_description") || "";
+  let message = "Inloggningslänken fungerar inte längre.";
+  if (code === "otp_expired" || /expired|invalid/i.test(desc)) {
+    message =
+      "Länken är redan använd eller har gått ut. Begär en ny under Glömt lösenord.";
+  }
+  el.loginError.textContent = message;
+  el.loginError.hidden = false;
+  history.replaceState(null, "", window.location.pathname + window.location.search);
+}
 
 const el = {
   login: document.getElementById("login"),
@@ -223,6 +241,7 @@ async function boot() {
   const { data } = await supabase().auth.getSession();
   if (data?.session) return enterApp(data.session);
   el.login.hidden = false;
+  showAuthHashError();
 }
 
 // Inloggningen triggar både formulärets svar och `onAuthStateChange`; appen
@@ -318,31 +337,51 @@ document.getElementById("magicLink")?.addEventListener("click", async () => {
   }
 });
 
-// Länken landar här med sessionen i URL:en. Supabase-klienten plockar upp den
-// själv (detectSessionInUrl); det här ser bara till att appen visas direkt.
-supabase().auth.onAuthStateChange((event, session) => {
+// Återställningsmejlet landar här med en engångssession. PASSWORD_RECOVERY
+// betyder "sätt nytt lösenord nu" -- utan det ser det ut som vanlig inloggning.
+supabase().auth.onAuthStateChange(async (event, session) => {
+  if (event === "PASSWORD_RECOVERY" && session) {
+    try {
+      await promptAndSetPassword(supabase());
+    } catch (error) {
+      alert(error?.message ?? "Kunde inte spara lösenordet.");
+      return;
+    }
+    if (el.app.hidden) await enterApp(session);
+    return;
+  }
   if (event === "SIGNED_IN" && session && el.app.hidden) {
-    enterApp(session);
+    await enterApp(session);
+  }
+});
+
+document.getElementById("forgotPassword")?.addEventListener("click", async () => {
+  el.loginError.hidden = true;
+  const email = String(new FormData(el.loginForm).get("email") ?? "").trim();
+  const sent = document.getElementById("magicSent");
+  if (!email) {
+    el.loginError.textContent = "Skriv din e-post först.";
+    el.loginError.hidden = false;
+    return;
+  }
+  try {
+    const { error } = await sendPasswordReset(
+      supabase(),
+      email,
+      `${window.location.origin}${window.location.pathname}`,
+    );
+    if (error) throw error;
+    sent.textContent = `Om ${email} har ett konto kommer en återställningslänk strax.`;
+    sent.hidden = false;
+  } catch (error) {
+    el.loginError.textContent = error?.message ?? "Kunde inte skicka länken.";
+    el.loginError.hidden = false;
   }
 });
 
 document.getElementById("changePassword")?.addEventListener("click", async () => {
-  const first = prompt("Nytt lösenord (minst 12 tecken):");
-  if (first === null) return;
-  if (first.length < 12) {
-    alert("Lösenordet måste vara minst 12 tecken.");
-    return;
-  }
-  const second = prompt("Skriv det nya lösenordet igen:");
-  if (second === null) return;
-  if (first !== second) {
-    alert("Lösenorden stämmer inte överens. Inget ändrades.");
-    return;
-  }
   try {
-    const { error } = await supabase().auth.updateUser({ password: first });
-    if (error) throw error;
-    alert("Lösenordet är bytt.");
+    await promptAndSetPassword(supabase());
   } catch (error) {
     alert(error?.message ?? "Kunde inte byta lösenord.");
   }

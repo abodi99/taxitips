@@ -55,6 +55,7 @@ class _VehicleSessionSheetState extends State<VehicleSessionSheet> {
   }
 
   Future<void> _load() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -64,17 +65,24 @@ class _VehicleSessionSheetState extends State<VehicleSessionSheet> {
       if (!mounted) return;
       setState(() {
         _vehicles = ((data['vehicles'] as List?) ?? const [])
-            .map((v) => Map<String, dynamic>.from(v as Map))
+            .whereType<Map>()
+            .map((v) => Map<String, dynamic>.from(v))
             .toList();
-        _session = data['session'] == null
-            ? null
-            : Map<String, dynamic>.from(data['session'] as Map);
+        _session = data['session'] is Map
+            ? Map<String, dynamic>.from(data['session'] as Map)
+            : null;
         _loading = false;
       });
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
         _error = e.message;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
         _loading = false;
       });
     }
@@ -99,6 +107,7 @@ class _VehicleSessionSheetState extends State<VehicleSessionSheet> {
       // få frågan att utebli.
       if (e.reason == 'takeover_required') {
         final confirmed = await _confirmTakeover(vehicle, e.message);
+        if (!mounted) return;
         if (confirmed == true) await _forceTake(licenseId);
         return;
       }

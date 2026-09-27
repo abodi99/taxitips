@@ -76,11 +76,14 @@ class _JoinScreenState extends State<JoinScreen> {
         });
       } else {
         await widget.api.pairWithCode(code: _code.text.trim(), label: label);
+        if (!mounted) return;
         widget.onJoined();
       }
     } on ApiException catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.message);
     } catch (e) {
+      if (!mounted) return;
       setState(() => _error = e.toString());
     } finally {
       if (mounted) setState(() => _busy = false);

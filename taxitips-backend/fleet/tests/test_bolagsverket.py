@@ -209,6 +209,8 @@ class PublicLookupTests(FleetTestCase):
             body = self.get("556012-5790").json()
         self.assertEqual(body["registry"]["name"], "Aktiebolaget Volvo")
         self.assertEqual(body["registry"]["city"], "Göteborg")
+        self.assertEqual(body["registry"]["line1"], "VAL 1")
+        self.assertEqual(body["registry"]["postalCode"], "405 08")
         self.assertNotIn("Volvo hos oss", str(body))
         self.assertNotIn("existing", str(body).lower())
 

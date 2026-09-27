@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../api_client.dart';
 import '../push_service.dart';
@@ -32,6 +33,9 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
   bool _loading = true;
   String? _error;
   Map<String, dynamic>? _data;
+  /// Den här telefonens device-id när den redan är parkopplad. Används för
+  /// att dölja "Kör själv …" när telefonen redan står under bilen.
+  String? _thisDeviceId;
 
   @override
   void initState() {
@@ -40,6 +44,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
   }
 
   Future<void> _reload() async {
+    if (!mounted) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -53,9 +58,22 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
         if (mounted) setState(() => _error = e.message);
       }
       final data = await widget.api.fleetCompany();
+      String? thisDeviceId;
+      if (widget.api.deviceToken != null) {
+        try {
+          final status = await widget.api.fleetStatus();
+          thisDeviceId = status['deviceId']?.toString() ??
+              (status['device'] is Map
+                  ? (status['device'] as Map)['id']?.toString()
+                  : null);
+        } catch (_) {
+          // Utan device-id visas knappen; parkopplingen fungerar ändå.
+        }
+      }
       if (!mounted) return;
       setState(() {
         _data = data;
+        _thisDeviceId = thisDeviceId;
         _loading = false;
       });
     } catch (e) {
@@ -67,9 +85,24 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     }
   }
 
+  /// True när den här telefonen redan är godkänd för bilen.
+  bool _thisPhoneOn(Map<String, dynamic> license) {
+    final id = _thisDeviceId;
+    if (id == null || id.isEmpty) return false;
+    for (final phone in (license['approvedPhones'] as List?) ?? const []) {
+      if (phone is Map && phone['deviceId']?.toString() == id) return true;
+    }
+    return false;
+  }
+
   String _cleanError(Object e) {
     if (e is ApiException) return e.message;
-    return e.toString().replaceFirst(RegExp(r'^(ApiException|Exception):\s*'), '');
+    final raw = e.toString();
+    // PostgREST-fel ska aldrig visas råa i UI (t.ex. device_by_token).
+    if (raw.contains('PostgrestException') || raw.contains('Postgrest')) {
+      return 'Kunde inte läsa företaget just nu. Dra ner för att försöka igen.';
+    }
+    return raw.replaceFirst(RegExp(r'^(ApiException|Exception):\s*'), '');
   }
 
   void _snack(String message, {bool isError = false}) {
@@ -123,7 +156,16 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     }
     if (access['ok'] == true) {
       if (reason == 'trial') {
-        return (TbColors.taxiDeep, 'Provperiod', '${_daysLeft(access['validUntil'])} · $cars');
+        final card = trial?['cardOnFile'] == true;
+        final until = _daysLeft(access['validUntil']);
+        if (card) {
+          return (
+            TbColors.live,
+            'Provperiod',
+            'Kort sparat · auto-förnyelse $until · $cars',
+          );
+        }
+        return (TbColors.taxiDeep, 'Provperiod', '$until · $cars');
       }
       if (reason == 'grace') {
         return (
@@ -206,11 +248,12 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       await showDialog<void>(
         context: context,
         builder: (_) => _PairingCodeDialog(
-          code: issued['code'].toString(),
+          code: issued['code']?.toString() ?? '',
           expiresAt: DateTime.tryParse(issued['expiresAt']?.toString() ?? ''),
           subtitle: '${name.isEmpty ? 'Förare' : name} · $plate',
         ),
       );
+      if (!mounted) return;
       await _reload();
     } catch (e) {
       _snack(_cleanError(e), isError: true);
@@ -242,6 +285,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     if (ok != true) return;
     try {
       await widget.api.blockPhone(phone['approvalId'].toString());
+      if (!mounted) return;
       await _reload();
       _snack('Telefonen är spärrad');
     } catch (e) {
@@ -269,10 +313,11 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
         label: 'Min telefon',
       );
       final paired = await widget.api.pairWithCode(
-        code: issued['code'].toString(),
+        code: issued['code']?.toString() ?? '',
         label: 'Min telefon',
       );
       unawaited(registerForPush(widget.api));
+      if (!mounted) return;
       await _reload();
       _snack(
         paired['sessionStarted'] == true
@@ -294,6 +339,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     if (result == null) return;
     try {
       await widget.api.addTrialVehicle(plate: result.$1, baseCounty: result.$2);
+      if (!mounted) return;
       await _reload();
       _snack('${result.$1} är tillagd');
     } catch (e) {
@@ -337,6 +383,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     if (picked == null || picked == current) return;
     try {
       await widget.api.setTrialCounty(license['licenseId'].toString(), picked);
+      if (!mounted) return;
       await _reload();
       _snack('${license['vehicle']} kör nu i ${_countyNames[picked] ?? picked}');
     } catch (e) {
@@ -373,6 +420,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     if (name == null || name.isEmpty) return;
     try {
       await widget.api.renamePhone(phone['approvalId'].toString(), name);
+      if (!mounted) return;
       await _reload();
     } catch (e) {
       _snack(_cleanError(e), isError: true);
@@ -404,6 +452,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     if (ok != true) return;
     try {
       await widget.api.removeTrialVehicle(license['licenseId'].toString());
+      if (!mounted) return;
       await _reload();
       _snack('$plate är borttagen');
     } catch (e) {
@@ -482,7 +531,9 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                         color: TbColors.muted,
                       ),
                       title: Text(
-                        phone['label']?.toString() ?? 'Förare',
+                        phone['deviceId']?.toString() == _thisDeviceId
+                            ? 'Den här telefonen'
+                            : (phone['label']?.toString() ?? 'Förare'),
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                       subtitle: phone['deviceId']?.toString() == activeDevice
@@ -493,7 +544,9 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                                 fontWeight: FontWeight.w700,
                               ),
                             )
-                          : null,
+                          : (phone['deviceId']?.toString() == _thisDeviceId
+                              ? const Text('Redan kopplad')
+                              : null),
                       trailing: canManage
                           ? PopupMenuButton<String>(
                               tooltip: 'Mer',
@@ -547,15 +600,17 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                     style: TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size.fromHeight(52),
+                if (!_thisPhoneOn(license)) ...[
+                  const SizedBox(height: 10),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      minimumSize: const Size.fromHeight(52),
+                    ),
+                    onPressed: () => act(ctx, () => _driveMyself(license)),
+                    icon: const Icon(Icons.phone_android),
+                    label: const Text('Kör själv med den här telefonen'),
                   ),
-                  onPressed: () => act(ctx, () => _driveMyself(license)),
-                  icon: const Icon(Icons.phone_android),
-                  label: const Text('Kör själv med den här telefonen'),
-                ),
+                ],
               ],
               if (canEditCar) ...[
                 const SizedBox(height: 8),
@@ -621,6 +676,10 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
           line: statusLine,
           color: color,
         ),
+        if (_trialOpen && trial?['cardOnFile'] != true) ...[
+          const SizedBox(height: 12),
+          _PortalContinueBanner(endsAt: trial?['endsAt']?.toString()),
+        ],
         const SizedBox(height: 20),
         const SettingsGroupLabel('Bilar'),
         SettingsGroup(
@@ -884,7 +943,9 @@ class _AddCarDialogState extends State<_AddCarDialog> {
               for (final c in counties)
                 DropdownMenuItem(value: c.key, child: Text(c.value)),
             ],
-            onChanged: (v) => setState(() => _county = v),
+            onChanged: counties.isEmpty
+                ? null
+                : (v) => setState(() => _county = v),
           ),
         ],
       ),
@@ -900,6 +961,53 @@ class _AddCarDialogState extends State<_AddCarDialog> {
           child: const Text('Lägg till'),
         ),
       ],
+    );
+  }
+}
+
+/// Informativ länk till kundportalen — inga priser, ingen köpknapp (§9c).
+class _PortalContinueBanner extends StatelessWidget {
+  const _PortalContinueBanner({this.endsAt});
+
+  final String? endsAt;
+
+  @override
+  Widget build(BuildContext context) {
+    final until = DateTime.tryParse(endsAt ?? '')?.toLocal();
+    final date = until == null
+        ? ''
+        : ' Provet gäller till '
+            '${until.year}-'
+            '${until.month.toString().padLeft(2, '0')}-'
+            '${until.day.toString().padLeft(2, '0')}.';
+    return Material(
+      color: TbColors.taxi.withValues(alpha: 0.12),
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () => launchUrl(
+          Uri.parse('https://taxitips.se/portal#fortsatt'),
+          mode: LaunchMode.externalApplication,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: Row(
+            children: [
+              const Icon(Icons.open_in_new, color: TbColors.taxiDeep, size: 22),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Hantera fortsatt åtkomst på taxitips.se/portal.$date',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    color: TbColors.ink,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

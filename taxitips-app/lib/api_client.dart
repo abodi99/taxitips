@@ -1376,21 +1376,61 @@ class ApiClient {
     await _sb.auth.updateUser(UserAttributes(password: newPassword));
   }
 
+  /// Telefonens läge: id, namn och bolag.
+  ///
+  /// Går via Django `/api/fleet/me`. Den gamla RPC:n `device_by_token` jämför
+  /// mot `devices.token` (installations-id), men parkopplingen sparar
+  /// hemligheten hashad i `fleet_device_credential` — RPC:n svarade då
+  /// "Enheten hittades inte" som PostgrestException i Inställningar.
   Future<Map<String, dynamic>> getDeviceMe() async {
     await ensureInitialized();
     if (deviceToken == null) throw ApiException(401, 'Ingen enhet');
-    final data = await _sb.rpc(
-      'device_by_token',
-      params: {'p_token': deviceToken},
-    );
-    return Map<String, dynamic>.from(data as Map);
+    final backend = _backend;
+    if (backend != null) {
+      final status = await backend.fleetStatus(deviceToken: deviceToken);
+      final device = status['device'] is Map
+          ? Map<String, dynamic>.from(status['device'] as Map)
+          : <String, dynamic>{
+              'id': status['deviceId'],
+              'company_id': status['companyId'],
+              'label': '',
+            };
+      final company = status['company'] is Map
+          ? Map<String, dynamic>.from(status['company'] as Map)
+          : <String, dynamic>{
+              'id': status['companyId'],
+              'name': '',
+            };
+      return {
+        ...status,
+        'device': device,
+        'company': company,
+      };
+    }
+    try {
+      final data = await _sb.rpc(
+        'device_by_token',
+        params: {'p_token': deviceToken},
+      );
+      return Map<String, dynamic>.from(data as Map);
+    } on PostgrestException catch (e, st) {
+      _rethrowAsApiException(e, stackTrace: st, operation: 'getDeviceMe');
+    }
   }
 
   Future<Map<String, dynamic>> updateDeviceLabel(String label) async {
     await ensureInitialized();
     final meDev = await getDeviceMe();
     final device = meDev['device'] as Map? ?? {};
-    await _sb.from('devices').update({'label': label}).eq('id', device['id']);
+    final id = device['id']?.toString();
+    if (id == null || id.isEmpty) {
+      throw ApiException(400, 'Ingen enhet att namnge.');
+    }
+    try {
+      await _sb.from('devices').update({'label': label}).eq('id', id);
+    } on PostgrestException catch (e, st) {
+      _rethrowAsApiException(e, stackTrace: st, operation: 'updateDeviceLabel');
+    }
     return {'label': label};
   }
 

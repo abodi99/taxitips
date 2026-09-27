@@ -31,7 +31,14 @@ from django.db import transaction
 from django.utils import timezone
 
 from fleet import audit, orders, stripe_sync, trials
-from fleet.models import Order, PendingChange, Subscription, SubscriptionStatus, Trial
+from fleet.models import (
+    CompanyProfile,
+    Order,
+    PendingChange,
+    Subscription,
+    SubscriptionStatus,
+    Trial,
+)
 
 log = logging.getLogger(__name__)
 
@@ -198,6 +205,179 @@ def resync_amount(company_id) -> dict:
     return _stripe_step(
         subscription, lambda: stripe_sync.sync_company_amount(company_id), "amount_sync"
     )
+
+
+# ---------------------------------------------------------------------------
+# Prov → kort i portalen → auto-förnyelse
+# ---------------------------------------------------------------------------
+
+
+def pending_trial_commit_order(company_id) -> Order | None:
+    """Väntande order märkt trial_commit (kort sparas / dragning vid provslut)."""
+    for order in Order.objects.filter(
+        company_id=company_id, status=Order.Status.PENDING_PAYMENT
+    ).order_by("-created_at")[:10]:
+        if (order.request or {}).get("trial_commit"):
+            return order
+    return None
+
+
+def trial_commit_status(company_id) -> dict:
+    """
+    Tillståndet portalen och appen visar under provet: har kunden bekräftat
+    bilarna och sparat kort?
+    """
+    order = pending_trial_commit_order(company_id)
+    profile = CompanyProfile.objects.filter(company_id=company_id).first()
+    card_on_file = bool(profile and profile.payment_method_verified_at)
+    committed = order is not None
+    return {
+        "committed": committed,
+        "cardOnFile": card_on_file,
+        "paymentUrl": (order.stripe_payment_url or None) if order and not card_on_file else None,
+        "orderId": str(order.id) if order else None,
+        "firstChargeAt": None,  # fylls av anroparen från trial.ends_at
+    }
+
+
+def has_active_trial_commit(company_id) -> bool:
+    """
+    True när fleet_tick INTE ska avsluta provet utan debitering: kort är
+    sparat och Stripe-abonnemanget väntar på trial_end.
+    """
+    order = pending_trial_commit_order(company_id)
+    if order is None:
+        return False
+    profile = CompanyProfile.objects.filter(company_id=company_id).first()
+    if not (profile and profile.payment_method_verified_at):
+        return False
+    subscription = Subscription.objects.filter(company_id=company_id).first()
+    if subscription is None or not subscription.stripe_subscription_id:
+        return False
+    return subscription.status in (
+        SubscriptionStatus.TRIALING, SubscriptionStatus.ACTIVE, SubscriptionStatus.NONE,
+    )
+
+
+def commit_trial_continuation(
+    company_id,
+    plan: orders.ChangePlan,
+    *,
+    created_by,
+    success_url: str,
+    cancel_url: str,
+    idempotency: str | None = None,
+) -> tuple[Order, dict]:
+    """
+    Bekräftar vilka provbilar som fortsätter och öppnar Stripe Checkout för
+    att spara kort. Debitering sker vid Trial.ends_at via Stripe trial_end.
+    """
+    trial = trials.active_trial(company_id)
+    if trial is None or trial.status != Trial.Status.ACTIVE or not trial.ends_at:
+        raise orders.OrderError(
+            "no_active_trial",
+            "Det finns inget pågående prov att fortsätta.",
+            status=409,
+        )
+    if not plan.request.get("addVehicles"):
+        raise orders.OrderError(
+            "vehicles_required", "Välj vilka bilar som ska fortsätta.", status=400,
+        )
+    existing = pending_trial_commit_order(company_id)
+    if existing is not None and existing.stripe_payment_url:
+        profile = CompanyProfile.objects.filter(company_id=company_id).first()
+        if profile and profile.payment_method_verified_at:
+            return existing, {
+                "requested": False,
+                "paymentUrl": None,
+                "alreadyCommitted": True,
+                "cardOnFile": True,
+            }
+        return existing, {
+            "requested": True,
+            "paymentUrl": existing.stripe_payment_url,
+            "alreadyCommitted": True,
+            "cardOnFile": False,
+        }
+
+    if not stripe_sync.available():
+        raise _stripe_failure(stripe_sync.StripeUnavailable(stripe_sync.status()["reason"]))
+
+    # Märk planen så webhooken vet att inte verkställa vid Checkout (0 kr).
+    plan.request = {**(plan.request or {}), "trial_commit": True}
+    # Idempotens inkluderar trial_commit så den inte krockar med en vanlig order.
+    key = idempotency or (
+        orders.idempotency_key(company_id, plan) + ":trial_commit"
+    )[:64]
+
+    order = orders.create_order(
+        company_id, plan, created_by=created_by, idempotency=key, actor_kind="customer",
+    )
+    # create_order kan ha returnerat en befintlig utan trial_commit-flaggan.
+    request = dict(order.request or {})
+    if not request.get("trial_commit"):
+        request["trial_commit"] = True
+        Order.objects.filter(id=order.id).update(request=request)
+        order.refresh_from_db()
+
+    if order.status != Order.Status.PENDING_PAYMENT:
+        # Gratisplan (0 kr) -- ovanligt; verkställ inte som deferred.
+        raise orders.OrderError(
+            "nothing_to_commit",
+            "Det finns inget att betala för de här bilarna.",
+            status=409,
+        )
+
+    try:
+        url = stripe_sync.collect_trial_commit(
+            order, trial_end=trial.ends_at,
+            success_url=success_url, cancel_url=cancel_url,
+        )
+    except ValueError as exc:
+        raise orders.OrderError("trial_commit_failed", str(exc), status=409) from exc
+    except Exception as exc:
+        log.exception("fleet.commerce: trial_commit misslyckades för %s", company_id)
+        raise _stripe_failure(exc) from exc
+
+    order.refresh_from_db()
+    return order, {
+        "requested": True,
+        "paymentUrl": url or order.stripe_payment_url or None,
+        "alreadyCommitted": False,
+        "cardOnFile": False,
+        "firstChargeAt": trial.ends_at.isoformat(),
+    }
+
+
+def cancel_trial_commit(company_id, *, actor_user_id) -> dict:
+    """Ångrar auto-förnyelse före första dragningen: Stripe-sub + pending order."""
+    order = pending_trial_commit_order(company_id)
+    if order is None:
+        raise orders.OrderError(
+            "no_trial_commit", "Det finns ingen sparad fortsättning att ångra.", status=404,
+        )
+    subscription = Subscription.objects.filter(company_id=company_id).first()
+    if subscription and subscription.stripe_subscription_id:
+        try:
+            stripe_sync.cancel_trial_commit_subscription(subscription)
+        except Exception as exc:
+            raise _stripe_failure(exc) from exc
+    if order.stripe_invoice_id:
+        try:
+            stripe_sync.void_order_invoice(order)
+        except Exception:
+            log.exception("fleet.commerce: kunde inte voida invoice för trial_commit %s", order.id)
+    Order.objects.filter(id=order.id).update(
+        status=Order.Status.CANCELED, failure_reason="trial_commit_canceled",
+    )
+    CompanyProfile.objects.filter(company_id=company_id).update(
+        payment_method_verified_at=None,
+    )
+    audit.record(
+        "trial_commit_canceled", company_id=company_id, actor_user_id=actor_user_id,
+        actor_kind="customer", subject_type="order", subject_id=order.id, detail={},
+    )
+    return {"ok": True, "canceledOrderId": str(order.id)}
 
 
 # ---------------------------------------------------------------------------

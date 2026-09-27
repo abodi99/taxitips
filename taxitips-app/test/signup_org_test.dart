@@ -10,4 +10,10 @@ void main() {
     expect(SignupScreenState.orgNumberLooksValid('5560360794'), isFalse);
     expect(SignupScreenState.orgNumberLooksValid('55603607'), isFalse);
   });
+
+  test('enskild firma: personnummer-form känns igen (månad 01–12)', () {
+    expect(SignupScreenState.looksLikeSoleTrader('556036-0793'), isFalse);
+    expect(SignupScreenState.looksLikeSoleTrader('850101-2395'), isTrue);
+    expect(SignupScreenState.looksLikeSoleTrader('8501012395'), isTrue);
+  });
 }

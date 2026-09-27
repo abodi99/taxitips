@@ -34,21 +34,63 @@ function statusPill(status) {
 
 /**
  * "Fortsätt med provbilarna": dit mejlen före och efter provslut länkar
- * (portal#fortsatt). Bilarna kommer från servern (trials.continue_vehicles);
- * priset visas i offerten innan något godkänns, som vid varje köp (§6).
+ * (portal#fortsatt). Under pågående prov: spara kort för auto-förnyelse.
+ * Efter prov utan kort: vanlig beställning (betala nu).
  */
 function continueCard(data) {
   const cars = data.continueVehicles ?? [];
   const canBuy = (data.permissions ?? []).includes("purchase");
   if (!cars.length || !canBuy) return "";
   const n = cars.length;
+  const trial = data.trial;
+  const activeTrial = trial && ["pending", "active"].includes(trial.status);
+  const cardOnFile = trial?.cardOnFile === true;
+  const committed = trial?.committed === true;
+
+  if (activeTrial && cardOnFile) {
+    return `<div class="card continue-card" id="fortsatt">
+      <h2>Auto-förnyelse är klar</h2>
+      <p>${cars.map((c) => `<b>${esc(c.plate)}</b>`).join(", ")}</p>
+      <p class="muted">Kortet är sparat. Första dragningen sker
+        ${esc(date(trial.firstChargeAt || trial.endsAt))} när provet tar slut,
+        sedan varje månad tills ni säger upp.</p>
+      <div class="btn-row">
+        <button class="btn btn-quiet" data-action="cancel-trial-commit">Avbryt auto-förnyelse</button>
+      </div>
+    </div>`;
+  }
+
+  if (activeTrial && committed && !cardOnFile && trial.paymentUrl) {
+    return `<div class="card continue-card" id="fortsatt">
+      <h2>Slutför kortet</h2>
+      <p>${cars.map((c) => `<b>${esc(c.plate)}</b>`).join(", ")}</p>
+      <p class="muted">Ni har påbörjat fortsättningen. Öppna Stripes sida och
+        spara kortet -- ingen dragning sker förrän provet tar slut.</p>
+      <div class="btn-row">
+        <a class="btn btn-primary" href="${esc(trial.paymentUrl)}" target="_blank" rel="noopener">Öppna betalsidan</a>
+        <button class="btn btn-quiet" data-action="cancel-trial-commit">Avbryt</button>
+      </div>
+    </div>`;
+  }
+
+  if (activeTrial) {
+    return `<div class="card continue-card" id="fortsatt">
+      <h2>Fortsätt med ${esc(n)} ${n === 1 ? "bil" : "bilar"}</h2>
+      <p>${cars.map((c) => `<b>${esc(c.plate)}</b>`).join(", ")}</p>
+      <p class="muted">Du ser månadspriset innan du godkänner. Kortet sparas i
+        Stripe; första dragningen sker när provet tar slut
+        (${esc(date(trial.endsAt))}), sedan automatiskt varje månad.</p>
+      <div class="btn-row"><button class="btn btn-primary" data-action="continue-trial">Bekräfta bilar och spara kort</button></div>
+    </div>`;
+  }
+
+  // Prov slut utan kort: betala nu (gamla flödet).
   return `<div class="card continue-card" id="fortsatt">
       <h2>Fortsätt med ${esc(n)} ${n === 1 ? "bil" : "bilar"}</h2>
       <p>${cars.map((c) => `<b>${esc(c.plate)}</b>`).join(", ")}</p>
-      <p class="muted">Du ser priset per månad och vad som betalas nu innan du
-        godkänner. Betalningen sker på Stripes betalsida med kort eller faktura;
-        med kort dras beloppet sedan automatiskt varje månad.</p>
-      <div class="btn-row"><button class="btn btn-primary" data-action="continue-trial">Visa pris och fortsätt</button></div>
+      <p class="muted">Provet är slut. Du ser priset innan du godkänner.
+        Betalningen sker på Stripes betalsida.</p>
+      <div class="btn-row"><button class="btn btn-primary" data-action="continue-trial">Visa pris och betala</button></div>
     </div>`;
 }
 
@@ -108,9 +150,11 @@ export function oversikt(data) {
              <h2>Provperiod</h2>
              <p>${esc(trial.vehiclesUsed)} av ${esc(trial.vehicleLimit)} provbilar.
              ${trial.endsAt ? `Provet slutar ${esc(dateTime(trial.endsAt))}.` : "Provet startar när den första telefonen ansluts."}</p>
-             <p class="muted">Utan en beställning avslutas provet utan debitering.
-             Provbilar blir aldrig debiterade licenser av sig själva -- du väljer
-             vilka bilar som fortsätter.</p>
+             <p class="muted">${
+               trial.cardOnFile
+                 ? `Kort sparat — första dragningen ${esc(date(trial.firstChargeAt || trial.endsAt))}.`
+                 : "Under provet kostar det ingenting. För auto-förnyelse bekräftar ni bilarna och sparar kort ovan. Utan kort stängs åtkomsten utan debitering."
+             }</p>
            </div>`
         : ""
     }
@@ -327,6 +371,7 @@ export function abonnemang(data, orders) {
         canBuy
           ? `<div class="btn-row">
                <button class="btn btn-primary" data-action="add-license">Lägg till en bil</button>
+               <button class="btn btn-quiet" data-action="billing-portal">Uppdatera kort / fakturor</button>
              </div>`
           : ""
       }

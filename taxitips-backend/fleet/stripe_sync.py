@@ -315,6 +315,164 @@ def charge_order(
     return invoice
 
 
+def collect_trial_commit(
+    order: Order,
+    *,
+    trial_end,
+    success_url: str,
+    cancel_url: str,
+) -> str:
+    """
+    Sparar kort under Django-provet utan att debitera nu.
+
+    Skapar (eller återanvänder) en Stripe Checkout-session i läget
+    `subscription` med `trial_end` = Django-provets slut. Kunden lägger in
+    kortet; första fakturan skapas när Stripe-provet tar slut. Rättigheter
+    ges först av `invoice.paid` med belopp > 0 (fleet/webhook_events.py).
+
+    Abonnemangsbeloppet är nästa periods belopp (ej den proportionerade
+    "betala nu"-summan) -- det är det som ska dras månadsvis efter konvertering.
+    """
+    stripe = _client()
+    order.refresh_from_db()
+    if order.status != Order.Status.PENDING_PAYMENT:
+        raise ValueError(f"ordern väntar inte på betalning ({order.status})")
+    if order.stripe_checkout_session_id and order.stripe_payment_url:
+        return order.stripe_payment_url
+
+    from datetime import datetime, timezone as dt_timezone
+
+    if trial_end.tzinfo is None:
+        trial_end = trial_end.replace(tzinfo=dt_timezone.utc)
+    trial_end_ts = int(trial_end.timestamp())
+    # Stripe kräver trial_end i framtiden.
+    if trial_end_ts <= int(timezone.now().timestamp()) + 60:
+        raise ValueError("provperioden tar slut för snart för deferred checkout")
+
+    subscription = Subscription.objects.get(company_id=order.company_id)
+    company = Company.objects.get(id=order.company_id)
+    customer_id = ensure_customer(company, subscription)
+
+    amount_ore = int(order.next_period_amount_ore or order.amount_now_ore or 0)
+    if amount_ore <= 0:
+        raise ValueError("ingen månadskostnad att prenumerera på")
+
+    recurring_lines = [
+        line for line in (order.lines or [])
+        if not str(line.get("key") or "").startswith("prorated_")
+    ] or (order.lines or [])
+    line_items = _checkout_line_items(
+        recurring_lines, currency=order.currency, amount_ore=amount_ore,
+    )
+
+    session = stripe.checkout.Session.create(
+        mode="subscription",
+        customer=customer_id,
+        line_items=line_items,
+        subscription_data={
+            "trial_end": trial_end_ts,
+            "description": package_summary(
+                order.company_id,
+                adding=(order.request or {}).get("addVehicles") or [],
+            ),
+            "metadata": {
+                "company_id": str(order.company_id),
+                "order_id": str(order.id),
+                "kind": "trial_commit",
+                "licenses": str(order.quantity_after),
+                "price_version": subscription.price_version_id,
+            },
+        },
+        # Kort obligatoriskt även under Stripe-provet -- annars ingen auto-förnyelse.
+        payment_method_collection="always",
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata={
+            "company_id": str(order.company_id),
+            "order_id": str(order.id),
+            "kind": "trial_commit",
+        },
+        idempotency_key=f"trial_commit:{order.id}",
+    )
+    url = getattr(session, "url", "") or ""
+    Order.objects.filter(id=order.id).update(
+        stripe_checkout_session_id=session.id,
+        stripe_payment_url=url,
+    )
+    audit.record(
+        "trial_commit_checkout_created", company_id=order.company_id, actor_kind="system",
+        subject_type="order", subject_id=order.id,
+        detail={"session": session.id, "trial_end": trial_end.isoformat()},
+    )
+    return url
+
+
+def _checkout_line_items(lines: list[dict], *, currency: str, amount_ore: int) -> list[dict]:
+    """Samma beloppslogik som `_items_from_lines`, men för Checkout Session."""
+    items = []
+    total = 0
+    for line in lines:
+        quantity = int(line.get("quantity") or 0)
+        unit = int(line.get("unit_price_ore") or 0)
+        amount = int(line.get("amount_ore") or 0)
+        if quantity <= 0 or unit * quantity != amount:
+            items = []
+            break
+        total += amount
+        key = str(line.get("key") or "")
+        price_data = {
+            "currency": currency.lower(),
+            "unit_amount": unit,
+            "recurring": {"interval": "month"},
+        }
+        product = _product_for(key)
+        if product:
+            price_data["product"] = product
+        else:
+            price_data["product_data"] = {"name": str(line.get("label") or "TaxiTips")}
+        item = {"price_data": price_data, "quantity": quantity}
+        rates = _vat_tax_rates()
+        if rates:
+            item["tax_rates"] = rates
+        items.append(item)
+    if items and total == int(amount_ore):
+        return items
+    price_data = {
+        "currency": currency.lower(),
+        "unit_amount": int(amount_ore),
+        "recurring": {"interval": "month"},
+    }
+    product = _product_for("licenses")
+    if product:
+        price_data["product"] = product
+    else:
+        price_data["product_data"] = {"name": "TaxiTips billicenser"}
+    item = {"price_data": price_data, "quantity": 1}
+    rates = _vat_tax_rates()
+    if rates:
+        item["tax_rates"] = rates
+    return [item]
+
+
+def cancel_trial_commit_subscription(subscription: Subscription) -> None:
+    """Avbryter en trialing/incomplete sub skapad av trial_commit (före första dragning)."""
+    stripe = _client()
+    if not subscription.stripe_subscription_id:
+        return
+    remote = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+    status = getattr(remote, "status", None) or remote.get("status")
+    if status in ("trialing", "incomplete", "incomplete_expired", "active"):
+        # Under Django-provet har ingen dragning skett -- cancel nu utan refund.
+        if status != "incomplete_expired":
+            stripe.Subscription.cancel(subscription.stripe_subscription_id)
+    Subscription.objects.filter(id=subscription.id).update(
+        stripe_subscription_id="",
+        status=SubscriptionStatus.NONE,
+        current_period_start=None,
+        current_period_end=None,
+    )
+
+
 def collect_order(
     order: Order, *, collection_method: str = "charge_automatically", days_until_due: int = 14
 ) -> str:

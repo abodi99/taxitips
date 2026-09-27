@@ -47,7 +47,8 @@ class Command(BaseCommand):
         dry = options["dry_run"]
         report = {
             "pending_applied": 0, "trials_ended": 0, "trials_warned": 0,
-            "renewals_stopped": 0, "codes_expired": 0, "requests_expired": 0,
+            "trials_awaiting_charge": 0, "renewals_stopped": 0,
+            "codes_expired": 0, "requests_expired": 0,
         }
 
         # 1) Väntande ändringar. Ett bolag i taget, så att en trasig rad inte
@@ -69,9 +70,15 @@ class Command(BaseCommand):
             except Exception as exc:
                 self.stderr.write(f"{company_id}: kunde inte verkställa: {exc}")
 
-        # 2) Prov som löpt ut. Utan beställning avslutas de utan debitering, och
-        # kunden får ett mejl med vägen tillbaka.
+        # 2) Prov som löpt ut. Utan sparat kort + commit avslutas utan
+        # debitering. Med trial_commit (kort på fil, Stripe trialing) väntar
+        # vi på invoice.paid -- annars hade tick och Stripe kappkörts.
+        from fleet import commerce
+
         for trial in Trial.objects.filter(status=Trial.Status.ACTIVE, ends_at__lte=now):
+            if commerce.has_active_trial_commit(trial.company_id):
+                report["trials_awaiting_charge"] = report.get("trials_awaiting_charge", 0) + 1
+                continue
             if not dry:
                 trials.end_trial(trial, reason="trial_period_over", converted=False, now=now)
                 company = Company.objects.filter(id=trial.company_id).first()
@@ -93,6 +100,32 @@ class Command(BaseCommand):
                 notifications.trial_ending(
                     trial.company_id, (company.email if company else ""), trial, stage=stage,
                 )
+                # Extra påminnelse om kort saknas (egen utkorgsrad).
+                status = commerce.trial_commit_status(trial.company_id)
+                if not status["cardOnFile"]:
+                    notifications.trial_ending(
+                        trial.company_id, (company.email if company else ""), trial,
+                        stage=f"card_missing_{stage}",
+                    )
+            report["trials_warned"] += 1
+
+        # 3b) Tidig påminnelse om saknat kort (~dag 3 av provet).
+        card_nudge_from = now - timedelta(days=4)
+        card_nudge_to = now - timedelta(days=2)
+        for trial in Trial.objects.filter(
+            status=Trial.Status.ACTIVE,
+            started_at__lte=card_nudge_to,
+            started_at__gte=card_nudge_from,
+            ends_at__gt=now + timedelta(days=3),
+        ):
+            if not dry:
+                status = commerce.trial_commit_status(trial.company_id)
+                if not status["cardOnFile"]:
+                    company = Company.objects.filter(id=trial.company_id).first()
+                    notifications.trial_ending(
+                        trial.company_id, (company.email if company else ""), trial,
+                        stage="card_missing",
+                    )
             report["trials_warned"] += 1
 
         # 4) Betalningsfrist som gått ut -> stoppa den löpande förnyelsen.

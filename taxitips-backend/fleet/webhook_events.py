@@ -143,6 +143,18 @@ def _payment_succeeded(event_type: str, obj: dict, *, event_at, now) -> dict:
             return {"handled": True, "action": "awaiting_payment"}
 
     subscription = _subscription_for(obj)
+    order = _order_for(obj)
+
+    # Prov-commit: Checkout sparar kort utan debitering. Verkställ INTE ordern
+    # förrän en riktig faktura (belopp > 0) kommer vid Stripe trial_end.
+    if order is not None and (order.request or {}).get("trial_commit"):
+        if obj.get("object") == "checkout.session":
+            return _trial_commit_checkout_completed(
+                obj, subscription=subscription, order=order, event_at=event_at, now=now,
+            )
+        if obj.get("object") == "invoice" and int(obj.get("amount_paid") or 0) <= 0:
+            return {"handled": True, "action": "trial_commit_zero_invoice"}
+
     if subscription is None:
         return {"handled": False, "reason": "unknown_subscription"}
 
@@ -159,9 +171,12 @@ def _payment_succeeded(event_type: str, obj: dict, *, event_at, now) -> dict:
             )
             return {"handled": True, "action": "ignored_stale_invoice"}
 
-    order = _order_for(obj)
     if order is not None:
         # Idempotent: `mark_order_paid` gör ingenting om ordern redan är betald.
+        if obj.get("object") == "invoice" and obj.get("id"):
+            if not order.stripe_invoice_id:
+                Order.objects.filter(id=order.id).update(stripe_invoice_id=obj["id"])
+                order.refresh_from_db()
         orders.mark_order_paid(order, now=now)
 
     if period_start and period_end:
@@ -184,6 +199,46 @@ def _payment_succeeded(event_type: str, obj: dict, *, event_at, now) -> dict:
     return {
         "handled": True, "action": "payment_succeeded",
         "order_id": str(order.id) if order else None,
+    }
+
+
+def _trial_commit_checkout_completed(
+    session: dict, *, subscription, order: Order, event_at, now
+) -> dict:
+    """
+    Kunden sparade kort under Django-provet. Ordern ligger kvar som
+    pending_payment tills Stripe drar vid trial_end.
+    """
+    from fleet.models import CompanyProfile
+
+    company_id = order.company_id
+    if subscription is None:
+        subscription = Subscription.objects.filter(company_id=company_id).first()
+    if subscription is None:
+        return {"handled": False, "reason": "unknown_subscription"}
+
+    sub_id = session.get("subscription")
+    updates = {"status": SubscriptionStatus.TRIALING}
+    if isinstance(sub_id, str) and sub_id:
+        updates["stripe_subscription_id"] = sub_id
+    customer = session.get("customer")
+    if isinstance(customer, str) and customer:
+        updates["stripe_customer_id"] = customer
+    Subscription.objects.filter(id=subscription.id).update(**updates)
+    CompanyProfile.objects.filter(company_id=company_id).update(
+        payment_method_verified_at=now,
+    )
+    if session.get("id") and not order.stripe_checkout_session_id:
+        Order.objects.filter(id=order.id).update(stripe_checkout_session_id=session["id"])
+    _touch(subscription, event_at)
+    audit.record(
+        "trial_commit_card_saved", company_id=company_id, actor_kind="system",
+        subject_type="order", subject_id=order.id,
+        detail={"subscription": sub_id, "session": session.get("id")},
+    )
+    return {
+        "handled": True, "action": "trial_commit_card_saved",
+        "order_id": str(order.id),
     }
 
 

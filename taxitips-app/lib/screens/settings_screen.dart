@@ -86,21 +86,27 @@ class _SettingsScreenState extends State<SettingsScreen> {
         _email.text = widget.api.currentUserEmail ?? '';
       }
       if (_isDevice) {
-        final data = await widget.api.getDeviceMe();
-        final device = data['device'] as Map<String, dynamic>? ?? {};
-        final company = data['company'] as Map<String, dynamic>? ?? {};
-        _label.text = device['label']?.toString() ?? '';
-        _companyName = company['name']?.toString();
+        // fleetStatus (= /api/fleet/me) är sanningen för parkopplade telefoner.
+        // getDeviceMe faller tillbaka dit; fel här ska inte blockera hela sidan
+        // (ägare som också kört bilen själv ska fortfarande se företaget).
         try {
           final status = await widget.api.fleetStatus();
+          final device = status['device'] is Map
+              ? Map<String, dynamic>.from(status['device'] as Map)
+              : <String, dynamic>{};
+          final company = status['company'] is Map
+              ? Map<String, dynamic>.from(status['company'] as Map)
+              : <String, dynamic>{};
+          _label.text = device['label']?.toString() ?? '';
+          _companyName = company['name']?.toString();
           final vehicles = ((status['vehicles'] as List?) ?? const [])
               .whereType<Map>()
               .toList();
           _hasCars = vehicles.isNotEmpty;
           final mine = vehicles.where((v) => v['isMine'] == true);
           _currentPlate = mine.isEmpty ? null : mine.first['plate']?.toString();
-        } catch (_) {
-          // Raden visar "Välj bil" i stället; inget att larma om.
+        } catch (e) {
+          debugPrint('SettingsScreen device load: $e');
         }
       }
       if (mounted) setState(() => _loading = false);

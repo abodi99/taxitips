@@ -92,6 +92,16 @@ class SignupScreenState extends State<SignupScreen> {
     return sum % 10 == 0;
   }
 
+  /// Personnummer (enskild firma) har månad 01–12; juridiska personer har
+  /// oftast ≥ 20 i samma position. Bolagsverket har inte enskilda firmor.
+  static bool looksLikeSoleTrader(String input) {
+    var digits = input.replaceAll(RegExp(r'\D'), '');
+    if (digits.length == 12) digits = digits.substring(2);
+    if (digits.length != 10) return false;
+    final month = int.tryParse(digits.substring(2, 4)) ?? 0;
+    return month >= 1 && month <= 12;
+  }
+
   Future<void> _checkOrg() async {
     final digits = _org.text.replaceAll(RegExp(r'\D'), '');
     if (!mounted) return;
@@ -125,6 +135,8 @@ class SignupScreenState extends State<SignupScreen> {
   /// Företagsnamnet behöver bara skrivas när registret inte har bolaget
   /// (t.ex. en enskild firma) eller inte gick att nå.
   bool get _needsCompanyName => _registryChecked && !_registryFound;
+
+  bool get _soleTrader => looksLikeSoleTrader(_org.text);
 
   @override
   void dispose() {
@@ -185,7 +197,9 @@ class SignupScreenState extends State<SignupScreen> {
     }
     if (!_registryChecked) return 'Vänta, vi kontrollerar organisationsnumret.';
     if (_needsCompanyName && _name.text.trim().isEmpty) {
-      return 'Skriv företagets namn.';
+      return _soleTrader
+          ? 'Skriv firmanamnet (enskild firma finns inte hos Bolagsverket).'
+          : 'Skriv företagets namn.';
     }
     if (_contact.text.trim().isEmpty) return 'Skriv ditt namn.';
     if (!_email.text.contains('@')) return 'Skriv en giltig e-postadress.';
@@ -346,11 +360,14 @@ class SignupScreenState extends State<SignupScreen> {
                           const SizedBox(height: 16),
                           TextField(
                             controller: _name,
+                            textCapitalization: TextCapitalization.words,
                             decoration: InputDecoration(
-                              labelText: 'Företagsnamn',
-                              helperText: _registry == null
-                                  ? null
-                                  : 'Vi hittade inte bolaget hos Bolagsverket.',
+                              labelText: _soleTrader
+                                  ? 'Firmanamn'
+                                  : 'Företagsnamn',
+                              helperText: _soleTrader
+                                  ? 'Enskild firma hämtas inte från Bolagsverket — skriv namnet ni använder.'
+                                  : 'Vi hittade inte bolaget hos Bolagsverket. Skriv namnet så ni syns rätt.',
                               prefixIcon: const Icon(Icons.business_outlined),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
@@ -640,7 +657,7 @@ class _ConfirmCardState extends State<_ConfirmCard> {
 }
 
 
-/// Bolaget som Bolagsverket har det: namn, ort och form. Rött när det är
+/// Bolaget som Bolagsverket har det: namn, adress och form. Rött när det är
 /// avregistrerat, gult när en konkurs eller likvidation pågår.
 class _RegistryCard extends StatelessWidget {
   const _RegistryCard({required this.registry});
@@ -655,10 +672,13 @@ class _RegistryCard extends StatelessWidget {
     final color = blocks
         ? TbColors.danger
         : (warn ? TbColors.taxiDeep : TbColors.live);
-    final details = [
+    final line1 = registry['line1']?.toString() ?? '';
+    final line2 = registry['line2']?.toString() ?? '';
+    final postal = [
+      registry['postalCode']?.toString() ?? '',
       registry['city']?.toString() ?? '',
-      registry['legalForm']?.toString() ?? '',
-    ].where((s) => s.isNotEmpty).join(' · ');
+    ].where((s) => s.isNotEmpty).join(' ');
+    final form = registry['legalForm']?.toString() ?? '';
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -686,17 +706,31 @@ class _RegistryCard extends StatelessWidget {
                     color: TbColors.ink,
                   ),
                 ),
-                if (details.isNotEmpty)
-                  Text(details, style: const TextStyle(color: TbColors.muted)),
+                if (form.isNotEmpty)
+                  Text(form, style: const TextStyle(color: TbColors.muted)),
+                if (line1.isNotEmpty) ...[
+                  const SizedBox(height: 4),
+                  Text(line1, style: const TextStyle(color: TbColors.ink)),
+                ],
+                if (line2.isNotEmpty)
+                  Text(line2, style: const TextStyle(color: TbColors.ink)),
+                if (postal.isNotEmpty)
+                  Text(postal, style: const TextStyle(color: TbColors.ink)),
                 if (blocks || warn)
-                  Text(
-                    registry['statusText']?.toString() ?? '',
-                    style: TextStyle(color: color, fontWeight: FontWeight.w600),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      registry['statusText']?.toString() ?? '',
+                      style: TextStyle(color: color, fontWeight: FontWeight.w600),
+                    ),
                   ),
                 if (!blocks && !warn)
-                  const Text(
-                    'Hämtat från Bolagsverket',
-                    style: TextStyle(color: TbColors.muted, fontSize: 12),
+                  const Padding(
+                    padding: EdgeInsets.only(top: 4),
+                    child: Text(
+                      'Hämtat från Bolagsverket — du behöver inte skriva om det.',
+                      style: TextStyle(color: TbColors.muted, fontSize: 12),
+                    ),
                   ),
               ],
             ),

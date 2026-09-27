@@ -341,12 +341,21 @@ def apply_to_profile(profile, info: CompanyInfo, *, overwrite_address: bool = Fa
 
 def public_view(info: CompanyInfo) -> dict:
     """
-    Det som visas för någon som inte är inloggad: namn, ort, form och status.
-    Samma uppgifter som Bolagsverket själv visar öppet -- inget om huruvida
-    bolaget är kund hos TaxiTips.
+    Det som visas för någon som inte är inloggad: namn, postadress, form och
+    status. Samma uppgifter som Bolagsverket själv visar öppet -- inget om
+    huruvida bolaget är kund hos TaxiTips. Adressen ingår så att kunden slipper
+    skriva av den (enskild firma saknas i registret och får bara skriva namnet).
     """
+    address = info.address or {}
     return {
-        "found": info.found, "name": info.name, "city": info.address.get("city", ""),
-        "legalForm": info.legal_form, "status": info.status, "statusText": info.status_text,
+        "found": info.found,
+        "name": info.name,
+        "city": address.get("city", ""),
+        "line1": address.get("line1", ""),
+        "line2": address.get("line2", ""),
+        "postalCode": address.get("postal_code", ""),
+        "legalForm": info.legal_form,
+        "status": info.status,
+        "statusText": info.status_text,
         "blocksSignup": info.blocks_signup,
     }
