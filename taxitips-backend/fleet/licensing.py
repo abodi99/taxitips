@@ -499,3 +499,55 @@ def return_from_replacement(*, license: License, actor_user_id=None, now=None):
         kind=VehicleAssignment.Kind.RETURN, case_ref=current.case_ref,
         actor_user_id=actor_user_id, now=now,
     )
+
+
+# ---------------------------------------------------------------------------
+# Provbilar: län och borttagning (samma regler i adminwebben och appen)
+# ---------------------------------------------------------------------------
+
+
+def set_trial_counties(license: License, *, base: str, extras: list[str] | None = None, now=None):
+    """
+    Byter län på en PROVBIL, direkt. Kostar inget under provet. En betald bil
+    byter län via en offert (tillägg kostar, borttag gäller vid förnyelse),
+    så att fakturan stämmer.
+    """
+    if license.status != License.Status.TRIAL:
+        raise LicensingError(
+            "paid_license", "Bilen är betald. Län på en betald bil ändras via en beställning.",
+        )
+    now = now or timezone.now()
+    base = assert_county_available(str(base or license.base_county))
+    extra_codes = sorted({assert_county_available(str(c)) for c in (extras or [])} - {base})
+    with transaction.atomic():
+        LicenseCounty.objects.filter(license=license).exclude(active_to__lte=now).update(active_to=now)
+        LicenseCounty.objects.create(
+            license=license, county_code=base, kind=LicenseCounty.Kind.BASE, active_from=now,
+        )
+        for county in extra_codes:
+            LicenseCounty.objects.create(
+                license=license, county_code=county, kind=LicenseCounty.Kind.EXTRA, active_from=now,
+            )
+        License.objects.filter(id=license.id).update(base_county=base, scheduled_base_county="")
+    return base, extra_codes
+
+
+def remove_trial_license(license: License, *, now=None) -> int:
+    """
+    Tar bort en PROVBIL nu och frigör provplatsen. Returnerar antalet pass som
+    stängdes. En betald bil tas aldrig bort här -- den avslutas vid förnyelse.
+    """
+    from fleet import sessions
+
+    if license.status != License.Status.TRIAL:
+        raise LicensingError(
+            "paid_license", "Bilen är betald och avslutas vid förnyelse, inte direkt.",
+        )
+    now = now or timezone.now()
+    with transaction.atomic():
+        License.objects.filter(id=license.id).update(
+            status=License.Status.CANCELED, canceled_at=now, ends_at=now,
+        )
+        return sessions.end_sessions_for_license(
+            license.id, reason=sessions.VehicleSession.EndReason.LICENSE_CHANGE, now=now,
+        )

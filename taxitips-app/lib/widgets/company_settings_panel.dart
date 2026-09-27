@@ -108,69 +108,45 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
 
   // ── Status ─────────────────────────────────────────────────────────────
 
-  /// (färg, ikon, rubrik, förklaring) för det läge företaget är i. Skälet kommer
-  /// från servern (`access.reason`) -- appen räknar inte ut åtkomsten själv.
-  (Color, IconData, String, String) _status() {
+  /// (färg, rubrik, rad) för läget företaget är i. Skälet kommer från servern
+  /// (`access.reason`) -- appen räknar inte ut åtkomsten själv.
+  (Color, String, String) _status() {
     final access = Map<String, dynamic>.from(_data?['access'] as Map? ?? {});
     final reason = access['reason']?.toString() ?? '';
-    final until = _date(access['validUntil']);
     final trial = _trial;
+    final cars = '${trial?['vehiclesUsed'] ?? 0} av ${trial?['vehicleLimit'] ?? 3} bilar';
     if (_suspended) {
-      return (
-        TbColors.danger,
-        Icons.block,
-        'Kontot är avstängt',
-        access['message']?.toString() ?? 'Kontakta TaxiTips support.',
-      );
+      return (TbColors.danger, 'Avstängt', 'Kontakta oss i chatten.');
     }
     if (trial != null && trial['status'] == 'pending') {
-      return (
-        TbColors.taxiDeep,
-        Icons.hourglass_empty,
-        'Provperiod redo',
-        '14 dagar gratis. Startar när den första telefonen kopplas. '
-            '${trial['vehiclesUsed'] ?? 0} av ${trial['vehicleLimit'] ?? 3} bilar.',
-      );
+      return (TbColors.taxiDeep, 'Provperiod', 'Startar när första telefonen kopplas · $cars');
     }
     if (access['ok'] == true) {
       if (reason == 'trial') {
-        return (
-          TbColors.taxiDeep,
-          Icons.hourglass_top_outlined,
-          'Provperiod',
-          'Gäller till $until. ${trial?['vehiclesUsed'] ?? 0} av '
-              '${trial?['vehicleLimit'] ?? 3} bilar.',
-        );
+        return (TbColors.taxiDeep, 'Provperiod', '${_daysLeft(access['validUntil'])} · $cars');
       }
       if (reason == 'grace') {
         return (
           TbColors.danger,
-          Icons.warning_amber_outlined,
-          'Betalningen har inte kommit in',
-          'Tipsen fungerar till $until. Kontakta den som sköter er faktura.',
+          'Betalningen saknas',
+          'Tipsen fungerar till ${_date(access['validUntil'])}.',
         );
       }
-      return (
-        TbColors.live,
-        Icons.check_circle_outline,
-        'Aktivt',
-        until.isEmpty ? 'Tipsen är på.' : 'Gäller till $until.',
-      );
+      final until = _date(access['validUntil']);
+      return (TbColors.live, 'Aktivt', until.isEmpty ? '' : 'Förnyas $until');
     }
     if (reason == 'trial_ended') {
-      return (
-        TbColors.muted,
-        Icons.hourglass_bottom,
-        'Provperioden är slut',
-        'Er kontaktperson på TaxiTips hjälper er att fortsätta.',
-      );
+      return (TbColors.muted, 'Provet är slut', 'Vi har mejlat hur ni fortsätter.');
     }
-    return (
-      TbColors.muted,
-      Icons.pause_circle_outline,
-      'Inte aktivt',
-      access['message']?.toString() ?? 'Tipsen är pausade.',
-    );
+    return (TbColors.muted, 'Pausat', access['message']?.toString() ?? '');
+  }
+
+  String _daysLeft(Object? iso) {
+    final end = DateTime.tryParse(iso?.toString() ?? '')?.toLocal();
+    if (end == null) return '';
+    final days = end.difference(DateTime.now()).inHours / 24;
+    if (days <= 1) return 'Sista dagen';
+    return '${days.ceil()} dagar kvar';
   }
 
   String _date(Object? iso) {
@@ -327,131 +303,268 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
 
   // ── Bilens blad ────────────────────────────────────────────────────────
 
+  Future<void> _changeCounty(Map<String, dynamic> license) async {
+    final current = license['baseCounty']?.toString();
+    final entries = _countyNames.entries.toList()
+      ..sort((a, b) => a.value.compareTo(b.value));
+    final picked = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: TbColors.foam,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const Padding(
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+              child: Text(
+                'Var kör bilen?',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+              ),
+            ),
+            for (final c in entries)
+              ListTile(
+                title: Text(c.value),
+                trailing: c.key == current
+                    ? const Icon(Icons.check, color: TbColors.live)
+                    : null,
+                onTap: () => Navigator.pop(ctx, c.key),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (picked == null || picked == current) return;
+    try {
+      await widget.api.setTrialCounty(license['licenseId'].toString(), picked);
+      await _reload();
+      _snack('${license['vehicle']} kör nu i ${_countyNames[picked] ?? picked}');
+    } catch (e) {
+      _snack(_cleanError(e), isError: true);
+    }
+  }
+
+  Future<void> _renamePhone(Map<String, dynamic> phone) async {
+    final ctrl = TextEditingController(text: phone['label']?.toString() ?? '');
+    final name = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Förarens namn'),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          textCapitalization: TextCapitalization.words,
+          decoration: const InputDecoration(hintText: 't.ex. Anna'),
+          onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Avbryt'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+            child: const Text('Spara'),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (name == null || name.isEmpty) return;
+    try {
+      await widget.api.renamePhone(phone['approvalId'].toString(), name);
+      await _reload();
+    } catch (e) {
+      _snack(_cleanError(e), isError: true);
+    }
+  }
+
+  Future<void> _removeCar(Map<String, dynamic> license) async {
+    final plate = license['vehicle']?.toString() ?? 'bilen';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Ta bort $plate?'),
+        content: const Text(
+          'Förarna i bilen slutar få tips direkt. Platsen i provet blir ledig.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Avbryt'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: TbColors.danger),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Ta bort'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await widget.api.removeTrialVehicle(license['licenseId'].toString());
+      await _reload();
+      _snack('$plate är borttagen');
+    } catch (e) {
+      _snack(_cleanError(e), isError: true);
+    }
+  }
+
+  String _counties(Map<String, dynamic> license) =>
+      ((license['counties'] as List?) ?? const [])
+          .map((c) => _countyNames[c.toString()] ?? c.toString())
+          .join(', ');
+
   Future<void> _openCar(Map<String, dynamic> license) async {
     final phones = ((license['approvedPhones'] as List?) ?? const [])
         .whereType<Map>()
         .map((m) => Map<String, dynamic>.from(m))
         .toList();
-    final active = license['activePhone'] is Map
-        ? Map<String, dynamic>.from(license['activePhone'] as Map)
+    final activeDevice = license['activePhone'] is Map
+        ? (license['activePhone'] as Map)['deviceId']?.toString()
         : null;
-    final counties = ((license['counties'] as List?) ?? const [])
-        .map((c) => _countyNames[c.toString()] ?? c.toString())
-        .join(', ');
+    final isTrial = license['status'] == 'trial';
     final canManage = _permissions.contains('manage_devices') && !_suspended;
+    final canEditCar =
+        isTrial && _permissions.contains('manage_vehicles') && !_suspended;
+    final counties = _counties(license);
+
+    void act(BuildContext ctx, Future<void> Function() action) {
+      Navigator.pop(ctx);
+      action();
+    }
+
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: TbColors.foam,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
+      showDragHandle: true,
       builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(
-                child: Container(
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: Colors.grey.shade400,
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
               Text(
                 license['vehicle']?.toString() ?? 'Bil',
                 style: const TextStyle(
                   fontFamily: kDisplayFont,
-                  fontSize: 24,
+                  fontSize: 26,
                   fontWeight: FontWeight.w800,
                 ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                counties.isEmpty ? 'Inga län' : 'Tips i $counties',
-                style: const TextStyle(color: TbColors.muted),
               ),
               const SizedBox(height: 16),
               SettingsGroup(
                 children: [
-                  SettingsInfoRow(
-                    icon: Icons.local_taxi_outlined,
-                    title: 'Kör nu',
-                    value: active == null
-                        ? 'Ingen'
-                        : active['label']?.toString() ?? 'Förare',
+                  SettingsNavRow(
+                    icon: Icons.place_outlined,
+                    title: counties.isEmpty ? 'Inget län' : counties,
+                    subtitle: canEditCar ? 'Tryck för att byta län' : null,
+                    trailingIcon: canEditCar
+                        ? Icons.chevron_right
+                        : Icons.lock_outline,
+                    onTap: canEditCar
+                        ? () => act(ctx, () => _changeCounty(license))
+                        : () {},
                   ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              const SettingsGroupLabel('Förare'),
+              SettingsGroup(
+                children: [
                   for (final phone in phones)
                     ListTile(
                       leading: const Icon(
-                        Icons.smartphone_outlined,
+                        Icons.person_outline,
                         color: TbColors.muted,
                       ),
                       title: Text(
-                        phone['label']?.toString() ?? 'Telefon',
+                        phone['label']?.toString() ?? 'Förare',
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
-                      subtitle: Text('Godkänd ${_date(phone['approvedAt'])}'),
-                      trailing: canManage
-                          ? TextButton(
-                              onPressed: () {
-                                Navigator.pop(ctx);
-                                _blockPhone(phone);
-                              },
-                              child: const Text(
-                                'Spärra',
-                                style: TextStyle(color: TbColors.danger),
+                      subtitle: phone['deviceId']?.toString() == activeDevice
+                          ? const Text(
+                              'Kör nu',
+                              style: TextStyle(
+                                color: TbColors.live,
+                                fontWeight: FontWeight.w700,
                               ),
+                            )
+                          : null,
+                      trailing: canManage
+                          ? PopupMenuButton<String>(
+                              tooltip: 'Mer',
+                              onSelected: (choice) => act(
+                                ctx,
+                                () => choice == 'rename'
+                                    ? _renamePhone(phone)
+                                    : _blockPhone(phone),
+                              ),
+                              itemBuilder: (_) => const [
+                                PopupMenuItem(
+                                  value: 'rename',
+                                  child: Text('Byt namn'),
+                                ),
+                                PopupMenuItem(
+                                  value: 'block',
+                                  child: Text(
+                                    'Spärra telefonen',
+                                    style: TextStyle(color: TbColors.danger),
+                                  ),
+                                ),
+                              ],
                             )
                           : null,
                     ),
                   if (phones.isEmpty)
-                    const SettingsInfoRow(
-                      icon: Icons.smartphone_outlined,
-                      title: 'Telefoner',
-                      value: 'Ingen kopplad än',
+                    const ListTile(
+                      leading: Icon(
+                        Icons.person_outline,
+                        color: TbColors.muted,
+                      ),
+                      title: Text(
+                        'Ingen förare kopplad',
+                        style: TextStyle(color: TbColors.muted),
+                      ),
                     ),
                 ],
               ),
-              const SizedBox(height: 16),
-              if (canManage)
+              if (canManage) ...[
+                const SizedBox(height: 20),
                 FilledButton.icon(
                   style: FilledButton.styleFrom(
                     backgroundColor: TbColors.taxi,
                     foregroundColor: TbColors.ink,
                     minimumSize: const Size.fromHeight(52),
                   ),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    _connectDriver(license);
-                  },
+                  onPressed: () => act(ctx, () => _connectDriver(license)),
                   icon: const Icon(Icons.person_add_alt_1),
                   label: const Text(
                     'Koppla en förare',
                     style: TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),
-              if (canManage) ...[
                 const SizedBox(height: 10),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
                     minimumSize: const Size.fromHeight(52),
                   ),
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    _driveMyself(license);
-                  },
+                  onPressed: () => act(ctx, () => _driveMyself(license)),
                   icon: const Icon(Icons.phone_android),
-                  label: const Text(
-                    'Kör bilen själv med den här telefonen',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                  label: const Text('Kör själv med den här telefonen'),
+                ),
+              ],
+              if (canEditCar) ...[
+                const SizedBox(height: 8),
+                TextButton(
+                  onPressed: () => act(ctx, () => _removeCar(license)),
+                  style: TextButton.styleFrom(
+                    foregroundColor: TbColors.danger,
                   ),
+                  child: const Text('Ta bort bilen'),
                 ),
               ],
             ],
@@ -485,7 +598,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       );
     }
 
-    final (color, icon, title, detail) = _status();
+    final (color, statusTitle, statusLine) = _status();
     final licenses = _licenses;
     final trial = _trial;
     final canAddTrialCar = _trialOpen &&
@@ -493,7 +606,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
         _permissions.contains('manage_vehicles') &&
         ((trial?['vehiclesUsed'] as num?) ?? 0) <
             ((trial?['vehicleLimit'] as num?) ?? 3);
-    final canManage = _permissions.contains('manage_devices') && !_suspended;
+    final name = _data?['company']?['name']?.toString() ?? '';
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -502,23 +615,14 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
           _Banner(message: _error!, color: TbColors.danger),
           const SizedBox(height: 12),
         ],
-
-        const SettingsGroupLabel('Företaget'),
-        SettingsGroup(
-          children: [
-            ListTile(
-              leading: Icon(icon, color: color),
-              title: Text(
-                title,
-                style: TextStyle(fontWeight: FontWeight.w800, color: color),
-              ),
-              subtitle: Text(detail),
-            ),
-          ],
+        _CompanyHeader(
+          name: name,
+          status: statusTitle,
+          line: statusLine,
+          color: color,
         ),
-
         const SizedBox(height: 20),
-        const SettingsGroupLabel('Bilar och förare'),
+        const SettingsGroupLabel('Bilar'),
         SettingsGroup(
           children: [
             for (final license in licenses)
@@ -530,53 +634,111 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                 subtitle: _carSubtitle(license),
                 onTap: () => _openCar(license),
               ),
-            if (licenses.isEmpty)
-              SettingsInfoRow(
-                icon: Icons.local_taxi_outlined,
-                title: 'Inga bilar än',
-                value: canAddTrialCar ? 'Lägg till en nedan' : '—',
+            if (licenses.isEmpty && !canAddTrialCar)
+              const ListTile(
+                leading: Icon(Icons.local_taxi_outlined, color: TbColors.muted),
+                title: Text(
+                  'Inga bilar',
+                  style: TextStyle(color: TbColors.muted),
+                ),
               ),
             if (canAddTrialCar)
               SettingsNavRow(
-                icon: Icons.add_circle_outline,
+                icon: Icons.add,
                 iconColor: TbColors.taxiDeep,
-                title: 'Lägg till bil i provet',
-                subtitle:
-                    '${trial?['vehiclesUsed'] ?? 0} av ${trial?['vehicleLimit'] ?? 3} bilar',
+                title: 'Lägg till bil',
+                titleColor: TbColors.taxiDeep,
                 onTap: _addTrialCar,
               ),
           ],
         ),
-        if (licenses.isNotEmpty && canManage)
-          const Padding(
-            padding: EdgeInsets.fromLTRB(4, 8, 4, 0),
-            child: Text(
-              'Tryck på en bil för att koppla en förare, eller för att köra '
-              'den själv med den här telefonen.',
-              style: TextStyle(color: TbColors.muted, fontSize: 13, height: 1.35),
-            ),
-          ),
-
       ],
     );
   }
 
   String _carSubtitle(Map<String, dynamic> license) {
-    final counties = ((license['counties'] as List?) ?? const [])
-        .map((c) => _countyNames[c.toString()] ?? c.toString())
-        .join(', ');
+    final counties = _counties(license);
     final phones = (license['approvedPhones'] as List?)?.length ?? 0;
     final active = license['activePhone'] is Map
         ? (license['activePhone'] as Map)['label']?.toString()
         : null;
-    final parts = [
-      if (counties.isNotEmpty) counties,
-      if (license['status'] == 'trial') 'prov',
-      active != null
-          ? 'kör: $active'
-          : '$phones telefon${phones == 1 ? '' : 'er'}',
-    ];
-    return parts.join(' · ');
+    final driver = active != null
+        ? 'Kör: $active'
+        : phones == 0
+        ? 'Ingen förare'
+        : '$phones förare';
+    return [if (counties.isNotEmpty) counties, driver].join(' · ');
+  }
+}
+
+/// Företagets namn och läge överst i inställningarna: en rad, inget mer.
+class _CompanyHeader extends StatelessWidget {
+  const _CompanyHeader({
+    required this.name,
+    required this.status,
+    required this.line,
+    required this.color,
+  });
+
+  final String name;
+  final String status;
+  final String line;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: TbColors.line),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            name.isEmpty ? 'Ditt företag' : name,
+            style: const TextStyle(
+              fontFamily: kDisplayFont,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+              color: TbColors.ink,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(99),
+                ),
+                child: Text(
+                  status,
+                  style: TextStyle(
+                    color: color,
+                    fontWeight: FontWeight.w800,
+                    fontSize: 13,
+                  ),
+                ),
+              ),
+              if (line.isNotEmpty) ...[
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    line,
+                    style: const TextStyle(color: TbColors.muted),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ],
+      ),
+    );
   }
 }
 

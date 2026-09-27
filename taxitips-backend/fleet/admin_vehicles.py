@@ -20,7 +20,7 @@ from django.views.decorators.http import require_POST
 from core.api import _json
 from fleet import licensing, sessions
 from fleet.admin_api import _body, _record, _staff, handle
-from fleet.models import License, LicenseCounty, Subscription, VehicleSession
+from fleet.models import License, Subscription, VehicleSession
 from fleet.roles import Perm
 
 _OPEN = (License.Status.ACTIVE, License.Status.TRIAL, License.Status.PENDING_CANCEL)
@@ -87,25 +87,10 @@ def set_trial_counties(request, license_id):
     """
     principal = _staff(request, Perm.ADMIN_SELL)
     license = _license_or_404(license_id)
-    if license.status != License.Status.TRIAL:
-        raise licensing.LicensingError(
-            "paid_license",
-            "Bilen är betald. Ändra län via offerten, så att fakturan stämmer.",
-        )
     body = _body(request)
-    base = licensing.assert_county_available(str(body.get("base") or license.base_county))
-    extras = sorted({licensing.assert_county_available(str(c)) for c in (body.get("extras") or [])} - {base})
-    now = timezone.now()
-    with transaction.atomic():
-        LicenseCounty.objects.filter(license=license).exclude(active_to__lte=now).update(active_to=now)
-        LicenseCounty.objects.create(
-            license=license, county_code=base, kind=LicenseCounty.Kind.BASE, active_from=now,
-        )
-        for county in extras:
-            LicenseCounty.objects.create(
-                license=license, county_code=county, kind=LicenseCounty.Kind.EXTRA, active_from=now,
-            )
-        License.objects.filter(id=license.id).update(base_county=base, scheduled_base_county="")
+    base, extras = licensing.set_trial_counties(
+        license, base=body.get("base") or license.base_county, extras=body.get("extras") or [],
+    )
     _record(
         principal, "admin_trial_counties_set", company_id=license.company_id,
         subject_type="license", subject_id=license.id, detail={"base": base, "extras": extras},

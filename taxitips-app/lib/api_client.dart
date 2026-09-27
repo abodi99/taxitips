@@ -453,6 +453,23 @@ class ApiClient {
   Future<Map<String, dynamic>> blockPhone(String approvalId) =>
       _owner('approvals/$approvalId/block', {'reason': 'owner_block'});
 
+  /// Namnet på en förares telefon ("Anna"), som det syns under bilen.
+  Future<Map<String, dynamic>> renamePhone(String approvalId, String label) =>
+      _owner('approvals/$approvalId/label', {'label': label});
+
+  /// Byter län på en provbil. Kostar inget; en betald bil kan inte ändras här.
+  Future<Map<String, dynamic>> setTrialCounty(String licenseId, String base) =>
+      _owner('trial/vehicles/$licenseId/county', {'base': base});
+
+  /// Tar bort en provbil och frigör platsen i provet.
+  Future<Map<String, dynamic>> removeTrialVehicle(String licenseId) =>
+      _owner('trial/vehicles/$licenseId/remove', {});
+
+  /// Avslutar företagskontot: förnyelsen stoppas, åtkomsten gäller den
+  /// betalda perioden ut (fleet/ownership.py:close_account).
+  Future<Map<String, dynamic>> closeCompanyAccount() =>
+      _owner('company/close', {});
+
   String _randomJoinCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
     final rnd = Random();

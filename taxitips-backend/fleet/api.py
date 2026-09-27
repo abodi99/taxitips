@@ -1122,6 +1122,72 @@ def close_account(request):
 @csrf_exempt
 @require_POST
 @handle
+def trial_vehicle_county(request, license_id):
+    """
+    POST /api/fleet/trial/vehicles/<id>/county {"base": "01"}
+
+    Ägaren byter län på en provbil i appen. Kostar inget under provet; en betald
+    bil byter län via en beställning (licensing.set_trial_counties).
+    """
+    principal = _principal(request, Perm.MANAGE_VEHICLES)
+    license = _company_license(principal, license_id)
+    base, _extras = licensing.set_trial_counties(license, base=_body(request).get("base") or "")
+    audit.record(
+        "trial_counties_set", company_id=principal.company_id, actor_user_id=principal.user_id,
+        actor_kind="customer", subject_type="license", subject_id=license.id, detail={"base": base},
+    )
+    return _json(request, {"ok": True, "base": base})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def trial_vehicle_remove(request, license_id):
+    """POST /api/fleet/trial/vehicles/<id>/remove -- tar bort en provbil och frigör platsen."""
+    principal = _principal(request, Perm.MANAGE_VEHICLES)
+    license = _company_license(principal, license_id)
+    ended = licensing.remove_trial_license(license)
+    audit.record(
+        "trial_vehicle_removed", company_id=principal.company_id, actor_user_id=principal.user_id,
+        actor_kind="customer", subject_type="license", subject_id=license.id,
+        detail={"sessions_ended": ended},
+    )
+    return _json(request, {"ok": True})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def rename_approval(request, approval_id):
+    """
+    POST /api/fleet/approvals/<id>/label {"label": "Anna"}
+
+    Namnet på en förares telefon, som det syns under bilen ("Kör: Anna").
+    Skrivs både på godkännandet och på telefonen, så att samma namn syns
+    oavsett vilken bil telefonen kör.
+    """
+    from billing.models import Device
+
+    principal = _principal(request, Perm.MANAGE_DEVICES)
+    approval = DeviceApproval.objects.filter(id=approval_id, company_id=principal.company_id).first()
+    if approval is None:
+        raise licensing.LicensingError("unknown_approval", "Telefonen finns inte.", status=404)
+    label = " ".join(str(_body(request).get("label") or "").split())[:80]
+    if not label:
+        raise licensing.LicensingError("label_required", "Skriv ett namn.")
+    DeviceApproval.objects.filter(id=approval.id).update(label=label)
+    Device.objects.filter(id=approval.device_id, company_id=principal.company_id).update(label=label)
+    audit.record(
+        "device_renamed", company_id=principal.company_id, actor_user_id=principal.user_id,
+        actor_kind="customer", subject_type="device", subject_id=approval.device_id,
+        detail={"label": label},
+    )
+    return _json(request, {"ok": True, "label": label})
+
+
+@csrf_exempt
+@require_POST
+@handle
 def change_contracting_party(request):
     """POST /api/fleet/company/contracting-party -- öppnar ett granskningsärende."""
     principal = _principal(request, Perm.TRANSFER_OWNERSHIP)

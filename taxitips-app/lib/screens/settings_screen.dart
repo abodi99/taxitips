@@ -10,6 +10,7 @@ import '../widgets/company_settings_panel.dart';
 import '../widgets/notification_log_sheet.dart';
 import '../widgets/notify_prefs_sheet.dart';
 import '../widgets/settings_ui.dart';
+import '../widgets/vehicle_session_sheet.dart';
 import 'support_chat_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -35,13 +36,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int _supportUnread = 0;
 
   // Office
-  final _name = TextEditingController();
   final _email = TextEditingController();
-  final _orgNumber = TextEditingController();
 
   // Driver
   final _label = TextEditingController();
   String? _companyName;
+  String? _currentPlate;
+  bool _hasCars = false;
 
   bool get _isOffice => widget.api.sessionToken != null;
   bool get _isDevice => widget.api.deviceToken != null;
@@ -54,9 +55,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
-    _name.dispose();
     _email.dispose();
-    _orgNumber.dispose();
     _label.dispose();
     super.dispose();
   }
@@ -83,21 +82,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     try {
       if (_isOffice) {
-        // Servern (GET /api/fleet/company), inte PostgREST: företag som skapats
-        // i den nya modellen och medlemskapens RLS ska inte avgöra om ägaren
-        // ser sitt eget företagsnamn. E-posten är inloggningens egen.
+        // Företaget och bilarna läser panelen själv (GET /api/fleet/company).
         _email.text = widget.api.currentUserEmail ?? '';
-        try {
-          final overview = await widget.api.fleetCompany();
-          final company = overview['company'] as Map<String, dynamic>? ?? {};
-          _name.text = company['name']?.toString() ?? '';
-          _orgNumber.text = company['orgNumber']?.toString() ?? '';
-        } catch (_) {
-          final me = await widget.api.me();
-          final company = me['company'] as Map<String, dynamic>? ?? {};
-          _name.text = company['name']?.toString() ?? '';
-          _orgNumber.text = company['orgNumber']?.toString() ?? '';
-        }
       }
       if (_isDevice) {
         final data = await widget.api.getDeviceMe();
@@ -105,6 +91,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
         final company = data['company'] as Map<String, dynamic>? ?? {};
         _label.text = device['label']?.toString() ?? '';
         _companyName = company['name']?.toString();
+        try {
+          final status = await widget.api.fleetStatus();
+          final vehicles = ((status['vehicles'] as List?) ?? const [])
+              .whereType<Map>()
+              .toList();
+          _hasCars = vehicles.isNotEmpty;
+          final mine = vehicles.where((v) => v['isMine'] == true);
+          _currentPlate = mine.isEmpty ? null : mine.first['plate']?.toString();
+        } catch (_) {
+          // Raden visar "Välj bil" i stället; inget att larma om.
+        }
       }
       if (mounted) setState(() => _loading = false);
     } catch (e) {
@@ -232,40 +229,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
     widget.onLeftDevice?.call();
   }
 
-  Future<void> _openSupport() async {
-    final choice = await showDialog<String>(
+  Future<void> _chooseCar() async {
+    final changed = await VehicleSessionSheet.show(context, widget.api);
+    if (changed) await _load();
+  }
+
+  Future<void> _closeAccount() async {
+    final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Support'),
+        title: const Text('Avsluta företagskontot?'),
         content: const Text(
-          'Mejla oss eller öppna kontaktsidan. Supportärenden skapas i '
-          'webbportalen för inloggade ägare.',
+          'Abonnemanget förnyas inte. Pågår ett prov avslutas det. '
+          'Ni kan använda appen perioden ut.',
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(ctx),
+            onPressed: () => Navigator.pop(ctx, false),
             child: const Text('Avbryt'),
           ),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, 'web'),
-            child: const Text('Webb'),
-          ),
           FilledButton(
-            onPressed: () => Navigator.pop(ctx, 'mail'),
-            child: const Text('Mejla'),
+            style: FilledButton.styleFrom(backgroundColor: TbColors.danger),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Avsluta'),
           ),
         ],
       ),
     );
-    if (choice == 'mail') {
-      await launchUrl(
-        Uri.parse('mailto:hej@taxitips.se?subject=TaxiTips%20support'),
-      );
-    } else if (choice == 'web') {
-      await launchUrl(
-        Uri.parse('https://taxitips.se/#kontakt'),
-        mode: LaunchMode.externalApplication,
-      );
+    if (ok != true) return;
+    try {
+      final result = await widget.api.closeCompanyAccount();
+      _showSnack(result['explanation']?.toString() ?? 'Kontot är avslutat.');
+      await _load();
+      if (mounted) setState(() => _companyPanelEpoch++);
+    } catch (e) {
+      _showSnack(_cleanError(e), isError: true);
     }
   }
 
@@ -280,38 +278,101 @@ class _SettingsScreenState extends State<SettingsScreen> {
               color: TbColors.taxiDeep,
               onRefresh: () async {
                 await _load();
-                if (mounted) {
-                  setState(() => _companyPanelEpoch++);
-                }
+                if (mounted) setState(() => _companyPanelEpoch++);
               },
               child: ListView(
                 padding: EdgeInsets.fromLTRB(
                   16,
                   8,
                   16,
-                  32 + MediaQuery.paddingOf(context).bottom,
+                  24 + MediaQuery.paddingOf(context).bottom,
                 ),
                 children: [
                   if (_error != null) ...[
                     _ErrorBanner(message: _error!),
                     const SizedBox(height: 16),
                   ],
+
+                  // Företaget och bilarna (ägaren).
+                  if (_isOffice) ...[
+                    CompanySettingsPanel(
+                      key: ValueKey(_companyPanelEpoch),
+                      api: widget.api,
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  // Telefonen man håller i: bilen, notiserna, namnet.
+                  if (_isDevice) ...[
+                    SettingsGroupLabel(
+                      _isOffice || _companyName == null
+                          ? 'Den här telefonen'
+                          : 'Den här telefonen · $_companyName',
+                    ),
+                    SettingsGroup(
+                      children: [
+                        if (_hasCars || _currentPlate != null)
+                          SettingsNavRow(
+                            icon: Icons.local_taxi_outlined,
+                            title: _currentPlate ?? 'Välj bil',
+                            subtitle: _currentPlate == null
+                                ? 'Ingen bil vald'
+                                : 'Bilen du kör',
+                            onTap: _chooseCar,
+                          ),
+                        SettingsNavRow(
+                          icon: BrandIcons.notification(
+                            size: 24,
+                            color: TbColors.muted,
+                          ),
+                          title: 'Notiser',
+                          onTap: _openNotify,
+                        ),
+                        SettingsNavRow(
+                          icon: Icons.history,
+                          title: 'Notishistorik',
+                          onTap: _openNotificationLog,
+                        ),
+                        SettingsEditRow(
+                          icon: Icons.smartphone_outlined,
+                          title: 'Telefonens namn',
+                          value: _label.text.isEmpty ? '—' : _label.text,
+                          onTap: _editLabel,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
+                  if (widget.api.canUseSupport) ...[
+                    SettingsGroup(
+                      children: [
+                        SettingsNavRow(
+                          icon: Icons.chat_bubble_outline,
+                          iconColor: TbColors.taxiDeep,
+                          title: 'Chatta med oss',
+                          subtitle: _supportUnread > 0
+                              ? (_supportUnread == 1
+                                  ? 'Ett nytt svar'
+                                  : '$_supportUnread nya svar')
+                              : null,
+                          trailing: _supportUnread > 0
+                              ? Badge.count(
+                                  count: _supportUnread,
+                                  backgroundColor: TbColors.danger,
+                                )
+                              : null,
+                          onTap: _openSupportChat,
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
                   if (_isOffice) ...[
                     const SettingsGroupLabel('Konto'),
                     SettingsGroup(
                       children: [
-                        SettingsInfoRow(
-                          icon: Icons.storefront_outlined,
-                          title: 'Företagsnamn',
-                          value: _name.text.isEmpty ? '—' : _name.text,
-                        ),
-                        SettingsInfoRow(
-                          icon: Icons.badge_outlined,
-                          title: 'Organisationsnummer',
-                          value: _orgNumber.text.isEmpty
-                              ? '—'
-                              : _orgNumber.text,
-                        ),
                         SettingsEditRow(
                           icon: Icons.email_outlined,
                           title: 'E-post',
@@ -324,143 +385,93 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           value: '••••••••',
                           onTap: _editPassword,
                         ),
+                        if (widget.onLogout != null)
+                          SettingsNavRow(
+                            icon: Icons.logout,
+                            title: 'Logga ut',
+                            trailingIcon: Icons.chevron_right,
+                            onTap: widget.onLogout!,
+                          ),
                       ],
                     ),
-                    const SizedBox(height: 20),
-                    CompanySettingsPanel(
-                      key: ValueKey(_companyPanelEpoch),
-                      api: widget.api,
-                    ),
+                    const SizedBox(height: 24),
                   ],
-                  if (_isDevice) ...[
-                    const SettingsGroupLabel('Den här telefonen'),
+
+                  if (_isDevice && !_isOffice) ...[
                     SettingsGroup(
                       children: [
-                        if (_companyName != null)
-                          SettingsInfoRow(
-                            icon: Icons.storefront_outlined,
-                            title: 'Bolag',
-                            value: _companyName!,
-                          ),
-                        SettingsEditRow(
-                          icon: Icons.smartphone_outlined,
-                          title: 'Enhetens namn',
-                          value: _label.text.isEmpty ? '—' : _label.text,
-                          onTap: _editLabel,
-                        ),
                         SettingsNavRow(
-                          icon: Icons.logout,
-                          title: 'Lämna denna telefon',
+                          icon: Icons.link_off,
                           iconColor: TbColors.danger,
+                          title: 'Koppla från telefonen',
                           titleColor: TbColors.danger,
                           onTap: _leaveDevice,
                         ),
                       ],
                     ),
-                    const SizedBox(height: 20),
-                    const SettingsGroupLabel('Notiser'),
-                    SettingsGroup(
-                      children: [
-                        SettingsNavRow(
-                          icon: BrandIcons.notification(
-                            size: 24,
-                            color: TbColors.muted,
-                          ),
-                          title: 'Notisinställningar',
-                          subtitle:
-                              'På/av och händelsetyper — '
-                              'län följer filtret på huvudskärmen',
-                          onTap: _openNotify,
-                        ),
-                        SettingsNavRow(
-                          icon: Icons.history,
-                          title: 'Mina notiser',
-                          subtitle:
-                              'Vad som skickats hit — '
-                              'spara det du vill komma tillbaka till',
-                          onTap: _openNotificationLog,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: 24),
                   ],
-                  if (widget.api.canUseSupport) ...[
-                    const SettingsGroupLabel('Support'),
-                    SettingsGroup(
-                      children: [
-                        SettingsNavRow(
-                          icon: Icons.chat_bubble_outline,
-                          iconColor: TbColors.taxiDeep,
-                          title: 'Chatta med support',
-                          subtitle: _supportUnread > 0
-                              ? 'Du har ${_supportUnread == 1 ? 'ett nytt svar' : '$_supportUnread nya svar'}'
-                              : 'Frågor om appen, bilar och förare',
-                          trailing: _supportUnread > 0
-                              ? Badge.count(
-                                  count: _supportUnread,
-                                  backgroundColor: TbColors.danger,
-                                )
-                              : null,
-                          onTap: _openSupportChat,
-                        ),
-                        SettingsNavRow(
-                          icon: Icons.mail_outline,
-                          title: 'Mejla oss',
-                          subtitle: 'hej@taxitips.se',
-                          trailingIcon: Icons.open_in_new,
-                          onTap: _openSupport,
-                        ),
-                      ],
+
+                  if (!_isOffice && !_isDevice)
+                    const Padding(
+                      padding: EdgeInsets.only(bottom: 24),
+                      child: Text('Logga in eller anslut telefonen.'),
                     ),
-                    const SizedBox(height: 20),
-                  ],
-                  if (!_isOffice && !_isDevice) ...[
-                    const Text(
-                      'Logga in eller registrera telefon för att se kontouppgifter.',
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-                  const SettingsGroupLabel('Om appen'),
-                  SettingsGroup(
-                    children: [
-                      SettingsNavRow(
-                        icon: Icons.info_outline,
-                        title: 'Om datan',
-                        subtitle: 'Vad förslagen bygger på',
-                        onTap: () => showDataInfoDialog(context),
-                      ),
-                      SettingsNavRow(
-                        icon: Icons.privacy_tip_outlined,
-                        title: 'Datapolicy',
-                        trailingIcon: Icons.open_in_new,
-                        onTap: () => _openLegal('/privacy.html'),
-                      ),
-                      SettingsNavRow(
-                        icon: Icons.description_outlined,
-                        title: 'Villkor',
-                        trailingIcon: Icons.open_in_new,
-                        onTap: () => _openLegal('/terms.html'),
-                      ),
-                    ],
+
+                  _Footer(
+                    onPrivacy: () => _openLegal('/privacy.html'),
+                    onTerms: () => _openLegal('/terms.html'),
+                    onData: () => showDataInfoDialog(context),
+                    onCloseAccount: _isOffice ? _closeAccount : null,
                   ),
-                  if (_isOffice && widget.onLogout != null) ...[
-                    const SizedBox(height: 20),
-                    SizedBox(
-                      width: double.infinity,
-                      child: OutlinedButton.icon(
-                        onPressed: widget.onLogout,
-                        icon: const Icon(Icons.logout, color: TbColors.danger),
-                        label: const Text('Logga ut'),
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: TbColors.danger,
-                          side: const BorderSide(color: TbColors.danger),
-                        ),
-                      ),
-                    ),
-                  ],
                 ],
               ),
             ),
+    );
+  }
+}
+
+/// Det man sällan behöver, i liten stil längst ner: villkor, datapolicy,
+/// vad tipsen bygger på -- och att avsluta kontot, som måste gå att göra i
+/// appen (Apple 5.1.1) men inte ska ligga bredvid vardagsknapparna.
+class _Footer extends StatelessWidget {
+  const _Footer({
+    required this.onPrivacy,
+    required this.onTerms,
+    required this.onData,
+    this.onCloseAccount,
+  });
+
+  final VoidCallback onPrivacy;
+  final VoidCallback onTerms;
+  final VoidCallback onData;
+  final VoidCallback? onCloseAccount;
+
+  @override
+  Widget build(BuildContext context) {
+    TextButton link(String text, VoidCallback onTap, {Color? color}) => TextButton(
+      onPressed: onTap,
+      style: TextButton.styleFrom(
+        foregroundColor: color ?? TbColors.muted,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        minimumSize: const Size(0, 36),
+        textStyle: const TextStyle(fontSize: 13),
+      ),
+      child: Text(text),
+    );
+    return Column(
+      children: [
+        Wrap(
+          alignment: WrapAlignment.center,
+          children: [
+            link('Om tipsen', onData),
+            link('Datapolicy', onPrivacy),
+            link('Villkor', onTerms),
+          ],
+        ),
+        if (onCloseAccount != null)
+          link('Avsluta företagskontot', onCloseAccount!, color: TbColors.danger),
+      ],
     );
   }
 }
