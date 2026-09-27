@@ -1041,3 +1041,130 @@ ul.todo li + li {
 .card-head h2 {
   margin: 0;
 }
+
+/* --- Status (src/admin/status.js) ------------------------------------------ */
+
+.st-dot {
+  display: inline-block;
+  flex: none;
+  width: 11px;
+  height: 11px;
+  border-radius: 50%;
+  background: var(--ljusgra-djup);
+}
+.st-dot.st-ok {
+  background: var(--ok);
+}
+.st-dot.st-warn {
+  background: var(--guld-djup);
+}
+.st-dot.st-down {
+  background: var(--danger);
+  box-shadow: 0 0 0 3px rgba(192, 57, 43, 0.18);
+}
+.st-dot.st-nav {
+  width: 9px;
+  height: 9px;
+  margin-left: 0.4rem;
+  vertical-align: middle;
+}
+.st-dot[hidden] {
+  display: none;
+}
+
+.st-summary {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+.st-summary h2 {
+  margin: 0;
+}
+.st-summary p {
+  margin: 0.15rem 0 0;
+}
+.st-summary .st-dot {
+  width: 16px;
+  height: 16px;
+}
+.st-summary-down {
+  border-color: var(--danger);
+}
+.st-summary-warn {
+  border-color: var(--guld-djup);
+}
+
+ul.st-list,
+ul.st-detail {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+ul.st-list > li + li {
+  border-top: 1px solid var(--line);
+}
+.st-row,
+.st-more > summary {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.7rem 0.25rem;
+}
+.st-more {
+  padding: 0;
+}
+.st-more > summary {
+  cursor: pointer;
+  list-style: none;
+  border-radius: 8px;
+}
+.st-more > summary::-webkit-details-marker {
+  display: none;
+}
+.st-more > summary:hover {
+  background: var(--ljusgra);
+}
+.st-more > summary:focus-visible {
+  outline: 3px solid var(--guld);
+}
+.st-main {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.st-main .muted {
+  overflow-wrap: anywhere;
+}
+ul.st-detail {
+  margin: 0 0 0.7rem calc(11px + 0.75rem + 0.25rem);
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+}
+ul.st-detail li {
+  overflow-wrap: anywhere;
+  padding: 0.1rem 0;
+}
+
+.st-banner {
+  all: unset;
+  box-sizing: border-box;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  margin-bottom: 1rem;
+  padding: 0.8rem 1rem;
+  border-radius: var(--radius);
+  border: 1px solid var(--guld-djup);
+  background: rgba(224, 143, 0, 0.1);
+  cursor: pointer;
+}
+.st-banner-down {
+  border-color: var(--danger);
+  background: rgba(192, 57, 43, 0.08);
+}
+.st-banner:focus-visible {
+  outline: 3px solid var(--guld);
+}

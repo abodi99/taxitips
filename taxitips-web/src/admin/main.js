@@ -3,6 +3,7 @@ import { ApiError, supabase } from "../portal/api.js";
 import * as acc from "./accounts.js";
 import { admin } from "./api.js";
 import * as sales from "./sales.js";
+import { LEVEL, statusBanner, statusView } from "./status.js";
 import * as support from "./support.js";
 import * as views from "./views.js";
 
@@ -73,6 +74,10 @@ const state = {
   quotedChange: null,
   // Supportchatten: en konversation att öppna direkt (från kundsidan).
   supportThread: null,
+  // Senaste statusrapporten (menyns prick och Hems varning), och om nästa
+  // hämtning ska köra om kontrollerna i stället för att ta serverns cache.
+  status: null,
+  statusFresh: false,
 };
 
 function showError(error) {
@@ -138,7 +143,15 @@ async function renderView(seq) {
           admin.supportSummary().catch(() => ({ waiting: 0 })),
         ]);
         setSupportCount(sup.waiting ?? 0);
-        paint(views.oversikt(overview, list, sup.waiting ?? 0));
+        paint(statusBanner(state.status) + views.oversikt(overview, list, sup.waiting ?? 0));
+        break;
+      }
+      case "status": {
+        const fresh = state.statusFresh;
+        state.statusFresh = false;
+        const report = await admin.status(fresh);
+        setStatus(report);
+        paint(statusView(report));
         break;
       }
       case "support":
@@ -269,11 +282,36 @@ async function refreshSupportCount() {
   }
 }
 
+/**
+ * Prick i menyn: grön, gul eller röd efter senaste statusrapporten. Hämtas i
+ * bakgrunden varannan minut, så att ett fel syns var man än är i adminwebben
+ * -- inte först när någon råkar öppna Status.
+ */
+function setStatus(report) {
+  state.status = report;
+  const dot = document.getElementById("statusDot");
+  if (!dot || !report) return;
+  dot.className = `st-dot st-nav st-${report.overall}`;
+  dot.setAttribute("aria-label", LEVEL[report.overall]?.[0] ?? "");
+  dot.hidden = false;
+}
+
+async function refreshStatus() {
+  if (document.hidden) return;
+  try {
+    setStatus(await admin.status());
+  } catch {
+    // Prickens hämtning får aldrig visa ett fel ovanpå en annan vy.
+  }
+}
+
 async function enterApp(session) {
   if (entered) return;
   entered = true;
   refreshSupportCount();
   setInterval(refreshSupportCount, 30_000);
+  refreshStatus();
+  setInterval(refreshStatus, 120_000);
   el.login.hidden = true;
   el.app.hidden = false;
   el.logout.hidden = false;
@@ -616,6 +654,10 @@ async function act(action, ds) {
       setTab("support");
       return render();
     }
+
+    case "status-refresh":
+      state.statusFresh = true;
+      return render();
 
     case "goto":
       state.view = ds.view;

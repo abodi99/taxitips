@@ -6,10 +6,12 @@ det här inte är kundens väg.
 
 from django.urls import path
 
-from fleet import admin_accounts, admin_api, admin_sales, admin_support, admin_vehicles
+from fleet import admin_accounts, admin_api, admin_sales, admin_status, admin_support, admin_vehicles
 
 urlpatterns = [
     path("overview", admin_api.overview),
+    # Varje koppling (databas, kö, källor, Stripe, Bolagsverket, Firebase, SMTP).
+    path("status", admin_status.status),
     path("companies", admin_api.companies),
     path("companies/new", admin_sales.create_company),
     path("companies/<uuid:company_id>", admin_api.company_detail),

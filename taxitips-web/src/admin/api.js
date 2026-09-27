@@ -10,6 +10,9 @@ import { request } from "../portal/api.js";
  */
 export const admin = {
   overview: () => request("/api/admin/overview"),
+  // Varje koppling, grön/gul/röd (fleet/admin_status.py). `fresh` kör om
+  // kontrollerna; annars ett svar som är högst 30 s gammalt.
+  status: (fresh = false) => request(`/api/admin/status${fresh ? "?fresh=1" : ""}`),
   companies: (q = "") =>
     request(`/api/admin/companies${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   company: (id) => request(`/api/admin/companies/${id}`),
