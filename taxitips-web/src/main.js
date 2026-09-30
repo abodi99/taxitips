@@ -106,12 +106,12 @@ const boardRows = document.querySelectorAll(".board-row");
 
 if (board && boardRows.length && !prefersReducedMotion) {
   const pool = [
-    { time: "20:02", place: "Kristianstad", strength: "MEDEL", reason: "Tåg försenat 20 min", hot: false },
-    { time: "20:18", place: "Malmö Live", strength: "HÖG", reason: "Konsert slutar", hot: true },
-    { time: "20:35", place: "Landskrona", strength: "LÅG", reason: "Färja försenad", hot: false },
-    { time: "20:51", place: "Lund Arena", strength: "HÖG", reason: "Match slutar", hot: true },
-    { time: "21:07", place: "Malmö C", strength: "MEDEL", reason: "Ersättningsbuss", hot: false },
-    { time: "21:22", place: "Helsingborg C", strength: "HÖG", reason: "Tåg inställt", hot: true },
+    { time: "20:02", place: "Norrköping C", strength: "MEDEL", reason: "Tåg försenat 20 min", hot: false },
+    { time: "20:18", place: "Göteborg C", strength: "STARK", reason: "Konsert slutar", hot: true },
+    { time: "20:35", place: "Visby", strength: "SVAG", reason: "Färja försenad", hot: false },
+    { time: "20:51", place: "Uppsala C", strength: "STARK", reason: "Tåg inställt", hot: true },
+    { time: "21:07", place: "Karlstad", strength: "MEDEL", reason: "Ersättningsbuss", hot: false },
+    { time: "21:22", place: "Landvetter", strength: "STARK", reason: "Sista planet landar", hot: true },
   ];
 
   let poolIndex = 0;
