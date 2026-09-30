@@ -63,6 +63,12 @@ def seen(payload: dict | None) -> None:
     """
     if not payload:
         return
+    # Senaste inloggning, appversion och telefon (fleet/client_activity.py).
+    # Före e-postkontrollen: ett konto utan e-post i token är fortfarande ett
+    # konto som supporten kan behöva felsöka. Har egen skrivspärr och är tyst.
+    from fleet import client_activity
+
+    client_activity.note_user(payload)
     user_id = str(payload.get("sub") or "")
     email = normalize_email(payload.get("email"))
     if not user_id or not email:

@@ -178,7 +178,10 @@ class AccountBlockTests(_Base):
 @override_settings(SUPABASE_JWT_SECRET=SECRET)
 class RegistrationTests(_Base):
     def register(self, user_id, email, **body):
-        payload = {"orgNumber": "5560360793", "companyName": "Nya Taxi AB", **body}
+        payload = {
+            "orgNumber": "5560360793", "companyName": "Nya Taxi AB",
+            "contactPhone": "070-812 34 91", **body,
+        }
         return self.call("post", "/api/fleet/register", user_id, payload, email=email)
 
     def test_registration_creates_owner_company_and_a_card_free_trial(self):
@@ -213,6 +216,34 @@ class RegistrationTests(_Base):
         response = self.register(str(uuid.uuid4()), "ny@example.test")
         self.assertEqual(response.status_code, 409)
         self.assertEqual(response.json()["reason"], "company_exists")
+
+    def test_the_second_person_with_the_same_org_number_gets_no_access(self):
+        from fleet.models import AuditEvent, OutboxMessage
+
+        first = self.register(str(uuid.uuid4()), "agare@example.test")
+        self.assertEqual(first.status_code, 201, first.content)
+        # Före kontot: appens förkontroll säger det direkt, utan vems det är.
+        check = self.client.post(
+            "/api/fleet/register/check",
+            data=json.dumps({"orgNumber": "556036-0793", "contactPhone": "070-812 34 91"}),
+            content_type="application/json",
+        ).json()
+        self.assertEqual((check["reason"], check["field"]), ("company_exists", "orgNumber"))
+        self.assertNotIn("Nya Taxi", check["message"])
+        # Efter kontot: inget företag, ingen medlem, inget prov -- men ägaren får veta.
+        second_user = str(uuid.uuid4())
+        second = self.register(second_user, "okand@example.test")
+        self.assertEqual(second.status_code, 409)
+        self.assertNotIn("detail", second.json())
+        self.assertFalse(CompanyMember.objects.filter(user_id=second_user).exists())
+        self.assertEqual(Company.objects.count(), 1)
+        self.assertTrue(AuditEvent.objects.filter(action="duplicate_signup_attempt").exists())
+        mail = OutboxMessage.objects.get(category="duplicate_signup_attempt")
+        self.assertEqual(mail.to_address, "agare@example.test")
+        self.assertIn("okand@example.test", mail.body)
+        # Ett mejl per adress, hur många gånger hen än försöker.
+        self.register(second_user, "okand@example.test")
+        self.assertEqual(OutboxMessage.objects.filter(category="duplicate_signup_attempt").count(), 1)
 
     def test_a_blocked_email_cannot_register(self):
         accounts.block(kind="email", value="spam@example.test", reason="Spam", actor_user_id=self.admin_id)
@@ -269,20 +300,21 @@ class TrialVehicleTests(_Base):
         user = str(uuid.uuid4())
         self.call("post", "/api/fleet/register", user, {
             "orgNumber": "5560360793", "companyName": "Nya Taxi AB",
-            "vehicles": [{"plate": "AAA111", "baseCounty": "12"}],
+            "contactPhone": "070-812 34 91",
         }, email="ny@example.test")
+        # Självregistrerat prov: en bil (fleet/trials.py).
         response = self.call("post", "/api/fleet/trial/vehicles", user, {
-            "vehicles": [{"plate": "BBB222", "baseCounty": "12"}, {"plate": "CCC333", "baseCounty": "13"}],
+            "vehicles": [{"plate": "BBB222", "baseCounty": "12"}],
         })
         self.assertEqual(response.status_code, 201, response.content)
-        self.assertEqual(response.json()["vehiclesUsed"], 3)
+        self.assertEqual(response.json()["vehiclesUsed"], 1)
         refused = self.call("post", "/api/fleet/trial/vehicles", user, {
             "vehicles": [{"plate": "DDD444", "baseCounty": "12"}],
         })
         self.assertEqual(refused.status_code, 400)
         self.assertEqual(refused.json()["reason"], "trial_vehicle_limit")
         overview = self.call("get", "/api/fleet/company", user).json()
-        self.assertEqual(len(overview["licenses"]), 3)
+        self.assertEqual(len(overview["licenses"]), 1)
         # Provbilarna finns, men provet har inte startat: ingen telefon än.
         self.assertFalse(overview["access"]["ok"])
 
@@ -317,6 +349,7 @@ class AdminVehicleTests(_Base):
         user = str(uuid.uuid4())
         self.call("post", "/api/fleet/register", user, {
             "orgNumber": "5560360793", "companyName": "Prov AB",
+            "contactPhone": "070-812 34 91",
             "vehicles": [{"plate": "AAA111", "baseCounty": "12"}],
         }, email="prov@example.test")
         return License.objects.get()

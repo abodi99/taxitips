@@ -37,6 +37,7 @@ urlpatterns = [
     # Registrering och prov
     path("signup", api.signup),
     path("register", api.register),
+    path("register/check", api.register_check),
     path("trial/vehicles", api.trial_vehicles),
     path("trial/vehicles/<uuid:license_id>/county", api.trial_vehicle_county),
     path("trial/vehicles/<uuid:license_id>/remove", api.trial_vehicle_remove),

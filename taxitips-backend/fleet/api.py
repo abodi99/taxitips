@@ -33,6 +33,7 @@ from core import areas
 from fleet import (
     accounts,
     access,
+    archive,
     audit,
     commerce,
     licensing,
@@ -79,6 +80,7 @@ log = logging.getLogger(__name__)
 # supportärende; det är billigare att kräva formen här.
 _DOMAIN_ERRORS = (
     accounts.AccountError,
+    archive.ArchiveError,
     pairing.PairingError,
     sessions.SessionError,
     licensing.LicensingError,
@@ -925,6 +927,15 @@ def signup(request):
 
     if not orgnr.is_valid(org_number, country):
         raise trials.TrialError("invalid_org_number", "Organisationsnumret går inte att tolka.")
+    # Samma kontroller som appens registrering (fleet/signup_checks.py), så att
+    # den här äldre vägen inte blir en väg förbi dem.
+    from fleet import registration
+
+    checked = registration.precheck(
+        org_number=org_number, contact_phone=str(body.get("contactPhone") or ""), country=country,
+        # Bolaget är medlemmens eget; det ska inte nekas för att det redan finns.
+        check_existing=False,
+    )
 
     member = CompanyMember.objects.filter(user_id=principal.user_id, status="active").first()
     if member is None:
@@ -942,7 +953,7 @@ def signup(request):
             "contact_name": body.get("contactName", ""),
             "contact_role": body.get("contactRole", ""),
             "contact_email": body.get("contactEmail", ""),
-            "contact_phone": body.get("contactPhone", ""),
+            "contact_phone": checked.phone,
             "billing_email": body.get("billingEmail", ""),
             "billing_reference": body.get("billingReference", ""),
             # Ett organisationsnummer och en verifierad e-post är inte bevis på
@@ -1013,13 +1024,15 @@ def register(request):
     country = (body.get("country") or "SE").upper()
     org_number = str(body.get("orgNumber") or "")
     ratelimit.enforce(ratelimit.SIGNUP, f"{country}:{orgnr.normalize(org_number, country)}")
-    result = registration.register(
-        user_id=payload.get("sub"), email=str(payload.get("email") or ""),
-        org_number=org_number, company_name=str(body.get("companyName") or ""),
-        contact_name=str(body.get("contactName") or ""),
-        contact_phone=str(body.get("contactPhone") or ""),
-        vehicles=body.get("vehicles") or [], country=country,
-    )
+    try:
+        result = _register(registration, payload, body, org_number, country)
+    except sales.SalesError as exc:
+        if exc.reason == "company_exists":
+            registration.report_duplicate_attempt(
+                org_number, email=str(payload.get("email") or ""),
+                user_id=payload.get("sub"), country=country,
+            )
+        raise
     trial = result.trial
     return _json(request, {
         "ok": True,
@@ -1034,6 +1047,54 @@ def register(request):
         ),
         "message": result.trial_message,
     }, status=201 if result.created else 200)
+
+
+def _register(registration, payload, body, org_number, country):
+    return registration.register(
+        user_id=payload.get("sub"), email=str(payload.get("email") or ""),
+        org_number=org_number, company_name=str(body.get("companyName") or ""),
+        contact_name=str(body.get("contactName") or ""),
+        contact_phone=str(body.get("contactPhone") or ""),
+        vehicles=body.get("vehicles") or [], country=country, token_payload=payload,
+    )
+
+
+@csrf_exempt
+@require_POST
+@handle
+def register_check(request):
+    """
+    POST /api/fleet/register/check {"orgNumber", "contactPhone", "email"}
+
+    Samma prövning som registreringen (registration.precheck), innan
+    Supabase-kontot skapas. Utan inloggning, med samma broms per IP som
+    registeruppslaget. Svarar med fältet som är fel. Att organisationsnumret
+    redan har ett konto sägs (`company_exists`), men inte vems.
+    """
+    from fleet import bolagsverket, registration
+
+    ratelimit.enforce(ratelimit.REGISTRY_LOOKUP, bolagsverket.client_ip(request) or "unknown")
+    body = _body(request)
+    try:
+        checked = registration.precheck(
+            org_number=str(body.get("orgNumber") or ""),
+            contact_phone=str(body.get("contactPhone") or ""),
+            email=str(body.get("email") or ""),
+            country=str(body.get("country") or "SE"),
+        )
+    except sales.SalesError as exc:
+        field = (
+            "phone" if "phone" in exc.reason
+            else "email" if "email" in exc.reason
+            else "orgNumber"
+        )
+        return _json(request, {
+            "ok": False, "reason": exc.reason, "field": field, "message": exc.message,
+        }, status=exc.status)
+    return _json(request, {
+        "ok": True, "kind": checked.kind, "phone": checked.phone,
+        "registryAvailable": checked.registry is not None,
+    })
 
 
 @csrf_exempt

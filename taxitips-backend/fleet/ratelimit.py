@@ -42,6 +42,13 @@ SUPPORT_MESSAGE = Limit("support_message", limit=30, window_seconds=600)
 # tillsammans så att en botnät-våg inte kan förbruka vår kvot.
 REGISTRY_LOOKUP = Limit("registry_lookup", limit=30, window_seconds=600)
 REGISTRY_LOOKUP_ALL = Limit("registry_lookup_all", limit=2000, window_seconds=3600)
+# Appens felrapporter (POST /api/client-log). En app i en felloop ska inte
+# kunna fylla tabellen: appen själv slår ihop och kapar (lib/client_log.dart),
+# det här är gränsen om den inte gör det. Utan inloggning (ett fel vid själva
+# inloggningen) per nät och snävare, och ett tak för alla tillsammans.
+CLIENT_LOG = Limit("client_log", limit=30, window_seconds=600)
+CLIENT_LOG_ANON = Limit("client_log_anon", limit=10, window_seconds=3600)
+CLIENT_LOG_ALL = Limit("client_log_all", limit=3000, window_seconds=3600)
 
 
 def _bucket(limit: Limit, identity: str) -> str:

@@ -96,6 +96,11 @@ class CompanyProfile(models.Model):
     # övergångsåtkomsten antingen varit hela landet eller ingenting.
     legacy_counties = models.JSONField(default=list, blank=True)
 
+    # Arkiverat i adminwebben (fleet/archive.py): ett avslutat bolag som inte
+    # längre ska synas i listorna. Raden finns kvar; NULL = syns som vanligt.
+    archived_at = models.DateTimeField(null=True, blank=True)
+    archived_by = models.UUIDField(null=True, blank=True)
+
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -293,8 +298,8 @@ class SalesInvite(models.Model):
 
 class Trial(models.Model):
     """
-    Provperioden. 14 dagar, högst tre provbilar, högst en per företag per 24
-    månader.
+    Provperioden. 14 dagar, en provbil (tre när en säljare lagt upp det), högst
+    en per företag per 24 månader.
 
     `org_key` är land+organisationsnummer och är det som spärren räknar på.
     Nyckeln sitter avsiktligt INTE på company_id: ett nytt bolagskonto med
@@ -1272,3 +1277,146 @@ class SupportMessage(models.Model):
     class Meta:
         db_table = "fleet_support_message"
         indexes = [models.Index(fields=["thread", "created_at"])]
+
+
+class SalesFollowUp(models.Model):
+    """
+    Säljarens anteckning om ett provföretag: har vi ringt, vad sa de, när
+    ringer vi igen. En rad per företag -- historiken finns i revisionsloggen
+    (`sales_followup_updated`), inte i fler rader här.
+
+    **Varför en egen tabell.** Provet slutar utan debitering om ingen beställer
+    (fleet/trials.py), så det som avgör om ett prov blir en kund är samtalet.
+    Utan en plats att skriva ner det vet nästa person som ringer inte att
+    kunden redan sagt "hör av er i november".
+    """
+
+    class Outcome(models.TextChoices):
+        NOT_CONTACTED = "not_contacted", "Inte kontaktad"
+        NO_ANSWER = "no_answer", "Svarade inte"
+        CALL_BACK = "call_back", "Ring igen"
+        INTERESTED = "interested", "Intresserad"
+        NOT_INTERESTED = "not_interested", "Inte intresserad"
+        WRONG_DETAILS = "wrong_details", "Fel uppgifter"
+        CUSTOMER = "customer", "Blev kund"
+
+    company_id = models.UUIDField(primary_key=True)
+    outcome = models.CharField(
+        max_length=20, choices=Outcome.choices, default=Outcome.NOT_CONTACTED,
+    )
+    note = models.TextField(blank=True, default="")
+    next_contact_at = models.DateTimeField(null=True, blank=True)
+    last_contact_at = models.DateTimeField(null=True, blank=True)
+    contact_attempts = models.IntegerField(default=0)
+    updated_by = models.UUIDField(null=True, blank=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "fleet_sales_followup"
+
+
+class ClientActivity(models.Model):
+    """
+    Senaste läget per konto och per telefon: när den loggade in, när den
+    senast hördes av, och vilken app på vilken telefon den kör. För att
+    supporten ska kunna svara på "vilken version har du?" utan att fråga.
+
+    **En rad per konto eller telefon, ingen historik.** Varje fält skrivs
+    över med det senaste värdet; det finns ingen tidslinje att läsa en förares
+    rörelser ur. IP-adressen lagras bara som nät (/24 för IPv4, /48 för IPv6)
+    och bara den senaste. Ingen position, aldrig en token. Se docs/loggning.md.
+
+    **Varför inte kolumner på `devices`.** Den tabellen ägs av Supabases
+    migrationer (billing.Device är `managed = False`), och kontona har ingen
+    tabell alls hos oss utöver `fleet_known_account`. En tabell för båda ger
+    adminwebben en fråga och skrivspärren (fleet/client_activity.py) ett ställe.
+    """
+
+    class Kind(models.TextChoices):
+        USER = "user", "Konto"
+        DEVICE = "device", "Telefon"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    subject_kind = models.CharField(max_length=10, choices=Kind.choices)
+    subject_id = models.UUIDField()
+    company_id = models.UUIDField(null=True, blank=True)
+    first_seen_at = models.DateTimeField(auto_now_add=True)
+    last_seen_at = models.DateTimeField()
+    # Senaste inloggningen enligt Supabase (JWT:ns `amr`-tidsstämpel), inte
+    # senaste anropet. Bara för konton; en förartelefon loggar aldrig in.
+    last_login_at = models.DateTimeField(null=True, blank=True)
+    app_version = models.CharField(max_length=32, blank=True, default="")
+    app_build = models.CharField(max_length=16, blank=True, default="")
+    platform = models.CharField(max_length=16, blank=True, default="")
+    os_version = models.CharField(max_length=64, blank=True, default="")
+    device_model = models.CharField(max_length=64, blank=True, default="")
+    ip_prefix = models.CharField(max_length=48, blank=True, default="")
+    country = models.CharField(max_length=2, blank=True, default="")
+
+    class Meta:
+        db_table = "fleet_client_activity"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["subject_kind", "subject_id"], name="fleet_client_activity_one_per_subject",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["company_id", "-last_seen_at"]),
+            models.Index(fields=["-last_seen_at"]),
+        ]
+
+
+class ClientError(models.Model):
+    """
+    Ett fel som appen rapporterat (krasch eller ett misslyckat kritiskt flöde)
+    eller ett 5xx som servern svarat med. Rensas efter 30 dygn
+    (fleet/client_activity.purge, körs av purge_old).
+
+    Inga hemligheter och inget innehåll: texten tvättas från tokens,
+    e-postadresser, telefonnummer, personnummer och koordinater innan den
+    sparas (fleet/client_activity.scrub). Samma fel från samma telefon inom en
+    timme räknas upp på samma rad i stället för att bli tusen rader.
+    """
+
+    class Source(models.TextChoices):
+        APP = "app", "Appen"
+        SERVER = "server", "Servern"
+
+    class Kind(models.TextChoices):
+        CRASH = "crash", "Krasch"
+        FLOW = "flow", "Flöde misslyckades"
+        SERVER = "server", "Serverfel"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_at = models.DateTimeField()
+    occurrences = models.IntegerField(default=1)
+    source = models.CharField(max_length=10, choices=Source.choices)
+    kind = models.CharField(max_length=10, choices=Kind.choices)
+    # login, signup, register, pairing, feed, me, uncaught … -- eller vyns
+    # sökväg för serverfel.
+    flow = models.CharField(max_length=64, blank=True, default="")
+    error_type = models.CharField(max_length=80, blank=True, default="")
+    message = models.TextField(blank=True, default="")
+    stack = models.TextField(blank=True, default="")
+    fatal = models.BooleanField(default=False)
+    http_status = models.IntegerField(null=True, blank=True)
+    reason = models.CharField(max_length=64, blank=True, default="")
+    request_id = models.CharField(max_length=64, blank=True, default="")
+    path = models.CharField(max_length=200, blank=True, default="")
+    company_id = models.UUIDField(null=True, blank=True)
+    user_id = models.UUIDField(null=True, blank=True)
+    device_id = models.UUIDField(null=True, blank=True)
+    app_version = models.CharField(max_length=32, blank=True, default="")
+    app_build = models.CharField(max_length=16, blank=True, default="")
+    platform = models.CharField(max_length=16, blank=True, default="")
+    os_version = models.CharField(max_length=64, blank=True, default="")
+    device_model = models.CharField(max_length=64, blank=True, default="")
+
+    class Meta:
+        db_table = "fleet_client_error"
+        indexes = [
+            models.Index(fields=["-last_at"]),
+            models.Index(fields=["company_id", "-last_at"]),
+            models.Index(fields=["created_at"]),
+        ]

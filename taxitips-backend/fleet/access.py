@@ -83,6 +83,9 @@ class Access:
     # en tom lista betytt båda, och ett omigrerat företag hade fått ett tomt
     # flöde som ser ut precis som "inga störningar just nu".
     unrestricted: bool = False
+    # Periodens skäl ur company_window ("trial", "paid_period", ...). Låter
+    # fleet/features.py hoppa över sina frågor för allt som inte är ett prov.
+    period: str = ""
 
     def __bool__(self) -> bool:
         return self.ok
@@ -314,6 +317,7 @@ def device_for_token(token: str | None) -> tuple[Device | None, DeviceCredential
         device = Device.objects.filter(id=credential.device_id).first()
         if device is None:
             return None, credential, "credential_without_device"
+        _note_device(device)
         return device, credential, "credential"
 
     device = Device.objects.filter(token=token).first()
@@ -330,7 +334,21 @@ def device_for_token(token: str | None) -> tuple[Device | None, DeviceCredential
     ).exists():
         return None, None, "legacy_token_superseded"
 
+    _note_device(device)
     return device, None, "legacy_token"
+
+
+def _note_device(device: Device) -> None:
+    """
+    Telefonen har visat en giltig token: bokför senast sedd, appversion och
+    modell (fleet/client_activity.py), och ge loggraderna under begäran
+    telefonens id. Här och inte i `_driver_access`, för att push-registreringen
+    och supportchatten slår upp telefonen samma väg. Tyst och med egen
+    skrivspärr -- ett fel där får aldrig neka åtkomst.
+    """
+    from fleet import client_activity
+
+    client_activity.note_device(device)
 
 
 # ---------------------------------------------------------------------------
@@ -489,7 +507,7 @@ def _driver_access(token: str, now) -> Access:
         company_id=str(device.company_id), device_id=str(device.id),
         license_id=str(session.license_id), session_id=str(session.id),
         vehicle_plate=session.vehicle.plate, counties=counties,
-        valid_until=window.valid_until,
+        valid_until=window.valid_until, period=window.reason,
     )
 
 
@@ -582,6 +600,7 @@ def _member_access(payload: dict, now) -> Access:
     return Access(
         True, "member", kind="member", company_id=str(member.company_id),
         counties=counties, valid_until=window.valid_until, unrestricted=unrestricted,
+        period=window.reason,
     )
 
 

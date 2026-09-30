@@ -89,6 +89,7 @@ Kundlivscykeln i `taxitips-backend/fleet/`:
 | `roles.py` | Behörigheter och tvåfaktorskravet. |
 | `risk.py` | Riskgränser. Blockerar nästa ändring, aldrig åtkomsten. |
 | `push_gate.py` | Mottagarkontroll strax före sändning. |
+| `client_activity.py` | Senaste inloggning, appversion och telefon per konto/telefon, och appens/serverns fel. Vad som lagras och hur länge: `docs/loggning.md`. |
 
 ## 4. Kör lokalt
 
@@ -321,6 +322,13 @@ ett spärrat konto får inte. Svaret blir en notis (`send_support_reply_push`,
 förbi förarens notisfilter). Olästa räknas mot `customer_read_at`/`staff_read_at`,
 inga räknare. Tabellerna är stängda för PostgREST (migration 0006).
 
+**Provet** (2026-09-29): självregistrering ger EN bil och visar bara tåg och
+buss (`fleet/features.py`, låset sitter på servern i varje väg som lämnar ut
+data). Registreringen stoppar påhittade uppgifter (`fleet/signup_checks.py`:
+svenskt mobilnummer, ett prov per nummer, riktigt personnummer, bolag som
+Bolagsverket känner till) och flaggar resten för säljaren under **Uppföljning**
+i adminwebben (`fleet/admin_followup.py`). Detaljer: `docs/fleet-abonnemang.md` §7, §9c.
+
 **Automatisk onboarding och mejl** (2026-09-27): registrering i appen (org.nr ->
 Bolagsverket) -> kortfritt prov -> mejl tre dagar före och sista dygnet med pris
 och länken `taxitips.se/portal#fortsatt` -> kortet "Fortsätt med provbilarna" i
@@ -376,8 +384,8 @@ Utrullningen styrs av `FLEET_ENFORCE_LICENSES`, som är AV tills
 Tester — båda ska vara gröna innan något deployas:
 
 ```bash
-cd taxitips-backend && CELERY_TASK_ALWAYS_EAGER=1 ./.venv/bin/python manage.py test   # 903
-cd taxitips-app && flutter test && flutter analyze                                     # 72
+cd taxitips-backend && CELERY_TASK_ALWAYS_EAGER=1 ./.venv/bin/python manage.py test   # 1016
+cd taxitips-app && flutter test && flutter analyze                                     # 77
 cd taxitips-web && npx vite build                                                      # index + portal + admin
 ```
 

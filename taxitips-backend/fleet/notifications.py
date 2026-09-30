@@ -201,6 +201,19 @@ def _offer_lines(offer: dict | None) -> str:
     )
 
 
+# Vad provet visar och vad abonnemanget lägger till (fleet/features.py). Står i
+# mejlen och aldrig som köpknapp i appen (docs/fleet-abonnemang.md §9c).
+_TRIAL_SCOPE = (
+    "Under provet visar appen tåg och buss: inställda tåg, sista avgången och "
+    "ersättningstrafik. Med abonnemang får förarna också flyg (ankomster), färjor, "
+    "evenemang (när publiken går hem) och trafikolyckor.\n"
+)
+
+
+def _cars(n: int) -> str:
+    return "en bil" if n == 1 else f"upp till {n} bilar"
+
+
 _SIGNATURE = (
     "\nFrågor? Svara på det här mejlet eller chatta med oss i appen "
     "(Inställningar -> Chatta med support).\n\nHälsningar\nTaxiTips"
@@ -214,11 +227,12 @@ def trial_started(company_id, to_address: str, trial) -> OutboxMessage | None:
         body=(
             "Hej!\n\n"
             f"Provperioden har startat och gäller till {trial.ends_at:%Y-%m-%d}. "
-            f"Den omfattar upp till {trial.vehicle_limit} bilar och kostar ingenting under provet.\n\n"
-            "Så kommer ni igång:\n"
-            "1. Lägg till bilarna i appen (Inställningar -> Bilar och förare).\n"
-            "2. Tryck på en bil och välj \"Koppla en förare\" -- föraren skriver in koden.\n"
-            "3. Kör ni själva: \"Kör bilen själv med den här telefonen\".\n\n"
+            f"Den omfattar {_cars(trial.vehicle_limit)} och kostar ingenting.\n\n"
+            + _TRIAL_SCOPE
+            + "\nSå kommer ni igång:\n"
+            "1. Tryck på bilen i appen (Inställningar) och välj \"Koppla en förare\" "
+            "-- föraren skriver in koden.\n"
+            "2. Kör ni själva: \"Kör bilen själv med den här telefonen\".\n\n"
             "För att fortsätta efter provet: bekräfta bilarna och spara kort i kundportalen. "
             "Då dras första betalningen automatiskt när provet tar slut. Utan sparat kort "
             "stängs åtkomsten utan debitering.\n\n"
@@ -241,6 +255,7 @@ def trial_ending(company_id, to_address: str, trial, *, stage: str = "3d") -> Ou
             "Hej!\n\n"
             f"Provperioden gäller till {trial.ends_at:%Y-%m-%d}. "
             "Ni har ännu inte sparat kort för auto-förnyelse.\n\n"
+            + _TRIAL_SCOPE + "\n"
             + _offer_lines(offer)
             + f"\nBekräfta bilarna och spara kort här: {portal_url('fortsatt')}\n\n"
             "Utan sparat kort stängs åtkomsten när provet tar slut -- utan debitering. "
@@ -263,6 +278,7 @@ def trial_ending(company_id, to_address: str, trial, *, stage: str = "3d") -> Ou
         body = (
             "Hej!\n\n"
             f"Provperioden slutar {when}.\n\n"
+            + _TRIAL_SCOPE + "\n"
             + _offer_lines(offer)
             + f"\nBekräfta bilarna och spara kort: {portal_url('fortsatt')}\n\n"
             "Med sparat kort fortsätter abonnemanget automatiskt. "
@@ -287,7 +303,8 @@ def trial_ended(company_id, to_address: str, trial) -> OutboxMessage | None:
             "Hej!\n\n"
             "Provperioden är slut och ingenting har debiterats. Förarna får inga fler "
             "tips förrän ni har valt vilka bilar som ska fortsätta och betalat i "
-            "kundportalen.\n\n"
+            "kundportalen. Med abonnemang får förarna också flyg, färjor, evenemang "
+            "och trafikolyckor -- inte bara tåg och buss.\n\n"
             f"Fortsätt när ni vill: {portal_url('fortsatt')}\n"
             + _SIGNATURE
         ),

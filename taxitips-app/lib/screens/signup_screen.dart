@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../api_client.dart';
+import '../net_status.dart';
 import '../theme.dart';
 
 class SignupScreen extends StatefulWidget {
@@ -92,6 +93,28 @@ class SignupScreenState extends State<SignupScreen> {
     return sum % 10 == 0;
   }
 
+  /// Svenskt mobilnummer (07X + sju siffror), med eller utan +46. Servern
+  /// prövar samma sak och mer (fleet/signup_checks.py); det här är bara för
+  /// att säga det direkt.
+  static bool phoneLooksValid(String input) {
+    var digits = input.replaceAll(RegExp(r'\D'), '');
+    if (digits.startsWith('0046')) {
+      digits = digits.substring(4);
+    } else if (input.trim().startsWith('+')) {
+      if (!digits.startsWith('46')) return false;
+      digits = digits.substring(2);
+    } else if (digits.startsWith('46') && digits.length == 11) {
+      digits = digits.substring(2);
+    } else if (digits.startsWith('0')) {
+      digits = digits.substring(1);
+    } else {
+      return false;
+    }
+    // "+46 (0)70 …"
+    if (digits.startsWith('0')) digits = digits.substring(1);
+    return RegExp(r'^7[02369]\d{7}$').hasMatch(digits);
+  }
+
   /// Personnummer (enskild firma) har månad 01–12; juridiska personer har
   /// oftast ≥ 20 i samma position. Bolagsverket har inte enskilda firmor.
   static bool looksLikeSoleTrader(String input) {
@@ -132,9 +155,26 @@ class SignupScreenState extends State<SignupScreen> {
   bool get _registryFound => _registry?['found'] == true;
   bool get _registryBlocks => _registry?['blocksSignup'] == true;
 
+  /// Uppslaget gick inte att göra (nätet, backenden eller Bolagsverket). Inte
+  /// samma sak som "finns inte" -- då ska användaren kunna försöka igen, inte
+  /// få höra att bolaget saknas (2026-09-30: backenden låg nere och appen sa
+  /// "Vi hittade inte bolaget" om ett aktivt aktiebolag).
+  bool get _registryUnavailable => _registryChecked && _registry == null;
+
+  /// Aktiebolag, ekonomisk förening och handelsbolag (5/7/9) finns alltid hos
+  /// Bolagsverket. Saknas de där är numret fel, och servern nekar
+  /// (fleet/signup_checks.py:check_registry).
+  bool get _registryRejects =>
+      _registryChecked &&
+      _registry != null &&
+      !_registryFound &&
+      !_soleTrader &&
+      RegExp(r'^[579]').hasMatch(_org.text.replaceAll(RegExp(r'\D'), '').replaceFirst(RegExp(r'^16'), ''));
+
   /// Företagsnamnet behöver bara skrivas när registret inte har bolaget
   /// (t.ex. en enskild firma) eller inte gick att nå.
-  bool get _needsCompanyName => _registryChecked && !_registryFound;
+  bool get _needsCompanyName =>
+      _registryChecked && !_registryFound && !_registryRejects;
 
   bool get _soleTrader => looksLikeSoleTrader(_org.text);
 
@@ -196,12 +236,18 @@ class SignupScreenState extends State<SignupScreen> {
       return 'Bolaget är avregistrerat hos Bolagsverket och kan inte skapa ett konto.';
     }
     if (!_registryChecked) return 'Vänta, vi kontrollerar organisationsnumret.';
+    if (_registryRejects) {
+      return 'Bolagsverket hittar inte organisationsnumret. Kontrollera siffrorna.';
+    }
     if (_needsCompanyName && _name.text.trim().isEmpty) {
       return _soleTrader
           ? 'Skriv firmanamnet (enskild firma finns inte hos Bolagsverket).'
           : 'Skriv företagets namn.';
     }
     if (_contact.text.trim().isEmpty) return 'Skriv ditt namn.';
+    if (!phoneLooksValid(_phone.text)) {
+      return 'Skriv ett svenskt mobilnummer, till exempel 070-123 45 67.';
+    }
     if (!_email.text.contains('@')) return 'Skriv en giltig e-postadress.';
     if (_password.text.length < 8) return 'Lösenordet behöver minst 8 tecken.';
     return null;
@@ -209,6 +255,8 @@ class SignupScreenState extends State<SignupScreen> {
 
   /// Supabase Auths engelska fel, i klartext.
   String _friendly(Object e) {
+    final net = netFailureOf(e);
+    if (net != null) return netMessage(net);
     final text = e.toString();
     if (text.contains('already registered') || text.contains('already been registered')) {
       return 'Det finns redan ett konto med den e-postadressen. Logga in i stället.';
@@ -284,7 +332,8 @@ class SignupScreenState extends State<SignupScreen> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Prova gratis i 14 dagar med upp till 3 bilar. Inget kort behövs.',
+                          'Prova gratis i 14 dagar med en bil. Inget kort behövs. '
+                          'Under provet visas tåg och buss.',
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             color: Colors.grey.shade600,
@@ -298,6 +347,7 @@ class SignupScreenState extends State<SignupScreen> {
                           keyboardType: TextInputType.number,
                           decoration: InputDecoration(
                             labelText: 'Organisationsnummer',
+                            helperText: 'Enskild firma: ditt personnummer',
                             prefixIcon: const Icon(
                               Icons.business_center_outlined,
                             ),
@@ -356,6 +406,30 @@ class SignupScreenState extends State<SignupScreen> {
                           const SizedBox(height: 10),
                           _RegistryCard(registry: _registry!),
                         ],
+                        if (_registryRejects) ...[
+                          const SizedBox(height: 8),
+                          const Text(
+                            'Bolagsverket hittar inte organisationsnumret. Kontrollera siffrorna.',
+                            style: TextStyle(color: TbColors.danger, fontSize: 13),
+                          ),
+                        ],
+                        if (_registryUnavailable) ...[
+                          const SizedBox(height: 8),
+                          Row(
+                            children: [
+                              const Expanded(
+                                child: Text(
+                                  'Kunde inte nå Bolagsverket just nu.',
+                                  style: TextStyle(fontSize: 13),
+                                ),
+                              ),
+                              TextButton(
+                                onPressed: _checkOrg,
+                                child: const Text('Försök igen'),
+                              ),
+                            ],
+                          ),
+                        ],
                         if (_needsCompanyName) ...[
                           const SizedBox(height: 16),
                           TextField(
@@ -367,6 +441,8 @@ class SignupScreenState extends State<SignupScreen> {
                                   : 'Företagsnamn',
                               helperText: _soleTrader
                                   ? 'Enskild firma hämtas inte från Bolagsverket — skriv namnet ni använder.'
+                                  : _registryUnavailable
+                                  ? 'Eller skriv företagets namn, så kontrollerar vi det senare.'
                                   : 'Vi hittade inte bolaget hos Bolagsverket. Skriv namnet så ni syns rätt.',
                               prefixIcon: const Icon(Icons.business_outlined),
                               border: OutlineInputBorder(
@@ -392,7 +468,8 @@ class SignupScreenState extends State<SignupScreen> {
                           controller: _phone,
                           keyboardType: TextInputType.phone,
                           decoration: InputDecoration(
-                            labelText: 'Telefon (valfritt)',
+                            labelText: 'Mobilnummer',
+                            helperText: 'Vi ringer och hjälper dig i gång under provet.',
                             prefixIcon: const Icon(Icons.phone_outlined),
                             border: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
@@ -435,7 +512,7 @@ class SignupScreenState extends State<SignupScreen> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               _Step(n: 1, text: 'Skapa kontot'),
-                              _Step(n: 2, text: 'Lägg till bilarna'),
+                              _Step(n: 2, text: 'Lägg till bilen'),
                               _Step(n: 3, text: 'Ge förarna en kod — provet startar'),
                             ],
                           ),

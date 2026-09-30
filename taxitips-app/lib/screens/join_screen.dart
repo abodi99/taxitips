@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../api_client.dart';
+import '../net_status.dart';
 import '../theme.dart';
 
 /// Förarens parkoppling: administratörens engångskod, eller bolagskoden som
@@ -84,7 +85,7 @@ class _JoinScreenState extends State<JoinScreen> {
       setState(() => _error = e.message);
     } catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.toString());
+      setState(() => _error = netAwareText(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../severity_labels.dart';
@@ -132,8 +134,8 @@ class SignalCard extends StatelessWidget {
                     ),
                     if (travel != null) ...[
                       const SizedBox(height: 8),
-                      Text(
-                        travel.summary!,
+                      LiveTravelText(
+                        travel,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
@@ -309,4 +311,53 @@ class FollowButton extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Nästa-avgång-raden som räknar om "om X min" mot klockan var 20:e sekund,
+/// så ett kort som ligger kvar i listan inte fryser på det avstånd som gällde
+/// när det hämtades.
+class LiveTravelText extends StatefulWidget {
+  const LiveTravelText(
+    this.travel, {
+    super.key,
+    this.style,
+    this.maxLines,
+    this.overflow,
+  });
+
+  final TravelOptions travel;
+  final TextStyle? style;
+  final int? maxLines;
+  final TextOverflow? overflow;
+
+  @override
+  State<LiveTravelText> createState() => _LiveTravelTextState();
+}
+
+class _LiveTravelTextState extends State<LiveTravelText> {
+  Timer? _timer;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.travel.nextDepartureAt != null) {
+      _timer = Timer.periodic(const Duration(seconds: 20), (_) {
+        if (mounted) setState(() {});
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Text(
+    widget.travel.text(),
+    style: widget.style,
+    maxLines: widget.maxLines,
+    overflow: widget.overflow,
+  );
 }

@@ -52,7 +52,7 @@ class TheCaseThatWasBroken(TestCase):
         result = classify(alert(next_departure_minutes=10))
         self.assertEqual(result.tier, "vehicle_cancelled")
         self.assertLessEqual(result.score, 61)  # 55 + ev. stationsbonus
-        self.assertIn("nästa avgång om 10 min", result.reasons)
+        self.assertIn("nästa avgång 10 min efter den inställda avgången", result.reasons)
 
     def test_last_departure_is_the_strongest_signal(self):
         result = classify(alert(is_last_departure=True))
@@ -325,6 +325,25 @@ class NewFieldsTests(TestCase):
         alert = self.normalize({}, others=[bus])
         self.assertTrue(alert.next_departure_is_bus)
         self.assertIn("Nästa avgång är en buss", alert.description)
+
+    def test_stored_text_has_clock_times_never_a_relative_duration(self):
+        later = {
+            "LocationSignature": "Mlm", "AdvertisedTrainIdent": "9001",
+            "AdvertisedTimeAtLocation": "2026-09-08T21:50:00.000+02:00",
+        }
+        alert = self.normalize({}, others=[later])
+        self.assertIn("Nästa avgång går 21:50.", alert.description)
+        self.assertNotRegex(alert.description, r"\bom \d+ (min|tim)")
+
+    def test_delay_is_estimated_minus_advertised_and_shows_the_new_time(self):
+        alert = self.normalize({
+            "Canceled": False,
+            "AdvertisedTimeAtLocation": "2026-09-08T13:30:00.000+02:00",
+            "EstimatedTimeAtLocation": "2026-09-08T13:50:00.000+02:00",
+        })
+        self.assertIn("20 min försenat", alert.header)
+        self.assertIn("försenad 20 minuter", alert.description)
+        self.assertIn("Ny avgång 13:50", alert.description)
 
 
 class CompleteFetchTests(TestCase):

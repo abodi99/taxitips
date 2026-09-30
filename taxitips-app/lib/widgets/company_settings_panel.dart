@@ -2,11 +2,11 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../api_client.dart';
 import '../push_service.dart';
 import '../signal_kinds.dart';
+import '../net_status.dart';
 import '../theme.dart';
 import 'settings_ui.dart';
 
@@ -97,6 +97,8 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
 
   String _cleanError(Object e) {
     if (e is ApiException) return e.message;
+    final net = netFailureOf(e);
+    if (net != null) return netMessage(net);
     final raw = e.toString();
     // PostgREST-fel ska aldrig visas råa i UI (t.ex. device_by_token).
     if (raw.contains('PostgrestException') || raw.contains('Postgrest')) {
@@ -147,7 +149,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     final access = Map<String, dynamic>.from(_data?['access'] as Map? ?? {});
     final reason = access['reason']?.toString() ?? '';
     final trial = _trial;
-    final cars = '${trial?['vehiclesUsed'] ?? 0} av ${trial?['vehicleLimit'] ?? 3} bilar';
+    final cars = '${trial?['vehiclesUsed'] ?? 0} av ${trial?['vehicleLimit'] ?? 1} ${(trial?['vehicleLimit'] ?? 1) == 1 ? 'bil' : 'bilar'}';
     if (_suspended) {
       return (TbColors.danger, 'Avstängt', 'Kontakta oss i chatten.');
     }
@@ -660,7 +662,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
         !_suspended &&
         _permissions.contains('manage_vehicles') &&
         ((trial?['vehiclesUsed'] as num?) ?? 0) <
-            ((trial?['vehicleLimit'] as num?) ?? 3);
+            ((trial?['vehicleLimit'] as num?) ?? 1);
     final name = _data?['company']?['name']?.toString() ?? '';
 
     return Column(
@@ -965,7 +967,10 @@ class _AddCarDialogState extends State<_AddCarDialog> {
   }
 }
 
-/// Informativ länk till kundportalen — inga priser, ingen köpknapp (§9c).
+/// Vad provet omfattar och att ett mejl visar vägen vidare. Ingen länk, inget
+/// pris, ingen köpknapp: Apple och Google tillåter inte att appen leder till
+/// en betalning utanför butikerna (docs/fleet-abonnemang.md §9c). Betalningen
+/// sker via mejlet, kundportalen eller en säljare.
 class _PortalContinueBanner extends StatelessWidget {
   const _PortalContinueBanner({this.endsAt});
 
@@ -976,37 +981,32 @@ class _PortalContinueBanner extends StatelessWidget {
     final until = DateTime.tryParse(endsAt ?? '')?.toLocal();
     final date = until == null
         ? ''
-        : ' Provet gäller till '
+        : 'Provet gäller till '
             '${until.year}-'
             '${until.month.toString().padLeft(2, '0')}-'
-            '${until.day.toString().padLeft(2, '0')}.';
-    return Material(
-      color: TbColors.taxi.withValues(alpha: 0.12),
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
+            '${until.day.toString().padLeft(2, '0')}. ';
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: TbColors.taxi.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(12),
-        onTap: () => launchUrl(
-          Uri.parse('https://taxitips.se/portal#fortsatt'),
-          mode: LaunchMode.externalApplication,
-        ),
-        child: Padding(
-          padding: const EdgeInsets.all(14),
-          child: Row(
-            children: [
-              const Icon(Icons.open_in_new, color: TbColors.taxiDeep, size: 22),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Text(
-                  'Hantera fortsatt åtkomst på taxitips.se/portal.$date',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    color: TbColors.ink,
-                  ),
-                ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.mark_email_read_outlined, color: TbColors.taxiDeep, size: 22),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              '${date}Under provet visas tåg och buss. Hur ni fortsätter med '
+              'flyg, färjor, evenemang och olyckor står i mejlet vi skickat.',
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: TbColors.ink,
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ),
     );
   }

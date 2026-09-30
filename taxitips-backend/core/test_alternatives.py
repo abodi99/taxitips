@@ -143,3 +143,33 @@ class RouteTests(TestCase):
         self.assertEqual(route_note("Göteborg C", "Länstrafik tåg 3493", "22:58"),
                          "Nästa resa mot Göteborg C: Länstrafik tåg 3493 22:58")
 
+
+
+class RelativeSplitTests(TestCase):
+    """Huvudet (klockslag) åldras aldrig; "om X" räknas av appen mot sin egen klocka."""
+
+    def test_head_and_tail_are_served_separately(self):
+        out = travel_options(
+            next_departure_at=NOW + timedelta(minutes=110), next_departure_minutes=110,
+            is_last_departure=False, has_alternative=True, alternative_note="Buss ersätter", now=NOW,
+        )
+        self.assertEqual(out["summary_head_upcoming"], f"Nästa avgång {out['next_departure_clock']}")
+        self.assertEqual(out["summary_tail"], "Buss ersätter")
+        self.assertIn("(om 1 tim 50 min)", out["summary"])
+
+    def test_clock_is_stockholm_time_regardless_of_server_tz(self):
+        out = travel_options(
+            next_departure_at=datetime(2026, 9, 30, 11, 50, tzinfo=timezone.utc), next_departure_minutes=None,
+            is_last_departure=False, has_alternative=False, alternative_note="",
+            now=datetime(2026, 9, 30, 10, 0, tzinfo=timezone.utc),
+        )
+        self.assertEqual(out["next_departure_clock"], "13:50")
+
+    def test_passed_departure_is_never_negative(self):
+        out = travel_options(
+            next_departure_at=NOW - timedelta(hours=2), next_departure_minutes=30,
+            is_last_departure=False, has_alternative=False, alternative_note="", now=NOW,
+        )
+        self.assertEqual(out["next_departure_minutes"], 0)
+        self.assertTrue(out["next_departure_departed"])
+        self.assertTrue(out["summary_head_departed"].startswith("Nästa avgång gick"))

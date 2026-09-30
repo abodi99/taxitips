@@ -20,6 +20,9 @@ class CategoryBar extends StatelessWidget {
     required this.followedCount,
     required this.onSelect,
     this.hidden = const {},
+    this.locked = const {},
+    this.lockedCounts = const {},
+    this.onLocked,
   });
 
   final String? selected;
@@ -29,6 +32,12 @@ class CategoryBar extends StatelessWidget {
 
   /// Kategorier föraren stängt av helt i filtret -- visas inte i raden.
   final Set<SignalCategory> hidden;
+
+  /// Kategorier provet inte omfattar (fleet/features.py). Visas med ett lås
+  /// och antalet tips som finns där, så att föraren ser vad som finns bakom.
+  final Set<SignalCategory> locked;
+  final Map<SignalCategory, int> lockedCounts;
+  final ValueChanged<SignalCategory>? onLocked;
 
   @override
   Widget build(BuildContext context) {
@@ -47,7 +56,16 @@ class CategoryBar extends StatelessWidget {
             onTap: () => onSelect(null),
           ),
           for (final c in signalCategoryOrder)
-            if (!hidden.contains(c))
+            if (locked.contains(c))
+              _CategoryChip(
+                icon: c.icon,
+                label: c.label,
+                count: lockedCounts[c] ?? 0,
+                selected: false,
+                locked: true,
+                onTap: () => onLocked?.call(c),
+              )
+            else if (!hidden.contains(c))
               _CategoryChip(
                 icon: c.icon,
                 label: c.label,
@@ -77,8 +95,10 @@ class _CategoryChip extends StatelessWidget {
     required this.selected,
     required this.onTap,
     this.accent = false,
+    this.locked = false,
   });
 
+  final bool locked;
   final IconData icon;
   final String label;
   final int count;
@@ -88,7 +108,7 @@ class _CategoryChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final empty = count == 0 && !selected;
+    final empty = (count == 0 && !selected) || locked;
     final fg = selected
         ? TbColors.vit
         : (empty ? TbColors.skiffer : TbColors.midnatt);
@@ -128,6 +148,10 @@ class _CategoryChip extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(width: 6),
+                if (locked) ...[
+                  const Icon(Icons.lock_rounded, size: 15, color: TbColors.skiffer),
+                  const SizedBox(width: 4),
+                ],
                 Container(
                   constraints: const BoxConstraints(minWidth: 24),
                   padding: const EdgeInsets.symmetric(

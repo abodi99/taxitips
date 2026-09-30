@@ -134,9 +134,10 @@ class TrialClockTests(FleetTestCase):
         }
         self.assertEqual(len(ends), 1)
 
-    def test_the_vehicle_limit_is_three(self):
+    def test_the_vehicle_limit_is_one_when_self_registered(self):
+        self.assertEqual(self.trial.vehicle_limit, 1)
         trials.start_trial(self.trial)
-        for index in range(3):
+        for index in range(1):
             vehicle = licensing.create_vehicle(
                 company_id=self.company.id, plate=f"TRI{index:03d}"
             )

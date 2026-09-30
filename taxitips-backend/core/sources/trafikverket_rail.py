@@ -563,7 +563,7 @@ def _normalize(
     brand = product or information_owner or operator
     train_label = f"{brand} {train}" if brand else f"Tåg {train}"
 
-    time_text = when.astimezone().strftime("%H:%M")
+    time_text = when.astimezone(LOCAL_TZ).strftime("%H:%M")
     if cancelled:
         header = f"{train_label} {time_text} är inställt från {name}"
         description = (
@@ -577,11 +577,14 @@ def _normalize(
         elif basis == "resrobot":
             description += (
                 f" Nästa resa mot {to or 'slutstationen'}: {alternative_label} "
-                f"{next_at.astimezone(LOCAL_TZ).strftime('%H:%M')}, om {_human_gap(next_minutes)}."
+                f"{next_at.astimezone(LOCAL_TZ).strftime('%H:%M')}."
             )
         elif next_minutes is not None:
+            # Klockslag, inte "om 20 min": texten sparas och läses senare, och
+            # ett avstånd räknat vid pollning är fel så fort klockan går.
             what = "Nästa avgång är en buss och går" if next_is_bus else "Nästa avgång går"
-            description += f" {what} om {_human_gap(next_minutes)}."
+            at_text = next_at.astimezone(LOCAL_TZ).strftime("%H:%M") if next_at else None
+            description += f" {what} {at_text}." if at_text else f" {what} senare."
         elif is_last:
             description += " Det var sista avgången härifrån."
     else:
@@ -590,6 +593,11 @@ def _normalize(
             f"Avgången {time_text} från {name}"
             f"{f' mot {to}' if to else ''} är försenad {delay} minuter."
         )
+        # Nya avgångstiden som klockslag (Estimated), bredvid den annonserade.
+        est = _parse_time(dep.get("EstimatedTimeAtLocation") or dep.get("TimeAtLocation"))
+        if est is not None and delay > 0:
+            description += f" Ny avgång {est.astimezone(LOCAL_TZ).strftime('%H:%M')}."
+
 
     # En riktig ReplacementTraffic-koppling ger en GPS-spårad hållplats för
     # ersättningsfordonet -- närmare den strandsatta perrongen än stationens

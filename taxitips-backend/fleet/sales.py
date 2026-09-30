@@ -6,7 +6,7 @@ Säljflödet: det en säljare gör i adminwebben under ett samtal med ett taxibo
    (Luhn) och får bara finnas en gång -- ett andra konto för samma bolag hade
    gett ett andra gratisprov och två sanningar om vem som betalar.
 2. **Starten** blir ett av tre:
-   * ett kortfritt prov i 14 dagar med högst tre bilar (`start_trial`), under
+   * ett kortfritt prov i 14 dagar med högst tre bilar (en vid självregistrering) (`start_trial`), under
      samma regler som självregistreringen: ett prov per organisationsnummer
      och 24 månader;
    * en kupong (`redeem_coupon`), se `fleet.models.Coupon`;
@@ -334,6 +334,12 @@ def _add_trial_vehicles(trial: Trial, specs: list[orders.VehicleSpec], *, actor_
             "trial_vehicle_limit",
             f"Högst {trial.vehicle_limit} bilar ({current} finns redan).",
         )
+    if trial.source == Trial.Source.SELF_SIGNUP and any(
+        c != s.base_county for s in specs for c in s.extra_counties
+    ):
+        # Provet ska vara en smak (fleet/features.py). Extra län ger en
+        # säljare, inte formuläret.
+        raise SalesError("trial_extra_county", "Under provet ingår ett län per bil.")
     created = []
     for spec in specs:
         licensing.assert_county_available(spec.base_county)
@@ -367,7 +373,8 @@ def start_trial(company: Company, vehicles: list, *, actor_user_id, now=None) ->
     Kortfritt prov i 14 dagar, eller fler provbilar i ett pågående prov.
 
     Samma regler som självregistreringen: ett prov per organisationsnummer och
-    24 månader, högst tre bilar, och klockan startar vid första telefonen.
+    24 månader, högst tre bilar när säljaren lägger upp provet (en vid
+    självregistrering), och klockan startar vid första telefonen.
     Utan beställning slutar provet utan debitering.
     """
     now = now or timezone.now()

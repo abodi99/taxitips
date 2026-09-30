@@ -149,6 +149,7 @@ class RegistrationTests(FleetTestCase):
         args = {
             "user_id": str(uuid.uuid4()), "email": "agare@volvo.test",
             "org_number": "556012-5790", "company_name": "", "contact_name": "Anna",
+            "contact_phone": "070-812 34 91",
         }
         args.update(overrides)
         return registration.register(**args)
@@ -176,12 +177,14 @@ class RegistrationTests(FleetTestCase):
         self.assertEqual(caught.exception.reason, "company_deregistered")
         self.assertFalse(Company.objects.filter(org_number="5560125790").exists())
 
-    def test_a_company_the_registry_lacks_needs_a_name(self):
+    def test_a_sole_trader_the_registry_lacks_needs_a_name(self):
+        # Enskild firma: personnumret är organisationsnumret. Ett aktiebolag som
+        # registret saknar nekas i stället (test_trial_scope.py).
         with registry(NOT_FOUND), self.assertRaises(sales.SalesError) as caught:
-            self.register()
+            self.register(org_number="811218-9876")
         self.assertEqual(caught.exception.reason, "name_required")
         with registry(NOT_FOUND):
-            result = self.register(company_name="Anna Taxi")
+            result = self.register(org_number="811218-9876", company_name="Anna Taxi")
         self.assertEqual(result.company.name, "Anna Taxi")
         self.assertFalse(CompanyProfile.objects.get(company_id=result.company.id).registry["found"])
 

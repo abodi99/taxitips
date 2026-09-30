@@ -32,7 +32,10 @@ void main() {
   group('stark eller svag signal', () {
     test('sista avgången är stark — ingen tar sig hem själv', () {
       final t = TravelOptions.of(
-        alert({'summary': 'Sista avgången härifrån', 'is_last_departure': true}),
+        alert({
+          'summary': 'Sista avgången härifrån',
+          'is_last_departure': true,
+        }),
       )!;
       expect(t.isStrong, isTrue);
       expect(t.isWeak, isFalse);
@@ -40,7 +43,10 @@ void main() {
 
     test('ett långt glapp är stark', () {
       final t = TravelOptions.of(
-        alert({'summary': 'Nästa avgång om 5 tim', 'next_departure_minutes': 300}),
+        alert({
+          'summary': 'Nästa avgång om 5 tim',
+          'next_departure_minutes': 300,
+        }),
       )!;
       expect(t.isStrong, isTrue);
     });
@@ -70,6 +76,66 @@ void main() {
       )!;
       expect(t.isStrong, isTrue);
       expect(t.isWeak, isFalse);
+    });
+  });
+
+  group('relativ tid räknas mot klockan, inte mot när tipset skrevs', () {
+    final at = DateTime(2026, 9, 30, 13, 50);
+
+    test('relativeDeparture', () {
+      expect(
+        relativeDeparture(at, now: DateTime(2026, 9, 30, 12, 0)),
+        'om 1 tim 50 min',
+      );
+      expect(
+        relativeDeparture(at, now: DateTime(2026, 9, 30, 13, 40)),
+        'om 10 min',
+      );
+      expect(
+        relativeDeparture(at, now: DateTime(2026, 9, 30, 12, 50)),
+        'om 1 tim',
+      );
+      expect(
+        relativeDeparture(at, now: DateTime(2026, 9, 30, 13, 50)),
+        'avgår nu',
+      );
+      expect(
+        relativeDeparture(at, now: DateTime(2026, 9, 30, 13, 49, 40)),
+        'avgår nu',
+      );
+      expect(
+        relativeDeparture(at, now: DateTime(2026, 9, 30, 14, 30)),
+        'har gått',
+      );
+    });
+
+    TravelOptions t() => TravelOptions.of(
+      alert({
+        'summary': 'Nästa avgång 13:50 (om 1 tim 50 min) · Buss ersätter',
+        'next_departure_at': at.toIso8601String(),
+        'next_departure_minutes': 110,
+        'summary_head_upcoming': 'Nästa avgång 13:50',
+        'summary_head_departed': 'Nästa avgång gick 13:50',
+        'summary_tail': 'Buss ersätter',
+      }),
+    )!;
+
+    test('texten byggs om från absolut tid', () {
+      expect(
+        t().text(now: DateTime(2026, 9, 30, 13, 40)),
+        'Nästa avgång 13:50 (om 10 min) · Buss ersätter',
+      );
+      expect(
+        t().text(now: DateTime(2026, 9, 30, 14, 0)),
+        'Nästa avgång gick 13:50 · Buss ersätter',
+      );
+    });
+
+    test('utan absolut tid gäller backends mening', () {
+      final o = TravelOptions.of(
+        alert({'summary': 'Sista avgången härifrån'}),
+      )!;
+      expect(o.text(), 'Sista avgången härifrån');
     });
   });
 }

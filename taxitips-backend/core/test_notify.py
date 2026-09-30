@@ -374,6 +374,18 @@ class PushCycleTests(SupabaseCompanyMixin, TestCase):
         )
         self.assertEqual(notify.push_body(o).count("Nästa avgång"), 1)
 
+    def test_push_body_uses_clock_time_not_a_relative_duration(self):
+        from datetime import datetime, timezone as dt_tz
+
+        o = opportunity(
+            summary="Avgången 08:00 är inställd.",
+            next_departure_minutes=110,
+            next_departure_at=datetime(2026, 9, 30, 11, 50, tzinfo=dt_tz.utc),  # 13:50 svensk sommartid
+        )
+        body = notify.push_body(o)
+        self.assertIn("Nästa avgång 13:50.", body)
+        self.assertNotIn(" om ", body)
+
 
 class NotifyPrefsApiTests(TestCase):
     """Katalogerna serveras från ETT ställe -- appen och sändaren ska inte

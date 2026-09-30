@@ -764,3 +764,35 @@ class DevicePresence(models.Model):
 
     class Meta:
         db_table = "device_presence"
+
+
+class AppVersionPolicy(models.Model):
+    """
+    Vilken appversion som krävs, per plattform -- se core/app_version.py.
+
+    En rad, id=1, som `fleet.RiskConfig`. I databasen och inte bara i en
+    miljövariabel: en version som skickar trasiga svar ska gå att stänga ute
+    från adminwebben en söndagskväll, utan en deploy som i sig kan gå fel.
+
+    Tomt fält betyder "ingen gräns härifrån" -- då gäller miljövariabeln, och
+    är den också tom gäller ingen gräns alls. Tom sträng hellre än NULL så att
+    formuläret i adminwebben kan skicka tillbaka exakt det det fick.
+    """
+
+    id = models.IntegerField(primary_key=True, default=1)
+    android_min_version = models.CharField(max_length=32, blank=True, default="")
+    android_recommended_version = models.CharField(max_length=32, blank=True, default="")
+    ios_min_version = models.CharField(max_length=32, blank=True, default="")
+    ios_recommended_version = models.CharField(max_length=32, blank=True, default="")
+    ios_store_url = models.CharField(max_length=300, blank=True, default="")
+    message = models.TextField(blank=True, default="")
+    updated_at = models.DateTimeField(auto_now=True)
+    updated_by = models.UUIDField(null=True, blank=True)
+
+    class Meta:
+        db_table = "app_version_policy"
+
+    @classmethod
+    def current(cls) -> "AppVersionPolicy":
+        obj, _ = cls.objects.get_or_create(id=1)
+        return obj

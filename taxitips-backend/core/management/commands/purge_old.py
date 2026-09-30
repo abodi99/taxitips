@@ -32,3 +32,15 @@ class Command(BaseCommand):
             f"borttaget: {result['opportunities']} opportunities, "
             f"{result['source_events']} source_events"
         ))
+        # Appens fel (30 dygn) och klientaktivitet som tystnat (180 dygn).
+        # Egna fasta gränser, oberoende av --days: tipsens sju dygn är för
+        # kort för en supportfråga som kommer in veckan efter felet. Här och
+        # inte i ett eget schema, så att gallringen inte kan glömmas bort när
+        # den andra redan körs varje timme (CELERY_BEAT_SCHEDULE "purge-old").
+        from fleet import client_activity
+
+        purged = client_activity.purge()
+        self.stdout.write(self.style.SUCCESS(
+            f"borttaget: {purged['client_errors']} klientfel, "
+            f"{purged['client_activity']} tysta klienter"
+        ))

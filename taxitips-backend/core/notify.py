@@ -55,6 +55,7 @@ from dataclasses import dataclass
 import hashlib
 from collections import Counter
 from datetime import timedelta
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.db import IntegrityError, transaction
@@ -550,13 +551,19 @@ def push_body(opportunity) -> str:
         parts.append(summary[:140])
     if opportunity.is_last_departure:
         parts.append("Sista avgången — inget kommer efter.")
-    elif opportunity.next_departure_minutes is not None and "nästa avgång" not in summary.lower():
+    elif (
+        getattr(opportunity, "next_departure_at", None) is not None
+        and "nästa avgång" not in summary.lower()
+    ):
         # Järnvägens summary skriver redan ut nästa avgång i sin egen text
         # ("Nästa avgång går om 20 min."). Utan den kontrollen blev
         # låsskärmsraden "... Nästa avgång går om 20 min. Nästa avgång om
         # 20 min." -- samma uppgift två gånger, i en text där varje tecken
         # konkurrerar om en sekunds uppmärksamhet.
-        parts.append(f"Nästa avgång om {opportunity.next_departure_minutes} min.")
+        # Klockslag: en push läses minuter eller timmar efter att den skickades,
+        # och "om 20 min" är då fel. Utan absolut tid säger notisen inget.
+        clock = opportunity.next_departure_at.astimezone(ZoneInfo("Europe/Stockholm")).strftime("%H:%M")
+        parts.append(f"Nästa avgång {clock}.")
     return " ".join(parts).strip()
 
 

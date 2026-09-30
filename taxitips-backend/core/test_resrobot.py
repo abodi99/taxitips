@@ -184,7 +184,7 @@ class RailIntegrationTests(SimpleTestCase):
         (alert,) = build_alerts(self.departures(), STATIONS, WHEN - timedelta(minutes=20), alternative_for=alternative_for)
         self.assertEqual((alert.next_departure_minutes, alert.alternative_basis), (11, "resrobot"))
         self.assertIn("Nästa resa mot Göteborg C: Länstrafik tåg 3174 06:13", alert.description)
-        self.assertIn("nästa resa mot Göteborg C om 11 min", classify(alert).reasons)
+        self.assertIn("nästa resa mot Göteborg C 11 min efter den inställda avgången", classify(alert).reasons)
 
     def test_without_an_answer_the_station_next_departure_stands(self):
         (alert,) = build_alerts(self.departures(), STATIONS, WHEN - timedelta(minutes=20), alternative_for=lambda *a: None)

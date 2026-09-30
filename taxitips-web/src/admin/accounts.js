@@ -10,6 +10,15 @@ import { esc } from "./sales.js";
  */
 
 const KIND = { company: "Företag", email: "E-postadress", user: "Konto" };
+const PLATFORM = { android: "Android", ios: "iOS", web: "Webb" };
+
+/** Appen kontot senast använde (fleet/client_activity.py), eller ett streck. */
+function clientCell(c) {
+  if (!c) return '<span class="muted">—</span>';
+  const version = c.appVersion ? `v${c.appVersion}${c.appBuild ? ` (${c.appBuild})` : ""}` : "";
+  const line = [PLATFORM[c.platform] ?? c.platform, version, c.deviceModel].filter(Boolean).join(" · ");
+  return `${esc(line || "Ingen appinfo")}${c.osVersion ? `<div class="muted">${esc(c.osVersion)}</div>` : ""}`;
+}
 const ROLE = { company_owner: "Ägare", company_admin: "Administratör" };
 
 export function konton(found, blocks, q = "", config = null) {
@@ -31,7 +40,7 @@ export function konton(found, blocks, q = "", config = null) {
     ${q ? `<div class="card table-scroll">
       <h2>Träffar</h2>
       ${accounts.length ? `<table>
-        <thead><tr><th>Konto</th><th>Företag</th><th>Senast inloggad</th><th></th></tr></thead>
+        <thead><tr><th>Konto</th><th>Företag</th><th>Senast inloggad</th><th>Senast sedd</th><th>App</th><th></th></tr></thead>
         <tbody>${accounts.map((a) => `
           <tr>
             <td data-label="Konto"><b>${esc(a.email)}</b>
@@ -41,7 +50,9 @@ export function konton(found, blocks, q = "", config = null) {
               <div><a href="#" data-action="open-company" data-id="${esc(m.companyId)}">${esc(m.companyName || m.companyId)}</a>
                 <span class="muted">${esc(ROLE[m.role] ?? m.role)}${m.status === "active" ? "" : " · avstängd"}</span></div>`).join("")
               : '<span class="muted">Inget företag</span>'}</td>
-            <td data-label="Senast inloggad">${esc(dateTime(a.lastSeenAt))}</td>
+            <td data-label="Senast inloggad">${esc(dateTime(a.client?.lastLoginAt))}</td>
+            <td data-label="Senast sedd">${esc(dateTime(a.client?.lastSeenAt ?? a.lastSeenAt))}</td>
+            <td data-label="App">${clientCell(a.client)}</td>
             <td data-label="">${manage && !a.blocked ? `<div class="btn-row">
               <button class="btn btn-danger" data-action="block-user" data-user="${esc(a.userId)}" data-email="${esc(a.email)}">Spärra kontot</button>
               <button class="btn btn-quiet" data-action="block-email" data-email="${esc(a.email)}">Spärra adressen</button>

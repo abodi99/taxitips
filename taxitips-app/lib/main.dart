@@ -6,7 +6,10 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import 'analytics.dart';
 import 'api_client.dart';
+import 'client_info.dart';
+import 'client_log.dart';
 import 'crashlytics.dart';
+import 'demo/demo_api_client.dart';
 import 'push_service.dart';
 import 'screens/driver_screen.dart';
 import 'screens/join_screen.dart';
@@ -21,8 +24,17 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initFirebaseSafe();
   await initCrashlyticsSafe();
+  // Efter Crashlytics: våra hanterare kedjar på dess, så att båda får felet.
+  ClientLog.installErrorHandlers();
+  // Version och telefonmodell till headrarna. Högst en kort stund -- appen
+  // startar hellre utan dem än väntar (lib/client_info.dart).
+  await ClientInfo.load().timeout(
+    const Duration(milliseconds: 1500),
+    onTimeout: () {},
+  );
   await initAnalyticsSafe();
   final api = ApiClient();
+  ClientLog.attach(api.sendClientLog);
   await api.ensureInitialized();
   await api.loadTokens();
   runApp(TaxiPrognosApp(api: api));
@@ -43,6 +55,7 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
   late AppRoute _route;
   String? _invite;
   bool _booting = true;
+  late final _demoApi = DemoApiClient();
 
   @override
   void initState() {
@@ -184,8 +197,10 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
                 onBack: _goShell,
               ),
               AppRoute.demo => DriverScreen(
-                api: widget.api,
+                // Egen klient: demon pratar aldrig med servern.
+                api: _demoApi,
                 demo: true,
+                onDemoSignup: () => setState(() => _route = AppRoute.signup),
                 onBack: () => setState(() => _route = AppRoute.welcome),
               ),
             },

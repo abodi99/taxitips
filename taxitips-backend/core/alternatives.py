@@ -22,6 +22,9 @@ from __future__ import annotations
 
 import re
 from datetime import datetime
+from zoneinfo import ZoneInfo
+
+LOCAL_TZ = ZoneInfo("Europe/Stockholm")
 
 # Vad källorna faktiskt skriver. Ordningen betyder något: den första
 # träffen blir etiketten, och "ersättningsbuss" är mer informativt än det
@@ -117,7 +120,7 @@ def travel_options(
     departed = False
     if next_departure_at:
         minutes = round((next_departure_at - now).total_seconds() / 60)
-        clock = next_departure_at.astimezone().strftime("%H:%M")
+        clock = next_departure_at.astimezone(LOCAL_TZ).strftime("%H:%M")
         if minutes <= 0:
             # Avgången har redan gått. "om 0 min" hade låtit som att den
             # står kvar på perrongen; det gör den inte, och skillnaden
@@ -130,15 +133,22 @@ def travel_options(
     # såg "Nästa avgång 14:09" utan att veta vart eller med vad.
     route = alternative_note if alternative_note.startswith(ROUTE_PREFIX) else ""
     parts: list[str] = []
+    # Raden delad i ett huvud som aldrig åldras och ett "om X" som gör det.
+    # Appen sätter ihop dem med sin egen klocka (travelRelative i
+    # severity_labels.dart), så en sparad eller cachad rad inte fryser avståndet.
+    head_upcoming = head_departed = None
     if is_last_departure:
         parts.append("Sista avgången härifrån")
     elif departed:
         parts.append(f"Nästa avgång gick {clock}")
+        head_departed = parts[-1]
     elif minutes is not None and route:
         parts.append(f"{route} (om {human_gap(minutes)})")
+        head_upcoming = route
     elif minutes is not None:
         gap = human_gap(minutes)
         parts.append(f"Nästa avgång {clock} (om {gap})" if clock else f"Nästa avgång om {gap}")
+        head_upcoming = f"Nästa avgång {clock}" if clock else None
     elif route:
         parts.append(route)
 
@@ -146,8 +156,15 @@ def travel_options(
         parts.append(alternative_note)
     elif has_alternative and not alternative_note:
         parts.append("Ersättningstrafik finns")
+    tail = " · ".join(parts[1:]) if parts else ""
+    if next_departure_at and not is_last_departure:
+        # Avgången har gått: det gäller även om anropet skedde före, appen avgör själv.
+        head_departed = head_departed or f"Nästa avgång gick {clock}"
 
     return {
+        "summary_head_upcoming": head_upcoming,
+        "summary_head_departed": head_departed if next_departure_at else None,
+        "summary_tail": tail or None,
         "next_departure_at": next_departure_at.isoformat() if next_departure_at else None,
         "next_departure_minutes": minutes,
         "next_departure_clock": clock,

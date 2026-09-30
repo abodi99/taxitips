@@ -1,6 +1,11 @@
 """
-Provperioden: 14 dagar, högst tre provbilar, högst en gratisperiod per företag
-under 24 månader.
+Provperioden: 14 dagar, EN provbil vid självregistrering (tre när en säljare
+lagt upp provet), högst en gratisperiod per företag under 24 månader.
+
+**Varför en bil.** Provet ska ge en smak, inte driva en hel bilpark gratis i
+två veckor. En säljare som pratat med kunden får ge fler -- det är en
+människa som bedömt att bolaget är riktigt. Vad provet får SE står i
+fleet/features.py (bara tåg och buss).
 
 **Vad spärren räknar på.** `Trial.org_key` = land + normaliserat
 organisationsnummer. Inte company_id: ett nytt bolagskonto med samma
@@ -33,7 +38,9 @@ from fleet import audit, orgnr
 from fleet.models import License, SalesInvite, Trial
 
 TRIAL_DAYS = 14
-TRIAL_VEHICLE_LIMIT = 3
+TRIAL_VEHICLE_LIMIT = 1
+# Prov som en säljare lagt upp efter ett samtal (Trial.Source.SALES/SALES_INVITE).
+SALES_TRIAL_VEHICLE_LIMIT = 3
 # Karenstiden mellan två gratisperioder. Räknas på provets START, så att ett
 # avbrutet prov inte kan användas för att korta ner den.
 TRIAL_COOLDOWN_MONTHS = 24
@@ -126,7 +133,7 @@ def create_trial(
         source=source,
         invite=invite,
         requires_payment_method=requires_payment_method,
-        vehicle_limit=TRIAL_VEHICLE_LIMIT,
+        vehicle_limit=vehicle_limit_for(source),
         status=Trial.Status.PENDING,
     )
     audit.record(
@@ -136,6 +143,13 @@ def create_trial(
         detail={"source": source, "requires_payment_method": requires_payment_method},
     )
     return trial
+
+
+def vehicle_limit_for(source: str) -> int:
+    """En bil för den som registrerar sig själv, fler när en säljare lagt upp provet."""
+    if source in (Trial.Source.SALES, Trial.Source.SALES_INVITE):
+        return SALES_TRIAL_VEHICLE_LIMIT
+    return TRIAL_VEHICLE_LIMIT
 
 
 def start_trial(trial: Trial, *, now=None) -> Trial:

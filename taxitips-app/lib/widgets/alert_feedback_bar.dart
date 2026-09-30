@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../analytics.dart';
 import '../api_client.dart';
 import '../config.dart';
+import '../demo/demo_api_client.dart';
 import '../theme.dart';
 import 'brand_icons.dart';
 
@@ -37,6 +38,8 @@ class _AlertFeedbackBarState extends State<AlertFeedbackBar> {
   final _sent = <String>{};
   String? _busy;
   String? _error;
+  // Sparat men inte skickat: inget nät just nu.
+  bool _queued = false;
 
   Future<void> _send(String verdict) async {
     setState(() {
@@ -53,6 +56,7 @@ class _AlertFeedbackBarState extends State<AlertFeedbackBar> {
       _busy = null;
       if (res['error'] == null) {
         _sent.add(verdict);
+        if (res['queued'] == true) _queued = true;
         logAnalyticsEvent('tip_feedback', params: {'verdict': verdict});
       } else {
         // Sagt rakt ut. Ett svar som inte kom fram ska inte se ut som ett
@@ -65,7 +69,9 @@ class _AlertFeedbackBarState extends State<AlertFeedbackBar> {
 
   @override
   Widget build(BuildContext context) {
-    if (!TaxiTipsConfig.usesDjangoApi) return const SizedBox.shrink();
+    if (!TaxiTipsConfig.usesDjangoApi && widget.api is! DemoApiClient) {
+      return const SizedBox.shrink();
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -122,6 +128,17 @@ class _AlertFeedbackBarState extends State<AlertFeedbackBar> {
             ),
           ],
         ),
+        if (_queued && _error == null) ...[
+          const SizedBox(height: 6),
+          const Text(
+            'Sparat. Skickas när du har nät igen.',
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: TbColors.muted,
+            ),
+          ),
+        ],
         if (_error != null) ...[
           const SizedBox(height: 6),
           Text(

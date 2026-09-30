@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../api_client.dart';
 import '../followed_events.dart';
 import '../signal_kinds.dart' show countyShort;
+import '../net_status.dart';
 import '../theme.dart';
 import '../widgets/ferry_event_widgets.dart';
 
@@ -71,6 +72,9 @@ class _EventsScreenState extends State<EventsScreen> {
   Map<String, int> _dayCounts = const {};
   bool _loading = true;
   String? _error;
+  // Satt när företaget har ett prov: evenemangen ingår i abonnemanget
+  // (fleet/features.py). Ingen länk -- betalningen sker utanför appen.
+  String? _locked;
   bool _preview = false;
   String _previewNote = '';
   String _attribution = '';
@@ -202,15 +206,15 @@ class _EventsScreenState extends State<EventsScreen> {
         _previewNote = body['previewNote']?.toString() ?? '';
         _attribution = body['attribution']?.toString() ?? '';
         _maxDays = (body['maxDays'] as num?)?.toInt() ?? _maxDays;
+        _locked = body['reason'] == 'feature_locked'
+            ? (body['message']?.toString() ?? 'Ingår när företaget har ett abonnemang.')
+            : null;
         _loading = false;
       });
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _error = e.toString().replaceFirst(
-          RegExp(r'^(ApiException|Exception):\s*'),
-          '',
-        );
+        _error = netAwareText(e);
         _loading = false;
       });
     }
@@ -759,6 +763,25 @@ class _EventsScreenState extends State<EventsScreen> {
               const Padding(
                 padding: EdgeInsets.all(40),
                 child: Center(child: CircularProgressIndicator()),
+              )
+            else if (_locked != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 32, 8, 8),
+                child: Column(
+                  children: [
+                    Icon(Icons.lock_rounded, size: 48, color: Colors.grey.shade500),
+                    const SizedBox(height: 10),
+                    Text(
+                      _locked!,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.grey.shade800,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
               )
             else if (_error != null)
               Padding(

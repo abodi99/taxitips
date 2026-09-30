@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../net_status.dart';
 import '../theme.dart';
 
 /// "Vilka notiser har jag fått?" -- läst ur `push_delivery`, en rad per
@@ -64,10 +65,7 @@ class _NotificationLogSheetState extends State<NotificationLogSheet> {
       if (!mounted) return;
       setState(() {
         _loading = false;
-        _error = e.toString().replaceFirst(
-          RegExp(r'^(ApiException|Exception):\s*'),
-          '',
-        );
+        _error = netAwareText(e);
       });
     }
   }
@@ -79,11 +77,17 @@ class _NotificationLogSheetState extends State<NotificationLogSheet> {
     setState(() => row['is_favorite'] = next);
     try {
       await widget.api.setFavorite(opportunityId: id, favorite: next);
-    } catch (_) {
+    } catch (e) {
       if (!mounted) return;
       setState(() => row['is_favorite'] = !next);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kunde inte spara tipset')),
+        SnackBar(
+          content: Text(
+            isNetworkError(e)
+                ? 'Kräver internet. Försök igen när du har nät.'
+                : 'Kunde inte spara tipset',
+          ),
+        ),
       );
     }
   }

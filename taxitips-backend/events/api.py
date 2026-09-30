@@ -234,6 +234,13 @@ def upcoming(request):
     ent = entitlement_for_request(request)
     if not ent.ok:
         return _json(request, {"events": [], "entitled": False, "reason": ent.reason})
+    from fleet import features
+
+    if not features.of(ent).allows("events"):
+        return _json(request, {
+            "events": [], "dayCounts": {}, "entitled": False,
+            "reason": features.LOCKED_REASON, "message": features.LOCKED_MESSAGE,
+        })
 
     now = timezone.now()
     today = now.astimezone(timing.STOCKHOLM).date()

@@ -8,7 +8,7 @@ from maritime import views as maritime_views
 from core.views import health, pipeline_health
 from events import api as events_api
 from events import live as events_live
-from fleet import support_api
+from fleet import client_log_api, support_api
 
 urlpatterns = [
     path("health", health),
@@ -41,6 +41,9 @@ urlpatterns = [
     path("api/ferries", maritime_views.ferries),
     path("api/presence", api.presence),
     path("api/device/session", api.device_session),
+    # Appens krascher och misslyckade inloggningar/parkopplingar/flöden, för
+    # adminwebbens fellista. Se fleet/client_log_api.py och docs/loggning.md.
+    path("api/client-log", client_log_api.client_log),
     # DEBUG-only: lista enheter + skicka test-FCM (pipeline-viz).
     path("api/dev/devices", api.push_devices),
     path("api/dev/push", api.push_send),

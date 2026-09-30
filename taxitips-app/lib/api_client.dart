@@ -6,8 +6,11 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'backend_api.dart';
+import 'client_log.dart';
 import 'config.dart';
 import 'device_credential.dart';
+import 'net_status.dart';
+import 'pending_feedback.dart';
 import 'severity_labels.dart';
 
 const _taxiAreaCatalog = [
@@ -141,6 +144,31 @@ class ApiClient {
     );
   }
 
+  /// Avsändaren för felrapporterna (lib/client_log.dart): samma bevis som
+  /// alla andra anrop, så att felet hamnar på rätt telefon och företag i
+  /// adminwebben. Utan Django-backend finns ingen mottagare.
+  Future<void> sendClientLog(Map<String, dynamic> body) async {
+    final backend = _backend;
+    if (backend == null) return;
+    await backend.clientLog(
+      body,
+      deviceToken: deviceToken,
+      accessToken: _accessToken,
+    );
+  }
+
+  /// Kritiska flöden rapporteras till supporten när de misslyckas
+  /// (lib/client_log.dart). Felet kastas vidare oförändrat -- skärmarna
+  /// visar det precis som förut.
+  Future<T> _reported<T>(String flow, Future<T> Function() run) async {
+    try {
+      return await run();
+    } catch (e, st) {
+      ClientLog.flowFailure(flow, e, st);
+      rethrow;
+    }
+  }
+
   Never _rethrowAsApiException(
     Object e, {
     StackTrace? stackTrace,
@@ -150,8 +178,16 @@ class ApiClient {
     if (stackTrace != null) {
       debugPrint('ApiClient[$operation] stack: $stackTrace');
     }
+    // Inloggning, profilen och flödet: rapporteras till adminwebbens
+    // fellista. Övriga operationer väljs bort i ClientLog.apiFailure.
+    ClientLog.apiFailure(operation, e, stackTrace);
 
     if (e is ApiException) throw e;
+    // Inget nät är inte ett databasfel: kort text, status 0, stabil reason.
+    final net = netFailureOf(e);
+    if (net != null) {
+      throw ApiException(0, netMessage(net), reason: netReason(net));
+    }
     if (e is PostgrestException) {
       final parts = <String>[e.message];
       final details = e.details?.toString() ?? '';
@@ -357,6 +393,25 @@ class ApiClient {
     required String orgNumber,
     required String companyName,
     String? phone,
+  }) => _reported(
+    'signup',
+    () => _signupUnreported(
+      name: name,
+      email: email,
+      password: password,
+      orgNumber: orgNumber,
+      companyName: companyName,
+      phone: phone,
+    ),
+  );
+
+  Future<Map<String, dynamic>> _signupUnreported({
+    required String name,
+    required String email,
+    required String password,
+    required String orgNumber,
+    required String companyName,
+    String? phone,
   }) async {
     await ensureInitialized();
     final company = {
@@ -365,12 +420,25 @@ class ApiClient {
       'contactName': name,
       if (phone != null && phone.isNotEmpty) 'contactPhone': phone,
     };
-    final auth = await _sb.auth.signUp(
-      email: email,
-      password: password,
-      data: {'name': name},
-      emailRedirectTo: _confirmedPage,
-    );
+    // Prövas FÖRE kontot: ett felskrivet mobilnummer eller ett bolag som
+    // Bolagsverket inte känner till ska inte upptäckas först efter att
+    // e-posten bekräftats (fleet/signup_checks.py).
+    final backend = _backend;
+    if (backend != null) {
+      await backend.registerCheck({...company, 'email': email});
+    }
+    final AuthResponse auth;
+    try {
+      auth = await _sb.auth.signUp(
+        email: email,
+        password: password,
+        data: {'name': name},
+        emailRedirectTo: _confirmedPage,
+      );
+    } catch (e) {
+      // Inget nät: inget konto har skapats. Kort text i stället för råtext.
+      throw asApiIfNetwork(e);
+    }
     if (auth.user == null) throw ApiException(400, 'Kunde inte skapa konto');
     await saveCredentials(email, password);
     final session = auth.session;
@@ -380,7 +448,23 @@ class ApiClient {
       return {'needsConfirmation': true, 'email': email};
     }
     await saveSession(session.accessToken);
-    return registerCompany(company);
+    // Kontot finns nu. Tappar nätet här får inte företaget försvinna:
+    // uppgifterna sparas och slutförs vid nästa start/inloggning
+    // (completePendingRegistration), och föraren får veta det.
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_pendingRegistrationKey, jsonEncode(company));
+    try {
+      return await registerCompany(company);
+    } catch (e) {
+      final net = netFailureOf(e);
+      if (net == null) rethrow;
+      throw ApiException(
+        0,
+        'Kontot är skapat, men vi nådde inte servern. '
+        'Logga in när du har nät igen.',
+        reason: netReason(net),
+      );
+    }
   }
 
   /// Nytt bekräftelsemejl när det första inte kom fram (skräppost, fel adress).
@@ -393,7 +477,12 @@ class ApiClient {
     );
   }
 
-  Future<Map<String, dynamic>> registerCompany(Map<String, dynamic> company) async {
+  Future<Map<String, dynamic>> registerCompany(Map<String, dynamic> company) =>
+      _reported('register', () => _registerCompanyUnreported(company));
+
+  Future<Map<String, dynamic>> _registerCompanyUnreported(
+    Map<String, dynamic> company,
+  ) async {
     final token = _accessToken;
     if (token == null) throw ApiException(401, 'Logga in för att fortsätta.');
     final result = await _fleet.ownerPost('register', company, accessToken: token);
@@ -631,11 +720,15 @@ class ApiClient {
           'licensedCounties': licensed.toList()..sort(),
         };
       } on ApiException catch (e) {
+        // Inget nät: säg det, i stället för att falla vidare och svara
+        // "ej berättigad" -- en tunnel är inte ett spärrat konto.
+        if (isNetworkError(e)) rethrow;
         // En gammal klartexttoken som ännu inte parkopplats om: backend
         // svarar 401 på /api/fleet/me men godkänner den i flödet under
         // övergången. Faller igenom till RPC:n i stället för att larma.
         debugPrint('ApiClient[entitlements] fleet: ${e.reason ?? e.message}');
       } catch (e) {
+        if (isNetworkError(e)) rethrow;
         debugPrint('ApiClient[entitlements] fleet error: $e');
       }
     }
@@ -678,6 +771,9 @@ class ApiClient {
       );
       return {'ok': true, 'entitled': entitled == true};
     } catch (e) {
+      // Samma sak här: nätfel kastas vidare så skärmen behåller senast
+      // kända status i stället för att visa "ingen åtkomst".
+      if (isNetworkError(e)) rethrow;
       debugPrint('ApiClient[entitlements] error: $e');
       return {'ok': false, 'entitled': false};
     }
@@ -733,6 +829,21 @@ class ApiClient {
   Future<Map<String, dynamic>> pairWithCode({
     required String code,
     String label = 'Förare',
+    String? platform,
+    String? pushToken,
+  }) => _reported(
+    'pairing',
+    () => _pairWithCodeUnreported(
+      code: code,
+      label: label,
+      platform: platform,
+      pushToken: pushToken,
+    ),
+  );
+
+  Future<Map<String, dynamic>> _pairWithCodeUnreported({
+    required String code,
+    required String label,
     String? platform,
     String? pushToken,
   }) async {
@@ -1443,6 +1554,37 @@ class ApiClient {
   /// databasen och landat i catch-blocket nedan, tyst. Tabellen har noll
   /// rader. Utan API_BASE_URL är beteendet oförändrat: det är samma tysta
   /// väg som förut, men den syns nu i loggen.
+  /// Skickar köade svar. Stannar vid första nätfelet (resten väntar till
+  /// nästa gång); ett svar servern avvisar (tipset borta, 4xx) kastas bort
+  /// så det inte blockerar kön för alltid.
+  Future<int> flushPendingFeedback() async {
+    final backend = _backend;
+    if (backend == null) return 0;
+    final items = await PendingFeedback.load();
+    if (items.isEmpty) return 0;
+    var sent = 0;
+    final left = <Map<String, dynamic>>[];
+    for (var i = 0; i < items.length; i++) {
+      try {
+        await backend.submitFeedback(
+          opportunityId: items[i]['id'] as String,
+          verdict: items[i]['verdict'] as String,
+          deviceToken: deviceToken,
+          accessToken: _accessToken,
+        );
+        sent++;
+      } catch (e) {
+        if (isNetworkError(e)) {
+          left.addAll(items.sublist(i));
+          break;
+        }
+        debugPrint('ApiClient[flushPendingFeedback] kastar ${items[i]}: $e');
+      }
+    }
+    await PendingFeedback.replaceAll(left);
+    return sent;
+  }
+
   Future<Map<String, dynamic>> submitAlertFeedback(
     String alertId,
     bool result, {
@@ -1460,7 +1602,16 @@ class ApiClient {
         return {'success': true};
       } catch (e) {
         debugPrint('ApiClient[feedback] backend: $e');
-        return {'error': e.toString()};
+        // Inget nät: svaret köas och skickas när det går (flushPendingFeedback).
+        // Föraren får veta att det är sparat men inte framme.
+        if (isNetworkError(e)) {
+          await PendingFeedback.add(
+            alertId,
+            verdict ?? (result ? 'fare' : 'empty'),
+          );
+          return {'success': true, 'queued': true};
+        }
+        return {'error': friendlyError(e, fallback: e.toString())};
       }
     }
     try {
@@ -1583,6 +1734,9 @@ class ApiClient {
       // Hur många väghändelser som finns i området -- också när bara de
       // närmaste skickades. Kategoriraden visar det riktiga antalet.
       int? roadTotal;
+      // Vad provet visar (fleet/features.py): låsta kategorier och hur många
+      // tips som finns i dem. Null = allt är öppet.
+      Map<String, dynamic>? features;
       final backend = _backend;
       if (backend != null) {
         // Django äger både marknadsurvalet och bedömningen. Den äldre
@@ -1617,6 +1771,9 @@ class ApiClient {
         reason = body['reason']?.toString();
         entitled = body['entitled'] is bool ? body['entitled'] as bool : null;
         message = body['message']?.toString();
+        features = body['features'] is Map
+            ? Map<String, dynamic>.from(body['features'] as Map)
+            : null;
         source = 'django';
       } else {
         rows = await _smartAlertsViaRpc(lat, lon);
@@ -1652,6 +1809,7 @@ class ApiClient {
         'reason': ?reason,
         'entitled': ?entitled,
         'message': ?message,
+        'features': ?features,
       };
     } on PostgrestException catch (e) {
       // Some environments are not provisioned with the alerts table yet.

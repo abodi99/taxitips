@@ -13,6 +13,9 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../analytics.dart';
 import '../api_client.dart';
+import '../feed_cache.dart';
+import '../net_status.dart';
+import '../widgets/offline_banner.dart';
 import '../widgets/ferry_event_widgets.dart';
 import 'events_screen.dart';
 import 'support_chat_screen.dart';
@@ -29,6 +32,9 @@ import '../widgets/signal_card.dart';
 import '../widgets/signal_map.dart';
 import '../widgets/vehicle_session_sheet.dart';
 import '../widgets/google_signal_map.dart';
+import '../demo/demo_api_client.dart';
+import '../demo/demo_banner.dart';
+import '../demo/demo_data.dart';
 
 class DriverScreen extends StatefulWidget {
   const DriverScreen({
@@ -36,6 +42,7 @@ class DriverScreen extends StatefulWidget {
     required this.api,
     this.inviteToken,
     this.demo = false,
+    this.onDemoSignup,
     this.onBack,
     this.onLeftDevice,
     this.onOpenSettings,
@@ -44,6 +51,9 @@ class DriverScreen extends StatefulWidget {
   final ApiClient api;
   final String? inviteToken;
   final bool demo;
+
+  /// Demoläget: "Prova gratis i 14 dagar" -> registreringen.
+  final VoidCallback? onDemoSignup;
   final VoidCallback? onBack;
   final VoidCallback? onLeftDevice;
   final VoidCallback? onOpenSettings;
@@ -62,6 +72,11 @@ class _DriverScreenState extends State<DriverScreen>
   String? _error;
   String? _status;
   Timer? _timer;
+  // Nätet är nere (inte ett serverfel): tipsen som syns är då gamla och
+  // märks så. `_retryTimer` försöker igen med växande väntetid.
+  NetFailure? _netFailure;
+  int _retryAttempt = 0;
+  Timer? _retryTimer;
   // Behåller sheet-höjd över poll-rebuilds. Utan controller återställs
   // DraggableScrollableSheet till initialChildSize varje setState →
   // listan "går alltid ner" var 30:e sekund.
@@ -471,6 +486,10 @@ class _DriverScreenState extends State<DriverScreen>
   @override
   void initState() {
     super.initState();
+    assert(
+      !widget.demo || widget.api is DemoApiClient,
+      'Demoläget måste få en DemoApiClient, annars går anropen till servern.',
+    );
     WidgetsBinding.instance.addObserver(this);
     _pushSub = foregroundMessages.listen(_onForegroundPush);
     _openedSub = openedMessageSignals.listen((_) => _openFromNotification());
@@ -583,6 +602,8 @@ class _DriverScreenState extends State<DriverScreen>
     if (foreground == _foreground) return;
     _foreground = foreground;
     if (foreground) {
+      // Tillbaka ur fickan/tunneln: försök direkt, vänta inte ut backoffen.
+      _retryAttempt = 0;
       _load(silent: true);
       _schedulePoll();
       _scheduleFerryPoll();
@@ -608,6 +629,7 @@ class _DriverScreenState extends State<DriverScreen>
     _pushSub?.cancel();
     _openedSub?.cancel();
     _timer?.cancel();
+    _retryTimer?.cancel();
     _ferryTimer?.cancel();
     _sheetController.dispose();
     _mapController.dispose();
@@ -648,6 +670,25 @@ class _DriverScreenState extends State<DriverScreen>
 
   /// Hämtar GPS. Returnerar null vid lycka, annars ett kort felmeddelande.
   Future<String?> _updateCurrentPosition({bool explain = false}) async {
+    if (widget.demo) {
+      // Demon har en fast position och frågar aldrig om platsbehörighet.
+      if (!mounted) return null;
+      setState(() {
+        _userLat = DemoData.userLat;
+        _userLon = DemoData.userLon;
+        if (_data != null) _enrichClientDistances(_data!);
+      });
+      if (!_centeredOnUser) {
+        _centeredOnUser = true;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!mounted) return;
+          try {
+            _mapFocus.move(DemoData.userLat, DemoData.userLon, 10);
+          } catch (_) {}
+        });
+      }
+      return null;
+    }
     try {
       final serviceOn = await Geolocator.isLocationServiceEnabled();
       if (!serviceOn) {
@@ -728,6 +769,8 @@ class _DriverScreenState extends State<DriverScreen>
   }
 
   String _friendly(Object e) {
+    final net = netFailureOf(e);
+    if (net != null) return netMessage(net);
     final s = e.toString();
     if (s.contains('Ogiltig')) {
       return 'Koden funkar inte — be kontoret om rätt bolags-/byteskod.';
@@ -775,18 +818,67 @@ class _DriverScreenState extends State<DriverScreen>
         // Backend säger varför flödet är tomt. `no_active_session` betyder
         // att bilval saknas -- inte att perioden gått ut.
         _needsVehicle = data['reason'] == 'no_active_session';
+        // En sparad kategori som provet inte omfattar hade gett en tom karta.
+        if (_lockedCategories.contains(signalCategoryFromKey(_category))) {
+          _category = null;
+        }
         _error = null;
+        _netFailure = null;
+        _retryAttempt = 0;
       });
+      _retryTimer?.cancel();
+      unawaited(FeedCache.save(data));
+      // Nätet är tillbaka: skicka svar som köats medan det var nere.
+      unawaited(widget.api.flushPendingFeedback());
       // Färjor och evenemang i samma område; ett fel där får inte dölja tipsen.
       unawaited(_loadFerries());
       unawaited(_loadEvents());
       unawaited(_refreshSupportUnread());
     } catch (e) {
       if (!mounted || seq != _loadSeq) return;
-      setState(() => _error = _friendly(e));
+      final net = netFailureOf(e);
+      if (net == null) {
+        setState(() => _error = _friendly(e));
+      } else {
+        await _onNetFailure(net);
+      }
     } finally {
       if (mounted && seq == _loadSeq) setState(() => _refreshing = false);
     }
+  }
+
+  /// Nätet är nere. Senaste tipsen ligger kvar (eller läses från disk vid
+  /// kallstart), utgångna tips gråas, och ett nytt försök planeras.
+  Future<void> _onNetFailure(NetFailure net) async {
+    Map<String, dynamic>? cached;
+    if (_data == null) cached = await FeedCache.load();
+    if (!mounted) return;
+    final now = DateTime.now();
+    setState(() {
+      _netFailure = net;
+      _error = null;
+      final base = _data ?? cached;
+      if (base != null) {
+        // Ett tips vars sluttid passerat får inte se pågående ut bara för
+        // att telefonen är offline.
+        _data = FeedCache.expireFeed(base, now);
+      }
+    });
+    _scheduleRetry();
+  }
+
+  void _scheduleRetry() {
+    _retryTimer?.cancel();
+    if (!_foreground) return;
+    final delay = retryDelay(_retryAttempt++);
+    _retryTimer = Timer(delay, () {
+      if (mounted && _foreground) _load(silent: true);
+    });
+  }
+
+  DateTime? get _dataAge {
+    final ms = (_data?['updatedAt'] as num?)?.toInt();
+    return ms == null ? null : DateTime.fromMillisecondsSinceEpoch(ms);
   }
 
   /// Fyller `distance_km` lokalt när servern saknar det (t.ex. tips utan
@@ -834,7 +926,6 @@ class _DriverScreenState extends State<DriverScreen>
       _municipalities.isEmpty ? null : (_municipalities.toList()..sort());
 
   Future<void> _loadFerries() async {
-    if (widget.demo) return;
     try {
       final body = await widget.api.ferries(
         lat: _userLat,
@@ -860,7 +951,6 @@ class _DriverScreenState extends State<DriverScreen>
   /// Evenemangen ändras sällan: hämtas om efter fem minuter, eller direkt när
   /// området eller positionen (på en tiondels grad) ändrats.
   Future<void> _loadEvents() async {
-    if (widget.demo) return;
     final key =
         '${_countyParam?.join(',')}|${_municipalityParam?.join(',')}|'
         '${_userLat?.toStringAsFixed(1)},${_userLon?.toStringAsFixed(1)}';
@@ -1065,7 +1155,12 @@ class _DriverScreenState extends State<DriverScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            favorite ? 'Kunde inte spara tipset' : 'Kunde inte ta bort tipset',
+            // Följa/avfölja kräver servern; ingen kö, så säg det rakt ut.
+            isNetworkError(e)
+                ? 'Kräver internet. Försök igen när du har nät.'
+                : favorite
+                ? 'Kunde inte spara tipset'
+                : 'Kunde inte ta bort tipset',
           ),
         ),
       );
@@ -1228,6 +1323,90 @@ class _DriverScreenState extends State<DriverScreen>
     if (_hiddenModes.contains('ferry')) SignalCategory.ferry,
     if (_hiddenModes.contains('events')) SignalCategory.event,
   };
+
+  /// Kategorier provet inte omfattar, och antalet tips i dem, ur flödets
+  /// `features` (fleet/features.py). Servern skickar aldrig själva tipsen.
+  Map<String, dynamic> get _features =>
+      (_data?['features'] as Map?)?.cast<String, dynamic>() ?? const {};
+
+  static SignalCategory? _featureCategory(Object? key) =>
+      signalCategoryFromKey(key == 'events' ? 'event' : key?.toString());
+
+  Set<SignalCategory> get _lockedCategories => {
+    for (final k in (_features['locked'] as List?) ?? const [])
+      ?_featureCategory(k),
+  };
+
+  Map<SignalCategory, int> get _lockedCounts {
+    final raw = (_features['hiddenCounts'] as Map?) ?? const {};
+    return {
+      for (final e in raw.entries)
+        ?_featureCategory(e.key): (e.value as num).toInt(),
+    };
+  }
+
+  /// Förklaringen bakom ett lås. Ingen länk och inget pris: betalningen sker
+  /// utanför appen, via mejlet, kundportalen eller en säljare (§9c).
+  Future<void> _showLocked(SignalCategory category) async {
+    final count = _lockedCounts[category] ?? 0;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: TbColors.foam,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(category.icon, color: TbColors.midnatt, size: 26),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      '${category.label} ingår i abonnemanget',
+                      style: const TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800,
+                        color: TbColors.midnatt,
+                      ),
+                    ),
+                  ),
+                  const Icon(Icons.lock_rounded, color: TbColors.skiffer),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                category.explanation,
+                style: const TextStyle(fontSize: 15, height: 1.4),
+              ),
+              if (count > 0) ...[
+                const SizedBox(height: 8),
+                Text(
+                  count == 1
+                      ? 'Just nu finns 1 sådant tips i ditt område.'
+                      : 'Just nu finns $count sådana tips i ditt område.',
+                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                ),
+              ],
+              const SizedBox(height: 12),
+              Text(
+                (_features['lockedMessage']?.toString().isNotEmpty ?? false)
+                    ? '${_features['lockedMessage']} Den som sköter företagets '
+                        'konto har fått ett mejl om hur ni fortsätter.'
+                    : 'Under provet visas tåg och buss.',
+                style: TextStyle(fontSize: 14, height: 1.4, color: Colors.grey.shade700),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Map<SignalCategory, int> get _categoryCounts {
     final counts = {for (final c in SignalCategory.values) c: 0};
@@ -2477,8 +2656,8 @@ class _DriverScreenState extends State<DriverScreen>
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Text(
-                                    travel.summary!,
+                                  LiveTravelText(
+                                    travel,
                                     style: TextStyle(
                                       fontSize: 15,
                                       height: 1.35,
@@ -2742,6 +2921,13 @@ class _DriverScreenState extends State<DriverScreen>
                                     ],
                                   ),
                                 ),
+                                if (widget.demo) ...[
+                                  const SizedBox(height: 8),
+                                  DemoBanner(
+                                    onExit: widget.onBack,
+                                    onSignup: widget.onDemoSignup,
+                                  ),
+                                ],
                                 if (_needsVehicle) ...[
                                   const SizedBox(height: 8),
                                   _Notice(
@@ -2768,7 +2954,18 @@ class _DriverScreenState extends State<DriverScreen>
                                     onAction: _openAreaChecklist,
                                   ),
                                 ],
-                                if (_error != null) ...[
+                                if (_netFailure != null) ...[
+                                  const SizedBox(height: 8),
+                                  OfflineBanner(
+                                    failure: _netFailure!,
+                                    lastUpdated: _dataAge,
+                                    retrying: _refreshing,
+                                    onRetry: () {
+                                      _retryAttempt = 0;
+                                      _load();
+                                    },
+                                  ),
+                                ] else if (_error != null) ...[
                                   const SizedBox(height: 8),
                                   _Notice(
                                     icon: Icons.cloud_off,
@@ -2801,6 +2998,9 @@ class _DriverScreenState extends State<DriverScreen>
                             counts: _categoryCounts,
                             followedCount: _followedCount,
                             hidden: _hiddenCategories,
+                            locked: _lockedCategories,
+                            lockedCounts: _lockedCounts,
+                            onLocked: _showLocked,
                             onSelect: _selectCategory,
                           ),
                         ],
@@ -3690,6 +3890,17 @@ class _ExplainSectionState extends State<_ExplainSection> {
               value:
                   severityTierLabels[severityTier] ?? severityTier ?? 'Okänd',
             ),
+            // Skälen bakom tipset, i klartext ("försenat 25 min").
+            if ((opp['reasons'] as List?)?.isNotEmpty ?? false) ...[
+              const SizedBox(height: 10),
+              _ExplainRow(
+                label: 'Därför',
+                value: [
+                  for (final r in opp['reasons'] as List)
+                    '• ${r.toString()}',
+                ].join('\n'),
+              ),
+            ],
             // Säkerhet/confidence-raden borttagen på användarens begäran --
             // "tydligt i källdatan"-texten upplevdes som brus, inte som
             // hjälpsam information. Kortets "osäker"-badge (confidence ==

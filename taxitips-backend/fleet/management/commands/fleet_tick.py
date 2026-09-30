@@ -97,16 +97,13 @@ class Command(BaseCommand):
             if not dry:
                 company = Company.objects.filter(id=trial.company_id).first()
                 stage = "1d" if trial.ends_at <= now + timedelta(days=1) else "3d"
-                notifications.trial_ending(
-                    trial.company_id, (company.email if company else ""), trial, stage=stage,
-                )
-                # Extra påminnelse om kort saknas (egen utkorgsrad).
+                # Ett mejl per stadium: utan kort det som ber om kortet, med
+                # kort den vanliga påminnelsen. Förut gick båda samma timme.
                 status = commerce.trial_commit_status(trial.company_id)
-                if not status["cardOnFile"]:
-                    notifications.trial_ending(
-                        trial.company_id, (company.email if company else ""), trial,
-                        stage=f"card_missing_{stage}",
-                    )
+                notifications.trial_ending(
+                    trial.company_id, (company.email if company else ""), trial,
+                    stage=(stage if status["cardOnFile"] else f"card_missing_{stage}"),
+                )
             report["trials_warned"] += 1
 
         # 3b) Tidig påminnelse om saknat kort (~dag 3 av provet).
@@ -162,6 +159,11 @@ class Command(BaseCommand):
         if not dry:
             expired_requests.update(status=JoinRequest.Status.EXPIRED, resolved_at=now)
 
+        # 5b) Bolagsverket igen för prov där registret inte svarade vid
+        # registreringen: säljaren ska se det riktiga namnet innan samtalet
+        # (fleet/signup_checks.flags). Några per körning, för registrets kvot.
+        report["registry_retried"] = 0 if dry else _retry_registry(now)
+
         # 6) Utkorgen. Utan konfigurerad sändare skrivs raderna men skickas inte.
         outbox = {"sent": 0, "skipped": "dry_run"} if dry else notifications.send_pending()
 
@@ -169,3 +171,29 @@ class Command(BaseCommand):
             " ".join(f"{key}={value}" for key, value in report.items())
             + f" outbox={outbox}"
         )
+
+
+REGISTRY_RETRY_PER_TICK = 10
+
+
+def _retry_registry(now) -> int:
+    from fleet import bolagsverket, signup_checks
+    from fleet.models import CompanyProfile
+
+    if not bolagsverket.configured():
+        return 0
+    open_trials = Trial.objects.filter(
+        status__in=[Trial.Status.PENDING, Trial.Status.ACTIVE]
+    ).values_list("company_id", flat=True)
+    done = 0
+    for profile in CompanyProfile.objects.filter(
+        company_id__in=list(open_trials), country="SE", registry={},
+    ).exclude(org_number="")[:REGISTRY_RETRY_PER_TICK]:
+        if signup_checks.org_kind(profile.org_number) != "organisation":
+            continue
+        info = bolagsverket.try_lookup(profile.org_number)
+        if info is None:
+            break  # registret svarar fortfarande inte; nästa körning
+        bolagsverket.apply_to_profile(profile, info, now=now)
+        done += 1
+    return done

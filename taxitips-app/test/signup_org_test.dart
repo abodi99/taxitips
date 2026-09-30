@@ -16,4 +16,20 @@ void main() {
     expect(SignupScreenState.looksLikeSoleTrader('850101-2395'), isTrue);
     expect(SignupScreenState.looksLikeSoleTrader('8501012395'), isTrue);
   });
+
+  test('mobilnummer: samma former som servern godtar', () {
+    for (final ok in [
+      '0708123491',
+      '070-812 34 91',
+      '+46 70 812 34 91',
+      '0046708123491',
+      '46708123491',
+      '+46 (0)70 812 34 91',
+    ]) {
+      expect(SignupScreenState.phoneLooksValid(ok), isTrue, reason: ok);
+    }
+    for (final bad in ['040-12 34 56', '0711234567', '+4712345678', '0708', '']) {
+      expect(SignupScreenState.phoneLooksValid(bad), isFalse, reason: bad);
+    }
+  });
 }

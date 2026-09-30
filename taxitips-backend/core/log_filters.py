@@ -53,3 +53,26 @@ class RedactFilter(logging.Filter):
         if record.exc_info and not record.exc_text:
             record.exc_text = redact(logging.Formatter().formatException(record.exc_info))
         return True
+
+
+class ContextFormatter(logging.Formatter):
+    """
+    Lägger begärans id, sökväg och konto/telefon på varje rad som skrivs
+    under en begäran (core/request_context.py).
+
+    Utan det stod ett oväntat fel i `handle()` som "oväntat fel i pair" -- utan
+    någon väg från föraren som ringde till raden i loggen. Id:t skickas också
+    tillbaka i svaret (`X-Request-Id`), så att ett fel som en användare ser går
+    att matcha mot exakt en rad här. Formatteraren och inte ett filter: ett
+    filter hade krävt att varje handler som använder formatet också har
+    filtret, annars kastar `%(ctx)s` KeyError mitt i en loggning.
+    """
+
+    def format(self, record: logging.LogRecord) -> str:
+        from core.request_context import log_suffix
+
+        try:
+            record.ctx = log_suffix()
+        except Exception:  # loggningen får aldrig fällas av sin egen kontext
+            record.ctx = ""
+        return super().format(record)

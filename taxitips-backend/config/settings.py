@@ -71,6 +71,10 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
+    # Ytterst: varje begäran får ett id (X-Request-Id i svaret och på varje
+    # loggrad), och ett 5xx från /api/ bokförs för adminwebbens fellista.
+    # Se core/middleware.py.
+    "core.middleware.RequestContextMiddleware",
     "django.middleware.security.SecurityMiddleware",
     # Före allt annat: en preflight ska besvaras, inte autentiseras eller
     # ruttas. Se core/middleware.py.
@@ -253,6 +257,18 @@ MARKET_SCOPE = os.environ.get("MARKET_SCOPE", "skane")
 # några svarsheaders, så den bevakas av core/thresholds.py:s budget i stället.
 SWEDAVIA_API_KEY = os.environ.get("SWEDAVIA_API_KEY", "")
 
+# --- Appversion ----------------------------------------------------------
+# Reserv för core/app_version.py när raden i `app_version_policy` är tom.
+# Adminwebben är den vanliga vägen; miljövariablerna finns för en miljö där
+# databasen ännu inte är migrerad, och för att tvinga fram en gräns vid en
+# nyinstallation. Formen är "1.2.3" eller "1.2.3+45" (byggnummer).
+APP_ANDROID_MIN_VERSION = os.environ.get("APP_ANDROID_MIN_VERSION", "")
+APP_ANDROID_RECOMMENDED_VERSION = os.environ.get("APP_ANDROID_RECOMMENDED_VERSION", "")
+APP_IOS_MIN_VERSION = os.environ.get("APP_IOS_MIN_VERSION", "")
+APP_IOS_RECOMMENDED_VERSION = os.environ.get("APP_IOS_RECOMMENDED_VERSION", "")
+APP_IOS_STORE_URL = os.environ.get("APP_IOS_STORE_URL", "")
+APP_ANDROID_PACKAGE = os.environ.get("APP_ANDROID_PACKAGE", "se.taxibehov.taxibehov_app")
+
 # --- Celery -----------------------------------------------------------
 # CELERY_TASK_ALWAYS_EAGER: satt av testkörning (se Jenkinsfile och README)
 # så `manage.py test` aldrig behöver en levande Redis/broker -- samma
@@ -423,7 +439,14 @@ LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
     "filters": {"redact": {"()": "core.log_filters.RedactFilter"}},
-    "formatters": {"plain": {"format": "%(asctime)s %(levelname)s %(name)s: %(message)s"}},
+    # `ctx` är begärans id, sökväg och konto/telefon (core/log_filters.ContextFormatter),
+    # tomt utanför en begäran.
+    "formatters": {
+        "plain": {
+            "()": "core.log_filters.ContextFormatter",
+            "format": "%(asctime)s %(levelname)s %(name)s%(ctx)s: %(message)s",
+        }
+    },
     "handlers": {
         "console": {"class": "logging.StreamHandler", "filters": ["redact"], "formatter": "plain"},
     },

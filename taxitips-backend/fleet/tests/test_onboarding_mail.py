@@ -132,15 +132,15 @@ class TrialMailTests(TrialFixture):
         with locmem():
             call_command("fleet_tick", stdout=StringIO())
             call_command("fleet_tick", stdout=StringIO())
-        # 3d + card_missing_3d (kort saknas under provet).
-        self.assertEqual(OutboxMessage.objects.filter(category="trial_ending").count(), 2)
+        # Ett mejl per stadium; utan kort är det mejlet som ber om kortet.
+        self.assertEqual(OutboxMessage.objects.filter(category="trial_ending").count(), 1)
         Trial.objects.filter(id=trial.id).update(ends_at=timezone.now() + timedelta(hours=10))
         with locmem():
             call_command("fleet_tick", stdout=StringIO())
         stages = sorted(
             OutboxMessage.objects.filter(category="trial_ending").values_list("payload__stage", flat=True)
         )
-        self.assertEqual(stages, ["1d", "3d", "card_missing_1d", "card_missing_3d"])
+        self.assertEqual(stages, ["card_missing_1d", "card_missing_3d"])
 
     def test_an_expired_trial_gets_a_way_back(self):
         company, trial = self.trial_company(ends_in=timedelta(hours=-1))

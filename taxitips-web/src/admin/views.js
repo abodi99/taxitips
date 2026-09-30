@@ -186,6 +186,8 @@ const FILTERS = [
   ["prov", "Prov"],
   ["betalande", "Betalande"],
   ["avstangda", "Avstängda"],
+  // Hämtas för sig (fleet/archive.py): arkiverade bolag syns inte i de andra.
+  ["arkiverade", "Arkiverade"],
 ];
 
 function matchesFilter(c, filter) {
@@ -194,6 +196,7 @@ function matchesFilter(c, filter) {
     case "prov": return !!c.trial;
     case "betalande": return ["active", "past_due"].includes(c.subscriptionStatus);
     case "avstangda": return !!c.suspended;
+    case "arkiverade": return !!c.archived;
     default: return true;
   }
 }
@@ -213,7 +216,10 @@ export function kunder(list, query = "", filter = "alla") {
     </form>
     <div class="chips" role="tablist" aria-label="Filter">
       ${FILTERS.map(([id, label]) => `<button class="chip" role="tab" data-action="kund-filter" data-filter="${id}"
-        aria-selected="${id === filter}">${esc(label)} <span class="muted">${esc(all.filter((c) => matchesFilter(c, id)).length)}</span></button>`).join("")}
+        aria-selected="${id === filter}">${esc(label)} <span class="muted">${esc(
+          id === "arkiverade" ? (list.archivedCount ?? 0)
+            : filter === "arkiverade" ? "" : all.filter((c) => matchesFilter(c, id)).length,
+        )}</span></button>`).join("")}
     </div>
     <div class="card list-card">
       ${rows.length ? rows.map((c) => {
@@ -407,6 +413,7 @@ function stepMer(d, config) {
         Ingen återbetalning görs automatiskt.</p>
       <div class="btn-row"><button class="btn btn-danger" data-action="terminate-now">Avsluta direkt</button></div>
     </div>` : ""}
+    ${archiveCard(d, config)}
     <details class="card"><summary><h2 style="display:inline">Händelselogg</h2></summary>
       <table><thead><tr><th>När</th><th>Vad</th><th>Av</th></tr></thead>
       <tbody>${(d.audit ?? []).map((e) => `
@@ -736,4 +743,40 @@ export function granskning(list) {
           </div>` : ""}
       </div>`).join("") : '<div class="card"><p class="muted">Inga öppna granskningar.</p></div>'}
   `;
+}
+
+
+/**
+ * Arkivera och radera (fleet/archive.py). Servern säger vad som går och varför
+ * inte; knapparna visas bara när det går, annars skälet.
+ */
+function archiveCard(d, config) {
+  const a = d.archive;
+  if (!a) return "";
+  if (!a.archivedAt) {
+    return `
+    <div class="card">
+      <h2>Arkivera</h2>
+      <p class="muted">Döljer bolaget från Hem, Kunder och Uppföljning. Inget tas bort, och det går att
+        återställa under Kunder → Arkiverade.</p>
+      ${a.canArchive
+        ? '<div class="btn-row"><button class="btn btn-quiet" data-action="archive">Arkivera bolaget</button></div>'
+        : `<p class="muted">${esc(a.archiveBlocker)}</p>`}
+    </div>`;
+  }
+  return `
+    <div class="card danger-zone">
+      <h2>Arkiverat ${esc(date(a.archivedAt))}</h2>
+      <p class="muted">Bolaget syns bara under Kunder → Arkiverade.</p>
+      <div class="btn-row">
+        <button class="btn btn-quiet" data-action="unarchive">Återställ</button>
+        ${config?.canManage && a.canDelete
+          ? '<button class="btn btn-danger" data-action="delete-company">Radera permanent</button>' : ""}
+      </div>
+      ${a.canDelete
+        ? `<p class="muted">Radera tar bort bilar, telefoner, beställningar, chatt och kontaktuppgifter.
+            Provhistoriken på organisationsnumret sparas, så att bolaget inte kan få ett nytt gratisprov.
+            ${config?.canManage ? "" : "Bara plattformsadministratören kan radera."}</p>`
+        : `<p class="muted">${esc(a.deleteBlocker)}</p>`}
+    </div>`;
 }

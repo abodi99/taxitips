@@ -95,7 +95,7 @@ def config(request):
             "volumeOre": price.volume_price_ore, "volumeThreshold": price.volume_threshold,
             "extraCountyOre": price.extra_county_price_ore,
         },
-        "trial": {"days": trials.TRIAL_DAYS, "vehicleLimit": trials.TRIAL_VEHICLE_LIMIT},
+        "trial": {"days": trials.TRIAL_DAYS, "vehicleLimit": trials.SALES_TRIAL_VEHICLE_LIMIT},
         "pairingCodeTtlSeconds": RiskConfig.current().pairing_code_ttl_seconds,
         "stripe": stripe_sync.status(),
     })

@@ -89,6 +89,16 @@ def ferries(request):
             "entitled": False, "reason": ent.reason,
         })
 
+    from fleet import features
+
+    plan = features.of(ent)
+    if not plan.allows("ferry"):
+        return _json(request, {
+            "ferries": [], "arrivals": [], "terminals": [],
+            "entitled": False, "reason": features.LOCKED_REASON,
+            "message": features.LOCKED_MESSAGE,
+        })
+
     lat, lon = position_from(request)
     counties, municipalities = request_area(request, lat, lon, ent)
     if area_blocked(ent, counties, municipalities):

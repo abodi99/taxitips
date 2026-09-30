@@ -335,6 +335,32 @@ void main() {
       expect(selected, 'road');
     });
 
+    testWidgets('provet: låsta kategorier visar lås och antal, och väljs aldrig', (
+      tester,
+    ) async {
+      String? selected = 'none';
+      SignalCategory? explained;
+      await tester.pumpWidget(
+        wrap(
+          CategoryBar(
+            selected: null,
+            counts: const {SignalCategory.transit: 2},
+            followedCount: 0,
+            locked: const {SignalCategory.flight},
+            lockedCounts: const {SignalCategory.flight: 3},
+            onLocked: (c) => explained = c,
+            onSelect: (v) => selected = v,
+          ),
+        ),
+      );
+      expect(find.byIcon(Icons.lock_rounded), findsOneWidget);
+      expect(find.text('3'), findsOneWidget, reason: 'tipsen som finns bakom låset');
+      expect(find.text('2'), findsNWidgets(2), reason: 'Alla räknar bara det som visas');
+      await tester.tap(find.text('Flyg'));
+      expect(explained, SignalCategory.flight);
+      expect(selected, 'none');
+    });
+
     testWidgets('förklaringen öppnas och visar alla typer', (tester) async {
       await tester.pumpWidget(
         wrap(

@@ -37,6 +37,7 @@ from core.alternatives import travel_options
 from core.coverage import county_catalog, uncovered_counties
 from core.entitlement import entitlement_for_request, verify_supabase_jwt
 from core.geo import haversine_km
+from fleet import features
 from core.models import (
     Opportunity,
     OpportunityFavorite,
@@ -700,7 +701,11 @@ def alerts(request):
     favorites_digest = hashlib.sha1(
         json.dumps(favorites, sort_keys=True, default=str).encode("utf-8")
     ).hexdigest()[:16]
-    etag = f'W/"{shared["digest"]}-{favorites_digest}"'
+    # Provet ser bara tåg och buss (fleet/features.py). Filtret ligger EFTER den
+    # delade cachen, så att ett provföretag och ett betalande i samma ruta delar
+    # uträkningen men aldrig svaret -- planen ingår därför i ETag:en.
+    plan = features.of(ent)
+    etag = f'W/"{shared["digest"]}-{favorites_digest}-{plan.plan}"'
     if etag in _if_none_match(request):
         from django.http import HttpResponseNotModified
 
@@ -708,11 +713,18 @@ def alerts(request):
     else:
         favorite_ids = {f["id"] for f in favorites}
         base = shared["payload"]
+        shown_alerts, hidden = features.filter_rows(plan, base["alerts"])
+        shown_context, hidden_context = features.filter_rows(plan, base["context"])
+        shown_favorites, _ = features.filter_rows(plan, favorites)
+        for category, count in hidden_context.items():
+            hidden[category] = hidden.get(category, 0) + count
         response = _json(request, {
             **base,
-            "alerts": _mark_favorites(base["alerts"], favorite_ids),
-            "context": _mark_favorites(base["context"], favorite_ids),
-            "favorites": favorites,
+            "alerts": _mark_favorites(shown_alerts, favorite_ids),
+            "context": _mark_favorites(shown_context, favorite_ids),
+            "contextTotal": base["contextTotal"] if plan.full else len(shown_context),
+            "favorites": shown_favorites,
+            "features": {**plan.as_dict(), "hiddenCounts": hidden},
         })
     response["ETag"] = etag
     # Personligt svar som alltid omvalideras: ingen delad cache får spara det.
@@ -739,6 +751,11 @@ def opportunity_detail(request, opportunity_id):
         # Samma svar som ett okänt id: en direktlänk ska inte kunna användas
         # för att ta reda på att ett tips finns i ett län man inte betalar för.
         return _json(request, {"error": "not_found"}, status=404)
+    plan = features.of(ent)
+    if not plan.allows(notify.category_of(o)):
+        return _json(request, {
+            "error": features.LOCKED_REASON, "message": features.LOCKED_MESSAGE,
+        }, status=403)
 
     events = SourceEvent.objects.filter(id__in=[str(i) for i in (o.source_event_ids or [])])
     now = timezone.now()
@@ -831,11 +848,18 @@ def config(request):
 
     Öppen med avsikt: den innehåller inga tips, bara de tal som avgör hur
     tips presenteras. Poängen är att talet 50 ska ha ETT hem.
+
+    `appVersion` är minsta och rekommenderade appversion per plattform (se
+    core/app_version.py). Den måste ligga på en öppen väg: en app som är för
+    gammal för att logga in ska ändå få veta att den är för gammal.
     """
+    from core import app_version
+
     return _json(
         request,
         {
             **thresholds.as_config(),
+            "appVersion": app_version.public_config(),
             "scoringRules": [
                 {"tier": r.tier, "mode": r.mode or "", "condition": r.condition,
                  "floor": r.floor, "cap": r.cap, "confidence": r.confidence}
@@ -876,14 +900,10 @@ def favorites(request):
 
     now = timezone.now()
     if request.method == "GET":
-        return _json(
-            request,
-            {
-                "favorites": _favorites_for(
-                    owner, *position_from(request), now
-                )
-            },
+        shown, _ = features.filter_rows(
+            features.of(ent), _favorites_for(owner, *position_from(request), now)
         )
+        return _json(request, {"favorites": shown})
 
     try:
         body = json.loads(request.body or b"{}")
@@ -963,7 +983,11 @@ def notifications(request):
         )
     ) if owner else set()
 
-    rows = PushDelivery.objects.filter(device_token=token, ok=True).order_by("-created_at")[:100]
+    plan = features.of(ent)
+    rows = [
+        d for d in PushDelivery.objects.filter(device_token=token, ok=True).order_by("-created_at")[:100]
+        if plan.allows(features.category_of_row(d.snapshot or {}))
+    ]
     return _json(
         request,
         {
@@ -1090,6 +1114,9 @@ def notify_prefs(request):
         "notifyScoreFloor": thresholds.NOTIFY_SCORE_FLOOR,
         # Förarens enkla regler: kategorierna (samma som kartans rad) och nivåerna.
         "categoryCatalog": notify.CATEGORY_CATALOG,
+        # Kategorier som provet inte omfattar (fleet/features.py): appen visar
+        # dem låsta. Notiserna för dem stoppas ändå i fleet/push_gate.py.
+        "features": features.of(ent).as_dict(),
         "levels": list(notify.LEVELS),
         "maxPauseHours": notify.MAX_PAUSE_HOURS,
         # Länen licensen omfattar. Appen erbjuder bara dem; tom lista och

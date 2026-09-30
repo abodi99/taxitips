@@ -60,6 +60,20 @@ Genererad av `manage.py dump_truth`. Redigera inte för hand.
 | demand_score | integer | YES |  |
 | reasons | ARRAY | YES |  |
 
+## app_version_policy  (0 rader)
+
+| kolumn | typ | null | default |
+|---|---|---|---|
+| id | integer | NO |  |
+| android_min_version | character varying | NO |  |
+| android_recommended_version | character varying | NO |  |
+| ios_min_version | character varying | NO |  |
+| ios_recommended_version | character varying | NO |  |
+| ios_store_url | character varying | NO |  |
+| message | text | NO |  |
+| updated_at | timestamp with time zone | NO |  |
+| updated_by | uuid | YES |  |
+
 ## auth_group  (0 rader)
 
 | kolumn | typ | null | default |
@@ -75,7 +89,7 @@ Genererad av `manage.py dump_truth`. Redigera inte för hand.
 | group_id | integer | NO |  |
 | permission_id | integer | NO |  |
 
-## auth_permission  (224 rader)
+## auth_permission  (248 rader)
 
 | kolumn | typ | null | default |
 |---|---|---|---|
@@ -116,7 +130,7 @@ Genererad av `manage.py dump_truth`. Redigera inte för hand.
 | user_id | integer | NO |  |
 | permission_id | integer | NO |  |
 
-## companies  (18 rader)
+## companies  (19 rader)
 
 | kolumn | typ | null | default |
 |---|---|---|---|
@@ -163,7 +177,7 @@ Genererad av `manage.py dump_truth`. Redigera inte för hand.
 | device_id | uuid | NO |  |
 | expires_at | timestamp with time zone | NO |  |
 
-## devices  (23 rader)
+## devices  (25 rader)
 
 | kolumn | typ | null | default |
 |---|---|---|---|
@@ -191,7 +205,7 @@ Genererad av `manage.py dump_truth`. Redigera inte för hand.
 | content_type_id | integer | YES |  |
 | user_id | integer | NO |  |
 
-## django_content_type  (56 rader)
+## django_content_type  (62 rader)
 
 | kolumn | typ | null | default |
 |---|---|---|---|
@@ -199,7 +213,7 @@ Genererad av `manage.py dump_truth`. Redigera inte för hand.
 | app_label | character varying | NO |  |
 | model | character varying | NO |  |
 
-## django_migrations  (55 rader)
+## django_migrations  (61 rader)
 
 | kolumn | typ | null | default |
 |---|---|---|---|
@@ -331,7 +345,7 @@ Genererad av `manage.py dump_truth`. Redigera inte för hand.
 | lifted_by | uuid | YES |  |
 | lift_note | text | NO |  |
 
-## fleet_audit_event  (166 rader)
+## fleet_audit_event  (185 rader)
 
 | kolumn | typ | null | default |
 |---|---|---|---|
@@ -362,7 +376,54 @@ Genererad av `manage.py dump_truth`. Redigera inte för hand.
 | license_id | uuid | YES |  |
 | vehicle_id | uuid | YES |  |
 
-## fleet_company_profile  (15 rader)
+## fleet_client_activity  (0 rader)
+
+| kolumn | typ | null | default |
+|---|---|---|---|
+| id | uuid | NO |  |
+| subject_kind | character varying | NO |  |
+| subject_id | uuid | NO |  |
+| company_id | uuid | YES |  |
+| first_seen_at | timestamp with time zone | NO |  |
+| last_seen_at | timestamp with time zone | NO |  |
+| last_login_at | timestamp with time zone | YES |  |
+| app_version | character varying | NO |  |
+| app_build | character varying | NO |  |
+| platform | character varying | NO |  |
+| os_version | character varying | NO |  |
+| device_model | character varying | NO |  |
+| ip_prefix | character varying | NO |  |
+| country | character varying | NO |  |
+
+## fleet_client_error  (0 rader)
+
+| kolumn | typ | null | default |
+|---|---|---|---|
+| id | uuid | NO |  |
+| created_at | timestamp with time zone | NO |  |
+| last_at | timestamp with time zone | NO |  |
+| occurrences | integer | NO |  |
+| source | character varying | NO |  |
+| kind | character varying | NO |  |
+| flow | character varying | NO |  |
+| error_type | character varying | NO |  |
+| message | text | NO |  |
+| stack | text | NO |  |
+| fatal | boolean | NO |  |
+| http_status | integer | YES |  |
+| reason | character varying | NO |  |
+| request_id | character varying | NO |  |
+| path | character varying | NO |  |
+| company_id | uuid | YES |  |
+| user_id | uuid | YES |  |
+| device_id | uuid | YES |  |
+| app_version | character varying | NO |  |
+| app_build | character varying | NO |  |
+| platform | character varying | NO |  |
+| os_version | character varying | NO |  |
+| device_model | character varying | NO |  |
+
+## fleet_company_profile  (16 rader)
 
 | kolumn | typ | null | default |
 |---|---|---|---|
@@ -389,6 +450,10 @@ Genererad av `manage.py dump_truth`. Redigera inte för hand.
 | legacy_counties | jsonb | NO |  |
 | created_at | timestamp with time zone | NO |  |
 | updated_at | timestamp with time zone | NO |  |
+| registry | jsonb | NO |  |
+| registry_checked_at | timestamp with time zone | YES |  |
+| archived_at | timestamp with time zone | YES |  |
+| archived_by | uuid | YES |  |
 
 ## fleet_coupon  (5 rader)
 
@@ -468,7 +533,7 @@ Genererad av `manage.py dump_truth`. Redigera inte för hand.
 | resolved_at | timestamp with time zone | YES |  |
 | resolved_by | uuid | YES |  |
 
-## fleet_known_account  (9 rader)
+## fleet_known_account  (11 rader)
 
 | kolumn | typ | null | default |
 |---|---|---|---|
@@ -477,7 +542,7 @@ Genererad av `manage.py dump_truth`. Redigera inte för hand.
 | first_seen_at | timestamp with time zone | NO |  |
 | last_seen_at | timestamp with time zone | NO |  |
 
-## fleet_license  (19 rader)
+## fleet_license  (20 rader)
 
 | kolumn | typ | null | default |
 |---|---|---|---|
@@ -491,7 +556,7 @@ Genererad av `manage.py dump_truth`. Redigera inte för hand.
 | ends_at | timestamp with time zone | YES |  |
 | trial_id | uuid | YES |  |
 
-## fleet_license_county  (31 rader)
+## fleet_license_county  (43 rader)
 
 | kolumn | typ | null | default |
 |---|---|---|---|
@@ -583,7 +648,7 @@ Genererad av `manage.py dump_truth`. Redigera inte för hand.
 | expires_at | timestamp with time zone | NO |  |
 | resolved_at | timestamp with time zone | YES |  |
 
-## fleet_pairing_code  (10 rader)
+## fleet_pairing_code  (11 rader)
 
 | kolumn | typ | null | default |
 |---|---|---|---|
@@ -664,6 +729,19 @@ Genererad av `manage.py dump_truth`. Redigera inte för hand.
 | license_id | uuid | YES |  |
 | vehicle_id | uuid | YES |  |
 
+## fleet_sales_followup  (0 rader)
+
+| kolumn | typ | null | default |
+|---|---|---|---|
+| company_id | uuid | NO |  |
+| outcome | character varying | NO |  |
+| note | text | NO |  |
+| next_contact_at | timestamp with time zone | YES |  |
+| last_contact_at | timestamp with time zone | YES |  |
+| contact_attempts | integer | NO |  |
+| updated_by | uuid | YES |  |
+| updated_at | timestamp with time zone | NO |  |
+
 ## fleet_sales_invite  (0 rader)
 
 | kolumn | typ | null | default |
@@ -695,7 +773,7 @@ Genererad av `manage.py dump_truth`. Redigera inte för hand.
 | note | text | NO |  |
 | created_at | timestamp with time zone | NO |  |
 
-## fleet_subscription  (16 rader)
+## fleet_subscription  (18 rader)
 
 | kolumn | typ | null | default |
 |---|---|---|---|
@@ -721,7 +799,39 @@ Genererad av `manage.py dump_truth`. Redigera inte för hand.
 | updated_at | timestamp with time zone | NO |  |
 | price_version_id | character varying | NO |  |
 
-## fleet_trial  (14 rader)
+## fleet_support_message  (8 rader)
+
+| kolumn | typ | null | default |
+|---|---|---|---|
+| id | uuid | NO |  |
+| sender | character varying | NO |  |
+| author_user_id | uuid | YES |  |
+| author_device_id | uuid | YES |  |
+| body | text | NO |  |
+| created_at | timestamp with time zone | NO |  |
+| thread_id | uuid | NO |  |
+
+## fleet_support_thread  (2 rader)
+
+| kolumn | typ | null | default |
+|---|---|---|---|
+| id | uuid | NO |  |
+| company_id | uuid | YES |  |
+| requester_kind | character varying | NO |  |
+| user_id | uuid | YES |  |
+| device_id | uuid | YES |  |
+| requester_label | text | NO |  |
+| status | character varying | NO |  |
+| created_at | timestamp with time zone | NO |  |
+| last_message_at | timestamp with time zone | YES |  |
+| last_customer_message_at | timestamp with time zone | YES |  |
+| last_staff_message_at | timestamp with time zone | YES |  |
+| customer_read_at | timestamp with time zone | YES |  |
+| staff_read_at | timestamp with time zone | YES |  |
+| closed_at | timestamp with time zone | YES |  |
+| closed_by | uuid | YES |  |
+
+## fleet_trial  (15 rader)
 
 | kolumn | typ | null | default |
 |---|---|---|---|
@@ -738,7 +848,7 @@ Genererad av `manage.py dump_truth`. Redigera inte för hand.
 | created_at | timestamp with time zone | NO |  |
 | invite_id | uuid | YES |  |
 
-## fleet_vehicle  (19 rader)
+## fleet_vehicle  (20 rader)
 
 | kolumn | typ | null | default |
 |---|---|---|---|
@@ -750,7 +860,7 @@ Genererad av `manage.py dump_truth`. Redigera inte för hand.
 | created_at | timestamp with time zone | NO |  |
 | archived_at | timestamp with time zone | YES |  |
 
-## fleet_vehicle_assignment  (19 rader)
+## fleet_vehicle_assignment  (20 rader)
 
 | kolumn | typ | null | default |
 |---|---|---|---|
@@ -922,7 +1032,7 @@ Genererad av `manage.py dump_truth`. Redigera inte för hand.
 | status | text | NO |  |
 | error | text | YES |  |
 
-## profiles  (20 rader)
+## profiles  (21 rader)
 
 | kolumn | typ | null | default |
 |---|---|---|---|

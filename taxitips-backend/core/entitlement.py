@@ -75,6 +75,9 @@ class Entitlement:
     session_id: str | None = None
     needs_session: bool = False
     detail: dict | None = None
+    # Vilka kategorier företaget får se (fleet/features.py). None = allt, som
+    # för de äldre vägarna nedan; provet smalnar av till tåg och buss.
+    features: object | None = None
 
     def __bool__(self) -> bool:
         return self.ok
@@ -246,9 +249,17 @@ def entitlement_for_request(request) -> Entitlement:
     Importen ligger i funktionen: fleet.access läser `verify_supabase_jwt`
     härifrån, och en import på modulnivå hade blivit cirkulär.
     """
+    from fleet import features
     from fleet.access import resolve
 
     access = resolve(request)
+    # Bara ett prov kan smalna av; en känd betald period behöver inga fler frågor.
+    if not access.ok or (access.period and access.period != "trial"):
+        plan = features.FULL
+    else:
+        plan = features.for_company(access.company_id)
+    detail = access.as_dict()
+    detail["features"] = plan.as_dict()
     return Entitlement(
         ok=access.ok,
         reason=access.reason,
@@ -259,7 +270,8 @@ def entitlement_for_request(request) -> Entitlement:
         license_id=access.license_id,
         session_id=access.session_id,
         needs_session=access.needs_session,
-        detail=access.as_dict(),
+        detail=detail,
+        features=plan,
     )
 
 

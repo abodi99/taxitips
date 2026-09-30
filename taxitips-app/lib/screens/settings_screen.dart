@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api_client.dart';
+import '../net_status.dart';
 import '../theme.dart';
 import '../widgets/brand_icons.dart';
 import '../widgets/company_settings_panel.dart';
@@ -121,7 +122,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   String _cleanError(Object e) =>
-      e.toString().replaceFirst(RegExp(r'^(ApiException|Exception):\s*'), '');
+      netAwareText(e);
 
   void _showSnack(String message, {bool isError = false}) {
     if (!mounted) return;
@@ -535,10 +536,7 @@ class _EmailChangeDialogState extends State<_EmailChangeDialog> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = e.toString().replaceFirst(
-          RegExp(r'^(ApiException|Exception):\s*'),
-          '',
-        );
+        _error = netAwareText(e);
       });
     }
   }
@@ -565,10 +563,7 @@ class _EmailChangeDialogState extends State<_EmailChangeDialog> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = e.toString().replaceFirst(
-          RegExp(r'^(ApiException|Exception):\s*'),
-          '',
-        );
+        _error = netAwareText(e);
       });
     }
   }
@@ -693,10 +688,7 @@ class _PasswordChangeDialogState extends State<_PasswordChangeDialog> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = e.toString().replaceFirst(
-          RegExp(r'^(ApiException|Exception):\s*'),
-          '',
-        );
+        _error = netAwareText(e);
       });
     }
   }
@@ -721,10 +713,7 @@ class _PasswordChangeDialogState extends State<_PasswordChangeDialog> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = e.toString().replaceFirst(
-          RegExp(r'^(ApiException|Exception):\s*'),
-          '',
-        );
+        _error = netAwareText(e);
       });
     }
   }
@@ -840,10 +829,7 @@ class _EditDialogState extends State<_EditDialog> {
       if (!mounted) return;
       setState(() {
         _busy = false;
-        _error = e.toString().replaceFirst(
-          RegExp(r'^(ApiException|Exception):\s*'),
-          '',
-        );
+        _error = netAwareText(e);
       });
     }
   }

@@ -63,6 +63,15 @@ def _next_text(alert: RailAlert) -> str:
     return "nästa avgång"
 
 
+def _gap_text(alert: RailAlert) -> str:
+    """
+    Glappet efter den inställda avgången, som ett mått som inte åldras:
+    "10 min efter den inställda". Aldrig "om 10 min" -- motiveringen sparas
+    och läses långt efter att den skrevs.
+    """
+    return f"{alert.next_departure_minutes} min efter den inställda avgången"
+
+
 def classify(alert: RailAlert) -> Assessment:
     """
     RailAlert -> tier, poäng, konfidens och motivering.
@@ -105,7 +114,7 @@ def classify(alert: RailAlert) -> Assessment:
         # Det HÄR är fallet som saknades. Resenärerna väntar en kvart --
         # de tar inte taxi. Ett tips här är inte fel, men det ska inte
         # konkurrera med en verkligt strandsatt perrong.
-        reasons.append(f"{_next_text(alert)} om {alert.next_departure_minutes} min")
+        reasons.append(f"{_next_text(alert)} {_gap_text(alert)}")
         return _finish(
             SeverityTier.VEHICLE_CANCELLED, 55, Confidence.HIGH,
             reasons, alert, "train.vehicle_cancelled.alternative_soon",
@@ -119,7 +128,7 @@ def classify(alert: RailAlert) -> Assessment:
         )
 
     if alert.next_departure_minutes is not None:
-        reasons.append(f"{_next_text(alert)} först om {alert.next_departure_minutes} min")
+        reasons.append(f"{_next_text(alert)} {_gap_text(alert)}")
         return _finish(
             SeverityTier.LINE_PAUSED, 78, Confidence.HIGH,
             reasons, alert, "train.line_paused.long_gap",

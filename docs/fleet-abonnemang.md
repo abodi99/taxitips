@@ -195,8 +195,15 @@ order utan villkorsversion går inte att knyta till ett avtal i efterhand.
 
 ## 7. Prov
 
-* 14 dagar, högst tre provbilar, högst **en gratisperiod per företag per 24
-  månader**.
+* 14 dagar, **en provbil** vid självregistrering (tre när en säljare lagt upp
+  provet, `trials.vehicle_limit_for`), ett län per provbil vid
+  självregistrering, högst **en gratisperiod per företag per 24 månader**.
+* **Provet visar bara tåg och buss** (`fleet/features.py`, beslut 2026-09-29).
+  Väg, flyg, färjor och evenemang syns som låsta kategorier med antal tips,
+  men lämnas aldrig ut: flödet, detaljvyn, favoriterna, `/api/ferries`,
+  `/api/events` och notiserna (`push_gate`) filtrerar på servern. Allt öppnas
+  av en betald period, av ett prov där kunden sparat kort
+  (`commerce.has_active_trial_commit`) och av en kupong.
 * Spärren räknar på `land + normaliserat organisationsnummer`, inte på
   company_id, e-post, telefon, Stripe-kund eller administratör — alla fem går
   att byta på en eftermiddag.
@@ -311,7 +318,7 @@ i `taxitips-web/src/admin/sales.js`. Testat i `fleet/tests/test_sales.py`.
 | Steg | Vem | Regel |
 |---|---|---|
 | Lägga upp företag | säljare | Giltigt orgnr (Luhn), en gång per orgnr, dokumenterad kontroll av kontaktpersonen (`verification_note`). `companies.status = inactive` — den nya modellen styr. |
-| Prov | säljare | Samma regler som självregistrering: 14 dagar, högst 3 bilar, ett per orgnr och 24 månader, startar vid första telefonen. Provbilar får prova extra län gratis. |
+| Prov | säljare | 14 dagar, högst 3 bilar (självregistrering: 1), ett per orgnr och 24 månader, startar vid första telefonen. Säljarens provbilar får prova extra län gratis. Bara tåg och buss syns (§7). |
 | Kupong | admin skapar, säljare löser in | Utan betalande abonnemang: tillfällig åtkomst (`Trial.source = coupon`, startar direkt). Med abonnemang i Stripe: nästa debitering flyttas (`trial_end`). Betalt utanför Stripe: perioden förlängs. En gång per bolag och kupong. |
 | Beställning | säljare | Offert först, kundens godkännande intygat. Betalning **bara via Stripe**: kort (betallänk) eller Stripe-faktura. Utan Stripe i miljön vägras beställningen innan något sparas. |
 | ~~Markera betald utanför Stripe~~ | -- | **Borttaget 2026-09-26.** All betalning går genom Stripe, så att varje betalning som gett åtkomst har en faktura att stämma av mot. |
@@ -351,11 +358,32 @@ telefonen och registreringen görs klart vid första inloggningen. Ett orgnr som
 redan har ett konto tas inte över (`company_exists`); en spärrad e-post kommer
 inte in (`account_blocked`).
 
+**Kontrollerna vid registreringen** (`fleet/signup_checks.py`, 2026-09-29) --
+samma prövning körs före kontot via `POST /api/fleet/register/check`:
+
+| Vad | Stoppas | Flaggas för säljaren |
+|---|---|---|
+| Telefon | Krävs; bara svenska mobilnummer (070/072/073/076/079), inte 0700000000 eller 0701234567; ett nummer ger ett prov per 24 månader (`phone_in_use`). Sparas som E.164. | Äldre profiler utan/ogiltigt nummer |
+| Personnummer (enskild firma) | Datum som inte finns, under 18 år | Alltid: namnet bekräftas inte av något register |
+| Organisationsnummer | Dödsbo (1), myndighet/kommun (2), ideell förening (8); AB/ek. förening/HB (5/7/9) som Bolagsverket inte hittar | Registret svarade inte (fleet_tick försöker igen), status ej aktiv, SNI utanför 49 (persontransport) |
+| E-post | Engångsdomäner; token med `email_verified: false` | -- |
+
+Bolagsverket nere stoppar aldrig en registrering (bolagsverket.py); den flaggas
+och `fleet_tick` hämtar registret igen.
+
+**Uppföljning** (adminwebben, `fleet/admin_followup.py`): varje prov som pågår
+eller slutat de senaste 60 dagarna, i ringordning (utlovade samtal, prov som tar
+slut, prov som slutat), med telefon, e-post, flaggor, skickade mejl, och
+säljarens utfall/anteckning/"ring igen" i `fleet_sales_followup`.
+
 Ägaren lägger själv till provbilar upp till provets gräns
 (`POST /api/fleet/trial/vehicles`) och kopplar förare med engångskod. **Fortsatt
 åtkomst efter provet** sker i kundportalen: bekräfta bilar + spara kort
-(`POST /api/fleet/trial/commit` → Stripe Checkout med `trial_end`). Appen visar
-bara en informativ länk till portalen — inga priser och ingen köpknapp.
+(`POST /api/fleet/trial/commit` → Stripe Checkout med `trial_end`). Vägen dit
+är mejlen (start, dag ~3, tre dagar före, sista dygnet, efter provslut -- ett
+mejl per tillfälle). Appen visar ingen länk alls, bara att mejlet visar vägen:
+en länk till en betalsida utanför butikerna är det Apple och Google förbjuder
+(borttagen 2026-09-29).
 Efter provslut utan kort går det fortfarande att beställa och betala nu via
 `POST /api/fleet/orders`.
 

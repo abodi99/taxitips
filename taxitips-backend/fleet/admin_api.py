@@ -35,7 +35,7 @@ from django.views.decorators.http import require_GET, require_POST
 from billing.models import Company, CompanyMember, Device
 from core.api import _json
 from core.models import PushDelivery
-from fleet import access, audit, licensing, pairing, pricing, risk, roles, sessions, trials
+from fleet import access, archive, audit, licensing, pairing, pricing, risk, roles, sessions, trials
 from fleet.api import _DOMAIN_ERRORS, _error
 from fleet.models import (
     AccountBlock,
@@ -166,7 +166,8 @@ def overview(request):
 
     return _json(request, {
         "ok": True,
-        "companies": Company.objects.count(),
+        "companies": Company.objects.exclude(id__in=archive.archived_ids()).count(),
+        "companiesArchived": len(archive.archived_ids()),
         "subscriptions": by_status,
         "mrrOre": mrr,
         "currency": "SEK",
@@ -205,8 +206,12 @@ def companies(request):
     _staff(request, Perm.ADMIN_VIEW)
     now = timezone.now()
     q = (request.GET.get("q") or "").strip()
+    # Arkiverade bolag (fleet/archive.py) syns bara när man ber om dem.
+    show_archived = request.GET.get("archived") == "1"
+    hidden = archive.archived_ids()
 
     rows = Company.objects.all().order_by("name")
+    rows = rows.filter(id__in=hidden) if show_archived else rows.exclude(id__in=hidden)
     if q:
         digits = "".join(ch for ch in q if ch.isdigit())
         filters = Q(name__icontains=q) | Q(join_code__iexact=q)
@@ -288,13 +293,17 @@ def companies(request):
             "unpaidOrders": unpaid_orders.get(company.id, 0),
             "hadPayment": bool(sub and sub.had_successful_payment),
             "suspended": str(company.id) in suspended,
+            "archived": company.id in hidden,
             "trial": (
                 {"status": open_trials[company.id].status,
                  "endsAt": _iso(open_trials[company.id].ends_at)}
                 if company.id in open_trials else None
             ),
         })
-    return _json(request, {"ok": True, "companies": out, "truncated": len(rows) >= _LIST_LIMIT})
+    return _json(request, {
+        "ok": True, "companies": out, "truncated": len(rows) >= _LIST_LIMIT,
+        "archivedCount": len(hidden),
+    })
 
 
 def _company_or_404(company_id) -> Company:
@@ -375,6 +384,8 @@ def company_detail(request, company_id):
 
     return _json(request, {
         "ok": True,
+        # Arkivera/radera: vad som går och varför inte (fleet/archive.py).
+        "archive": archive.state(company.id, now).as_dict(),
         "company": {
             "id": str(company.id), "name": company.name, "email": company.email or "",
             "orgNumber": company.org_number or "", "joinCode": company.join_code,
@@ -884,3 +895,45 @@ def resolve_review(request, review_id):
         note=str(body.get("note", ""))[:500],
     )
     return _json(request, {"ok": True, "status": review.status})
+
+
+# ---------------------------------------------------------------------------
+# Arkivera och radera (fleet/archive.py)
+# ---------------------------------------------------------------------------
+
+
+@csrf_exempt
+@require_POST
+@handle
+def archive_company(request, company_id):
+    """
+    POST /api/admin/companies/<id>/archive {"archived": true|false}
+
+    Döljer ett avslutat bolag i listorna, eller tar tillbaka det. Säljare får
+    göra det -- ingenting tas bort.
+    """
+    principal = _staff(request, Perm.ADMIN_SELL)
+    company = _company_or_404(company_id)
+    if _body(request).get("archived", True) is False:
+        archive.unarchive(company.id, actor_user_id=principal.user_id)
+    else:
+        archive.archive(company.id, actor_user_id=principal.user_id)
+    return _json(request, {"ok": True, **archive.state(company.id).as_dict()})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def delete_company(request, company_id):
+    """
+    POST /api/admin/companies/<id>/delete {"confirmName": "<bolagets namn>"}
+
+    Tar bort ett arkiverat bolag som aldrig betalat. Bara plattformsadministratör.
+    """
+    principal = _staff(request, Perm.ADMIN_MANAGE)
+    company = _company_or_404(company_id)
+    counts = archive.delete(
+        company.id, actor_user_id=principal.user_id,
+        confirm_name=str(_body(request).get("confirmName") or ""),
+    )
+    return _json(request, {"ok": True, "deleted": counts})

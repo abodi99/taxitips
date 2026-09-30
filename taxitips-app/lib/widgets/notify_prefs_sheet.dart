@@ -3,6 +3,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../api_client.dart';
 import '../signal_kinds.dart';
+import '../net_status.dart';
 import '../theme.dart';
 
 /// Notisinställningar: på/av och händelsetyper.
@@ -129,10 +130,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
     } catch (e) {
       setState(() {
         _loading = false;
-        _error = e.toString().replaceFirst(
-          RegExp(r'^(ApiException|Exception):\s*'),
-          '',
-        );
+        _error = netAwareText(e);
       });
     }
   }
@@ -170,10 +168,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString().replaceFirst(
-            RegExp(r'^(ApiException|Exception):\s*'),
-            '',
-          );
+          _error = netAwareText(e);
         });
       }
     } finally {
@@ -199,10 +194,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString().replaceFirst(
-            RegExp(r'^(ApiException|Exception):\s*'),
-            '',
-          );
+          _error = netAwareText(e);
         });
       }
     } finally {
@@ -233,10 +225,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
     } catch (e) {
       if (mounted) {
         setState(
-          () => _error = e.toString().replaceFirst(
-            RegExp(r'^(ApiException|Exception):\s*'),
-            '',
-          ),
+          () => _error = netAwareText(e),
         );
       }
     } finally {

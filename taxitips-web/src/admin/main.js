@@ -1,9 +1,12 @@
 import { promptAndSetPassword, sendPasswordReset } from "../auth_password.js";
 import { ApiError, supabase } from "../portal/api.js";
 import * as acc from "./accounts.js";
+import * as activity from "./activity.js";
+import { followUpBody, uppfoljning } from "./followup.js";
 import { admin } from "./api.js";
 import * as sales from "./sales.js";
 import { LEVEL, statusBanner, statusView } from "./status.js";
+import { appVersionCard, bindAppVersionForm, loadAppVersion } from "./app_version.js";
 import * as support from "./support.js";
 import * as views from "./views.js";
 
@@ -63,6 +66,7 @@ const state = {
   // Kundens cykel: vilket steg som är öppet, och listans filter.
   companyTab: "",
   kundFilter: "alla",
+  fuFilter: "ring",
   // En betald bils ändring som väntar på kundens godkännande: offerten visas
   // i bilens kort tills säljaren bekräftar eller avbryter.
   pending: null,
@@ -133,6 +137,8 @@ async function renderView(seq) {
       paint(views.kund(
         await admin.company(state.companyId), state.config, state.companyTab, state.pending,
       ));
+      // Hopfälld ruta sist: företagets appar och fel (activity.js).
+      activity.companyPanel(el.view, state.companyId, { isCurrent: current });
       return;
     }
     switch (state.view) {
@@ -149,9 +155,9 @@ async function renderView(seq) {
       case "status": {
         const fresh = state.statusFresh;
         state.statusFresh = false;
-        const report = await admin.status(fresh);
+        const [report, appVersion] = await Promise.all([admin.status(fresh), loadAppVersion()]);
         setStatus(report);
-        paint(statusView(report));
+        paint(statusView(report) + appVersionCard(appVersion, !!state.config?.canManage));
         break;
       }
       case "support":
@@ -171,7 +177,13 @@ async function renderView(seq) {
         state.supportThread = null;
         break;
       case "kunder":
-        paint(views.kunder(await admin.companies(state.query), state.query, state.kundFilter));
+        paint(views.kunder(
+          await admin.companies(state.query, state.kundFilter === "arkiverade"),
+          state.query, state.kundFilter,
+        ));
+        break;
+      case "uppfoljning":
+        paint(uppfoljning(await admin.followUps(), state.fuFilter));
         break;
       case "nykund":
         paint(sales.nyKund(state.config, state.lookup, state.lookupOrg));
@@ -195,6 +207,10 @@ async function renderView(seq) {
       }
       case "personal":
         paint(acc.personal(await admin.staff(), state.config));
+        break;
+      case "aktivitet":
+        // Egen vy med egna filter och händelser, se activity.js.
+        await activity.mount(el.view, { isCurrent: current, onError: showError });
         break;
       case "granskning":
         paint(views.granskning(await admin.reviews("open")));
@@ -442,10 +458,29 @@ for (const tab of el.tabs) {
   });
 }
 
+bindAppVersionForm(el.view);
+
 el.view.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.target;
   clearError();
+  if (form.dataset.form === "followup") {
+    // Ingen omritning av hela listan: säljaren står mitt i den.
+    const button = form.querySelector('button[type="submit"]');
+    if (button) button.disabled = true;
+    try {
+      const saved = await admin.updateFollowUp(form.dataset.company, followUpBody(form));
+      const meta = form.querySelector(".fu-meta");
+      if (meta) meta.textContent = `Sparat · ${saved.attempts} samtal`;
+      const box = form.querySelector('input[name="contacted"]');
+      if (box) box.checked = false;
+    } catch (error) {
+      showError(error);
+    } finally {
+      if (button) button.disabled = false;
+    }
+    return;
+  }
   try {
     switch (form.id) {
       case "searchForm":
@@ -569,6 +604,10 @@ async function act(action, ds) {
 
     case "kund-filter":
       state.kundFilter = ds.filter;
+      return render();
+
+    case "fu-filter":
+      state.fuFilter = ds.filter;
       return render();
 
     case "extend": {
@@ -1162,6 +1201,39 @@ async function salesAction(action, ds) {
       if (!confirm("Är du säker? Det går inte att ångra.")) return;
       const result = await admin.cancelSubscription(companyId, reason, true);
       alert(`Abonnemanget är avslutat.${stripeWarning(result)}`);
+      if (confirm("Vill du också arkivera bolaget, så att det inte syns i listorna längre?")) {
+        try {
+          await admin.archiveCompany(companyId, true);
+          flash("Bolaget är avslutat och arkiverat. Det finns under Kunder → Arkiverade.");
+        } catch (error) {
+          showError(error);
+        }
+      }
+      return render();
+    }
+
+    case "archive":
+      await admin.archiveCompany(companyId, true);
+      flash("Bolaget är arkiverat. Det finns under Kunder → Arkiverade.");
+      state.companyId = null;
+      return render();
+
+    case "unarchive":
+      await admin.archiveCompany(companyId, false);
+      flash("Bolaget är återställt och syns i listorna igen.");
+      return render();
+
+    case "delete-company": {
+      const name = prompt(
+        "RADERA PERMANENT: bolaget, bilarna, telefonerna, beställningarna och chatten tas bort " +
+          "och går inte att få tillbaka.\n\nSkriv bolagets namn exakt för att bekräfta:",
+      );
+      if (!name) return;
+      const result = await admin.deleteCompany(companyId, name);
+      const total = Object.values(result.deleted ?? {}).reduce((a, b) => a + b, 0);
+      flash(`Bolaget är raderat (${total} rader). Provhistoriken på organisationsnumret finns kvar.`);
+      state.companyId = null;
+      state.kundFilter = "alla";
       return render();
     }
 

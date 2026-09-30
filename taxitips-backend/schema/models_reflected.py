@@ -76,6 +76,22 @@ class Alerts(models.Model):
         db_table = 'alerts'
 
 
+class AppVersionPolicy(models.Model):
+    id = models.IntegerField(primary_key=True)
+    android_min_version = models.CharField(max_length=32)
+    android_recommended_version = models.CharField(max_length=32)
+    ios_min_version = models.CharField(max_length=32)
+    ios_recommended_version = models.CharField(max_length=32)
+    ios_store_url = models.CharField(max_length=300)
+    message = models.TextField()
+    updated_at = models.DateTimeField()
+    updated_by = models.UUIDField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'app_version_policy'
+
+
 class AuthGroup(models.Model):
     name = models.CharField(unique=True, max_length=150)
 
@@ -426,6 +442,58 @@ class FleetChangeReview(models.Model):
         db_table = 'fleet_change_review'
 
 
+class FleetClientActivity(models.Model):
+    id = models.UUIDField(primary_key=True)
+    subject_kind = models.CharField(max_length=10)
+    subject_id = models.UUIDField()
+    company_id = models.UUIDField(blank=True, null=True)
+    first_seen_at = models.DateTimeField()
+    last_seen_at = models.DateTimeField()
+    last_login_at = models.DateTimeField(blank=True, null=True)
+    app_version = models.CharField(max_length=32)
+    app_build = models.CharField(max_length=16)
+    platform = models.CharField(max_length=16)
+    os_version = models.CharField(max_length=64)
+    device_model = models.CharField(max_length=64)
+    ip_prefix = models.CharField(max_length=48)
+    country = models.CharField(max_length=2)
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_client_activity'
+        unique_together = (('subject_kind', 'subject_id'),)
+
+
+class FleetClientError(models.Model):
+    id = models.UUIDField(primary_key=True)
+    created_at = models.DateTimeField()
+    last_at = models.DateTimeField()
+    occurrences = models.IntegerField()
+    source = models.CharField(max_length=10)
+    kind = models.CharField(max_length=10)
+    flow = models.CharField(max_length=64)
+    error_type = models.CharField(max_length=80)
+    message = models.TextField()
+    stack = models.TextField()
+    fatal = models.BooleanField()
+    http_status = models.IntegerField(blank=True, null=True)
+    reason = models.CharField(max_length=64)
+    request_id = models.CharField(max_length=64)
+    path = models.CharField(max_length=200)
+    company_id = models.UUIDField(blank=True, null=True)
+    user_id = models.UUIDField(blank=True, null=True)
+    device_id = models.UUIDField(blank=True, null=True)
+    app_version = models.CharField(max_length=32)
+    app_build = models.CharField(max_length=16)
+    platform = models.CharField(max_length=16)
+    os_version = models.CharField(max_length=64)
+    device_model = models.CharField(max_length=64)
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_client_error'
+
+
 class FleetCompanyProfile(models.Model):
     company_id = models.UUIDField(primary_key=True)
     country = models.CharField(max_length=2)
@@ -450,6 +518,10 @@ class FleetCompanyProfile(models.Model):
     legacy_counties = models.JSONField()
     created_at = models.DateTimeField()
     updated_at = models.DateTimeField()
+    registry = models.JSONField()
+    registry_checked_at = models.DateTimeField(blank=True, null=True)
+    archived_at = models.DateTimeField(blank=True, null=True)
+    archived_by = models.UUIDField(blank=True, null=True)
 
     class Meta:
         managed = False
@@ -769,6 +841,21 @@ class FleetRiskSignal(models.Model):
         db_table = 'fleet_risk_signal'
 
 
+class FleetSalesFollowup(models.Model):
+    company_id = models.UUIDField(primary_key=True)
+    outcome = models.CharField(max_length=20)
+    note = models.TextField()
+    next_contact_at = models.DateTimeField(blank=True, null=True)
+    last_contact_at = models.DateTimeField(blank=True, null=True)
+    contact_attempts = models.IntegerField()
+    updated_by = models.UUIDField(blank=True, null=True)
+    updated_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_sales_followup'
+
+
 class FleetSalesInvite(models.Model):
     id = models.UUIDField(primary_key=True)
     code_hash = models.CharField(unique=True, max_length=64)
@@ -830,6 +917,42 @@ class FleetSubscription(models.Model):
     class Meta:
         managed = False
         db_table = 'fleet_subscription'
+
+
+class FleetSupportMessage(models.Model):
+    id = models.UUIDField(primary_key=True)
+    sender = models.CharField(max_length=10)
+    author_user_id = models.UUIDField(blank=True, null=True)
+    author_device_id = models.UUIDField(blank=True, null=True)
+    body = models.TextField()
+    created_at = models.DateTimeField()
+    thread = models.ForeignKey('FleetSupportThread', models.DO_NOTHING)
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_support_message'
+
+
+class FleetSupportThread(models.Model):
+    id = models.UUIDField(primary_key=True)
+    company_id = models.UUIDField(blank=True, null=True)
+    requester_kind = models.CharField(max_length=10)
+    user_id = models.UUIDField(unique=True, blank=True, null=True)
+    device_id = models.UUIDField(unique=True, blank=True, null=True)
+    requester_label = models.TextField()
+    status = models.CharField(max_length=10)
+    created_at = models.DateTimeField()
+    last_message_at = models.DateTimeField(blank=True, null=True)
+    last_customer_message_at = models.DateTimeField(blank=True, null=True)
+    last_staff_message_at = models.DateTimeField(blank=True, null=True)
+    customer_read_at = models.DateTimeField(blank=True, null=True)
+    staff_read_at = models.DateTimeField(blank=True, null=True)
+    closed_at = models.DateTimeField(blank=True, null=True)
+    closed_by = models.UUIDField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_support_thread'
 
 
 class FleetTrial(models.Model):

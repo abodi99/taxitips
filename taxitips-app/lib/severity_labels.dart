@@ -133,8 +133,18 @@ CustomerLikelihood customerLikelihood({
 // still drives the badge colour and the "Bara hög prio" filter.
 
 const _months = [
-  'jan', 'feb', 'mar', 'apr', 'maj', 'jun',
-  'jul', 'aug', 'sep', 'okt', 'nov', 'dec',
+  'jan',
+  'feb',
+  'mar',
+  'apr',
+  'maj',
+  'jun',
+  'jul',
+  'aug',
+  'sep',
+  'okt',
+  'nov',
+  'dec',
 ];
 
 // Titles this generic carry no place/route info at all -- Trafiklab
@@ -259,7 +269,6 @@ String compensationLabel(num? amountKr, {bool? perPerson}) {
   return 'Taxi ersätts · upp till ${amountKr.round()} kr$per';
 }
 
-
 /// "Vad gör resenären i stället?" — nästa avgång och ersättningstrafik.
 ///
 /// Meningen kommer färdigformulerad från backend (core/alternatives.py);
@@ -273,7 +282,18 @@ class TravelOptions {
     required this.hasAlternative,
     required this.minutes,
     this.planner,
+    this.nextDepartureAt,
+    this.headUpcoming,
+    this.headDeparted,
+    this.tail,
   });
+
+  /// Den absoluta avgångstiden (ISO från backend). "om X" räknas av den mot
+  /// klockan när raden ritas -- aldrig mot när tipset skrevs eller hämtades.
+  final DateTime? nextDepartureAt;
+  final String? headUpcoming;
+  final String? headDeparted;
+  final String? tail;
 
   final String? summary;
   final bool isLastDeparture;
@@ -295,7 +315,26 @@ class TravelOptions {
       hasAlternative: raw['has_alternative'] == true,
       minutes: (raw['next_departure_minutes'] as num?)?.toInt(),
       planner: raw['planner']?.toString(),
+      nextDepartureAt: DateTime.tryParse(
+        raw['next_departure_at']?.toString() ?? '',
+      ),
+      headUpcoming: raw['summary_head_upcoming']?.toString(),
+      headDeparted: raw['summary_head_departed']?.toString(),
+      tail: raw['summary_tail']?.toString(),
     );
+  }
+
+  /// Raden som den ska läsas just nu. Utan absolut tid (eller vid "sista
+  /// avgången") gäller backends färdiga mening oförändrad.
+  String text({DateTime? now}) {
+    final at = nextDepartureAt;
+    if (at == null || isLastDeparture) return summary!;
+    final departed = at.difference(now ?? DateTime.now()).inSeconds <= 0;
+    final head = departed ? headDeparted : headUpcoming;
+    if (head == null || head.isEmpty) return summary!;
+    final rel = departed ? '' : ' (${relativeDeparture(at, now: now)})';
+    final t = (tail == null || tail!.isEmpty) ? '' : ' · $tail';
+    return '$head$rel$t';
   }
 
   /// Sista avgången betyder att ingen tar sig hem själv — det är den
@@ -304,4 +343,18 @@ class TravelOptions {
   /// motsatt innebörd, så de får inte se likadana ut.
   bool get isStrong => isLastDeparture || (minutes != null && minutes! >= 60);
   bool get isWeak => hasAlternative && !isLastDeparture;
+}
+
+/// "om 10 min", "om 1 tim 50 min", "avgår nu" -- alltid mot `now`
+/// (standard: klockan just nu). Aldrig negativt: en avgång som har gått
+/// ger "har gått", inte "om -5 min".
+String relativeDeparture(DateTime at, {DateTime? now}) {
+  final secs = at.difference(now ?? DateTime.now()).inSeconds;
+  if (secs <= -60) return 'har gått';
+  if (secs < 60) return 'avgår nu';
+  final minutes = (secs / 60).round();
+  if (minutes < 60) return 'om $minutes min';
+  final h = minutes ~/ 60;
+  final m = minutes % 60;
+  return m == 0 ? 'om $h tim' : 'om $h tim $m min';
 }

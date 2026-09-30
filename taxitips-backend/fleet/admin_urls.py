@@ -6,17 +6,27 @@ det här inte är kundens väg.
 
 from django.urls import path
 
-from fleet import admin_accounts, admin_api, admin_sales, admin_status, admin_support, admin_vehicles
+from fleet import (
+    admin_accounts, admin_activity, admin_api, admin_app_version, admin_followup, admin_sales, admin_status, admin_support,
+    admin_vehicles,
+)
 
 urlpatterns = [
     path("overview", admin_api.overview),
     # Varje koppling (databas, kö, källor, Stripe, Bolagsverket, Firebase, SMTP).
     path("status", admin_status.status),
+    # Minsta och rekommenderade appversion per plattform -- se core/app_version.py.
+    path("app-version", admin_app_version.app_version_view),
     path("companies", admin_api.companies),
+    # Säljarens uppföljning av prov (vem ska ringas, vad sa de).
+    path("followups", admin_followup.followups),
+    path("followups/<uuid:company_id>", admin_followup.update_followup),
     path("companies/new", admin_sales.create_company),
     path("companies/<uuid:company_id>", admin_api.company_detail),
     path("companies/<uuid:company_id>/profile", admin_sales.update_profile),
     path("companies/<uuid:company_id>/registry", admin_sales.refresh_registry),
+    path("companies/<uuid:company_id>/archive", admin_api.archive_company),
+    path("companies/<uuid:company_id>/delete", admin_api.delete_company),
     path("companies/<uuid:company_id>/support", admin_support.start_with_company),
     # Supportchatten
     path("support/threads", admin_support.threads),
@@ -54,6 +64,10 @@ urlpatterns = [
     path("events/<int:event_id>/visibility", admin_api.event_visibility),
     path("events/<int:event_id>/delete", admin_api.event_delete),
     path("accounts", admin_accounts.search),
+    # Appar och fel: senaste inloggning, version och telefon per konto och
+    # telefon, och appens/serverns fel. Se fleet/admin_activity.py.
+    path("activity/clients", admin_activity.clients),
+    path("activity/errors", admin_activity.errors),
     path("blocks", admin_accounts.blocks),
     path("blocks/new", admin_accounts.create_block),
     path("blocks/<uuid:block_id>/lift", admin_accounts.lift_block),

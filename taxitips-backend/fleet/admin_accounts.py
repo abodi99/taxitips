@@ -44,8 +44,12 @@ def _account_row(user_id, email: str, last_seen=None) -> dict:
         m["companyName"] = names.get(m["companyId"], "")
     staff = StaffRole.objects.filter(user_id=user_id).first()
     block = accounts.account_block(user_id=user_id, email=email)
+    from fleet.admin_activity import activity_for_user
+
     return {
         "userId": str(user_id), "email": email, "lastSeenAt": _iso(last_seen),
+        # Senaste inloggning, appversion och telefon (fleet/client_activity.py).
+        "client": activity_for_user(user_id),
         "memberships": memberships,
         "staffRole": staff.role if staff and staff.is_active else "",
         "blocked": accounts.block_row(block) if block else None,

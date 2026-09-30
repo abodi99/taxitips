@@ -4,7 +4,9 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'api_client.dart' show ApiException;
+import 'client_info.dart';
 import 'config.dart';
+import 'net_status.dart';
 
 /// Klienten mot taxitips-backend (Django) -- tipsflödet, förklaringen och
 /// feedbacken.
@@ -30,7 +32,7 @@ class BackendApi {
       // Injicerbar med avsikt: annars går den här klassen bara att prova
       // mot en riktig server, och headern som bär förarens token är just
       // det som tyst kan sluta skickas.
-      _client = client ?? http.Client();
+      _client = NetAwareClient(client ?? http.Client());
 
   final String baseUrl;
   final http.Client _client;
@@ -40,6 +42,10 @@ class BackendApi {
   static const _timeout = Duration(seconds: 12);
 
   Map<String, String> _headers({String? deviceToken, String? accessToken}) => {
+    // Appversion, plattform, OS och modell, för supporten
+    // (lib/client_info.dart, fleet/client_activity.py). Först, så att inget
+    // av det nedan kan skrivas över av dem.
+    ...ClientInfo.headers,
     'Accept': 'application/json',
     'Content-Type': 'application/json',
     if (deviceToken != null && deviceToken.isNotEmpty)
@@ -53,6 +59,15 @@ class BackendApi {
     try {
       body = Map<String, dynamic>.from(jsonDecode(res.body) as Map);
     } catch (_) {
+      // 502/503/504 med HTML: proxyn svarar men appen bakom är nere
+      // (omstart, deploy). För föraren är det "servern svarar inte".
+      if (res.statusCode >= 502 && res.statusCode <= 504) {
+        throw ApiException(
+          res.statusCode,
+          netMessage(NetFailure.unreachable),
+          reason: netReason(NetFailure.unreachable),
+        );
+      }
       throw ApiException(res.statusCode, 'Ogiltigt svar från backend ($op)');
     }
     if (res.statusCode >= 400) {
@@ -541,6 +556,21 @@ class BackendApi {
     return _decode(res, 'registryLookup');
   }
 
+  /// Samma prövning som registreringen (telefon, org.nr/personnummer,
+  /// Bolagsverket, e-postdomän), innan Supabase-kontot skapas
+  /// (fleet/api.py:register_check). Kastar ApiException med `reason` när
+  /// något är fel.
+  Future<Map<String, dynamic>> registerCheck(Map<String, dynamic> body) async {
+    final res = await _client
+        .post(
+          Uri.parse('$baseUrl/api/fleet/register/check'),
+          headers: _headers(),
+          body: jsonEncode(body),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'registerCheck');
+  }
+
   // Supportchatten (/api/support). Båda bevisen följer med: servern väljer
   // kontot om appen är inloggad, annars telefonen (fleet/support.py).
 
@@ -585,5 +615,21 @@ class BackendApi {
         )
         .timeout(_timeout);
     return _decode(res, 'supportSend');
+  }
+
+  /// Felrapporten (lib/client_log.dart -> POST /api/client-log). Kort
+  /// tidsgräns och inget svar att läsa: rapporten får aldrig hålla uppe något.
+  Future<void> clientLog(
+    Map<String, dynamic> body, {
+    String? deviceToken,
+    String? accessToken,
+  }) async {
+    await _client
+        .post(
+          Uri.parse('$baseUrl/api/client-log'),
+          headers: _headers(deviceToken: deviceToken, accessToken: accessToken),
+          body: jsonEncode(body),
+        )
+        .timeout(const Duration(seconds: 5));
   }
 }

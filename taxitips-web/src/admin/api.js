@@ -13,9 +13,25 @@ export const admin = {
   // Varje koppling, grön/gul/röd (fleet/admin_status.py). `fresh` kör om
   // kontrollerna; annars ett svar som är högst 30 s gammalt.
   status: (fresh = false) => request(`/api/admin/status${fresh ? "?fresh=1" : ""}`),
-  companies: (q = "") =>
-    request(`/api/admin/companies${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  // Minsta och rekommenderade appversion (core/app_version.py). Ändra kräver ADMIN_MANAGE.
+  appVersion: () => request("/api/admin/app-version"),
+  setAppVersion: (body) => request("/api/admin/app-version", { method: "POST", body }),
+  companies: (q = "", archived = false) => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (archived) params.set("archived", "1");
+    const qs = params.toString();
+    return request(`/api/admin/companies${qs ? `?${qs}` : ""}`);
+  },
+  archiveCompany: (id, archived = true) =>
+    request(`/api/admin/companies/${id}/archive`, { method: "POST", body: { archived } }),
+  deleteCompany: (id, confirmName) =>
+    request(`/api/admin/companies/${id}/delete`, { method: "POST", body: { confirmName } }),
   company: (id) => request(`/api/admin/companies/${id}`),
+  /* --- Uppföljning av prov (fleet/admin_followup.py) --- */
+  followUps: () => request("/api/admin/followups"),
+  updateFollowUp: (companyId, body) =>
+    request(`/api/admin/followups/${companyId}`, { method: "POST", body }),
   setSubscription: (id, body) =>
     request(`/api/admin/companies/${id}/subscription`, { method: "POST", body }),
   pairingCode: (id, licenseId, label = "Support") =>
