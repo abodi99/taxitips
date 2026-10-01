@@ -207,7 +207,8 @@ class _EventsScreenState extends State<EventsScreen> {
         _attribution = body['attribution']?.toString() ?? '';
         _maxDays = (body['maxDays'] as num?)?.toInt() ?? _maxDays;
         _locked = body['reason'] == 'feature_locked'
-            ? (body['message']?.toString() ?? 'Ingår när företaget har ett abonnemang.')
+            ? (body['message']?.toString() ??
+                  'Ingår när företaget har ett abonnemang.')
             : null;
         _loading = false;
       });
@@ -769,7 +770,11 @@ class _EventsScreenState extends State<EventsScreen> {
                 padding: const EdgeInsets.fromLTRB(8, 32, 8, 8),
                 child: Column(
                   children: [
-                    Icon(Icons.lock_rounded, size: 48, color: Colors.grey.shade500),
+                    Icon(
+                      Icons.lock_rounded,
+                      size: 48,
+                      color: Colors.grey.shade500,
+                    ),
                     const SizedBox(height: 10),
                     Text(
                       _locked!,

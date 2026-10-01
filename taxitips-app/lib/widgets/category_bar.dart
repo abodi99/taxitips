@@ -149,7 +149,11 @@ class _CategoryChip extends StatelessWidget {
                 ),
                 const SizedBox(width: 6),
                 if (locked) ...[
-                  const Icon(Icons.lock_rounded, size: 15, color: TbColors.skiffer),
+                  const Icon(
+                    Icons.lock_rounded,
+                    size: 15,
+                    color: TbColors.skiffer,
+                  ),
                   const SizedBox(width: 4),
                 ],
                 Container(

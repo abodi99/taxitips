@@ -55,3 +55,16 @@ Future<void> logAnalyticsEvent(
     debugPrint('Analytics event failed: $e');
   }
 }
+
+/// Skärmvisning för skärmar som inte är Navigator-routes (välkomst,
+/// inloggning, onboarding väljs med en switch i main.dart och syns därför
+/// inte för FirebaseAnalyticsObserver).
+Future<void> logScreen(String name) async {
+  final a = _analytics;
+  if (a == null || !_collectionEnabled) return;
+  try {
+    await a.logScreenView(screenName: name, screenClass: name);
+  } catch (e) {
+    debugPrint('Analytics screen failed: $e');
+  }
+}

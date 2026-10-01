@@ -224,9 +224,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
       );
     } catch (e) {
       if (mounted) {
-        setState(
-          () => _error = netAwareText(e),
-        );
+        setState(() => _error = netAwareText(e));
       }
     } finally {
       if (mounted) setState(() => _saving = false);

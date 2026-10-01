@@ -91,7 +91,13 @@ class ClientLog {
     };
     final previousPlatform = PlatformDispatcher.instance.onError;
     PlatformDispatcher.instance.onError = (error, stack) {
-      report(kind: 'crash', flow: 'uncaught', error: error, stack: stack, fatal: true);
+      report(
+        kind: 'crash',
+        flow: 'uncaught',
+        error: error,
+        stack: stack,
+        fatal: true,
+      );
       // Samma svar som förut: Crashlyticss hanterare säger "hanterat", utan
       // den får motorn skriva ut felet som vanligt.
       return previousPlatform?.call(error, stack) ?? false;
@@ -182,7 +188,11 @@ class ClientLog {
     }
   }
 
-  static void _crashlyticsNonFatal(String flow, Object error, StackTrace? stack) {
+  static void _crashlyticsNonFatal(
+    String flow,
+    Object error,
+    StackTrace? stack,
+  ) {
     if (!firebaseReady || kIsWeb) return;
     try {
       unawaited(

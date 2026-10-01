@@ -31,33 +31,44 @@ void main() {
   });
 
   group('BackendApi', () {
-    test('varje anrop bär appens plattform, och tokens skrivs inte över', () async {
-      final seen = <http.Request>[];
-      final api = BackendApi(
-        baseUrl: 'http://localhost:8000',
-        client: MockClient((req) async {
-          seen.add(req);
-          return http.Response('{"ok": true}', 202);
-        }),
-      );
-      await api.clientLog(
-        {'kind': 'flow', 'flow': 'feed', 'message': 'x'},
-        deviceToken: 'tok-1',
-      );
-      final req = seen.single;
-      expect(req.url.path, '/api/client-log');
-      expect(req.method, 'POST');
-      expect(req.headers['X-App-Platform'], ClientInfo.platformName());
-      expect(req.headers['X-Device-Token'], 'tok-1');
-      expect(jsonDecode(req.body), {'kind': 'flow', 'flow': 'feed', 'message': 'x'});
-    });
+    test(
+      'varje anrop bär appens plattform, och tokens skrivs inte över',
+      () async {
+        final seen = <http.Request>[];
+        final api = BackendApi(
+          baseUrl: 'http://localhost:8000',
+          client: MockClient((req) async {
+            seen.add(req);
+            return http.Response('{"ok": true}', 202);
+          }),
+        );
+        await api.clientLog({
+          'kind': 'flow',
+          'flow': 'feed',
+          'message': 'x',
+        }, deviceToken: 'tok-1');
+        final req = seen.single;
+        expect(req.url.path, '/api/client-log');
+        expect(req.method, 'POST');
+        expect(req.headers['X-App-Platform'], ClientInfo.platformName());
+        expect(req.headers['X-Device-Token'], 'tok-1');
+        expect(jsonDecode(req.body), {
+          'kind': 'flow',
+          'flow': 'feed',
+          'message': 'x',
+        });
+      },
+    );
   });
 
   group('ClientLog', () {
     test('bara kritiska operationer rapporteras', () async {
       ClientLog.attach((body) async => sent.add(body));
       ClientLog.apiFailure('setFavorite', Exception('x'));
-      ClientLog.apiFailure('taxi.alerts', ApiException(503, 'Backend nere', reason: 'internal_error'));
+      ClientLog.apiFailure(
+        'taxi.alerts',
+        ApiException(503, 'Backend nere', reason: 'internal_error'),
+      );
       await flush();
       expect(sent, hasLength(1));
       expect(sent.single['flow'], 'feed');

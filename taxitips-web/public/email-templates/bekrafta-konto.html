@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="sv">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Din kod till Taxi Tips</title>
+</head>
+<!--
+  Supabase Auth (GoTrue) "Confirm signup". Koden ({{ .Token }}) skrivs in i
+  appen; länken fungerar som reserv. Prod: GOTRUE_MAILER_TEMPLATES_CONFIRMATION
+  pekar hit (se docs/epost-otp.md). Inline-stilar: e-postklienter läser inte
+  <style> pålitligt.
+-->
+<body style="margin:0;padding:0;background:#F5F7FA;font-family:Inter,Arial,Helvetica,sans-serif;color:#14213D;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:#F5F7FA;padding:32px 16px;">
+    <tr>
+      <td align="center">
+        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:480px;background:#FFFFFF;border-radius:16px;overflow:hidden;">
+          <tr>
+            <td style="background:#14213D;padding:24px 28px;color:#F5F7FA;font-size:20px;font-weight:800;">
+              taxi<span style="color:#FCA311;">tips</span>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:28px;">
+              <h1 style="margin:0 0 8px;font-size:22px;line-height:1.3;">Din kod till Taxi Tips</h1>
+              <p style="margin:0 0 20px;font-size:16px;line-height:1.5;color:#526078;">
+                Skriv in koden i appen för att bekräfta {{ .Email }}.
+              </p>
+              <div style="font-size:36px;font-weight:800;letter-spacing:10px;text-align:center;background:#F5F7FA;border-radius:12px;padding:18px 12px;color:#14213D;">
+                {{ .Token }}
+              </div>
+              <p style="margin:20px 0 0;font-size:14px;line-height:1.5;color:#526078;">
+                Koden gäller i 24 timmar. Fungerar den inte kan du i stället
+                <a href="{{ .ConfirmationURL }}" style="color:#14213D;font-weight:700;">bekräfta med den här länken</a>.
+              </p>
+              <p style="margin:16px 0 0;font-size:13px;line-height:1.5;color:#8A93A3;">
+                Har du inte registrerat dig hos Taxi Tips? Då kan du strunta i mejlet.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>

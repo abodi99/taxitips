@@ -15,6 +15,10 @@ const kRcAndroidStoreUrl = 'android_store_url';
 const kRcIosStoreUrl = 'ios_store_url';
 const kRcForceUpgradeMessage = 'force_upgrade_message';
 
+/// Kommaseparerade versioner som inte får köras, t.ex. `1.4.0, 1.4.1+33`.
+const kRcAndroidBlocked = 'android_blocked_versions';
+const kRcIosBlocked = 'ios_blocked_versions';
+
 Future<void> initRemoteConfigSafe() async {
   if (!firebaseReady || kIsWeb) return;
   try {
@@ -35,6 +39,8 @@ Future<void> initRemoteConfigSafe() async {
       kRcAndroidStoreUrl: '',
       kRcIosStoreUrl: '',
       kRcForceUpgradeMessage: '',
+      kRcAndroidBlocked: '',
+      kRcIosBlocked: '',
     });
     try {
       await rc.fetchAndActivate();
@@ -66,6 +72,9 @@ UpgradePolicy? remoteUpgradePolicy(String platform) {
     ),
     storeUrl: _rcText(rc, isAndroid ? kRcAndroidStoreUrl : kRcIosStoreUrl),
     message: _rcText(rc, kRcForceUpgradeMessage),
+    blocked: UpgradePolicy.parseList(
+      _rcText(rc, isAndroid ? kRcAndroidBlocked : kRcIosBlocked),
+    ),
   );
 }
 

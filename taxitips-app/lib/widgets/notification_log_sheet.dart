@@ -55,7 +55,8 @@ class _NotificationLogSheetState extends State<NotificationLogSheet> {
       final data = await widget.api.notifications();
       if (!mounted) return;
       setState(() {
-        _rows = (data['notifications'] as List?)?.cast<Map<String, dynamic>>() ??
+        _rows =
+            (data['notifications'] as List?)?.cast<Map<String, dynamic>>() ??
             const [];
         _reason = data['reason']?.toString();
         _hint = data['hint']?.toString();
@@ -171,14 +172,16 @@ class _NotificationLogSheetState extends State<NotificationLogSheet> {
                 title: _reason == 'no_backend'
                     ? 'Notishistorik kräver backend'
                     : 'Ingen parad telefon',
-                body: _hint ??
+                body:
+                    _hint ??
                     'Notiser skickas till en parad enhet. Den här '
                         'inloggningen har ingen.',
               )
             else if (_rows.isEmpty)
               const _EmptyNote(
                 title: 'Inga notiser än',
-                body: 'Notiser skickas bara för störningar som är värda att '
+                body:
+                    'Notiser skickas bara för störningar som är värda att '
                     'avbryta för. Är det lugnt i dina län hör du inget — '
                     'och det är meningen.',
               )
@@ -193,8 +196,8 @@ class _NotificationLogSheetState extends State<NotificationLogSheet> {
                   onToggleFavorite: row['purged'] == true
                       ? null
                       : () => _toggleFavorite(row),
-                  onTap: row['purged'] == true ||
-                          widget.onOpenOpportunity == null
+                  onTap:
+                      row['purged'] == true || widget.onOpenOpportunity == null
                       ? null
                       : () {
                           final id = row['opportunity_id']?.toString();

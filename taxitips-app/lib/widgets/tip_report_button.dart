@@ -76,7 +76,9 @@ class _TipReportButtonState extends State<TipReportButton> {
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Kunde inte skicka rapporten. Prova igen.')),
+          const SnackBar(
+            content: Text('Kunde inte skicka rapporten. Prova igen.'),
+          ),
         );
       }
     } finally {

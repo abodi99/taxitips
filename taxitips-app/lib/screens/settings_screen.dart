@@ -121,8 +121,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  String _cleanError(Object e) =>
-      netAwareText(e);
+  String _cleanError(Object e) => netAwareText(e);
 
   void _showSnack(String message, {bool isError = false}) {
     if (!mounted) return;
@@ -360,8 +359,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           title: 'Chatta med oss',
                           subtitle: _supportUnread > 0
                               ? (_supportUnread == 1
-                                  ? 'Ett nytt svar'
-                                  : '$_supportUnread nya svar')
+                                    ? 'Ett nytt svar'
+                                    : '$_supportUnread nya svar')
                               : null,
                           trailing: _supportUnread > 0
                               ? Badge.count(
@@ -456,16 +455,17 @@ class _Footer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    TextButton link(String text, VoidCallback onTap, {Color? color}) => TextButton(
-      onPressed: onTap,
-      style: TextButton.styleFrom(
-        foregroundColor: color ?? TbColors.muted,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        minimumSize: const Size(0, 36),
-        textStyle: const TextStyle(fontSize: 13),
-      ),
-      child: Text(text),
-    );
+    TextButton link(String text, VoidCallback onTap, {Color? color}) =>
+        TextButton(
+          onPressed: onTap,
+          style: TextButton.styleFrom(
+            foregroundColor: color ?? TbColors.muted,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            minimumSize: const Size(0, 36),
+            textStyle: const TextStyle(fontSize: 13),
+          ),
+          child: Text(text),
+        );
     return Column(
       children: [
         Wrap(
@@ -477,7 +477,11 @@ class _Footer extends StatelessWidget {
           ],
         ),
         if (onCloseAccount != null)
-          link('Avsluta företagskontot', onCloseAccount!, color: TbColors.danger),
+          link(
+            'Avsluta företagskontot',
+            onCloseAccount!,
+            color: TbColors.danger,
+          ),
       ],
     );
   }

@@ -114,7 +114,9 @@ class BackendApi {
         if (counties != null && counties.isNotEmpty)
           'counties': (List<String>.from(counties)..sort()).join(','),
         if (municipalities != null && municipalities.isNotEmpty)
-          'municipalities': (List<String>.from(municipalities)..sort()).join(','),
+          'municipalities': (List<String>.from(
+            municipalities,
+          )..sort()).join(','),
       },
     );
     // Positionen går i en header, avrundad till två decimaler (ungefär en
@@ -196,10 +198,7 @@ class BackendApi {
         .post(
           Uri.parse('$baseUrl/api/tip-reports'),
           headers: _headers(deviceToken: deviceToken, accessToken: accessToken),
-          body: jsonEncode({
-            'opportunity_id': opportunityId,
-            'reason': reason,
-          }),
+          body: jsonEncode({'opportunity_id': opportunityId, 'reason': reason}),
         )
         .timeout(_timeout);
     return _decode(res, 'tipReport');
@@ -344,7 +343,10 @@ class BackendApi {
       ? '${lat.toStringAsFixed(2)},${lon.toStringAsFixed(2)}'
       : null;
 
-  Map<String, String> _areaQuery(List<String>? counties, List<String>? municipalities) => {
+  Map<String, String> _areaQuery(
+    List<String>? counties,
+    List<String>? municipalities,
+  ) => {
     if (counties != null && counties.isNotEmpty)
       'counties': (List<String>.from(counties)..sort()).join(','),
     if (municipalities != null && municipalities.isNotEmpty)
@@ -361,8 +363,9 @@ class BackendApi {
     String? deviceToken,
     String? accessToken,
   }) async {
-    final uri = Uri.parse('$baseUrl/api/ferries')
-        .replace(queryParameters: _areaQuery(counties, municipalities));
+    final uri = Uri.parse(
+      '$baseUrl/api/ferries',
+    ).replace(queryParameters: _areaQuery(counties, municipalities));
     final res = await _client
         .get(
           uri,
@@ -388,11 +391,13 @@ class BackendApi {
     String? accessToken,
   }) async {
     // En dag eller period (YYYY-MM-DD) när den finns, annars `days` från i dag.
-    final uri = Uri.parse('$baseUrl/api/events').replace(queryParameters: {
-      if (from != null) 'from': from else 'days': '$days',
-      'to': ?to,
-      ..._areaQuery(counties, municipalities),
-    });
+    final uri = Uri.parse('$baseUrl/api/events').replace(
+      queryParameters: {
+        if (from != null) 'from': from else 'days': '$days',
+        'to': ?to,
+        ..._areaQuery(counties, municipalities),
+      },
+    );
     final res = await _client
         .get(
           uri,
@@ -567,9 +572,9 @@ class BackendApi {
   Future<Map<String, dynamic>> registryLookup(String orgNumber) async {
     final res = await _client
         .get(
-          Uri.parse('$baseUrl/api/fleet/registry').replace(
-            queryParameters: {'orgNumber': orgNumber},
-          ),
+          Uri.parse(
+            '$baseUrl/api/fleet/registry',
+          ).replace(queryParameters: {'orgNumber': orgNumber}),
           headers: _headers(),
         )
         .timeout(_timeout);

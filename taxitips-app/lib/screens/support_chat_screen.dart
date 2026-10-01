@@ -233,7 +233,8 @@ class _SupportChatScreenState extends State<SupportChatScreen>
         final previous = i > 0 ? _messages[i - 1] : null;
         return _Bubble(
           message: m,
-          showAuthor: m['sender'] == 'staff' &&
+          showAuthor:
+              m['sender'] == 'staff' &&
               (previous == null || previous['sender'] != 'staff'),
         );
       },
@@ -296,8 +297,9 @@ class _Bubble extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final mine = message['sender'] != 'staff';
-    final when = DateTime.tryParse(message['createdAt']?.toString() ?? '')
-        ?.toLocal();
+    final when = DateTime.tryParse(
+      message['createdAt']?.toString() ?? '',
+    )?.toLocal();
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: ConstrainedBox(
@@ -305,8 +307,9 @@ class _Bubble extends StatelessWidget {
           maxWidth: MediaQuery.of(context).size.width * 0.8,
         ),
         child: Column(
-          crossAxisAlignment:
-              mine ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+          crossAxisAlignment: mine
+              ? CrossAxisAlignment.end
+              : CrossAxisAlignment.start,
           children: [
             if (showAuthor)
               Padding(

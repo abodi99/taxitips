@@ -112,7 +112,9 @@ class DeviceCredentialStore {
       // Säker lagring är otillgänglig just nu (t.ex. låst telefon efter
       // omstart). Token ligger kvar där den låg och flyttas nästa gång --
       // hellre det än att föraren står utan flöde mitt i ett skift.
-      debugPrint('DeviceCredentialStore: flytt misslyckades, försöker igen: $e');
+      debugPrint(
+        'DeviceCredentialStore: flytt misslyckades, försöker igen: $e',
+      );
       _cached = legacy;
     }
     return legacy;

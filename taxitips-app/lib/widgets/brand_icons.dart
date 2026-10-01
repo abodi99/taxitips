@@ -57,8 +57,10 @@ class BrandIcons {
       _icon('map-pin', size: size, color: color);
 
   /// Notis — push-notifikation.
-  static Widget notification({double size = 24, Color color = TbColors.midnatt}) =>
-      _icon('notification', size: size, color: color);
+  static Widget notification({
+    double size = 24,
+    Color color = TbColors.midnatt,
+  }) => _icon('notification', size: size, color: color);
 
   /// Kontor — bolagsvy, administration.
   static Widget office({double size = 24, Color color = TbColors.midnatt}) =>
@@ -73,8 +75,10 @@ class BrandIcons {
       _icon('taxi', size: size, color: color);
 
   /// Trafikstörning — varningstriangel.
-  static Widget trafficAlert({double size = 24, Color color = TbColors.midnatt}) =>
-      _icon('traffic-alert', size: size, color: color);
+  static Widget trafficAlert({
+    double size = 24,
+    Color color = TbColors.midnatt,
+  }) => _icon('traffic-alert', size: size, color: color);
 
   /// Tåg — järnvägstrafik.
   static Widget train({double size = 24, Color color = TbColors.midnatt}) =>

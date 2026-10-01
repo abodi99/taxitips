@@ -40,7 +40,10 @@ class FeedCache {
           if (data[k] != null) k: data[k],
       };
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString(_key, jsonEncode({'v': 1, 'savedAt': at, 'data': slim}));
+      await prefs.setString(
+        _key,
+        jsonEncode({'v': 1, 'savedAt': at, 'data': slim}),
+      );
     } catch (e) {
       // Cachen är en bonus; ett skrivfel får aldrig störa flödet.
       debugPrint('FeedCache.save: $e');

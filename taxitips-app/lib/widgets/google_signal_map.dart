@@ -25,7 +25,9 @@ import 'signal_marker.dart';
 const bool _googleMapsDefine = bool.fromEnvironment('GOOGLE_MAPS');
 
 bool get useGoogleMaps =>
-    _googleMapsDefine && !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
+    _googleMapsDefine &&
+    !kIsWeb &&
+    defaultTargetPlatform == TargetPlatform.android;
 
 /// Flyttar och zoomar kartan, vilken av de två som visas.
 class MapFocus {
@@ -37,7 +39,11 @@ class MapFocus {
   void move(double lat, double lon, double zoom) {
     final g = google;
     if (g != null) {
-      unawaited(g.animateCamera(gm.CameraUpdate.newLatLngZoom(gm.LatLng(lat, lon), zoom)));
+      unawaited(
+        g.animateCamera(
+          gm.CameraUpdate.newLatLngZoom(gm.LatLng(lat, lon), zoom),
+        ),
+      );
       return;
     }
     try {
@@ -114,19 +120,27 @@ class _GoogleSignalMapState extends State<GoogleSignalMap> {
     final south = lats.reduce(math.min), north = lats.reduce(math.max);
     final west = lons.reduce(math.min), east = lons.reduce(math.max);
     if ((north - south) + (east - west) < 0.0005) {
-      unawaited(g.animateCamera(gm.CameraUpdate.newLatLngZoom(
-        gm.LatLng(group.first.lat, group.first.lon),
-        math.max(_zoom + 2, kClusterUntilZoom),
-      )));
+      unawaited(
+        g.animateCamera(
+          gm.CameraUpdate.newLatLngZoom(
+            gm.LatLng(group.first.lat, group.first.lon),
+            math.max(_zoom + 2, kClusterUntilZoom),
+          ),
+        ),
+      );
       return;
     }
-    unawaited(g.animateCamera(gm.CameraUpdate.newLatLngBounds(
-      gm.LatLngBounds(
-        southwest: gm.LatLng(south, west),
-        northeast: gm.LatLng(north, east),
+    unawaited(
+      g.animateCamera(
+        gm.CameraUpdate.newLatLngBounds(
+          gm.LatLngBounds(
+            southwest: gm.LatLng(south, west),
+            northeast: gm.LatLng(north, east),
+          ),
+          90,
+        ),
       ),
-      90,
-    )));
+    );
   }
 
   Set<gm.Marker> _markers(double ratio) {
@@ -137,61 +151,81 @@ class _GoogleSignalMapState extends State<GoogleSignalMap> {
       final first = group.first;
       if (group.length == 1) {
         final selected = first.id == widget.selectedId;
-        final key = 'item:${first.hazard}:${first.category.name}:${first.strength.name}:'
+        final key =
+            'item:${first.hazard}:${first.category.name}:${first.strength.name}:'
             '${first.icon.codePoint}:${first.followed}:$selected';
         final icon = _icons.get(key, ratio, () {
           final head = pinHead(first.strength) + (selected ? 6 : 0);
           return _Spec(
             first.hazard
                 ? HazardSign(
-                    icon: first.icon, strength: first.strength,
-                    followed: first.followed, selected: selected,
+                    icon: first.icon,
+                    strength: first.strength,
+                    followed: first.followed,
+                    selected: selected,
                   )
                 : SignalPin(
-                    icon: first.icon, strength: first.strength, category: first.category,
-                    followed: first.followed, selected: selected,
+                    icon: first.icon,
+                    strength: first.strength,
+                    category: first.category,
+                    followed: first.followed,
+                    selected: selected,
                   ),
             Size(head + 12, first.hazard ? head + 8 : head + 9),
           );
         }, ready);
         if (icon == null) continue;
-        out.add(gm.Marker(
-          markerId: gm.MarkerId('i:${first.id}'),
-          position: gm.LatLng(first.lat, first.lon),
-          icon: icon,
-          // Nålens spets pekar på platsen; triangeln står mitt på den.
-          anchor: first.hazard ? const Offset(0.5, 0.5) : const Offset(0.5, 1.0),
-          zIndexInt: selected ? 10 : (first.hazard ? 1 : 2),
-          consumeTapEvents: true,
-          onTap: first.onTap,
-        ));
+        out.add(
+          gm.Marker(
+            markerId: gm.MarkerId('i:${first.id}'),
+            position: gm.LatLng(first.lat, first.lon),
+            icon: icon,
+            // Nålens spets pekar på platsen; triangeln står mitt på den.
+            anchor: first.hazard
+                ? const Offset(0.5, 0.5)
+                : const Offset(0.5, 1.0),
+            zIndexInt: selected ? 10 : (first.hazard ? 1 : 2),
+            consumeTapEvents: true,
+            onTap: first.onTap,
+          ),
+        );
         continue;
       }
       final categories = {for (final i in group) i.category};
       final category = categories.length == 1 ? categories.first : null;
-      final key = 'cluster:${group.length}:${first.strength.name}:${first.hazard}:${category?.name}';
-      final icon = _icons.get(key, ratio, () => _Spec(
-        Center(
-          child: ClusterBubble(
-            count: group.length, strength: first.strength,
-            hazard: first.hazard, category: category,
+      final key =
+          'cluster:${group.length}:${first.strength.name}:${first.hazard}:${category?.name}';
+      final icon = _icons.get(
+        key,
+        ratio,
+        () => _Spec(
+          Center(
+            child: ClusterBubble(
+              count: group.length,
+              strength: first.strength,
+              hazard: first.hazard,
+              category: category,
+            ),
           ),
+          const Size(64, 64),
         ),
-        const Size(64, 64),
-      ), ready);
+        ready,
+      );
       if (icon == null) continue;
-      out.add(gm.Marker(
-        markerId: gm.MarkerId('c:${first.id}:${group.length}'),
-        position: gm.LatLng(
-          group.map((i) => i.lat).reduce((a, b) => a + b) / group.length,
-          group.map((i) => i.lon).reduce((a, b) => a + b) / group.length,
+      out.add(
+        gm.Marker(
+          markerId: gm.MarkerId('c:${first.id}:${group.length}'),
+          position: gm.LatLng(
+            group.map((i) => i.lat).reduce((a, b) => a + b) / group.length,
+            group.map((i) => i.lon).reduce((a, b) => a + b) / group.length,
+          ),
+          icon: icon,
+          anchor: const Offset(0.5, 0.5),
+          zIndexInt: 3,
+          consumeTapEvents: true,
+          onTap: () => _openCluster(group),
         ),
-        icon: icon,
-        anchor: const Offset(0.5, 0.5),
-        zIndexInt: 3,
-        consumeTapEvents: true,
-        onTap: () => _openCluster(group),
-      ));
+      );
     }
 
     // Färjorna: terminalerna som små ankare, fartygen som pilar i sin kurs.
@@ -199,25 +233,32 @@ class _GoogleSignalMapState extends State<GoogleSignalMap> {
       final lat = (t['lat'] as num?)?.toDouble();
       final lon = (t['lon'] as num?)?.toDouble();
       if (lat == null || lon == null) continue;
-      final icon = _icons.get('terminal', ratio, () => _Spec(
-        Container(
-          decoration: BoxDecoration(
-            color: TbColors.vit,
-            shape: BoxShape.circle,
-            border: Border.all(color: TbColors.midnatt, width: 2),
+      final icon = _icons.get(
+        'terminal',
+        ratio,
+        () => _Spec(
+          Container(
+            decoration: BoxDecoration(
+              color: TbColors.vit,
+              shape: BoxShape.circle,
+              border: Border.all(color: TbColors.midnatt, width: 2),
+            ),
+            child: const Icon(Icons.anchor, size: 13, color: TbColors.midnatt),
           ),
-          child: const Icon(Icons.anchor, size: 13, color: TbColors.midnatt),
+          const Size(24, 24),
         ),
-        const Size(24, 24),
-      ), ready);
+        ready,
+      );
       if (icon == null) continue;
-      out.add(gm.Marker(
-        markerId: gm.MarkerId('t:${t['key']}'),
-        position: gm.LatLng(lat, lon),
-        icon: icon,
-        anchor: const Offset(0.5, 0.5),
-        zIndexInt: 0,
-      ));
+      out.add(
+        gm.Marker(
+          markerId: gm.MarkerId('t:${t['key']}'),
+          position: gm.LatLng(lat, lon),
+          icon: icon,
+          anchor: const Offset(0.5, 0.5),
+          zIndexInt: 0,
+        ),
+      );
     }
     for (final (i, f) in widget.ferries.indexed) {
       final lat = (f['lat'] as num?)?.toDouble();
@@ -226,29 +267,45 @@ class _GoogleSignalMapState extends State<GoogleSignalMap> {
       final status = f['status']?.toString();
       final course = f['course'] as num?;
       // Pilen ritas rakt upp och vrids av kartan -- en bild per status, inte en per grad.
-      final icon = _icons.get('ferry:$status:${course != null}', ratio, () => _Spec(
-        Center(child: FerryArrow(status: status, course: course == null ? null : 0)),
-        const Size(44, 44),
-      ), ready);
+      final icon = _icons.get(
+        'ferry:$status:${course != null}',
+        ratio,
+        () => _Spec(
+          Center(
+            child: FerryArrow(
+              status: status,
+              course: course == null ? null : 0,
+            ),
+          ),
+          const Size(44, 44),
+        ),
+        ready,
+      );
       if (icon == null) continue;
-      out.add(gm.Marker(
-        markerId: gm.MarkerId('f:${f['mmsi'] ?? i}'),
-        position: gm.LatLng(lat, lon),
-        icon: icon,
-        anchor: const Offset(0.5, 0.5),
-        rotation: course?.toDouble() ?? 0,
-        flat: course != null,
-        zIndexInt: 4,
-        consumeTapEvents: true,
-        onTap: widget.onSelectFerry == null ? null : () => widget.onSelectFerry!(f),
-      ));
+      out.add(
+        gm.Marker(
+          markerId: gm.MarkerId('f:${f['mmsi'] ?? i}'),
+          position: gm.LatLng(lat, lon),
+          icon: icon,
+          anchor: const Offset(0.5, 0.5),
+          rotation: course?.toDouble() ?? 0,
+          flat: course != null,
+          zIndexInt: 4,
+          consumeTapEvents: true,
+          onTap: widget.onSelectFerry == null
+              ? null
+              : () => widget.onSelectFerry!(f),
+        ),
+      );
     }
 
     if (ready.isNotEmpty) {
       // Nya symboler ritas i bakgrunden; kartan byggs om när de finns.
-      unawaited(Future.wait(ready).then((_) {
-        if (mounted) setState(() {});
-      }));
+      unawaited(
+        Future.wait(ready).then((_) {
+          if (mounted) setState(() {});
+        }),
+      );
     }
     return out;
   }
@@ -258,7 +315,8 @@ class _GoogleSignalMapState extends State<GoogleSignalMap> {
       for (final t in widget.ferryTerminals)
         if (t['lat'] is num && t['lon'] is num)
           t['key']?.toString() ?? '': gm.LatLng(
-            (t['lat'] as num).toDouble(), (t['lon'] as num).toDouble(),
+            (t['lat'] as num).toDouble(),
+            (t['lon'] as num).toDouble(),
           ),
     };
     final out = <gm.Polyline>{};
@@ -267,13 +325,21 @@ class _GoogleSignalMapState extends State<GoogleSignalMap> {
       final terminal = terminals[f['terminal']?.toString() ?? ''];
       if (terminal == null || f['lat'] is! num || f['lon'] is! num) continue;
       if (status != 'approaching' && status != 'docking') continue;
-      out.add(gm.Polyline(
-        polylineId: gm.PolylineId('fl:$i'),
-        points: [gm.LatLng((f['lat'] as num).toDouble(), (f['lon'] as num).toDouble()), terminal],
-        color: ferryColor(status).withValues(alpha: 0.85),
-        width: 3,
-        patterns: [gm.PatternItem.dash(20), gm.PatternItem.gap(14)],
-      ));
+      out.add(
+        gm.Polyline(
+          polylineId: gm.PolylineId('fl:$i'),
+          points: [
+            gm.LatLng(
+              (f['lat'] as num).toDouble(),
+              (f['lon'] as num).toDouble(),
+            ),
+            terminal,
+          ],
+          color: ferryColor(status).withValues(alpha: 0.85),
+          width: 3,
+          patterns: [gm.PatternItem.dash(20), gm.PatternItem.gap(14)],
+        ),
+      );
     }
     return out;
   }
@@ -282,10 +348,15 @@ class _GoogleSignalMapState extends State<GoogleSignalMap> {
   Widget build(BuildContext context) {
     final ratio = MediaQuery.devicePixelRatioOf(context);
     return gm.GoogleMap(
-      initialCameraPosition: const gm.CameraPosition(target: gm.LatLng(62.0, 15.0), zoom: 5),
+      initialCameraPosition: const gm.CameraPosition(
+        target: gm.LatLng(62.0, 15.0),
+        zoom: 5,
+      ),
       onMapCreated: (controller) {
         widget.focus.google = controller;
-        unawaited(controller.moveCamera(gm.CameraUpdate.newLatLngBounds(_sweden, 16)));
+        unawaited(
+          controller.moveCamera(gm.CameraUpdate.newLatLngBounds(_sweden, 16)),
+        );
       },
       onCameraMove: _onCamera,
       // Det här är skälet till Google-kartan: köer och stopp i realtid.
@@ -330,18 +401,25 @@ class _IconCache {
     if (hit != null) return hit;
     if (_pending.add(full)) {
       final s = spec();
-      ready.add(_render(s.widget, s.size, ratio).then((bitmap) {
-        _done[full] = bitmap;
-        _pending.remove(full);
-      }));
+      ready.add(
+        _render(s.widget, s.size, ratio).then((bitmap) {
+          _done[full] = bitmap;
+          _pending.remove(full);
+        }),
+      );
     }
     return null;
   }
 }
 
-Future<gm.BitmapDescriptor> _render(Widget child, Size size, double ratio) async {
+Future<gm.BitmapDescriptor> _render(
+  Widget child,
+  Size size,
+  double ratio,
+) async {
   final boundary = RenderRepaintBoundary();
-  final view = ui.PlatformDispatcher.instance.implicitView ??
+  final view =
+      ui.PlatformDispatcher.instance.implicitView ??
       ui.PlatformDispatcher.instance.views.first;
   final renderView = RenderView(
     view: view,

@@ -80,7 +80,9 @@ Future<String?>? _registerInFlight;
 Future<void> initFirebaseSafe() async {
   try {
     if (Firebase.apps.isEmpty) {
-      await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+      await Firebase.initializeApp(
+        options: DefaultFirebaseOptions.currentPlatform,
+      );
     }
     firebaseReady = true;
     // Tidigt: getInitialMessage() måste läsas innan något annat hinner

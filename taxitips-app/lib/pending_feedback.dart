@@ -57,9 +57,9 @@ class PendingFeedback {
       'verdict': verdict,
       'at': t.millisecondsSinceEpoch,
     });
-    await _save(items.length > maxItems
-        ? items.sublist(items.length - maxItems)
-        : items);
+    await _save(
+      items.length > maxItems ? items.sublist(items.length - maxItems) : items,
+    );
   }
 
   static Future<void> replaceAll(List<Map<String, dynamic>> items) =>

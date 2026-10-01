@@ -30,8 +30,7 @@ class OfflineBanner extends StatelessWidget {
     final at = clockLabel(lastUpdated);
     return switch (failure) {
       NetFailure.offline => 'Offline – visar senaste tips från $at',
-      NetFailure.unreachable =>
-        'Servern svarar inte – visar tips från $at',
+      NetFailure.unreachable => 'Servern svarar inte – visar tips från $at',
       NetFailure.timeout => 'Dålig uppkoppling – visar tips från $at',
     };
   }

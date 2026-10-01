@@ -71,12 +71,26 @@ class UpgradePolicy {
     this.recommended,
     this.storeUrl,
     this.message,
+    this.blocked = const [],
   });
 
   final String? min;
   final String? recommended;
   final String? storeUrl;
   final String? message;
+
+  /// Enskilda versioner som inte får köras, även om de ligger över `min`
+  /// (t.ex. en trasig release). `1.4.0` spärrar alla byggen av 1.4.0;
+  /// `1.4.0+31` bara det bygget. Från Remote Config
+  /// (`android_blocked_versions`, kommaseparerad).
+  final List<String> blocked;
+
+  /// Kommaseparerad lista → versioner. Tomt och skräp tas bort.
+  static List<String> parseList(String? raw) => (raw ?? '')
+      .split(RegExp(r'[,;\s]+'))
+      .map((v) => v.trim())
+      .where((v) => AppVersion.tryParse(v) != null)
+      .toList();
 
   /// Läser `appVersion.<platform>` ur /api/config. Null om svaret saknar
   /// blocket (äldre server) eller plattformen -- då gäller ingen gräns.
@@ -119,11 +133,13 @@ class UpgradePolicy {
       recommended: pick(p?.recommended, f?.recommended),
       storeUrl: pick(p?.storeUrl, f?.storeUrl),
       message: pick(p?.message, f?.message),
+      blocked: {...?p?.blocked, ...?f?.blocked}.toList(),
     );
     if ((merged.min ?? '').isEmpty &&
         (merged.recommended ?? '').isEmpty &&
         (merged.storeUrl ?? '').isEmpty &&
-        (merged.message ?? '').isEmpty) {
+        (merged.message ?? '').isEmpty &&
+        merged.blocked.isEmpty) {
       return null;
     }
     return merged;
@@ -159,6 +175,22 @@ UpgradeDecision decideUpgrade({
   final min = AppVersion.tryParse(policy.min);
   final recommended = AppVersion.tryParse(policy.recommended);
   final hasStore = (policy.storeUrl ?? '').isNotEmpty;
+  // Spärrad version: samma väg som under `min` -- till butiken.
+  final blockedHit = policy.blocked.any((raw) {
+    final v = AppVersion.tryParse(raw);
+    if (v == null) return false;
+    return v.build == null
+        ? AppVersion(installed.parts).compareTo(v) == 0
+        : installed.compareTo(v) == 0 && installed.build == v.build;
+  });
+  if (blockedHit) {
+    return UpgradeDecision(
+      hasStore ? UpgradeAction.block : UpgradeAction.nudge,
+      required: policy.recommended ?? policy.min,
+      storeUrl: policy.storeUrl,
+      message: policy.message,
+    );
+  }
   if (min != null && installed.isBelow(min)) {
     // En spärr utan väg till butiken är bara en utelåsning. Servern vägrar
     // redan spara en iPhone-gräns utan App Store-länk; det här är reserven

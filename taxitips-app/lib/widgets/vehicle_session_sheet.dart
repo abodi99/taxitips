@@ -257,7 +257,8 @@ class _VehicleSessionSheetState extends State<VehicleSessionSheet> {
             if ((vehicle['label']?.toString() ?? '').isNotEmpty)
               vehicle['label'].toString(),
             if (counties.isNotEmpty) '${counties.length} län',
-            if (occupied) 'Används av ${vehicle['occupiedBy'] ?? 'en annan telefon'}',
+            if (occupied)
+              'Används av ${vehicle['occupiedBy'] ?? 'en annan telefon'}',
             if (mine) 'Du kör den här',
           ].join(' · '),
         ),

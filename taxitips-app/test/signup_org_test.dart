@@ -28,7 +28,13 @@ void main() {
     ]) {
       expect(SignupScreenState.phoneLooksValid(ok), isTrue, reason: ok);
     }
-    for (final bad in ['040-12 34 56', '0711234567', '+4712345678', '0708', '']) {
+    for (final bad in [
+      '040-12 34 56',
+      '0711234567',
+      '+4712345678',
+      '0708',
+      '',
+    ]) {
       expect(SignupScreenState.phoneLooksValid(bad), isFalse, reason: bad);
     }
   });

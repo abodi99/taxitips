@@ -60,6 +60,7 @@ dependencies:
   # Telefonmodell och OS-version till supporten (lib/client_info.dart) --
   # skickas som headers till backenden, som visar dem i adminwebben.
   device_info_plus: ^13.2.0
+  liquid_swipe: ^3.1.0
 
 dev_dependencies:
   flutter_test:

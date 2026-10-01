@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:taxitips_app/api_client.dart';
+import 'package:taxitips_app/screens/login_screen.dart';
 import 'package:taxitips_app/screens/welcome_screen.dart';
 
 /// Startsidan är EN inloggning för förare, ägare och kontor -- servern avgör
@@ -15,12 +16,12 @@ void main() {
     addTearDown(tester.view.reset);
     await tester.pumpWidget(
       MaterialApp(
-        home: WelcomeScreen(
+        home: LoginScreen(
           api: ApiClient(supabaseUrl: 'http://localhost', supabaseAnonKey: 'x'),
           onOwner: () => taps.add('owner'),
           onDriver: () => taps.add('driver'),
-          onUseCode: () => taps.add('code'),
           onSignup: () => taps.add('signup'),
+          onBack: () => taps.add('back'),
         ),
       ),
     );
@@ -61,11 +62,30 @@ void main() {
     expect(password().obscureText, isFalse);
   });
 
-  testWidgets('kod och nytt företag finns som länkar', (tester) async {
+  testWidgets('ingen bolagskod: bara e-post, registrera och tillbaka', (
+    tester,
+  ) async {
     final r = await pump(tester);
-    await tester.ensureVisible(find.textContaining('Har du en kod'));
-    await tester.tap(find.textContaining('Har du en kod'));
-    await tester.tap(find.textContaining('Nytt företag?'));
-    expect(r.taps, ['code', 'signup']);
+    expect(find.textContaining('kod'), findsNothing);
+    await tester.ensureVisible(find.textContaining('Inget konto?'));
+    await tester.tap(find.textContaining('Inget konto?'));
+    await tester.tap(find.byTooltip('Tillbaka'));
+    expect(r.taps, ['signup', 'back']);
+  });
+
+  testWidgets('välkomstskärmen: logga in eller registrera', (tester) async {
+    final taps = <String>[];
+    await tester.pumpWidget(
+      MaterialApp(
+        home: WelcomeScreen(
+          onLogin: () => taps.add('login'),
+          onSignup: () => taps.add('signup'),
+        ),
+      ),
+    );
+    await tester.tap(find.text('Logga in'));
+    await tester.tap(find.text('Registrera företag'));
+    expect(taps, ['login', 'signup']);
+    expect(find.textContaining('kod'), findsNothing);
   });
 }

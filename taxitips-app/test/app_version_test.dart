@@ -216,4 +216,54 @@ void main() {
       expect(find.text('Uppdatera appen'), findsNothing);
     });
   });
+
+  group('spärrade versioner (Remote Config)', () {
+    UpgradeDecision decide(
+      String installed,
+      List<String> blocked, {
+      String? store = 'https://play.google.com/x',
+    }) => decideUpgrade(
+      installed: AppVersion.tryParse(installed),
+      policy: UpgradePolicy(
+        min: '1.0.0',
+        recommended: '1.5.0',
+        storeUrl: store,
+        blocked: blocked,
+      ),
+    );
+
+    test('en spärrad version blockeras trots att den är över min', () {
+      final d = decide('1.4.0+31', ['1.4.0']);
+      expect(d.action, UpgradeAction.block);
+      expect(d.required, '1.5.0');
+    });
+
+    test('ett spärrat bygge träffar bara det bygget', () {
+      expect(decide('1.4.0+31', ['1.4.0+31']).action, UpgradeAction.block);
+      expect(decide('1.4.0+32', ['1.4.0+31']).action, UpgradeAction.nudge);
+    });
+
+    test('ingen butikslänk ger förslag, aldrig utelåsning', () {
+      expect(
+        decide('1.4.0', ['1.4.0'], store: null).action,
+        UpgradeAction.nudge,
+      );
+    });
+
+    test('listan tål mellanslag och skräp', () {
+      expect(UpgradePolicy.parseList(' 1.4.0, 1.4.1+33 ;x, '), [
+        '1.4.0',
+        '1.4.1+33',
+      ]);
+      expect(UpgradePolicy.parseList(null), isEmpty);
+    });
+
+    test('listorna från Remote Config och servern slås ihop', () {
+      final merged = UpgradePolicy.merge(
+        const UpgradePolicy(blocked: ['1.4.0']),
+        const UpgradePolicy(blocked: ['1.3.9'], storeUrl: 'x'),
+      )!;
+      expect(merged.blocked, containsAll(['1.4.0', '1.3.9']));
+    });
+  });
 }

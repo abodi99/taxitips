@@ -33,6 +33,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
   bool _loading = true;
   String? _error;
   Map<String, dynamic>? _data;
+
   /// Den här telefonens device-id när den redan är parkopplad. Används för
   /// att dölja "Kör själv …" när telefonen redan står under bilen.
   String? _thisDeviceId;
@@ -62,7 +63,8 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       if (widget.api.deviceToken != null) {
         try {
           final status = await widget.api.fleetStatus();
-          thisDeviceId = status['deviceId']?.toString() ??
+          thisDeviceId =
+              status['deviceId']?.toString() ??
               (status['device'] is Map
                   ? (status['device'] as Map)['id']?.toString()
                   : null);
@@ -125,7 +127,8 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
 
   Map<String, String> get _countyNames => {
     for (final c in (_data?['countyCatalog'] as List?) ?? const [])
-      if (c is Map) c['code'].toString(): countyShort(c['name']?.toString() ?? ''),
+      if (c is Map)
+        c['code'].toString(): countyShort(c['name']?.toString() ?? ''),
   };
 
   Set<String> get _permissions => {
@@ -153,12 +156,17 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     final access = Map<String, dynamic>.from(_data?['access'] as Map? ?? {});
     final reason = access['reason']?.toString() ?? '';
     final trial = _trial;
-    final cars = '${trial?['vehiclesUsed'] ?? 0} av ${trial?['vehicleLimit'] ?? 1} ${(trial?['vehicleLimit'] ?? 1) == 1 ? 'bil' : 'bilar'}';
+    final cars =
+        '${trial?['vehiclesUsed'] ?? 0} av ${trial?['vehicleLimit'] ?? 1} ${(trial?['vehicleLimit'] ?? 1) == 1 ? 'bil' : 'bilar'}';
     if (_suspended) {
       return (TbColors.danger, 'Avstängt', 'Kontakta oss i chatten.');
     }
     if (trial != null && trial['status'] == 'pending') {
-      return (TbColors.taxiDeep, 'Provperiod', 'Startar när första telefonen kopplas · $cars');
+      return (
+        TbColors.taxiDeep,
+        'Provperiod',
+        'Startar när första telefonen kopplas · $cars',
+      );
     }
     if (access['ok'] == true) {
       if (reason == 'trial') {
@@ -184,7 +192,11 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       return (TbColors.live, 'Aktivt', until.isEmpty ? '' : 'Förnyas $until');
     }
     if (reason == 'trial_ended') {
-      return (TbColors.muted, 'Provet är slut', 'Vi har mejlat hur ni fortsätter.');
+      return (
+        TbColors.muted,
+        'Provet är slut',
+        'Vi har mejlat hur ni fortsätter.',
+      );
     }
     return (TbColors.muted, 'Pausat', access['message']?.toString() ?? '');
   }
@@ -201,8 +213,18 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     final d = DateTime.tryParse(iso?.toString() ?? '')?.toLocal();
     if (d == null) return '';
     const months = [
-      'jan', 'feb', 'mar', 'apr', 'maj', 'jun',
-      'jul', 'aug', 'sep', 'okt', 'nov', 'dec',
+      'jan',
+      'feb',
+      'mar',
+      'apr',
+      'maj',
+      'jun',
+      'jul',
+      'aug',
+      'sep',
+      'okt',
+      'nov',
+      'dec',
     ];
     return '${d.day} ${months[d.month - 1]} ${d.year}';
   }
@@ -467,7 +489,9 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       await widget.api.setTrialCounty(license['licenseId'].toString(), picked);
       if (!mounted) return;
       await _reload();
-      _snack('${license['vehicle']} kör nu i ${_countyNames[picked] ?? picked}');
+      _snack(
+        '${license['vehicle']} kör nu i ${_countyNames[picked] ?? picked}',
+      );
     } catch (e) {
       _snack(_cleanError(e), isError: true);
     }
@@ -631,8 +655,8 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                               ),
                             )
                           : (phone['deviceId']?.toString() == _thisDeviceId
-                              ? const Text('Redan kopplad')
-                              : null),
+                                ? const Text('Redan kopplad')
+                                : null),
                       trailing: canManage
                           ? PopupMenuButton<String>(
                               tooltip: 'Mer',
@@ -771,9 +795,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                 const SizedBox(height: 8),
                 TextButton(
                   onPressed: () => act(ctx, () => _removeCar(license)),
-                  style: TextButton.styleFrom(
-                    foregroundColor: TbColors.danger,
-                  ),
+                  style: TextButton.styleFrom(foregroundColor: TbColors.danger),
                   child: const Text('Ta bort bilen'),
                 ),
               ],
@@ -811,7 +833,8 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     final (color, statusTitle, statusLine) = _status();
     final licenses = _licenses;
     final trial = _trial;
-    final canAddTrialCar = _trialOpen &&
+    final canAddTrialCar =
+        _trialOpen &&
         !_suspended &&
         _permissions.contains('manage_vehicles') &&
         ((trial?['vehiclesUsed'] as num?) ?? 0) <
@@ -925,7 +948,10 @@ class _CompanyHeader extends StatelessWidget {
           Row(
             children: [
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
                   color: color.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(99),
@@ -1217,9 +1243,9 @@ class _PortalContinueBanner extends StatelessWidget {
     final date = until == null
         ? ''
         : 'Provet gäller till '
-            '${until.year}-'
-            '${until.month.toString().padLeft(2, '0')}-'
-            '${until.day.toString().padLeft(2, '0')}. ';
+              '${until.year}-'
+              '${until.month.toString().padLeft(2, '0')}-'
+              '${until.day.toString().padLeft(2, '0')}. ';
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -1229,7 +1255,11 @@ class _PortalContinueBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.mark_email_read_outlined, color: TbColors.taxiDeep, size: 22),
+          const Icon(
+            Icons.mark_email_read_outlined,
+            color: TbColors.taxiDeep,
+            size: 22,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(

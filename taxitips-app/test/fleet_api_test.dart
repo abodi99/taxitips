@@ -96,32 +96,35 @@ void main() {
     expect(jsonDecode(seen.single.body)['force'], isTrue);
   });
 
-  test('takeover_required kommer fram som ett skäl appen kan grena på', () async {
-    final api = BackendApi(
-      baseUrl: 'http://localhost:8000',
-      client: respond({
-        'ok': false,
-        'reason': 'takeover_required',
-        'message': 'Nattbil använder bilen. Vill du ta över?',
-        'detail': {'currentDeviceLabel': 'Nattbil'},
-      }, status: 409),
-    );
-
-    try {
-      await api.startVehicleSession(
-        licenseId: 'lic-1',
-        deviceToken: 'hemlighet-123',
+  test(
+    'takeover_required kommer fram som ett skäl appen kan grena på',
+    () async {
+      final api = BackendApi(
+        baseUrl: 'http://localhost:8000',
+        client: respond({
+          'ok': false,
+          'reason': 'takeover_required',
+          'message': 'Nattbil använder bilen. Vill du ta över?',
+          'detail': {'currentDeviceLabel': 'Nattbil'},
+        }, status: 409),
       );
-      fail('skulle ha kastat');
-    } on ApiException catch (e) {
-      // Grenen går på `reason`, inte på texten: en omformulering i backend
-      // ska inte kunna få frågan till föraren att utebli.
-      expect(e.reason, 'takeover_required');
-      expect(e.status, 409);
-      expect(e.detail?['currentDeviceLabel'], 'Nattbil');
-      expect(e.message, contains('Vill du ta över'));
-    }
-  });
+
+      try {
+        await api.startVehicleSession(
+          licenseId: 'lic-1',
+          deviceToken: 'hemlighet-123',
+        );
+        fail('skulle ha kastat');
+      } on ApiException catch (e) {
+        // Grenen går på `reason`, inte på texten: en omformulering i backend
+        // ska inte kunna få frågan till föraren att utebli.
+        expect(e.reason, 'takeover_required');
+        expect(e.status, 409);
+        expect(e.detail?['currentDeviceLabel'], 'Nattbil');
+        expect(e.message, contains('Vill du ta över'));
+      }
+    },
+  );
 
   test('bolagskoden skapar en ansökan och ger ingen token', () async {
     final api = BackendApi(

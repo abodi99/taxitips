@@ -21,54 +21,90 @@ void main() {
     });
   }
 
-  test('I tjänst: positionen i headern, avrundad, aldrig i URL eller body', () async {
-    final api = BackendApi(
-      baseUrl: 'http://localhost:8000',
-      client: respond({'ok': true, 'on': true}),
-    );
-    await api.setPresence(on: true, lat: 55.60498, lon: 13.00382, deviceToken: 'tok-1');
-    expect(seen.single.url.path, '/api/presence');
-    expect(seen.single.url.queryParameters, isEmpty);
-    expect(seen.single.headers['X-TT-Position'], '55.60,13.00');
-    expect(jsonDecode(seen.single.body), {'on': true});
+  test(
+    'I tjänst: positionen i headern, avrundad, aldrig i URL eller body',
+    () async {
+      final api = BackendApi(
+        baseUrl: 'http://localhost:8000',
+        client: respond({'ok': true, 'on': true}),
+      );
+      await api.setPresence(
+        on: true,
+        lat: 55.60498,
+        lon: 13.00382,
+        deviceToken: 'tok-1',
+      );
+      expect(seen.single.url.path, '/api/presence');
+      expect(seen.single.url.queryParameters, isEmpty);
+      expect(seen.single.headers['X-TT-Position'], '55.60,13.00');
+      expect(jsonDecode(seen.single.body), {'on': true});
 
-    await api.setPresence(on: false, lat: 55.6, lon: 13.0, deviceToken: 'tok-1');
-    // Av skickar ingen position alls.
-    expect(seen.last.headers.containsKey('X-TT-Position'), isFalse);
-    expect(jsonDecode(seen.last.body), {'on': false});
-  });
+      await api.setPresence(
+        on: false,
+        lat: 55.6,
+        lon: 13.0,
+        deviceToken: 'tok-1',
+      );
+      // Av skickar ingen position alls.
+      expect(seen.last.headers.containsKey('X-TT-Position'), isFalse);
+      expect(jsonDecode(seen.last.body), {'on': false});
+    },
+  );
 
   test('färjor: område i query, position avrundad i headern', () async {
     final api = BackendApi(
       baseUrl: 'http://localhost:8000',
       client: respond({'ferries': [], 'terminals': []}),
     );
-    await api.ferries(lat: 56.04321, lon: 12.65432, counties: ['12', '01'], deviceToken: 'tok-1');
+    await api.ferries(
+      lat: 56.04321,
+      lon: 12.65432,
+      counties: ['12', '01'],
+      deviceToken: 'tok-1',
+    );
     expect(seen.single.url.path, '/api/ferries');
     expect(seen.single.url.queryParameters, {'counties': '01,12'});
     expect(seen.single.headers['X-TT-Position'], '56.04,12.65');
     expect(seen.single.headers['X-Device-Token'], 'tok-1');
   });
 
-  test('evenemang: dagar och kommuner i query, ingen position i URL:en', () async {
-    final api = BackendApi(
-      baseUrl: 'http://localhost:8000',
-      client: respond({'events': []}),
-    );
-    await api.events(lat: 59.33, lon: 18.07, municipalities: ['0180'], deviceToken: 'tok-1');
-    expect(seen.single.url.path, '/api/events');
-    expect(seen.single.url.queryParameters, {'days': '14', 'municipalities': '0180'});
-    expect(seen.single.headers['X-TT-Position'], '59.33,18.07');
-  });
+  test(
+    'evenemang: dagar och kommuner i query, ingen position i URL:en',
+    () async {
+      final api = BackendApi(
+        baseUrl: 'http://localhost:8000',
+        client: respond({'events': []}),
+      );
+      await api.events(
+        lat: 59.33,
+        lon: 18.07,
+        municipalities: ['0180'],
+        deviceToken: 'tok-1',
+      );
+      expect(seen.single.url.path, '/api/events');
+      expect(seen.single.url.queryParameters, {
+        'days': '14',
+        'municipalities': '0180',
+      });
+      expect(seen.single.headers['X-TT-Position'], '59.33,18.07');
+    },
+  );
 
-  test('evenemang: en vald period skickas som from och to i stället för days', () async {
-    final api = BackendApi(
-      baseUrl: 'http://localhost:8000',
-      client: respond({'events': []}),
-    );
-    await api.events(from: '2026-10-03', to: '2026-10-05', counties: ['01']);
-    expect(seen.single.url.queryParameters, {'from': '2026-10-03', 'to': '2026-10-05', 'counties': '01'});
-  });
+  test(
+    'evenemang: en vald period skickas som from och to i stället för days',
+    () async {
+      final api = BackendApi(
+        baseUrl: 'http://localhost:8000',
+        client: respond({'events': []}),
+      );
+      await api.events(from: '2026-10-03', to: '2026-10-05', counties: ['01']);
+      expect(seen.single.url.queryParameters, {
+        'from': '2026-10-03',
+        'to': '2026-10-05',
+        'counties': '01',
+      });
+    },
+  );
 
   test('förartoken följer med som header, inte som query', () async {
     final api = BackendApi(
@@ -260,7 +296,12 @@ void main() {
   test('Bolagsverket-uppslaget går utan inloggning, numret i query', () async {
     final api = BackendApi(
       baseUrl: 'http://localhost:8000',
-      client: respond({'ok': true, 'valid': true, 'available': true, 'registry': {'found': true}}),
+      client: respond({
+        'ok': true,
+        'valid': true,
+        'available': true,
+        'registry': {'found': true},
+      }),
     );
     await api.registryLookup('556012-5790');
     expect(seen.single.url.path, '/api/fleet/registry');
@@ -294,31 +335,35 @@ void main() {
       baseUrl: 'http://localhost:8000',
       client: respond({'ok': true, 'companyId': 'c1'}, status: 201),
     );
-    await api.ownerPost(
-      'register',
-      {'orgNumber': '5560360793', 'companyName': 'Nya Taxi AB'},
-      accessToken: 'jwt-1',
-    );
+    await api.ownerPost('register', {
+      'orgNumber': '5560360793',
+      'companyName': 'Nya Taxi AB',
+    }, accessToken: 'jwt-1');
     expect(seen.single.url.path, '/api/fleet/register');
     expect(seen.single.headers['Authorization'], 'Bearer jwt-1');
     expect(seen.single.headers.containsKey('X-Device-Token'), isFalse);
     expect(jsonDecode(seen.single.body)['companyName'], 'Nya Taxi AB');
   });
 
-  test('ägarens fel når fram med skäl, t.ex. ett orgnr som redan finns', () async {
-    final api = BackendApi(
-      baseUrl: 'http://localhost:8000',
-      client: respond({
-        'ok': false,
-        'reason': 'company_exists',
-        'message': 'Företaget har redan ett konto.',
-      }, status: 409),
-    );
-    await expectLater(
-      api.ownerPost('register', {}, accessToken: 'jwt-1'),
-      throwsA(isA<ApiException>()
-          .having((e) => e.reason, 'reason', 'company_exists')
-          .having((e) => e.status, 'status', 409)),
-    );
-  });
+  test(
+    'ägarens fel når fram med skäl, t.ex. ett orgnr som redan finns',
+    () async {
+      final api = BackendApi(
+        baseUrl: 'http://localhost:8000',
+        client: respond({
+          'ok': false,
+          'reason': 'company_exists',
+          'message': 'Företaget har redan ett konto.',
+        }, status: 409),
+      );
+      await expectLater(
+        api.ownerPost('register', {}, accessToken: 'jwt-1'),
+        throwsA(
+          isA<ApiException>()
+              .having((e) => e.reason, 'reason', 'company_exists')
+              .having((e) => e.status, 'status', 409),
+        ),
+      );
+    },
+  );
 }

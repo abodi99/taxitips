@@ -13,9 +13,7 @@ import 'package:taxitips_app/widgets/offline_banner.dart';
 void main() {
   group('netFailureOf', () {
     test('ClientException med värduppslag = offline', () {
-      final e = http.ClientException(
-        'Failed host lookup: api.taxitips.se',
-      );
+      final e = http.ClientException('Failed host lookup: api.taxitips.se');
       expect(netFailureOf(e), NetFailure.offline);
     });
 
@@ -56,7 +54,10 @@ void main() {
         friendlyError(http.ClientException('Failed host lookup: x')),
         'Ingen internetanslutning',
       );
-      expect(friendlyError(ApiException(409, 'Bilen är upptagen')), 'Bilen är upptagen');
+      expect(
+        friendlyError(ApiException(409, 'Bilen är upptagen')),
+        'Bilen är upptagen',
+      );
       expect(
         friendlyError(StateError('intern detalj')),
         'Något gick fel. Försök igen.',
@@ -98,7 +99,10 @@ void main() {
       final d = FeedCache.decode(
         raw(
           saved: now.subtract(const Duration(minutes: 5)),
-          end: now.subtract(const Duration(minutes: 1)).toUtc().toIso8601String(),
+          end: now
+              .subtract(const Duration(minutes: 1))
+              .toUtc()
+              .toIso8601String(),
         ),
         now: now,
       )!;
@@ -187,7 +191,10 @@ void main() {
           ),
         ),
       );
-      expect(find.text('Offline – visar senaste tips från 12:04'), findsOneWidget);
+      expect(
+        find.text('Offline – visar senaste tips från 12:04'),
+        findsOneWidget,
+      );
       await tester.tap(find.text('Försök igen'));
       expect(taps, 1);
     });

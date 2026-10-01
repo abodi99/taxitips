@@ -48,7 +48,10 @@ class ClientInfo {
       } else if (defaultTargetPlatform == TargetPlatform.android) {
         final a = await plugin.androidInfo;
         _put('X-Device-Model', '${a.manufacturer} ${a.model}');
-        _put('X-OS-Version', 'Android ${a.version.release} (SDK ${a.version.sdkInt})');
+        _put(
+          'X-OS-Version',
+          'Android ${a.version.release} (SDK ${a.version.sdkInt})',
+        );
       } else if (defaultTargetPlatform == TargetPlatform.iOS) {
         final i = await plugin.iosInfo;
         _put(

@@ -6,8 +6,18 @@ import 'package:taxitips_app/severity_labels.dart';
 void main() {
   group('evenemangens sort', () {
     test('sporten före kategorin', () {
-      expect(eventKindOf({'sport': 'ishockey', 'category': 'sport'}), 'ishockey');
-      expect(eventKindLabelOf({'sport': 'ishockey', 'sportLabel': 'Ishockey', 'categoryLabel': 'Sport'}), 'Ishockey');
+      expect(
+        eventKindOf({'sport': 'ishockey', 'category': 'sport'}),
+        'ishockey',
+      );
+      expect(
+        eventKindLabelOf({
+          'sport': 'ishockey',
+          'sportLabel': 'Ishockey',
+          'categoryLabel': 'Sport',
+        }),
+        'Ishockey',
+      );
     });
     test('annars kategorin, och övrigt när den saknas', () {
       expect(eventKindOf({'sport': '', 'category': 'konsert'}), 'konsert');
@@ -20,7 +30,8 @@ void main() {
     test('reseplanerarens resa och vem som svarade', () {
       final travel = TravelOptions.of({
         'travel_options': {
-          'summary': 'Nästa resa mot Stockholm C: Regional tåg 178 14:09 (om 37 min)',
+          'summary':
+              'Nästa resa mot Stockholm C: Regional tåg 178 14:09 (om 37 min)',
           'next_departure_minutes': 37,
           'planner': 'ResRobot',
         },
