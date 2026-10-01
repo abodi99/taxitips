@@ -282,7 +282,7 @@ function cardHtml(x) {
       <p><b>Vill ni ha det här i bolagets bilar?</b> Provet är gratis och du behöver inget kort.</p>
       <div class="d-sell-row">
         <a class="d-btn d-btn-gold" href="/registrera" data-track="demo_card_signup">Prova gratis</a>
-        <a class="d-btn d-btn-ghost" href="/#kontakt" data-track="demo_card_book">Boka demo</a>
+        <a class="d-btn d-btn-ghost" href="/#kontakt" data-track="demo_card_book">Prata med oss</a>
       </div>
     </div>
     <p class="d-fineprint">Exempeldata. Platsen är riktig, händelsen är påhittad för demon.</p>`;

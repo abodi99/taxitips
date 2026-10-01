@@ -60,6 +60,30 @@ if (revealTargets.length) {
   revealTargets.forEach((el) => revealObserver.observe(el));
 }
 
+// ---------- Mobile menu: one button, closes on link tap, Esc or outside tap ----------
+
+const navToggle = document.querySelector(".nav-toggle");
+const siteNav = document.getElementById("siteNav");
+
+if (navToggle && siteNav) {
+  const setOpen = (open) => {
+    siteNav.classList.toggle("is-open", open);
+    navToggle.setAttribute("aria-expanded", String(open));
+    navToggle.setAttribute("aria-label", open ? "Stäng menyn" : "Öppna menyn");
+  };
+  navToggle.addEventListener("click", () => setOpen(!siteNav.classList.contains("is-open")));
+  siteNav.querySelectorAll(".nav-links a").forEach((a) => a.addEventListener("click", () => setOpen(false)));
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && siteNav.classList.contains("is-open")) {
+      setOpen(false);
+      navToggle.focus();
+    }
+  });
+  document.addEventListener("click", (e) => {
+    if (siteNav.classList.contains("is-open") && !siteNav.contains(e.target)) setOpen(false);
+  });
+}
+
 // ---------- Nav: border + shadow once the page has scrolled ----------
 
 const nav = document.getElementById("siteNav");

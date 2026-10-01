@@ -44,16 +44,20 @@
 
   <header class="nav" id="siteNav">
     <a class="brand-logo" href="/"><img src="/brand/logo-on-dark.svg" alt="Taxi Tips" height="28" /></a>
-    <nav class="nav-links" aria-label="Sidans delar">
-      <a href="#tipset">Tipset</a>
-      <a href="#situationer">Situationer</a>
+    <nav class="nav-links" id="navLinks" aria-label="Meny">
+      <a href="#tipset">Så funkar det</a>
       <a href="/demo" data-track="nav_demo">Demo</a>
-      <a href="#bolaget">För bolaget</a>
+      <a href="#bolaget">För bolag</a>
       <a href="#faq">Frågor</a>
-      <a href="/portal">Logga in</a>
+      <a class="nav-links-login" href="/portal">Logga in</a>
     </nav>
-    <a class="nav-signin" href="/portal">Logga in</a>
-    <a class="nav-cta" href="/registrera" data-track="cta_nav">Prova gratis</a>
+    <div class="nav-actions">
+      <a class="nav-signin" href="/portal">Logga in</a>
+      <a class="nav-cta" href="/registrera" data-track="cta_nav">Prova gratis</a>
+      <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="navLinks" aria-label="Öppna menyn">
+        <span aria-hidden="true"></span>
+      </button>
+    </div>
   </header>
 
   <main id="huvudinnehall">
@@ -70,12 +74,12 @@
           </p>
           <div class="hero-actions">
             <a class="btn btn-primary" href="/registrera" data-track="cta_hero_signup">Prova gratis</a>
-            <a class="btn btn-ghost-dark" href="#kontakt" data-track="cta_hero_demo">Boka en demo</a>
+            <a class="btn btn-ghost-dark" href="/demo" data-track="cta_hero_demo">Se demon</a>
           </div>
           <ul class="hero-points" aria-label="Kort om Taxi Tips">
             <li>Hela Sverige</li>
             <li>Inget kort</li>
-            <li>En bil eller många</li>
+            <li>Klart på två minuter</li>
           </ul>
         </div>
 
@@ -278,8 +282,8 @@
         </ul>
 
         <div class="sit-demo" data-reveal>
-          <a class="btn btn-primary" href="/demo" data-track="cta_situations_demo">Testa demon på kartan</a>
-          <p>Klicka på en punkt och se tipset. Fungerar i mobilen och på datorn.</p>
+          <a class="btn btn-ghost-dark" href="/demo" data-track="cta_situations_demo">Se demon</a>
+          <p>Klicka på en punkt på kartan och se tipset.</p>
         </div>
 
         <p class="sit-note" data-reveal>Tipsen är bedömningar, inte löften. Vi lovar aldrig en körning eller en viss inkomst. Du bestämmer alltid själv om du kör dit.</p>
@@ -347,7 +351,6 @@
             <span class="step-n" aria-hidden="true">1</span>
             <h3>Skapa ett konto</h3>
             <p>Här på webben eller i appen. Skriv organisationsnumret. Provet är gratis och du behöver inget kort.</p>
-            <a class="step-link" href="/registrera" data-track="cta_steps_signup">Skapa konto</a>
           </li>
           <li class="step" data-reveal style="--i: 1">
             <span class="step-n" aria-hidden="true">2</span>
@@ -360,6 +363,10 @@
             <p>En licens per bil och län. Du betalar med faktura eller på webben, inte i appen.</p>
           </li>
         </ol>
+        <div class="cta-row" data-reveal>
+          <a class="btn btn-primary" href="/registrera" data-track="cta_steps_signup">Prova gratis</a>
+          <p class="cta-note">Inget kort. Klart på två minuter.</p>
+        </div>
       </div>
     </section>
 
@@ -431,9 +438,8 @@
       <div class="section-inner capture-inner">
         <div class="capture-copy" data-reveal>
           <p class="eyebrow">Kontakt</p>
-          <h2 id="capture-title">Vill du se appen först?</h2>
-          <p class="section-lead">Vi visar hur appen fungerar och berättar priset. Skriv några rader. Vi svarar från hej@taxitips.se.</p>
-          <p class="capture-alt">Vill du hellre prova själv? <a href="/registrera" data-track="cta_contact_signup">Skapa ett konto gratis</a>.</p>
+          <h2 id="capture-title">Vill du prata med oss först?</h2>
+          <p class="section-lead">Vi visar appen och berättar priset för er. Skriv några rader. Vi svarar från hej@taxitips.se.</p>
           <div class="store-row" id="app">
             <span class="store-badge">
               <img src="/brand/icons/apple.svg" alt="" aria-hidden="true" />
@@ -447,7 +453,7 @@
         </div>
 
         <div class="capture-card" data-reveal>
-          <h3 id="contact-title">Skicka en förfrågan</h3>
+          <h3 id="contact-title">Boka en genomgång</h3>
           <form id="contactForm" class="capture-form" aria-labelledby="contact-title" novalidate>
             <label class="field">
               <span>Namn</span>
@@ -465,7 +471,7 @@
               <span>Meddelande</span>
               <textarea name="message" rows="4" required minlength="10" placeholder="Hur många bilar och i vilket län? När vill ni starta?"></textarea>
             </label>
-            <button type="submit" class="btn btn-primary btn-block" data-track="form_contact">Skicka</button>
+            <button type="submit" class="btn btn-dark btn-block" data-track="form_contact">Skicka</button>
             <p class="form-status" data-form-status hidden></p>
           </form>
         </div>
@@ -499,8 +505,8 @@
       <div class="footer-col">
         <h3>Produkt</h3>
         <ul>
-          <li><a href="#tipset">Vad ett tips innehåller</a></li>
-          <li><a href="#situationer">Situationer</a></li>
+          <li><a href="#tipset">Så funkar det</a></li>
+          <li><a href="/demo">Demo</a></li>
           <li><a href="#faq">Vanliga frågor</a></li>
         </ul>
       </div>
@@ -508,10 +514,10 @@
       <div class="footer-col">
         <h3>Kontakt</h3>
         <ul>
-          <li><a href="/registrera">Skapa konto</a></li>
+          <li><a href="/registrera">Prova gratis</a></li>
           <li><a href="/portal">Logga in</a></li>
+          <li><a href="#kontakt">Prata med oss</a></li>
           <li><a href="mailto:hej@taxitips.se">hej@taxitips.se</a></li>
-          <li><a href="#kontakt">Boka en demo</a></li>
         </ul>
       </div>
 

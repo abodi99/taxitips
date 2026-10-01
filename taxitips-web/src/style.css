@@ -154,51 +154,63 @@ p { margin: 0; text-wrap: pretty; }
   color: var(--ink-soft);
 }
 
-/* ---------- Nav ---------- */
+/* ---------- Nav ----------
+   Datorn: logotyp till vänster, menyn i mitten, Logga in + huvudknappen
+   till höger (tre kolumner, så menyn hamnar i mitten oavsett bredd).
+   Mobilen: logotyp, huvudknappen och en menyknapp. Menyn fälls ned. */
 
 .nav {
   position: sticky;
   top: 0;
   z-index: 20;
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr auto;
   align-items: center;
   gap: 1rem;
-  padding: 0.85rem var(--gutter);
-  padding-top: max(0.85rem, env(safe-area-inset-top));
+  padding: 0.75rem var(--gutter);
+  padding-top: max(0.75rem, env(safe-area-inset-top));
   background: var(--midnatt);
   border-bottom: 1px solid transparent;
   transition: border-color 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out);
 }
 
-.nav.is-scrolled {
+.nav.is-scrolled,
+.nav.is-open {
   border-bottom-color: rgba(252, 163, 17, 0.18);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
 }
 
-.nav-links {
-  display: none;
-  margin-left: auto;
-  gap: 0.25rem;
+.nav .brand-logo { justify-self: start; grid-row: 1; grid-column: 1; }
+
+.nav-actions {
+  grid-row: 1;
+  grid-column: 2;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
 }
 
-.nav-links a {
-  padding: 0.5rem 0.8rem;
-  border-radius: 8px;
+.nav-links a,
+.nav-signin {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 0.85rem;
+  border-radius: 10px;
   color: var(--on-dark);
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   font-weight: 500;
   text-decoration: none;
   transition: color 0.15s ease, background 0.15s ease;
 }
 
-.nav-links a:hover { color: #fff; background: rgba(245, 247, 250, 0.06); }
+.nav-links a:hover,
+.nav-signin:hover { color: #fff; background: rgba(245, 247, 250, 0.06); }
 
-@media (min-width: 880px) {
-  .nav-links { display: flex; }
-}
+.nav-signin { display: none; font-weight: 600; }
 
 .nav-cta {
-  margin-left: auto;
   display: inline-flex;
   align-items: center;
   min-height: 44px;
@@ -207,36 +219,87 @@ p { margin: 0; text-wrap: pretty; }
   background: var(--guld);
   color: var(--midnatt);
   font-weight: 700;
-  font-size: 0.92rem;
+  font-size: 0.95rem;
   text-decoration: none;
   white-space: nowrap;
   transition: transform 0.15s ease, background 0.15s ease;
 }
 
-@media (min-width: 880px) {
-  .nav-cta { margin-left: 0.5rem; }
-}
-
 .nav-cta:hover { background: var(--guld-ljus); transform: translateY(-1px); }
 
-/* Mobil: "Logga in" bredvid knappen, eftersom menylänkarna är dolda där */
-.nav-signin {
-  margin-left: auto;
-  display: inline-flex;
-  align-items: center;
-  min-height: 44px;
-  padding: 0 0.6rem;
-  color: var(--on-dark);
-  font-size: 0.92rem;
-  font-weight: 600;
-  text-decoration: none;
+/* Menyknappen: tre streck som blir ett kryss */
+.nav-toggle {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  border: 1px solid rgba(245, 247, 250, 0.25);
+  border-radius: 12px;
+  background: transparent;
+  cursor: pointer;
 }
 
-.nav-signin + .nav-cta { margin-left: 0.25rem; }
+.nav-toggle span,
+.nav-toggle span::before,
+.nav-toggle span::after {
+  position: absolute;
+  left: 50%;
+  width: 18px;
+  height: 2px;
+  border-radius: 2px;
+  background: #fff;
+  translate: -50% 0;
+  transition: transform 0.25s var(--ease-out), opacity 0.2s ease;
+}
 
-@media (min-width: 880px) {
-  .nav-signin { display: none; }
-  .nav-signin + .nav-cta { margin-left: 0.5rem; }
+.nav-toggle span { top: 50%; margin-top: -1px; }
+.nav-toggle span::before,
+.nav-toggle span::after { content: ""; left: 0; translate: 0 0; }
+.nav-toggle span::before { transform: translateY(-6px); }
+.nav-toggle span::after { transform: translateY(6px); }
+
+.nav.is-open .nav-toggle span { background: transparent; }
+.nav.is-open .nav-toggle span::before { transform: rotate(45deg); }
+.nav.is-open .nav-toggle span::after { transform: rotate(-45deg); }
+
+/* Mobilmenyn: fälls ned under menyraden */
+.nav-links {
+  grid-row: 2;
+  grid-column: 1 / -1;
+  display: none;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.25rem 0 0.5rem;
+}
+
+.nav.is-open .nav-links {
+  display: flex;
+  animation: menu-in 0.25s var(--ease-out);
+}
+
+.nav-links a { font-size: 1.05rem; min-height: 48px; }
+
+@keyframes menu-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@media (min-width: 900px) {
+  .nav { grid-template-columns: 1fr auto 1fr; }
+  .nav-actions { grid-column: 3; }
+  .nav-links,
+  .nav.is-open .nav-links {
+    grid-row: 1;
+    grid-column: 2;
+    display: flex;
+    flex-direction: row;
+    gap: 0.15rem;
+    padding: 0;
+    animation: none;
+  }
+  .nav-links a { font-size: 0.95rem; min-height: 44px; }
+  .nav-links .nav-links-login { display: none; }
+  .nav-signin { display: inline-flex; }
+  .nav-toggle { display: none; }
 }
 
 /* ---------- Buttons ---------- */
@@ -281,6 +344,35 @@ p { margin: 0; text-wrap: pretty; }
 .btn-ghost-dark:hover { border-color: rgba(245, 247, 250, 0.65); transform: translateY(-2px); }
 
 .btn-block { width: 100%; }
+
+/* Mörk knapp: för formulär (Skicka) så att guld bara betyder "Prova gratis" */
+.btn-dark {
+  background: var(--midnatt);
+  color: #fff;
+}
+
+.btn-dark:hover { background: var(--midnatt-mjuk); transform: translateY(-2px); }
+
+/* Samma rad under varje "Prova gratis": det minskar tveksamheten */
+.cta-note {
+  margin-top: 0.75rem;
+  font-size: 0.92rem;
+  color: var(--on-dark-soft);
+}
+
+.cta-row {
+  margin-top: 2rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.25rem;
+}
+
+.cta-row .cta-note { margin-top: 0; color: var(--ink-soft); }
+
+@media (max-width: 520px) {
+  .cta-row .btn { flex: 1 1 100%; }
+}
 
 /* ---------- Hero ---------- */
 
@@ -1198,29 +1290,6 @@ p { margin: 0; text-wrap: pretty; }
 }
 
 .step h3 { font-size: 1.12rem; }
-
-.step-link {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  min-height: 44px;
-  margin-top: 0.5rem;
-  color: var(--midnatt);
-  font-weight: 700;
-  text-decoration-color: var(--guld);
-  text-decoration-thickness: 2px;
-  text-underline-offset: 4px;
-}
-
-.step-link::after { content: "→"; transition: translate 0.2s var(--ease-out); }
-.step-link:hover::after { translate: 3px 0; }
-
-.capture-alt {
-  margin-top: 1rem;
-  font-weight: 600;
-}
-
-.capture-alt a { text-decoration-color: var(--guld); text-decoration-thickness: 2px; text-underline-offset: 4px; }
 
 .step p {
   margin-top: 0.5rem;
