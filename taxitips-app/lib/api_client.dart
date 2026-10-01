@@ -1726,7 +1726,6 @@ class ApiClient {
   }
 
   Future<Map<String, dynamic>> taxi({
-    bool demo = false,
     double? userLat,
     double? userLon,
     List<String>? regions,
@@ -1824,7 +1823,6 @@ class ApiClient {
         'week': all,
         'events': const [],
         'placeStats': _buildPlaceStats(all),
-        'demo': demo,
         'roadTotal': ?roadTotal,
         'roadAll': roadAll,
         'updatedAt': now.millisecondsSinceEpoch,
@@ -1848,7 +1846,6 @@ class ApiClient {
           'week': const [],
           'events': const [],
           'placeStats': const [],
-          'demo': demo,
           'updatedAt': DateTime.now().millisecondsSinceEpoch,
           'source': 'trafiklab',
         };

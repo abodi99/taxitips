@@ -9,7 +9,6 @@ import 'api_client.dart';
 import 'client_info.dart';
 import 'client_log.dart';
 import 'crashlytics.dart';
-import 'demo/demo_api_client.dart';
 import 'push_service.dart';
 import 'screens/driver_screen.dart';
 import 'screens/join_screen.dart';
@@ -49,13 +48,12 @@ class TaxiPrognosApp extends StatefulWidget {
   State<TaxiPrognosApp> createState() => _TaxiPrognosAppState();
 }
 
-enum AppRoute { welcome, login, signup, join, shell, driverInvite, demo }
+enum AppRoute { welcome, login, signup, join, shell, driverInvite }
 
 class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
   late AppRoute _route;
   String? _invite;
   bool _booting = true;
-  late final _demoApi = DemoApiClient();
 
   @override
   void initState() {
@@ -89,8 +87,6 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
       _route = AppRoute.driverInvite;
     } else if (uri.path.contains('join') || uri.path.contains('register')) {
       _route = AppRoute.join;
-    } else if (uri.path.contains('demo')) {
-      _route = AppRoute.demo;
     } else if (widget.api.sessionToken != null) {
       try {
         await widget.api.me();
@@ -152,13 +148,11 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
                 onSignup: () => setState(() => _route = AppRoute.signup),
                 onJoinPhone: () => setState(() => _route = AppRoute.join),
                 onBack: () => setState(() => _route = AppRoute.welcome),
-                onDemo: () => setState(() => _route = AppRoute.demo),
               ),
               AppRoute.welcome => WelcomeScreen(
                 onLogin: () => setState(() => _route = AppRoute.login),
                 onSignup: () => setState(() => _route = AppRoute.signup),
                 onJoinPhone: () => setState(() => _route = AppRoute.join),
-                onDemo: () => setState(() => _route = AppRoute.demo),
               ),
               AppRoute.signup => SignupScreen(
                 api: widget.api,
@@ -195,13 +189,6 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
                 api: widget.api,
                 inviteToken: _invite,
                 onBack: _goShell,
-              ),
-              AppRoute.demo => DriverScreen(
-                // Egen klient: demon pratar aldrig med servern.
-                api: _demoApi,
-                demo: true,
-                onDemoSignup: () => setState(() => _route = AppRoute.signup),
-                onBack: () => setState(() => _route = AppRoute.welcome),
               ),
             },
     );
@@ -287,7 +274,6 @@ class _AppShellState extends State<_AppShell> {
       body: DriverScreen(
         key: ValueKey(_driverEpoch),
         api: widget.api,
-        demo: false,
         onLeftDevice: widget.onLeftDevice,
         onOpenSettings: () => _openSettings(context),
       ),

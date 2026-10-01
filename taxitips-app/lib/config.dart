@@ -27,4 +27,8 @@ class TaxiTipsConfig {
   static const apiBaseUrl = String.fromEnvironment('API_BASE_URL');
 
   static bool get usesDjangoApi => apiBaseUrl.isNotEmpty;
+
+  /// Den interaktiva demon på webben. Appen har ingen egen demo längre --
+  /// startskärmen öppnar den här sidan i telefonens webbläsare.
+  static const demoUrl = 'https://taxitips.se/demo';
 }

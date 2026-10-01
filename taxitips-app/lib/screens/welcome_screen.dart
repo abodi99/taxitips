@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../config.dart';
 import '../theme.dart';
 
 class WelcomeScreen extends StatelessWidget {
@@ -10,13 +12,29 @@ class WelcomeScreen extends StatelessWidget {
     required this.onLogin,
     required this.onSignup,
     required this.onJoinPhone,
-    this.onDemo,
   });
 
   final VoidCallback onLogin;
   final VoidCallback onSignup;
   final VoidCallback onJoinPhone;
-  final VoidCallback? onDemo;
+
+  /// Demon finns på webben (taxitips.se/demo), inte i appen. Där syns samma
+  /// slags tips på en Sverigekarta utan att någon behöver ett konto.
+  Future<void> _openDemo(BuildContext context) async {
+    final messenger = ScaffoldMessenger.of(context);
+    var opened = false;
+    try {
+      opened = await launchUrl(
+        Uri.parse(TaxiTipsConfig.demoUrl),
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (_) {}
+    if (!opened) {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Kunde inte öppna webbläsaren')),
+      );
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -150,16 +168,28 @@ class WelcomeScreen extends StatelessWidget {
                       ),
                     ),
                     
-                    if (onDemo != null) ...[
-                      const SizedBox(height: 24),
-                      TextButton(
-                        onPressed: onDemo,
-                        child: const Text(
-                          'Prova appen (Demo)',
-                          style: TextStyle(color: Colors.white54, fontSize: 14, decoration: TextDecoration.underline),
-                        ),
+                    const SizedBox(height: 24),
+                    TextButton(
+                      onPressed: () => _openDemo(context),
+                      style: TextButton.styleFrom(
+                        foregroundColor: Colors.white70,
+                        minimumSize: const Size.fromHeight(48),
                       ),
-                    ],
+                      child: const Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'Se demon',
+                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, decoration: TextDecoration.underline),
+                          ),
+                          SizedBox(height: 2),
+                          Text(
+                            'Öppnas i webbläsaren',
+                            style: TextStyle(color: Colors.white54, fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    ),
                   ],
                 ],
               ),
