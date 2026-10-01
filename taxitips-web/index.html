@@ -34,6 +34,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="preload" as="image" href="/brand/hero-karta-m.webp" media="(max-width: 759px)" />
+  <link rel="preload" as="image" href="/brand/hero-karta-d.webp" media="(min-width: 760px)" />
   <link rel="stylesheet" href="/src/brand.css" />
   <link rel="stylesheet" href="/src/style.css" />
 </head>
@@ -57,6 +59,7 @@
   <main id="huvudinnehall">
     <!-- ============ Hero ============ -->
     <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-map" aria-hidden="true"></div>
       <div class="hero-inner">
         <div class="hero-copy">
           <h1 id="hero-title">Se var folk behöver taxi. <span class="hl">Innan kön växer.</span></h1>
@@ -114,6 +117,7 @@
           <figcaption class="lock-caption">Exempel på notiser</figcaption>
         </figure>
       </div>
+      <p class="hero-credit">Karta: © OpenStreetMap-bidragsgivare, OpenMapTiles, OpenFreeMap</p>
     </section>
 
     <!-- ============ Anatomy of a tip ============ -->

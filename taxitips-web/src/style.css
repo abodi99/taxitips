@@ -286,9 +286,77 @@ p { margin: 0; text-wrap: pretty; }
 
 .hero {
   position: relative;
+  isolation: isolate;
   overflow: hidden;
-  background: linear-gradient(180deg, var(--midnatt) 0%, var(--midnatt-djup) 100%);
+  background: var(--midnatt-djup);
   color: var(--ljusgra);
+}
+
+/* Kartan från demon som bakgrund: en färdigrenderad bild (inte en levande
+   karta), så startsidan slipper kartmotorn och WebGL. Bilderna görs om med
+   _hero-render.html om demons kartstil ändras. */
+.hero-map {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  background: url("/brand/hero-karta-m.webp") 50% 40% / cover no-repeat;
+  transform-origin: 60% 55%;
+}
+
+@media (min-width: 760px) {
+  .hero-map {
+    background-image: url("/brand/hero-karta-d.webp");
+    background-position: 55% 50%;
+  }
+}
+
+/* Mörk övertoning så att texten alltid går att läsa: uppifrån och ned i
+   mobilen (texten ligger överst), från vänster på datorn (texten till vänster). */
+.hero::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background:
+    linear-gradient(180deg, rgba(13, 23, 41, 0.88) 0%, rgba(13, 23, 41, 0.6) 36%, rgba(13, 23, 41, 0.2) 60%, rgba(13, 23, 41, 0.8) 100%);
+}
+
+@media (min-width: 960px) {
+  .hero::before {
+    background:
+      linear-gradient(90deg, rgba(13, 23, 41, 0.9) 0%, rgba(13, 23, 41, 0.6) 30%, rgba(13, 23, 41, 0.05) 55%, rgba(13, 23, 41, 0.3) 100%),
+      linear-gradient(180deg, transparent 72%, rgba(13, 23, 41, 0.75) 100%);
+  }
+}
+
+/* Kartan tonar in och glider sedan sakta, som en kamera som svävar över
+   landet. Bara transform/opacity; stängs av med reducerad rörelse. */
+.js .hero-map {
+  animation:
+    map-in 1.6s var(--ease-out) both,
+    map-drift 48s ease-in-out 1.6s infinite alternate;
+}
+
+@keyframes map-in {
+  from { opacity: 0; transform: scale(1.12); }
+  to { opacity: 1; transform: scale(1.04); }
+}
+
+@keyframes map-drift {
+  from { transform: scale(1.04) translate3d(0, 0, 0); }
+  to { transform: scale(1.1) translate3d(-1.5%, -1.2%, 0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .js .hero-map { animation: none; }
+}
+
+.hero-credit {
+  position: absolute;
+  right: var(--gutter);
+  bottom: 0.6rem;
+  font-size: 0.72rem;
+  color: rgba(245, 247, 250, 0.4);
 }
 
 .hero-inner {

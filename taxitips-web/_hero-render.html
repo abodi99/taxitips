@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <title>hero render (tillfällig, committas inte)</title>
+  <style>
+    html, body, #map { margin: 0; height: 100%; width: 100%; background: #0d1729; }
+    .maplibregl-ctrl-attrib, .maplibregl-ctrl-logo { display: none !important; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <script type="module">
+    import maplibregl from "maplibre-gl";
+    import "maplibre-gl/dist/maplibre-gl.css";
+    import { navyStyle } from "/src/demo/mapstyle.js";
+    import { TIPS } from "/src/demo/data.js";
+
+    const q = new URLSearchParams(location.search);
+    const view = {
+      center: [Number(q.get("lng") || 16.6), Number(q.get("lat") || 61.6)],
+      zoom: Number(q.get("z") || 4.2),
+      pitch: Number(q.get("p") || 48),
+      bearing: Number(q.get("b") || -12),
+    };
+    const map = new maplibregl.Map({
+      container: "map", style: navyStyle(), ...view,
+      attributionControl: false, interactive: false, fadeDuration: 0,
+      preserveDrawingBuffer: true,
+    });
+    const color = { stark: "#fca311", medel: "#ffcf7a", svag: "#8a97ad" };
+    map.on("load", () => {
+      // Bakgrundsbild: inga etiketter som konkurrerar med rubriken.
+      for (const layer of map.getStyle().layers) {
+        if (layer.type === "symbol") map.setLayoutProperty(layer.id, "visibility", "none");
+      }
+      map.addSource("tips", {
+        type: "geojson",
+        data: {
+          type: "FeatureCollection",
+          features: TIPS.map((t) => ({
+            type: "Feature",
+            properties: { c: color[t.strength] || color.medel, s: t.strength === "stark" ? 1 : t.strength === "medel" ? 0.7 : 0.45 },
+            geometry: { type: "Point", coordinates: t.lngLat },
+          })),
+        },
+      });
+      // Mjukt sken, en ring och en skarp kärna per tips.
+      map.addLayer({ id: "halo", type: "circle", source: "tips", paint: {
+        "circle-radius": ["*", 48, ["get", "s"]], "circle-color": ["get", "c"],
+        "circle-opacity": 0.32, "circle-blur": 1, "circle-pitch-alignment": "map",
+      } });
+      map.addLayer({ id: "ring", type: "circle", source: "tips", paint: {
+        "circle-radius": ["*", 13, ["get", "s"]], "circle-color": "rgba(0,0,0,0)",
+        "circle-stroke-color": ["get", "c"], "circle-stroke-width": 1.5, "circle-stroke-opacity": 0.55,
+        "circle-pitch-alignment": "map",
+      } });
+      map.addLayer({ id: "core", type: "circle", source: "tips", paint: {
+        "circle-radius": ["*", 4.5, ["get", "s"]], "circle-color": ["get", "c"],
+        "circle-pitch-alignment": "map",
+      } });
+      map.once("idle", () => { document.body.dataset.ready = "1"; });
+    });
+  </script>
+</body>
+</html>
