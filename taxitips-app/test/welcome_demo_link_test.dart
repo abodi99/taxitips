@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:taxibehov_app/config.dart';
-import 'package:taxibehov_app/screens/welcome_screen.dart';
+import 'package:taxitips_app/config.dart';
+import 'package:taxitips_app/screens/welcome_screen.dart';
 
 void main() {
   test('demon är webbsidan, ingen sida i appen', () {

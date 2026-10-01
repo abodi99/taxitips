@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:taxibehov_app/api_client.dart';
-import 'package:taxibehov_app/screens/driver_login_screen.dart';
-import 'package:taxibehov_app/screens/welcome_screen.dart';
+import 'package:taxitips_app/api_client.dart';
+import 'package:taxitips_app/screens/driver_login_screen.dart';
+import 'package:taxitips_app/screens/welcome_screen.dart';
 
 /// Startsidan har två tydliga vägar -- förare och ägare -- och förarens
 /// inloggning har koden kvar som reserv. Inget här pratar med servern.

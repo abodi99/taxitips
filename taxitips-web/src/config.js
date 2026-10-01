@@ -7,15 +7,14 @@ export const site = {
   contactEmail: "hej@taxitips.se",
 };
 
-/** Firebase / GA4 — project taxibehov, web app "Taxitips Web" */
+/** Firebase — project taxitips-se, web app "Taxitips Web" */
 export const firebase = {
-  apiKey: "AIzaSyDoKaLhJptAWUpbw2vh1pJ61YRb7kau2zU",
-  authDomain: "taxibehov.firebaseapp.com",
-  projectId: "taxibehov",
-  storageBucket: "taxibehov.firebasestorage.app",
-  messagingSenderId: "963263574599",
-  appId: "1:963263574599:web:f8fffff4809589607f7762",
-  measurementId: "G-6ZWTCYKFKS",
+  apiKey: "AIzaSyC8EoR1vv95zfhlnMwIDsnfMikUPh4d1pU",
+  authDomain: "taxitips-se.firebaseapp.com",
+  projectId: "taxitips-se",
+  storageBucket: "taxitips-se.firebasestorage.app",
+  messagingSenderId: "1015418824161",
+  appId: "1:1015418824161:web:a8462870b4b2801e859ea0",
 };
 
 /** Umami (A2M Central) — https://umami.a2m-tech.com */

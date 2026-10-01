@@ -4,10 +4,10 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:taxibehov_app/api_client.dart' show ApiException;
-import 'package:taxibehov_app/backend_api.dart';
-import 'package:taxibehov_app/client_info.dart';
-import 'package:taxibehov_app/client_log.dart';
+import 'package:taxitips_app/api_client.dart' show ApiException;
+import 'package:taxitips_app/backend_api.dart';
+import 'package:taxitips_app/client_info.dart';
+import 'package:taxitips_app/client_log.dart';
 
 void main() {
   late List<Map<String, dynamic>> sent;

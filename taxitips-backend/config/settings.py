@@ -267,7 +267,7 @@ APP_ANDROID_RECOMMENDED_VERSION = os.environ.get("APP_ANDROID_RECOMMENDED_VERSIO
 APP_IOS_MIN_VERSION = os.environ.get("APP_IOS_MIN_VERSION", "")
 APP_IOS_RECOMMENDED_VERSION = os.environ.get("APP_IOS_RECOMMENDED_VERSION", "")
 APP_IOS_STORE_URL = os.environ.get("APP_IOS_STORE_URL", "")
-APP_ANDROID_PACKAGE = os.environ.get("APP_ANDROID_PACKAGE", "se.taxibehov.taxibehov_app")
+APP_ANDROID_PACKAGE = os.environ.get("APP_ANDROID_PACKAGE", "se.taxitips.app")
 
 # --- Celery -----------------------------------------------------------
 # CELERY_TASK_ALWAYS_EAGER: satt av testkörning (se Jenkinsfile och README)

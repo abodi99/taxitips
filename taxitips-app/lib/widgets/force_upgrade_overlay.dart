@@ -8,19 +8,21 @@ import 'package:url_launcher/url_launcher.dart';
 import '../app_version.dart';
 import '../backend_api.dart';
 import '../config.dart';
+import '../remote_config_service.dart';
 import '../theme.dart';
 
 /// Paketnamnet i Play Butik. Reserv när PackageInfo inte svarar.
-const kAndroidPackage = 'se.taxibehov.taxibehov_app';
+const kAndroidPackage = 'se.taxitips.app';
 
 typedef ConfigFetcher = Future<Map<String, dynamic>> Function();
 typedef InstalledVersionReader = Future<AppVersion?> Function();
+typedef RemotePolicyReader = UpgradePolicy? Function(String platform);
 
 /// Tvingad eller föreslagen uppdatering, styrd från servern.
 ///
-/// Gränserna kommer från `/api/config` (`appVersion`), som adminwebben
-/// ändrar utan deploy. Tidigare låg en enda gräns för båda plattformarna i
-/// Firebase Remote Config; den syntes inte där resten av driften sköts.
+/// Gränserna kommer primärt från Firebase Remote Config (versionsnycklar
+/// per plattform) och fylls från `/api/config` (`appVersion`) när RC-fält
+/// är tomma — adminwebben kan fortfarande styra utan app-deploy.
 ///
 /// Kontrollen görs vid start och varje gång appen kommer tillbaka från
 /// bakgrunden -- en förare som öppnat butiken och kommit tillbaka utan att
@@ -36,6 +38,7 @@ class ForceUpgradeOverlay extends StatefulWidget {
     super.key,
     required this.child,
     this.fetchConfig,
+    this.readRemotePolicy,
     this.installedVersion,
     this.platform,
   });
@@ -44,6 +47,7 @@ class ForceUpgradeOverlay extends StatefulWidget {
 
   /// Injicerbara för testerna. Null = den riktiga backenden och PackageInfo.
   final ConfigFetcher? fetchConfig;
+  final RemotePolicyReader? readRemotePolicy;
   final InstalledVersionReader? installedVersion;
 
   /// `android` eller `ios`. Null = läses från enheten (webb och desktop får
@@ -113,16 +117,25 @@ class _ForceUpgradeOverlayState extends State<ForceUpgradeOverlay>
     _checking = true;
     try {
       final installed = _installed ??= await _readInstalled();
-      UpgradePolicy? policy;
+      UpgradePolicy? remotePolicy;
+      try {
+        final readRemote = widget.readRemotePolicy ?? remoteUpgradePolicy;
+        remotePolicy = readRemote(platform);
+      } catch (e) {
+        debugPrint('ForceUpgrade: remote config: $e');
+      }
+      UpgradePolicy? backendPolicy;
       try {
         final pending = _fetch();
-        policy = pending == null
+        backendPolicy = pending == null
             ? null
             : UpgradePolicy.fromConfig(await pending, platform);
       } catch (e) {
-        // Servern nere, inget nät, trasigt svar: släpp igenom, men behåll en
-        // spärr som redan gäller -- ett tappat nät ska inte vara vägen runt den.
         debugPrint('ForceUpgrade: config gick inte att hämta: $e');
+      }
+      final policy = UpgradePolicy.merge(remotePolicy, backendPolicy);
+      if (policy == null && remotePolicy == null && backendPolicy == null) {
+        // Båda källor nere: behåll eventuell befintlig spärr.
         return;
       }
       final decision = decideUpgrade(installed: installed, policy: policy);

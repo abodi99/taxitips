@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:taxibehov_app/app_version.dart';
-import 'package:taxibehov_app/widgets/force_upgrade_overlay.dart';
+import 'package:taxitips_app/app_version.dart';
+import 'package:taxitips_app/widgets/force_upgrade_overlay.dart';
 
 AppVersion v(String s) => AppVersion.tryParse(s)!;
 
@@ -102,6 +102,24 @@ void main() {
         decide('1.0.1', config(min: '1.0.2', storeUrl: null)),
         UpgradeAction.nudge,
       );
+    });
+
+    test('Remote Config fyller tomma backend-fält', () {
+      final remote = const UpgradePolicy(
+        min: '1.0.3',
+        recommended: null,
+        storeUrl: 'https://play.example/a',
+        message: 'Från RC',
+      );
+      final backend = UpgradePolicy.fromConfig(
+        config(min: '1.0.2', recommended: '1.0.4', message: 'Från API'),
+        'android',
+      );
+      final merged = UpgradePolicy.merge(remote, backend)!;
+      expect(merged.min, '1.0.3');
+      expect(merged.recommended, '1.0.4');
+      expect(merged.storeUrl, 'https://play.example/a');
+      expect(merged.message, 'Från RC');
     });
 
     test('meddelandet följer med', () {

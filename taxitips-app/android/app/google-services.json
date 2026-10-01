@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "963263574599",
-    "project_id": "taxibehov",
-    "storage_bucket": "taxibehov.firebasestorage.app"
+    "project_number": "1015418824161",
+    "project_id": "taxitips-se",
+    "storage_bucket": "taxitips-se.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:963263574599:android:18f6a9e821aac3e17f7762",
+        "mobilesdk_app_id": "1:1015418824161:android:72ff9fd1ca7234ef859ea0",
         "android_client_info": {
-          "package_name": "se.taxibehov.taxibehov_app"
+          "package_name": "se.taxitips.app"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyBcaBKtr2sqEtx9kYtHbAJOw7zaVx0ZtCQ"
+          "current_key": "AIzaSyB_7X6J4EhjetJbHsmAdR9kX6_uTT2c7_E"
         }
       ],
       "services": {

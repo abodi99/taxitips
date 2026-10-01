@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:taxibehov_app/screens/events_screen.dart';
-import 'package:taxibehov_app/severity_labels.dart';
+import 'package:taxitips_app/screens/events_screen.dart';
+import 'package:taxitips_app/severity_labels.dart';
 
 void main() {
   group('evenemangens sort', () {

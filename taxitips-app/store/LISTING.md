@@ -11,8 +11,8 @@
 | Fält | Värde |
 |---|---|
 | **Apptitel** | Taxitips |
-| **Package ID (Android)** | `se.taxibehov.taxibehov_app` — ändra **inte**; bryter uppdateringar |
-| **Bundle ID (iOS)** | `se.taxibehov.taxibehovApp` — ändra **inte** |
+| **Package ID (Android)** | `se.taxitips.app` — nytt paket 2026-10-01 (ersätter se.taxibehov…) |
+| **Bundle ID (iOS)** | `se.taxitips.app` — nytt paket 2026-10-01 |
 | **Version** | 1.0.0 (build 1) — uppdatera inför release |
 | **Kategori Play** | Navigation / Transport |
 | **Kategori App Store** | Navigation |
@@ -148,7 +148,7 @@ Montserrat Bold. Format: JPEG eller PNG, max 1 MB.
   och konfigurerad i `build.gradle.kts` (ta inte debug-nyckeln till store)
 - [ ] **iOS Distribution certificate** + provisioning profile i Xcode
 - [ ] **App Store Connect** — app skapad, bundle ID verifierat
-- [ ] **Google Play Console** — app skapad, paket-ID matchar `se.taxibehov.taxibehov_app`
+- [ ] **Google Play Console** — app skapad, paket-ID matchar `se.taxitips.app`
 - [ ] **Launcher-ikon genererad** — kör:
   ```bash
   cd taxitips-app
@@ -166,11 +166,11 @@ Montserrat Bold. Format: JPEG eller PNG, max 1 MB.
 
 | Identifierare | Värde | Får ändras? |
 |---|---|---|
-| Android applicationId | `se.taxibehov.taxibehov_app` | **Nej** — bryter alla befintliga installationer |
-| Android namespace | `se.taxibehov.taxibehov_app` | Nej |
-| iOS Bundle Identifier | `se.taxibehov.taxibehovApp` | Nej |
-| Firebase-projekt | `taxibehov` | Nej |
-| Dart package name (pubspec) | `taxibehov_app` | Nej — alla `import`-statements |
+| Android applicationId | `se.taxitips.app` | Ja — ny Play-listning krävs |
+| Android namespace | `se.taxitips.app` | Ja |
+| iOS Bundle Identifier | `se.taxitips.app` | Ja |
+| Firebase-projekt | `taxitips-se` | Ja — nytt projekt (taxitips var upptaget) |
+| Dart package name (pubspec) | `taxitips_app` | Ja |
 | **Android display name** | **Taxitips** ✅ | Ja — ändrat i `AndroidManifest.xml` |
 | **iOS CFBundleDisplayName** | **Taxitips** ✅ | Ja — ändrat i `Info.plist` |
 | **iOS CFBundleName** | **Taxitips** ✅ | Ja — ändrat i `Info.plist` |

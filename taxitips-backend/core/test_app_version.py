@@ -52,7 +52,7 @@ class PublicConfigTests(TestCase):
         self.assertIsNone(body["android"]["recommended"])
         self.assertIsNone(body["ios"]["min"])
         self.assertIsNone(body["ios"]["storeUrl"])
-        self.assertIn("se.taxibehov.taxibehov_app", body["android"]["storeUrl"])
+        self.assertIn("se.taxitips.app", body["android"]["storeUrl"])
         self.assertIsNone(body["message"])
 
     def test_the_stored_row_is_served_per_platform(self):
@@ -64,7 +64,7 @@ class PublicConfigTests(TestCase):
         body = self.get()
         self.assertEqual(body["android"], {
             "min": "1.0.2", "recommended": "1.1.0",
-            "storeUrl": "https://play.google.com/store/apps/details?id=se.taxibehov.taxibehov_app",
+            "storeUrl": "https://play.google.com/store/apps/details?id=se.taxitips.app",
         })
         self.assertEqual(body["ios"]["min"], "1.0.0")
         self.assertIsNone(body["ios"]["recommended"])

@@ -3,8 +3,8 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
-import 'package:taxibehov_app/api_client.dart' show ApiException;
-import 'package:taxibehov_app/backend_api.dart';
+import 'package:taxitips_app/api_client.dart' show ApiException;
+import 'package:taxitips_app/backend_api.dart';
 
 void main() {
   late List<http.Request> seen;

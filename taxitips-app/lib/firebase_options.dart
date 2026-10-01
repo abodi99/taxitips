@@ -1,4 +1,4 @@
-// File generated for Firebase project taxibehov.
+// File generated for Firebase project taxitips-se.
 // Ignore for file: type=lint
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
@@ -25,29 +25,28 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyDoKaLhJptAWUpbw2vh1pJ61YRb7kau2zU',
-    appId: '1:963263574599:web:f8fffff4809589607f7762',
-    messagingSenderId: '963263574599',
-    projectId: 'taxibehov',
-    authDomain: 'taxibehov.firebaseapp.com',
-    storageBucket: 'taxibehov.firebasestorage.app',
-    measurementId: 'G-6ZWTCYKFKS',
+    apiKey: 'AIzaSyC8EoR1vv95zfhlnMwIDsnfMikUPh4d1pU',
+    appId: '1:1015418824161:web:a8462870b4b2801e859ea0',
+    messagingSenderId: '1015418824161',
+    projectId: 'taxitips-se',
+    authDomain: 'taxitips-se.firebaseapp.com',
+    storageBucket: 'taxitips-se.firebasestorage.app',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyBcaBKtr2sqEtx9kYtHbAJOw7zaVx0ZtCQ',
-    appId: '1:963263574599:android:18f6a9e821aac3e17f7762',
-    messagingSenderId: '963263574599',
-    projectId: 'taxibehov',
-    storageBucket: 'taxibehov.firebasestorage.app',
+    apiKey: 'AIzaSyB_7X6J4EhjetJbHsmAdR9kX6_uTT2c7_E',
+    appId: '1:1015418824161:android:72ff9fd1ca7234ef859ea0',
+    messagingSenderId: '1015418824161',
+    projectId: 'taxitips-se',
+    storageBucket: 'taxitips-se.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyBEkRxD9Vw4GEFuc-TYzTFG1hymtnZwQHE',
-    appId: '1:963263574599:ios:64ba2ead7f4db6b77f7762',
-    messagingSenderId: '963263574599',
-    projectId: 'taxibehov',
-    storageBucket: 'taxibehov.firebasestorage.app',
-    iosBundleId: 'se.taxibehov.taxibehovApp',
+    apiKey: 'AIzaSyDAdOXQP1L1CZw42owaTcytUMaM8ETXQBw',
+    appId: '1:1015418824161:ios:6fa297c7276b6d41859ea0',
+    messagingSenderId: '1015418824161',
+    projectId: 'taxitips-se',
+    storageBucket: 'taxitips-se.firebasestorage.app',
+    iosBundleId: 'se.taxitips.app',
   );
 }

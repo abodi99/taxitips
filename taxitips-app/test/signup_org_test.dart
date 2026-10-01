@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:taxibehov_app/screens/signup_screen.dart';
+import 'package:taxitips_app/screens/signup_screen.dart';
 
 void main() {
   test('organisationsnummer: kontrollsiffran prövas som på servern', () {

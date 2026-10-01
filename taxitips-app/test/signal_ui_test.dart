@@ -1,14 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-import 'package:taxibehov_app/followed_events.dart';
-import 'package:taxibehov_app/signal_kinds.dart';
-import 'package:taxibehov_app/theme.dart';
-import 'package:taxibehov_app/widgets/category_bar.dart';
-import 'package:taxibehov_app/widgets/ferry_event_widgets.dart';
-import 'package:taxibehov_app/widgets/map_legend_sheet.dart';
-import 'package:taxibehov_app/widgets/signal_card.dart';
-import 'package:taxibehov_app/widgets/signal_map.dart';
+import 'package:taxitips_app/followed_events.dart';
+import 'package:taxitips_app/signal_kinds.dart';
+import 'package:taxitips_app/theme.dart';
+import 'package:taxitips_app/widgets/category_bar.dart';
+import 'package:taxitips_app/widgets/ferry_event_widgets.dart';
+import 'package:taxitips_app/widgets/map_legend_sheet.dart';
+import 'package:taxitips_app/widgets/signal_card.dart';
+import 'package:taxitips_app/widgets/signal_map.dart';
 
 MapItem item(
   String id,

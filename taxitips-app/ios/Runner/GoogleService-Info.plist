@@ -3,21 +3,21 @@
 <plist version="1.0">
 <dict>
 	<key>API_KEY</key>
-	<string>AIzaSyBEkRxD9Vw4GEFuc-TYzTFG1hymtnZwQHE</string>
+	<string>AIzaSyDAdOXQP1L1CZw42owaTcytUMaM8ETXQBw</string>
 	<key>GCM_SENDER_ID</key>
-	<string>963263574599</string>
+	<string>1015418824161</string>
 	<key>PLIST_VERSION</key>
 	<string>1</string>
 	<key>BUNDLE_ID</key>
-	<string>se.taxibehov.taxibehovApp</string>
+	<string>se.taxitips.app</string>
 	<key>PROJECT_ID</key>
-	<string>taxibehov</string>
+	<string>taxitips-se</string>
 	<key>STORAGE_BUCKET</key>
-	<string>taxibehov.firebasestorage.app</string>
+	<string>taxitips-se.firebasestorage.app</string>
 	<key>IS_ADS_ENABLED</key>
 	<false></false>
 	<key>IS_ANALYTICS_ENABLED</key>
-	<true></true>
+	<false></false>
 	<key>IS_APPINVITE_ENABLED</key>
 	<true></true>
 	<key>IS_GCM_ENABLED</key>
@@ -25,6 +25,6 @@
 	<key>IS_SIGNIN_ENABLED</key>
 	<true></true>
 	<key>GOOGLE_APP_ID</key>
-	<string>1:963263574599:ios:64ba2ead7f4db6b77f7762</string>
+	<string>1:1015418824161:ios:6fa297c7276b6d41859ea0</string>
 </dict>
 </plist>

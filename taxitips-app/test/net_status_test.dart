@@ -4,11 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:taxibehov_app/api_client.dart' show ApiException;
-import 'package:taxibehov_app/feed_cache.dart';
-import 'package:taxibehov_app/net_status.dart';
-import 'package:taxibehov_app/pending_feedback.dart';
-import 'package:taxibehov_app/widgets/offline_banner.dart';
+import 'package:taxitips_app/api_client.dart' show ApiException;
+import 'package:taxitips_app/feed_cache.dart';
+import 'package:taxitips_app/net_status.dart';
+import 'package:taxitips_app/pending_feedback.dart';
+import 'package:taxitips_app/widgets/offline_banner.dart';
 
 void main() {
   group('netFailureOf', () {

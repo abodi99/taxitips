@@ -100,6 +100,34 @@ class UpgradePolicy {
       message: text(block['message']),
     );
   }
+
+  /// Tomma fält i [primary] fylls från [fallback]. Primär = Remote Config,
+  /// reserv = `/api/config` när adminwebben eller nätet sätter annat.
+  static UpgradePolicy? merge(UpgradePolicy? primary, UpgradePolicy? fallback) {
+    if (primary == null && fallback == null) return null;
+    String? pick(String? a, String? b) {
+      final ta = (a ?? '').trim();
+      if (ta.isNotEmpty) return ta;
+      final tb = (b ?? '').trim();
+      return tb.isEmpty ? null : tb;
+    }
+
+    final p = primary;
+    final f = fallback;
+    final merged = UpgradePolicy(
+      min: pick(p?.min, f?.min),
+      recommended: pick(p?.recommended, f?.recommended),
+      storeUrl: pick(p?.storeUrl, f?.storeUrl),
+      message: pick(p?.message, f?.message),
+    );
+    if ((merged.min ?? '').isEmpty &&
+        (merged.recommended ?? '').isEmpty &&
+        (merged.storeUrl ?? '').isEmpty &&
+        (merged.message ?? '').isEmpty) {
+      return null;
+    }
+    return merged;
+  }
 }
 
 enum UpgradeAction { none, nudge, block }

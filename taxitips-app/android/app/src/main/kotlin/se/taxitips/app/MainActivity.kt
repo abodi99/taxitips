@@ -1,4 +1,4 @@
-package se.taxibehov.taxibehov_app
+package se.taxitips.app
 
 import android.app.NotificationChannel
 import android.app.NotificationManager

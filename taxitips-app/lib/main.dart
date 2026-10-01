@@ -9,7 +9,9 @@ import 'api_client.dart';
 import 'client_info.dart';
 import 'client_log.dart';
 import 'crashlytics.dart';
+import 'performance_monitoring.dart';
 import 'push_service.dart';
+import 'remote_config_service.dart';
 import 'screens/driver_login_screen.dart';
 import 'screens/driver_screen.dart';
 import 'screens/join_screen.dart';
@@ -23,7 +25,9 @@ import 'widgets/force_upgrade_overlay.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initFirebaseSafe();
+  await initRemoteConfigSafe();
   await initCrashlyticsSafe();
+  await initPerformanceSafe();
   // Efter Crashlytics: våra hanterare kedjar på dess, så att båda får felet.
   ClientLog.installErrorHandlers();
   // Version och telefonmodell till headrarna. Högst en kort stund -- appen

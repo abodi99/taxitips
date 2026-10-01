@@ -308,14 +308,14 @@ class _SignalMapState extends State<SignalMap> {
                 'https://basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key={key}',
             additionalOptions: const {'key': kCartoKey},
             retinaMode: RetinaMode.isHighDensity(context),
-            userAgentPackageName: 'se.taxibehov.taxibehov_app',
+            userAgentPackageName: 'se.taxitips.app',
             maxNativeZoom: 20,
           )
         else
           TileLayer(
             urlTemplate:
                 'https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}',
-            userAgentPackageName: 'se.taxibehov.taxibehov_app',
+            userAgentPackageName: 'se.taxitips.app',
             maxNativeZoom: 19,
           ),
         SimpleAttributionWidget(

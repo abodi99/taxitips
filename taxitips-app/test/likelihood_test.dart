@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:taxibehov_app/severity_labels.dart';
+import 'package:taxitips_app/severity_labels.dart';
 
 void main() {
   test('the three live vehicle_cancelled cases that were mislabeled', () {

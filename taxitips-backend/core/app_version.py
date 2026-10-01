@@ -137,7 +137,7 @@ def _effective(row) -> dict:
         out["ios"]["storeUrl"] = {"value": _env("APP_IOS_STORE_URL", version=False), "source": "env"}
     else:
         out["ios"]["storeUrl"] = {"value": None, "source": None}
-    package = getattr(settings, "APP_ANDROID_PACKAGE", "") or "se.taxibehov.taxibehov_app"
+    package = getattr(settings, "APP_ANDROID_PACKAGE", "") or "se.taxitips.app"
     out["android"]["storeUrl"] = {
         "value": f"https://play.google.com/store/apps/details?id={package}",
         "source": "env",
