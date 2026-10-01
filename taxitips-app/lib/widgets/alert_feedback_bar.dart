@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../analytics.dart';
 import '../api_client.dart';
 import '../config.dart';
-import '../demo/demo_api_client.dart';
 import '../theme.dart';
 import 'brand_icons.dart';
 
@@ -69,7 +68,7 @@ class _AlertFeedbackBarState extends State<AlertFeedbackBar> {
 
   @override
   Widget build(BuildContext context) {
-    if (!TaxiTipsConfig.usesDjangoApi && widget.api is! DemoApiClient) {
+    if (!TaxiTipsConfig.usesDjangoApi) {
       return const SizedBox.shrink();
     }
 

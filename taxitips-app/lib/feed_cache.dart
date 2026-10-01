@@ -30,7 +30,6 @@ class FeedCache {
     'message',
     'features',
     'source',
-    'demo',
   ];
 
   static Future<void> save(Map<String, dynamic> data, {DateTime? now}) async {

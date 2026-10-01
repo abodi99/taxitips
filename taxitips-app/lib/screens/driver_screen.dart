@@ -32,17 +32,12 @@ import '../widgets/signal_card.dart';
 import '../widgets/signal_map.dart';
 import '../widgets/vehicle_session_sheet.dart';
 import '../widgets/google_signal_map.dart';
-import '../demo/demo_api_client.dart';
-import '../demo/demo_banner.dart';
-import '../demo/demo_data.dart';
 
 class DriverScreen extends StatefulWidget {
   const DriverScreen({
     super.key,
     required this.api,
     this.inviteToken,
-    this.demo = false,
-    this.onDemoSignup,
     this.onBack,
     this.onLeftDevice,
     this.onOpenSettings,
@@ -50,10 +45,6 @@ class DriverScreen extends StatefulWidget {
 
   final ApiClient api;
   final String? inviteToken;
-  final bool demo;
-
-  /// Demoläget: "Prova gratis i 14 dagar" -> registreringen.
-  final VoidCallback? onDemoSignup;
   final VoidCallback? onBack;
   final VoidCallback? onLeftDevice;
   final VoidCallback? onOpenSettings;
@@ -486,10 +477,6 @@ class _DriverScreenState extends State<DriverScreen>
   @override
   void initState() {
     super.initState();
-    assert(
-      !widget.demo || widget.api is DemoApiClient,
-      'Demoläget måste få en DemoApiClient, annars går anropen till servern.',
-    );
     WidgetsBinding.instance.addObserver(this);
     _pushSub = foregroundMessages.listen(_onForegroundPush);
     _openedSub = openedMessageSignals.listen((_) => _openFromNotification());
@@ -512,7 +499,6 @@ class _DriverScreenState extends State<DriverScreen>
   }
 
   Future<void> _refreshSupportUnread() async {
-    if (widget.demo) return;
     final unread = await widget.api.supportUnread();
     if (mounted && unread != _supportUnread) {
       setState(() => _supportUnread = unread);
@@ -670,25 +656,6 @@ class _DriverScreenState extends State<DriverScreen>
 
   /// Hämtar GPS. Returnerar null vid lycka, annars ett kort felmeddelande.
   Future<String?> _updateCurrentPosition({bool explain = false}) async {
-    if (widget.demo) {
-      // Demon har en fast position och frågar aldrig om platsbehörighet.
-      if (!mounted) return null;
-      setState(() {
-        _userLat = DemoData.userLat;
-        _userLon = DemoData.userLon;
-        if (_data != null) _enrichClientDistances(_data!);
-      });
-      if (!_centeredOnUser) {
-        _centeredOnUser = true;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!mounted) return;
-          try {
-            _mapFocus.move(DemoData.userLat, DemoData.userLon, 10);
-          } catch (_) {}
-        });
-      }
-      return null;
-    }
     try {
       final serviceOn = await Geolocator.isLocationServiceEnabled();
       if (!serviceOn) {
@@ -797,7 +764,6 @@ class _DriverScreenState extends State<DriverScreen>
     try {
       final results = await Future.wait([
         widget.api.taxi(
-          demo: widget.demo,
           roadAll: _category == SignalCategory.road.key,
           userLat: _userLat,
           userLon: _userLon,
@@ -1053,12 +1019,8 @@ class _DriverScreenState extends State<DriverScreen>
   void _zoomBy(double delta) => _mapFocus.zoomBy(delta);
 
   /// Kollar entitlement separat från _load så att ett fel här inte döljer
-  /// alert-datan (t.ex. i demo-läge finns ingen deviceToken alls).
+  /// alert-datan.
   Future<void> _checkEntitlement() async {
-    if (widget.demo) {
-      if (mounted) setState(() => _entitled = true);
-      return;
-    }
     try {
       final result = await widget.api.entitlements();
       if (!mounted) return;
@@ -2921,13 +2883,6 @@ class _DriverScreenState extends State<DriverScreen>
                                     ],
                                   ),
                                 ),
-                                if (widget.demo) ...[
-                                  const SizedBox(height: 8),
-                                  DemoBanner(
-                                    onExit: widget.onBack,
-                                    onSignup: widget.onDemoSignup,
-                                  ),
-                                ],
                                 if (_needsVehicle) ...[
                                   const SizedBox(height: 8),
                                   _Notice(
@@ -2972,9 +2927,7 @@ class _DriverScreenState extends State<DriverScreen>
                                     text: _error!,
                                     danger: true,
                                   ),
-                                ] else if (_data != null &&
-                                    !live &&
-                                    !widget.demo) ...[
+                                ] else if (_data != null && !live) ...[
                                   const SizedBox(height: 8),
                                   _Notice(
                                     icon: Icons.schedule,

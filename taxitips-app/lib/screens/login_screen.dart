@@ -14,7 +14,6 @@ class LoginScreen extends StatefulWidget {
     required this.onSignup,
     required this.onJoinPhone,
     required this.onBack,
-    this.onDemo,
   });
 
   final ApiClient api;
@@ -22,7 +21,6 @@ class LoginScreen extends StatefulWidget {
   final VoidCallback onSignup;
   final VoidCallback onJoinPhone;
   final VoidCallback onBack;
-  final VoidCallback? onDemo;
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
