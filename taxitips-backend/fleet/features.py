@@ -2,7 +2,7 @@
 Vad ett företag får SE: provet visar bara tåg och buss, betalningen öppnar resten.
 
 **Varför provet är smalt.** Provet ska ge en smak av appen -- nog för att
-föraren ser att tipsen stämmer -- men inte hela produkten gratis i fjorton
+föraren ser att tipsen stämmer -- men inte hela produkten gratis i sju
 dagar. Tåg & buss är kärnan (inställda tåg, sista avgången) och det som
 säljer; väg, flyg, färjor och evenemang syns som låsta kategorier med antal,
 så att föraren ser vad som finns bakom.

@@ -1,5 +1,5 @@
 """
-Provperioden: 14 dagar, EN provbil vid självregistrering (tre när en säljare
+Provperioden: 7 dagar, EN provbil vid självregistrering (tre när en säljare
 lagt upp provet), högst en gratisperiod per företag under 24 månader.
 
 **Varför en bil.** Provet ska ge en smak, inte driva en hel bilpark gratis i
@@ -37,7 +37,7 @@ from django.utils import timezone
 from fleet import audit, orgnr
 from fleet.models import License, SalesInvite, Trial
 
-TRIAL_DAYS = 14
+TRIAL_DAYS = 7
 TRIAL_VEHICLE_LIMIT = 1
 # Prov som en säljare lagt upp efter ett samtal (Trial.Source.SALES/SALES_INVITE).
 SALES_TRIAL_VEHICLE_LIMIT = 3

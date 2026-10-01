@@ -22,7 +22,7 @@ enskild firma -- eller inte svarar. Ett avregistrerat bolag får inget konto.
 **Vad som INTE bevisas.** Ett organisationsnummer och en e-post är inte bevis
 på att personen får företräda bolaget (§7). Profilen börjar därför som
 obekräftad och syns så i adminwebben; provet har samma gränser som annars
-(en bil, 14 dagar, ett prov per organisationsnummer och 24 månader), och
+(en bil, 7 dagar, ett prov per organisationsnummer och 24 månader), och
 provet visar bara tåg och buss (fleet/features.py).
 """
 
@@ -154,7 +154,7 @@ def register(
         specs = sales._vehicle_specs(vehicles or [])
         if specs:
             sales._add_trial_vehicles(trial, specs, actor_user_id=user_id, now=now)
-        message = "Provperioden på 14 dagar startar när den första telefonen kopplas."
+        message = f"Provperioden på {trials.TRIAL_DAYS} dagar startar när den första telefonen kopplas."
     else:
         message = f"{check.message} Kontakta TaxiTips för att komma igång."
 

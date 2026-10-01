@@ -3,7 +3,7 @@ Kontrollerna vid självregistreringen: telefon, organisationsnummer,
 personnummer (enskild firma) och e-post -- och flaggorna säljaren ser efteråt.
 
 **Varför.** Provet är kortfritt, så det enda som står mellan en påhittad
-registrering och fjorton gratisdagar är det här. Mätt i produktion
+registrering och sju gratisdagar är det här. Mätt i produktion
 2026-09-29: av tre självregistrerade prov hade ett företagsnamnet "jsjjdd",
 två inget telefonnummer, och ett var Aktiebolaget Volvos organisationsnummer.
 Säljaren som ringer efter provet behöver ett nummer som går att ringa och ett

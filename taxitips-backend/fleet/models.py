@@ -298,7 +298,7 @@ class SalesInvite(models.Model):
 
 class Trial(models.Model):
     """
-    Provperioden. 14 dagar, en provbil (tre när en säljare lagt upp det), högst
+    Provperioden. 7 dagar, en provbil (tre när en säljare lagt upp det), högst
     en per företag per 24 månader.
 
     `org_key` är land+organisationsnummer och är det som spärren räknar på.

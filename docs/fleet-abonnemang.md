@@ -195,7 +195,7 @@ order utan villkorsversion går inte att knyta till ett avtal i efterhand.
 
 ## 7. Prov
 
-* 14 dagar, **en provbil** vid självregistrering (tre när en säljare lagt upp
+* 7 dagar, **en provbil** vid självregistrering (tre när en säljare lagt upp
   provet, `trials.vehicle_limit_for`), ett län per provbil vid
   självregistrering, högst **en gratisperiod per företag per 24 månader**.
 * **Provet visar bara tåg och buss** (`fleet/features.py`, beslut 2026-09-29).
@@ -318,7 +318,7 @@ i `taxitips-web/src/admin/sales.js`. Testat i `fleet/tests/test_sales.py`.
 | Steg | Vem | Regel |
 |---|---|---|
 | Lägga upp företag | säljare | Giltigt orgnr (Luhn), en gång per orgnr, dokumenterad kontroll av kontaktpersonen (`verification_note`). `companies.status = inactive` — den nya modellen styr. |
-| Prov | säljare | 14 dagar, högst 3 bilar (självregistrering: 1), ett per orgnr och 24 månader, startar vid första telefonen. Säljarens provbilar får prova extra län gratis. Bara tåg och buss syns (§7). |
+| Prov | säljare | 7 dagar, högst 3 bilar (självregistrering: 1), ett per orgnr och 24 månader, startar vid första telefonen. Säljarens provbilar får prova extra län gratis. Bara tåg och buss syns (§7). |
 | Kupong | admin skapar, säljare löser in | Utan betalande abonnemang: tillfällig åtkomst (`Trial.source = coupon`, startar direkt). Med abonnemang i Stripe: nästa debitering flyttas (`trial_end`). Betalt utanför Stripe: perioden förlängs. En gång per bolag och kupong. |
 | Beställning | säljare | Offert först, kundens godkännande intygat. Betalning **bara via Stripe**: kort (betallänk) eller Stripe-faktura. Utan Stripe i miljön vägras beställningen innan något sparas. |
 | ~~Markera betald utanför Stripe~~ | -- | **Borttaget 2026-09-26.** All betalning går genom Stripe, så att varje betalning som gett åtkomst har en faktura att stämma av mot. |
