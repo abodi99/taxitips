@@ -230,8 +230,9 @@ def trial_started(company_id, to_address: str, trial) -> OutboxMessage | None:
             f"Den omfattar {_cars(trial.vehicle_limit)} och kostar ingenting.\n\n"
             + _TRIAL_SCOPE
             + "\nSå kommer ni igång:\n"
-            "1. Tryck på bilen i appen (Inställningar) och välj \"Koppla en förare\" "
-            "-- föraren skriver in koden.\n"
+            "1. Tryck på bilen i appen (Inställningar) och välj \"Bjud in förare med "
+            "e-post\" -- föraren får ett mejl och loggar in i appen. Har föraren "
+            "ingen e-post: välj \"Visa kod i stället\".\n"
             "2. Kör ni själva: \"Kör bilen själv med den här telefonen\".\n\n"
             "För att fortsätta efter provet: bekräfta bilarna och spara kort i kundportalen. "
             "Då dras första betalningen automatiskt när provet tar slut. Utan sparat kort "

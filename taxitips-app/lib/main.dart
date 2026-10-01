@@ -11,6 +11,7 @@ import 'client_log.dart';
 import 'crashlytics.dart';
 import 'demo/demo_api_client.dart';
 import 'push_service.dart';
+import 'screens/driver_login_screen.dart';
 import 'screens/driver_screen.dart';
 import 'screens/join_screen.dart';
 import 'screens/login_screen.dart';
@@ -49,7 +50,16 @@ class TaxiPrognosApp extends StatefulWidget {
   State<TaxiPrognosApp> createState() => _TaxiPrognosAppState();
 }
 
-enum AppRoute { welcome, login, signup, join, shell, driverInvite, demo }
+enum AppRoute {
+  welcome,
+  login,
+  signup,
+  join,
+  driverLogin,
+  shell,
+  driverInvite,
+  demo,
+}
 
 class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
   late AppRoute _route;
@@ -150,14 +160,14 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
                 api: widget.api,
                 onLoggedIn: _afterLogin,
                 onSignup: () => setState(() => _route = AppRoute.signup),
-                onJoinPhone: () => setState(() => _route = AppRoute.join),
+                onDriver: () => setState(() => _route = AppRoute.driverLogin),
                 onBack: () => setState(() => _route = AppRoute.welcome),
                 onDemo: () => setState(() => _route = AppRoute.demo),
               ),
               AppRoute.welcome => WelcomeScreen(
                 onLogin: () => setState(() => _route = AppRoute.login),
                 onSignup: () => setState(() => _route = AppRoute.signup),
-                onJoinPhone: () => setState(() => _route = AppRoute.join),
+                onDriver: () => setState(() => _route = AppRoute.driverLogin),
                 onDemo: () => setState(() => _route = AppRoute.demo),
               ),
               AppRoute.signup => SignupScreen(
@@ -169,13 +179,28 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
                 onLogin: () => setState(() => _route = AppRoute.login),
                 onBack: () => setState(() => _route = AppRoute.welcome),
               ),
+              AppRoute.driverLogin => DriverLoginScreen(
+                api: widget.api,
+                // Telefonen är kopplad till bilen: samma väg som efter en kod.
+                onPaired: () async {
+                  await registerForPush(widget.api);
+                  _goShell();
+                },
+                onOwner: () async {
+                  await registerForPush(widget.api);
+                  await _afterLogin();
+                },
+                onUseCode: () => setState(() => _route = AppRoute.join),
+                onBack: () => setState(() => _route = AppRoute.welcome),
+              ),
               AppRoute.join => JoinScreen(
                 api: widget.api,
                 onJoined: () async {
                   await registerForPush(widget.api);
                   _goShell();
                 },
-                onBack: () => setState(() => _route = AppRoute.welcome),
+                // Koden nås från förarens inloggning ("Har du en kod?").
+                onBack: () => setState(() => _route = AppRoute.driverLogin),
               ),
               AppRoute.shell => _AppShell(
                 api: widget.api,

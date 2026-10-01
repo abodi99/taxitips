@@ -134,6 +134,10 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
 
   bool get _suspended => _data?['company']?['suspended'] == true;
 
+  /// Förarinbjudan med e-post är påslagen på servern. Annars visas bara
+  /// koden -- ingen knapp som inte fungerar.
+  bool get _invitesOn => _data?['driverInvites']?['enabled'] == true;
+
   Map<String, dynamic>? get _trial => _data?['trial'] is Map
       ? Map<String, dynamic>.from(_data!['trial'] as Map)
       : null;
@@ -203,6 +207,82 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     return '${d.day} ${months[d.month - 1]} ${d.year}';
   }
 
+  // ── Förare: inbjudan med e-post ────────────────────────────────────────
+
+  /// Huvudvägen för en ny förare: chefen skriver förarens e-post. Föraren får
+  /// ett mejl, väljer lösenord och loggar in i appen under "Jag är förare" --
+  /// då kopplas telefonen till bilen (fleet/driver_invites.py).
+  Future<void> _inviteDriver(Map<String, dynamic> license) async {
+    final plate = license['vehicle']?.toString() ?? 'bilen';
+    final vehicleId = license['vehicleId']?.toString();
+    if (vehicleId == null) {
+      _snack('Bilen saknas på licensen. Kontakta support.', isError: true);
+      return;
+    }
+    final result = await showDialog<(String, String)>(
+      context: context,
+      builder: (_) => _InviteDriverDialog(plate: plate),
+    );
+    if (result == null) return;
+    final (email, name) = result;
+    try {
+      await widget.api.inviteDriver(
+        licenseId: license['licenseId'].toString(),
+        vehicleId: vehicleId,
+        email: email,
+        label: name,
+      );
+      if (!mounted) return;
+      await _reload();
+      _snack('Inbjudan skickad till $email');
+    } catch (e) {
+      _snack(_cleanError(e), isError: true);
+    }
+  }
+
+  Future<void> _resendInvite(Map<String, dynamic> invite) async {
+    try {
+      await widget.api.resendDriverInvite(invite['inviteId'].toString());
+      if (!mounted) return;
+      await _reload();
+      _snack('Inbjudan skickad igen till ${invite['email']}');
+    } catch (e) {
+      _snack(_cleanError(e), isError: true);
+    }
+  }
+
+  Future<void> _revokeInvite(Map<String, dynamic> invite) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Ta bort inbjudan?'),
+        content: Text(
+          '${invite['email']} kan inte längre använda inbjudan för att logga in.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Avbryt'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: TbColors.danger),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Ta bort'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true) return;
+    try {
+      await widget.api.revokeDriverInvite(invite['inviteId'].toString());
+      if (!mounted) return;
+      await _reload();
+      _snack('Inbjudan är borttagen');
+    } catch (e) {
+      _snack(_cleanError(e), isError: true);
+    }
+  }
+
   // ── Förare: engångskod ─────────────────────────────────────────────────
 
   Future<void> _connectDriver(Map<String, dynamic> license) async {
@@ -269,7 +349,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
         title: Text('Spärra ${phone['label'] ?? 'telefonen'}?'),
         content: const Text(
           'Telefonen slutar visa tips direkt och lämnar bilen. '
-          'Föraren behöver en ny kod för att komma in igen.',
+          'Föraren behöver en ny inbjudan eller kod för att komma in igen.',
         ),
         actions: [
           TextButton(
@@ -472,6 +552,10 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
         .whereType<Map>()
         .map((m) => Map<String, dynamic>.from(m))
         .toList();
+    final invites = ((license['pendingInvites'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((m) => Map<String, dynamic>.from(m))
+        .toList();
     final activeDevice = license['activePhone'] is Map
         ? (license['activePhone'] as Map)['deviceId']?.toString()
         : null;
@@ -574,7 +658,54 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                             )
                           : null,
                     ),
-                  if (phones.isEmpty)
+                  for (final invite in invites)
+                    ListTile(
+                      leading: const Icon(
+                        Icons.mark_email_unread_outlined,
+                        color: TbColors.muted,
+                      ),
+                      title: Text(
+                        (invite['label']?.toString().isNotEmpty ?? false)
+                            ? invite['label'].toString()
+                            : invite['email']?.toString() ?? 'Förare',
+                        style: const TextStyle(fontWeight: FontWeight.w700),
+                      ),
+                      subtitle: Text(
+                        invite['expired'] == true
+                            ? 'Inbjudan har gått ut'
+                            : 'Inbjuden · har inte loggat in än',
+                        style: TextStyle(
+                          color: invite['expired'] == true
+                              ? TbColors.danger
+                              : TbColors.muted,
+                        ),
+                      ),
+                      trailing: canManage
+                          ? PopupMenuButton<String>(
+                              tooltip: 'Mer',
+                              onSelected: (choice) => act(
+                                ctx,
+                                () => choice == 'resend'
+                                    ? _resendInvite(invite)
+                                    : _revokeInvite(invite),
+                              ),
+                              itemBuilder: (_) => const [
+                                PopupMenuItem(
+                                  value: 'resend',
+                                  child: Text('Skicka igen'),
+                                ),
+                                PopupMenuItem(
+                                  value: 'revoke',
+                                  child: Text(
+                                    'Ta bort inbjudan',
+                                    style: TextStyle(color: TbColors.danger),
+                                  ),
+                                ),
+                              ],
+                            )
+                          : null,
+                    ),
+                  if (phones.isEmpty && invites.isEmpty)
                     const ListTile(
                       leading: Icon(
                         Icons.person_outline,
@@ -589,19 +720,41 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
               ),
               if (canManage) ...[
                 const SizedBox(height: 20),
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: TbColors.taxi,
-                    foregroundColor: TbColors.ink,
-                    minimumSize: const Size.fromHeight(52),
+                if (_invitesOn) ...[
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: TbColors.taxi,
+                      foregroundColor: TbColors.ink,
+                      minimumSize: const Size.fromHeight(52),
+                    ),
+                    onPressed: () => act(ctx, () => _inviteDriver(license)),
+                    icon: const Icon(Icons.forward_to_inbox_outlined),
+                    label: const Text(
+                      'Bjud in förare med e-post',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
                   ),
-                  onPressed: () => act(ctx, () => _connectDriver(license)),
-                  icon: const Icon(Icons.person_add_alt_1),
-                  label: const Text(
-                    'Koppla en förare',
-                    style: TextStyle(fontWeight: FontWeight.w800),
+                  TextButton(
+                    style: TextButton.styleFrom(
+                      minimumSize: const Size.fromHeight(44),
+                    ),
+                    onPressed: () => act(ctx, () => _connectDriver(license)),
+                    child: const Text('Visa kod i stället'),
                   ),
-                ),
+                ] else
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: TbColors.taxi,
+                      foregroundColor: TbColors.ink,
+                      minimumSize: const Size.fromHeight(52),
+                    ),
+                    onPressed: () => act(ctx, () => _connectDriver(license)),
+                    icon: const Icon(Icons.person_add_alt_1),
+                    label: const Text(
+                      'Koppla en förare',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
                 if (!_thisPhoneOn(license)) ...[
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
@@ -723,10 +876,11 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     final active = license['activePhone'] is Map
         ? (license['activePhone'] as Map)['label']?.toString()
         : null;
+    final invited = (license['pendingInvites'] as List?)?.length ?? 0;
     final driver = active != null
         ? 'Kör: $active'
         : phones == 0
-        ? 'Ingen förare'
+        ? (invited > 0 ? '$invited inbjuden' : 'Ingen förare')
         : '$phones förare';
     return [if (counties.isNotEmpty) counties, driver].join(' · ');
   }
@@ -874,8 +1028,8 @@ class _PairingCodeDialogState extends State<_PairingCodeDialog> {
           ),
           const SizedBox(height: 12),
           const Text(
-            'Föraren öppnar TaxiTips, väljer "Anslut telefonen" och skriver '
-            'in koden. Koden visas bara en gång.',
+            'Föraren öppnar Taxi Tips, trycker "Jag är förare" och sedan '
+            '"Har du en kod?" och skriver in koden. Koden visas bara en gång.',
             textAlign: TextAlign.center,
             style: TextStyle(color: TbColors.muted, height: 1.35),
           ),
@@ -892,6 +1046,87 @@ class _PairingCodeDialogState extends State<_PairingCodeDialog> {
           onPressed: () => Navigator.pop(context),
           child: const Text('Klar'),
         ),
+      ],
+    );
+  }
+}
+
+/// Förarens e-post och (frivilligt) namn. Returnerar (e-post, namn).
+class _InviteDriverDialog extends StatefulWidget {
+  const _InviteDriverDialog({required this.plate});
+
+  final String plate;
+
+  @override
+  State<_InviteDriverDialog> createState() => _InviteDriverDialogState();
+}
+
+class _InviteDriverDialogState extends State<_InviteDriverDialog> {
+  static final _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
+  final _email = TextEditingController();
+  final _name = TextEditingController();
+  String? _error;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _name.dispose();
+    super.dispose();
+  }
+
+  void _send() {
+    final email = _email.text.trim();
+    if (!_emailPattern.hasMatch(email)) {
+      setState(() => _error = 'Skriv förarens e-post, t.ex. namn@exempel.se');
+      return;
+    }
+    Navigator.pop(context, (email, _name.text.trim()));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Bjud in förare till ${widget.plate}'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          const Text(
+            'Föraren får ett mejl, väljer lösenord och loggar in i appen. '
+            'Då kopplas telefonen till bilen.',
+            style: TextStyle(color: TbColors.muted, height: 1.35),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _email,
+            autofocus: true,
+            keyboardType: TextInputType.emailAddress,
+            autocorrect: false,
+            textInputAction: TextInputAction.next,
+            decoration: InputDecoration(
+              labelText: 'Förarens e-post',
+              errorText: _error,
+            ),
+          ),
+          const SizedBox(height: 8),
+          TextField(
+            controller: _name,
+            textCapitalization: TextCapitalization.words,
+            onSubmitted: (_) => _send(),
+            decoration: const InputDecoration(
+              labelText: 'Förarens namn (frivilligt)',
+              hintText: 't.ex. Anna',
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Avbryt'),
+        ),
+        FilledButton(onPressed: _send, child: const Text('Skicka inbjudan')),
       ],
     );
   }
