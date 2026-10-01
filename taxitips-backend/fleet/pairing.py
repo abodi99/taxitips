@@ -110,6 +110,22 @@ class IssuedCode:
         }
 
 
+def check_pairable(license: License, vehicle: Vehicle) -> None:
+    """
+    Får en telefon godkännas för den här bilen under den här licensen?
+
+    Samma prövning för engångskoden och för e-postinbjudan
+    (fleet/driver_invites.py), både när administratören skapar den och när
+    telefonen löser in den -- licensen kan ha sagts upp däremellan.
+    """
+    if str(vehicle.company_id) != str(license.company_id):
+        raise PairingError("vehicle_company_mismatch", "Bilen hör inte till företaget.")
+    if vehicle.status != Vehicle.Status.ACTIVE:
+        raise PairingError("vehicle_archived", "Bilen är borttagen.")
+    if license.status not in (License.Status.ACTIVE, License.Status.TRIAL, License.Status.PENDING_CANCEL):
+        raise PairingError("license_inactive", "Licensen är inte aktiv.")
+
+
 def issue_code(
     *,
     license: License,
@@ -126,12 +142,7 @@ def issue_code(
     att skicka ett främmande id.
     """
     now = now or timezone.now()
-    if str(vehicle.company_id) != str(license.company_id):
-        raise PairingError("vehicle_company_mismatch", "Bilen hör inte till företaget.")
-    if vehicle.status != Vehicle.Status.ACTIVE:
-        raise PairingError("vehicle_archived", "Bilen är borttagen.")
-    if license.status not in (License.Status.ACTIVE, License.Status.TRIAL, License.Status.PENDING_CANCEL):
-        raise PairingError("license_inactive", "Licensen är inte aktiv.")
+    check_pairable(license, vehicle)
 
     ratelimit.enforce(ratelimit.PAIRING_ISSUE, str(license.company_id))
 
@@ -253,19 +264,59 @@ def redeem_code(
 
     license = License.objects.select_related(None).get(id=pairing.license_id)
     vehicle = Vehicle.objects.get(id=pairing.vehicle_id)
-    company = Company.objects.filter(id=pairing.company_id).first()
+    paired = approve_device(
+        company_id=pairing.company_id,
+        license=license,
+        vehicle=vehicle,
+        approved_by=pairing.created_by,
+        installation_id=installation_id,
+        device_label=label or pairing.label or "Förare",
+        approval_label=label[:80] or pairing.label[:80],
+        platform=platform,
+        push_token=push_token,
+        via="code",
+        now=now,
+    )
+    PairingCode.objects.filter(id=pairing.id).update(consumed_by_device=paired.device_id)
+    return paired
+
+
+def approve_device(
+    *,
+    company_id,
+    license: License,
+    vehicle: Vehicle,
+    approved_by,
+    installation_id: str,
+    device_label: str,
+    approval_label: str,
+    platform: str = "",
+    push_token: str | None = None,
+    via: str = "code",
+    now=None,
+) -> PairedDevice:
+    """
+    Godkänn telefonen för bilen, när beviset (engångskoden eller
+    e-postinbjudan) redan är prövat och förbrukat.
+
+    En enda väg för båda bevisen, så att reglerna inte kan glida isär: en
+    telefon per företag, ominstallation ersätter, passet följer godkännandet,
+    körområdet blir licensens län, risksignal och revision. Anroparen ska
+    ligga i samma transaktion som förbrukningen av beviset.
+    """
+    now = now or timezone.now()
+    company = Company.objects.filter(id=company_id).first()
     if company is None:
         raise PairingError("unknown_company", "Företaget finns inte.")
 
     device = _upsert_device(
-        company_id=pairing.company_id,
+        company_id=company_id,
         installation_id=installation_id,
-        label=label or pairing.label or "Förare",
+        label=device_label,
         platform=platform,
         push_token=push_token,
         now=now,
     )
-    PairingCode.objects.filter(id=pairing.id).update(consumed_by_device=device.id)
 
     from fleet import sessions as _sessions
 
@@ -277,7 +328,7 @@ def redeem_code(
     # (2026-09-26) -- och ett bolag hade kunnat se ett annat bolags licens.
     moved = list(DeviceApproval.objects.filter(
         device_id=device.id, status=DeviceApproval.Status.ACTIVE
-    ).exclude(company_id=pairing.company_id).values_list("id", flat=True))
+    ).exclude(company_id=company_id).values_list("id", flat=True))
     DeviceApproval.objects.filter(id__in=moved).update(
         status=DeviceApproval.Status.REPLACED, revoked_at=now, revoke_reason="moved_company"
     )
@@ -303,13 +354,13 @@ def redeem_code(
         )
 
     approval = DeviceApproval.objects.create(
-        company_id=pairing.company_id,
+        company_id=company_id,
         device_id=device.id,
         license=license,
         vehicle=vehicle,
-        label=label[:80] or pairing.label[:80],
+        label=(approval_label or "")[:80],
         approved_at=now,
-        approved_by=pairing.created_by,
+        approved_by=approved_by,
     )
 
     secret = secrets.token_urlsafe(32)
@@ -320,7 +371,7 @@ def redeem_code(
     )
     DeviceCredential.objects.create(
         device_id=device.id,
-        company_id=pairing.company_id,
+        company_id=company_id,
         token_hash=hash_token(secret),
         prefix=secret[:8],
         scheme=DeviceCredential.Scheme.HASHED_V1,
@@ -347,19 +398,20 @@ def redeem_code(
     Device.objects.filter(id=device.id).update(notify_prefs=prefs)
 
     RiskSignal.objects.create(
-        company_id=pairing.company_id, kind=RiskSignal.Kind.PAIRING,
+        company_id=company_id, kind=RiskSignal.Kind.PAIRING,
         license=license, vehicle=vehicle, device_id=device.id, created_at=now,
     )
     audit.record(
         "device_approved",
-        company_id=pairing.company_id,
-        actor_user_id=pairing.created_by,
+        company_id=company_id,
+        actor_user_id=approved_by,
         actor_kind="admin",
         subject_type="device",
         subject_id=device.id,
         detail={
             "vehicle_id": str(vehicle.id), "license_id": str(license.id),
             "approval_id": str(approval.id), "plate": vehicle.plate,
+            "via": via,
         },
     )
     # Koden gällde en bestämd bil, så telefonen tar den direkt: ett extra
@@ -372,7 +424,7 @@ def redeem_code(
     except _sessions.SessionError:
         pass
     return PairedDevice(
-        device_id=str(device.id), company_id=str(pairing.company_id),
+        device_id=str(device.id), company_id=str(company_id),
         vehicle_id=str(vehicle.id), license_id=str(license.id),
         approval_id=str(approval.id), secret=secret, plate=vehicle.plate,
         session_started=session_started,

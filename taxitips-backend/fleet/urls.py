@@ -17,12 +17,17 @@ urlpatterns = [
     path("session", api.session_start),
     path("session/end", api.session_end),
     path("join-request", api.join_request),
+    # Förarens inloggning löser in en e-postinbjudan (Bearer, inte enhetstoken).
+    path("driver-invites/claim", api.claim_driver_invite),
     # Registreringen: bolagets namn från Bolagsverket, före inloggning.
     path("registry", api.registry_lookup),
     # Administratören
     path("company", api.company_overview),
     path("vehicles", api.create_vehicle),
     path("pairing-codes", api.issue_pairing_code),
+    path("driver-invites", api.driver_invites_view),
+    path("driver-invites/<uuid:invite_id>/resend", api.resend_driver_invite),
+    path("driver-invites/<uuid:invite_id>/revoke", api.revoke_driver_invite),
     path("approvals/<uuid:approval_id>/block", api.block_approval),
     path("approvals/<uuid:approval_id>/label", api.rename_approval),
     path("licenses/<uuid:license_id>/vehicle", api.change_license_vehicle),

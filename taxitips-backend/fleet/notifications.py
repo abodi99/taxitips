@@ -42,7 +42,7 @@ SERVICE_CATEGORIES = frozenset({
     "activation", "trial_started", "trial_ending", "trial_ended",
     "order_confirmed", "payment_failed", "grace_started", "renewal_reminder",
     "price_step", "cancellation_confirmed", "cancellation_applied",
-    "device_blocked", "review_opened",
+    "device_blocked", "review_opened", "driver_invite",
 })
 
 
@@ -358,4 +358,37 @@ def device_blocked(company_id, approval) -> OutboxMessage | None:
         body="Telefonen kan inte längre se tips eller ta bilen i anspråk.",
         payload={"approvalId": str(approval.id)},
         key_parts=(approval.id,),
+    )
+
+
+def driver_invite(invite, *, link: str, company_name: str, plate: str) -> OutboxMessage | None:
+    """
+    Förarens inbjudan (fleet/driver_invites.py). Enkel svenska, tre steg:
+    föraren kan vara ny i Sverige och har aldrig sett appen.
+
+    Länken är en engångslänk från Supabase Auth. Varje utskick får en egen
+    rad (`send_count` i nyckeln): "Skicka igen" ger en ny länk, inte samma rad.
+    """
+    who = company_name or "Ditt taxibolag"
+    car = f" för bilen {plate}" if plate else ""
+    return queue(
+        category="driver_invite", company_id=invite.company_id, to_address=invite.email,
+        subject=f"{who} bjuder in dig till Taxi Tips",
+        body=(
+            "Hej!\n\n"
+            f"{who} har bjudit in dig till Taxi Tips{car}. "
+            "Taxi Tips visar var det finns folk som behöver taxi just nu.\n\n"
+            "Så kommer du igång:\n"
+            f"1. Tryck på länken och välj ett lösenord:\n{link}\n\n"
+            "2. Hämta appen Taxi Tips i App Store eller Google Play.\n\n"
+            "3. Öppna appen. Tryck \"Jag är förare\". Logga in med "
+            f"{invite.email} och ditt lösenord.\n\n"
+            "Länken fungerar en gång. Fungerar den inte: tryck \"Glömt lösenord?\" "
+            f"i appen och skriv {invite.email}. Eller be {who} skicka inbjudan igen.\n\n"
+            "Inbjudan gäller i sju dagar. Väntade du dig inte det här mejlet kan du "
+            "strunta i det.\n"
+            + _SIGNATURE
+        ),
+        payload={"inviteId": str(invite.id), "kind": "driver_invite"},
+        key_parts=(invite.id, invite.send_count),
     )

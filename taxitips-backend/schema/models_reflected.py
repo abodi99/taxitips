@@ -603,6 +603,32 @@ class FleetDeviceCredential(models.Model):
         db_table = 'fleet_device_credential'
 
 
+class FleetDriverInvite(models.Model):
+    id = models.UUIDField(primary_key=True)
+    company_id = models.UUIDField()
+    email = models.TextField()
+    label = models.TextField()
+    status = models.CharField(max_length=16)
+    created_by = models.UUIDField(blank=True, null=True)
+    created_at = models.DateTimeField()
+    expires_at = models.DateTimeField()
+    auth_user_id = models.UUIDField(blank=True, null=True)
+    last_sent_at = models.DateTimeField(blank=True, null=True)
+    send_count = models.IntegerField()
+    consumed_at = models.DateTimeField(blank=True, null=True)
+    consumed_by_user = models.UUIDField(blank=True, null=True)
+    consumed_by_device = models.UUIDField(blank=True, null=True)
+    revoked_at = models.DateTimeField(blank=True, null=True)
+    revoked_by = models.UUIDField(blank=True, null=True)
+    license = models.ForeignKey('FleetLicense', models.DO_NOTHING)
+    vehicle = models.ForeignKey('FleetVehicle', models.DO_NOTHING)
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_driver_invite'
+        unique_together = (('company_id', 'email'),)
+
+
 class FleetJoinRequest(models.Model):
     id = models.UUIDField(primary_key=True)
     company_id = models.UUIDField()

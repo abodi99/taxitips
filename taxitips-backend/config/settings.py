@@ -426,6 +426,18 @@ FLEET_MAIL_FROM = os.environ.get("FLEET_MAIL_FROM", "")
 FLEET_MAIL_REPLY_TO = os.environ.get("FLEET_MAIL_REPLY_TO", "hej@taxitips.se")
 # Kundportalen, som mejlen länkar till. Betalning sker där, aldrig i appen (§9c).
 FLEET_PORTAL_URL = os.environ.get("FLEET_PORTAL_URL", "https://taxitips.se/portal")
+# Förarinbjudan med e-post (fleet/driver_invites.py). Supabase Auths
+# admin-API skapar förarens konto och en engångslänk där hen väljer lösenord.
+# Nyckeln används BARA till det anropet (fleet/auth_admin.py) -- Django skriver
+# fortfarande via sin egen databasanslutning. Tom = e-postinbjudan är avslagen
+# och portalen och appen visar bara engångskoden.
+SUPABASE_SERVICE_ROLE_KEY = os.environ.get("SUPABASE_SERVICE_ROLE_KEY", "")
+# Dit länken i mejlet leder: sidan där föraren väljer lösenord. Måste ha samma
+# värd som Supabase Auths SITE_URL, eller stå i dess tillåtelselista --
+# annars skickar Supabase föraren till SITE_URL i stället.
+FLEET_DRIVER_INVITE_REDIRECT = os.environ.get(
+    "FLEET_DRIVER_INVITE_REDIRECT", "https://taxitips.se/forare"
+)
 
 # Samma variabelnamn som taxitips-api/worker/src/fcmPush.js, för kontinuitet
 # -- samma Firebase-projekt backar båda tjänsterna.

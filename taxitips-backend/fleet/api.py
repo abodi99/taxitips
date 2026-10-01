@@ -25,7 +25,7 @@ import logging
 from django.db import transaction
 from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_GET, require_POST
+from django.views.decorators.http import require_GET, require_http_methods, require_POST
 
 from billing.models import Company, CompanyMember
 from core.api import _json
@@ -37,6 +37,7 @@ from fleet import (
     audit,
     commerce,
     company_details,
+    driver_invites,
     licensing,
     ownership,
     notifications,
@@ -83,6 +84,7 @@ _DOMAIN_ERRORS = (
     accounts.AccountError,
     archive.ArchiveError,
     pairing.PairingError,
+    driver_invites.DriverInviteError,
     sessions.SessionError,
     licensing.LicensingError,
     orders.OrderError,
@@ -181,12 +183,48 @@ def pair(request):
         platform=body.get("platform", ""),
         push_token=(body.get("push_token") or "").strip() or None,
     )
-    # Provet startar vid FÖRSTA telefonaktiveringen, inte vid registreringen.
-    trial = trials.active_trial(result.company_id)
+    _start_trial_on_first_phone(result.company_id)
+    return _json(request, {"ok": True, **result.as_dict()})
+
+
+def _start_trial_on_first_phone(company_id) -> None:
+    """Provet startar vid FÖRSTA telefonaktiveringen, inte vid registreringen."""
+    trial = trials.active_trial(company_id)
     if trial is not None and trial.status == Trial.Status.PENDING:
         trials.start_trial(trial)
-        company = Company.objects.filter(id=result.company_id).first()
-        notifications.trial_started(result.company_id, (company.email if company else ""), trial)
+        company = Company.objects.filter(id=company_id).first()
+        notifications.trial_started(company_id, (company.email if company else ""), trial)
+
+
+@csrf_exempt
+@require_POST
+@handle
+def claim_driver_invite(request):
+    """
+    POST /api/fleet/driver-invites/claim -- förarens inloggning blir ett
+    godkännande för bilen hen bjöds in till.
+
+    Bär förarens Supabase-inloggning (`Authorization: Bearer`) och telefonens
+    installations-id. E-postadressen och kontot läses ur den VERIFIERADE
+    token, aldrig ur anropet. Svaret har samma form som `pair`: hemligheten
+    lämnar servern EN gång.
+    """
+    from core.entitlement import verify_supabase_jwt
+
+    auth = request.headers.get("Authorization", "")
+    payload = verify_supabase_jwt(auth[7:].strip()) if auth.lower().startswith("bearer ") else None
+    if not payload:
+        raise PermissionDenied("login_required", "Logga in för att fortsätta.", status=401)
+    body = _body(request)
+    result = driver_invites.claim_invite(
+        user_id=str(payload.get("sub") or ""),
+        email=str(payload.get("email") or ""),
+        installation_id=body.get("installation_id", ""),
+        label=body.get("label", ""),
+        platform=body.get("platform", ""),
+        push_token=(body.get("push_token") or "").strip() or None,
+    )
+    _start_trial_on_first_phone(result.company_id)
     return _json(request, {"ok": True, **result.as_dict()})
 
 
@@ -412,6 +450,12 @@ def company_overview(request):
     subscription = orders.get_or_create_subscription(company_id)
     trial = trials.active_trial(company_id)
 
+    invites_by_license: dict[str, list] = {}
+    for invite in driver_invites.pending_for_company(company_id, now):
+        invites_by_license.setdefault(str(invite.license_id), []).append(
+            driver_invites.view(invite, now)
+        )
+
     rows = []
     for license in License.objects.filter(company_id=company_id).exclude(
         status=License.Status.CANCELED
@@ -460,6 +504,8 @@ def company_overview(request):
                     license=license, status=DeviceApproval.Status.ACTIVE
                 )
             ],
+            # Förare som bjudits in med e-post men inte loggat in i appen än.
+            "pendingInvites": invites_by_license.get(str(license.id), []),
         })
 
     pending = [
@@ -528,6 +574,10 @@ def company_overview(request):
         "extraCountyCount": licensing.extra_county_count(company_id, now),
         "pendingChanges": pending,
         "reviews": risk.customer_status(company_id),
+        # Förarinbjudan med e-post. Av när servern saknar Supabase-nyckeln --
+        # då visar portalen och appen bara koden, i stället för en knapp som
+        # inte fungerar.
+        "driverInvites": {"enabled": driver_invites.enabled()},
         # Länslistan för att välja baslän på en ny provbil i appen.
         "countyCatalog": [{"code": code, "name": name} for code, name in areas.COUNTIES],
     })
@@ -602,6 +652,78 @@ def issue_pairing_code(request):
         label=body.get("label", ""),
     )
     return _json(request, {"ok": True, **issued.as_dict()})
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+@handle
+def driver_invites_view(request):
+    """
+    GET  /api/fleet/driver-invites -- väntande inbjudningar.
+    POST /api/fleet/driver-invites {email, licenseId, vehicleId?, label?}
+         -- bjud in en förare med e-post till en bil.
+
+    Utan `vehicleId` gäller inbjudan bilen som licensen betjänar just nu.
+    """
+    principal = _principal(request, Perm.MANAGE_DEVICES)
+    if request.method == "GET":
+        now = timezone.now()
+        return _json(request, {
+            "ok": True,
+            "enabled": driver_invites.enabled(),
+            "invites": [
+                driver_invites.view(i, now)
+                for i in driver_invites.pending_for_company(principal.company_id, now)
+            ],
+        })
+    body = _body(request)
+    license = _company_license(principal, body.get("licenseId") or body.get("license_id"))
+    vehicle_id = body.get("vehicleId") or body.get("vehicle_id")
+    if vehicle_id:
+        vehicle = _company_vehicle(principal, vehicle_id)
+    else:
+        vehicle = sessions.current_vehicle(license)
+        if vehicle is None:
+            raise licensing.LicensingError("unknown_vehicle", "Bilen finns inte.", status=404)
+    risk.guard_pairing(vehicle)
+    invite = driver_invites.create_invite(
+        license=license, vehicle=vehicle, email=body.get("email", ""),
+        label=body.get("label", ""), created_by=principal.user_id,
+    )
+    return _json(request, {"ok": True, "invite": driver_invites.view(invite)})
+
+
+def _company_invite(principal: roles.Principal, invite_id):
+    from fleet.models import DriverInvite
+
+    invite = DriverInvite.objects.filter(id=invite_id, company_id=principal.company_id).first()
+    if invite is None:
+        raise driver_invites.DriverInviteError("unknown_invite", "Inbjudan finns inte.", status=404)
+    return invite
+
+
+@csrf_exempt
+@require_POST
+@handle
+def resend_driver_invite(request, invite_id):
+    """POST /api/fleet/driver-invites/<id>/resend -- ny länk och sju nya dagar."""
+    principal = _principal(request, Perm.MANAGE_DEVICES)
+    invite = driver_invites.resend_invite(
+        _company_invite(principal, invite_id), actor_user_id=principal.user_id
+    )
+    return _json(request, {"ok": True, "invite": driver_invites.view(invite)})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def revoke_driver_invite(request, invite_id):
+    """POST /api/fleet/driver-invites/<id>/revoke -- inbjudan kan inte längre lösas in."""
+    principal = _principal(request, Perm.MANAGE_DEVICES)
+    driver_invites.revoke_invite(
+        _company_invite(principal, invite_id), actor_user_id=principal.user_id
+    )
+    return _json(request, {"ok": True})
 
 
 @csrf_exempt
