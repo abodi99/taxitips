@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#14213d" />
+  <title>Taxi Tips Demo — Se tipsen på kartan</title>
+  <meta name="description" content="Prova Taxi Tips på en karta över Sverige. Tryck på en prick och se hela tipset: var, när och varför. Demo med exempeldata." />
+  <link rel="canonical" href="https://taxitips.se/demo" />
+  <meta property="og:type" content="website" />
+  <meta property="og:locale" content="sv_SE" />
+  <meta property="og:site_name" content="Taxi Tips" />
+  <meta property="og:title" content="Taxi Tips Demo — Se tipsen på kartan" />
+  <meta property="og:description" content="Tryck på en prick och se hela tipset: var, när och varför. Demo med exempeldata." />
+  <meta property="og:url" content="https://taxitips.se/demo" />
+  <meta property="og:image" content="https://taxitips.se/brand/app-icon.png" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="preconnect" href="https://tiles.openfreemap.org" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/brand.css" />
+  <link rel="stylesheet" href="/src/demo/demo.css" />
+</head>
+<body>
+  <a class="skip-link" href="#tipslista">Hoppa till listan med tips</a>
+
+  <header class="d-top">
+    <a class="brand-logo" href="/" aria-label="Taxi Tips, till startsidan"><img src="/brand/logo-on-dark.svg" alt="Taxi Tips" height="26" /></a>
+    <span class="d-badge" title="Allt på den här sidan är exempel. Inget är live.">
+      <span class="d-badge-dot" aria-hidden="true"></span>Demo<span class="d-wide">· Exempeldata</span>
+    </span>
+    <div class="d-top-actions">
+      <button class="d-iconbtn" type="button" id="helpBtn" aria-label="Så här funkar demon">?</button>
+      <a class="d-btn d-btn-ghost d-wide" href="/#kontakt" data-track="demo_book">Boka demo</a>
+      <a class="d-btn d-btn-gold" href="/registrera" data-track="demo_signup">Prova gratis</a>
+    </div>
+  </header>
+
+  <main class="d-stage" id="stage">
+    <div class="d-map" id="map" role="region" aria-label="Karta över Sverige med exempeltips. Alla tips finns också i listan."></div>
+
+    <div class="d-maploading" id="mapLoading" aria-hidden="true">
+      <span class="d-spinner"></span>
+      <span>Laddar kartan …</span>
+    </div>
+
+    <div class="d-nomap" id="noMap" hidden>
+      <p class="d-nomap-t">Kartan kan inte visas här.</p>
+      <p>Din webbläsare kan inte rita 3D-kartan. Alla tips finns i listan. Tryck på ett tips för att se det.</p>
+      <button class="d-btn d-btn-gold" type="button" id="noMapList">Visa listan</button>
+    </div>
+
+    <div class="d-filters" id="filters" role="toolbar" aria-label="Visa bara en sorts tips"></div>
+
+    <div class="d-mapctl">
+      <button class="d-iconbtn d-iconbtn-map" type="button" id="overviewBtn" aria-label="Visa hela Sverige" title="Hela Sverige"></button>
+    </div>
+
+    <!-- Lista: vänsterpanel på dator, bottenark på mobil -->
+    <aside class="d-list d-sheet" id="listPanel" aria-labelledby="listTitle" data-state="closed">
+      <div class="d-grab" data-grab aria-hidden="true"><span></span></div>
+      <div class="d-list-head">
+        <div>
+          <p class="d-eyebrow">Just nu i demon</p>
+          <h1 class="d-list-title" id="listTitle"><span id="listCount">13</span> tips i Sverige</h1>
+        </div>
+        <button class="d-iconbtn d-sheet-close" type="button" data-close="list" aria-label="Stäng listan"></button>
+      </div>
+      <button class="d-btn d-btn-gold d-tourbtn" type="button" data-tour-start>
+        <span class="d-ico" data-icon="play"></span>Visa runt <span class="d-tourbtn-sub">1 min</span>
+      </button>
+      <ul class="d-legend" aria-label="Förklaring">
+        <li><span class="d-sw d-sw-stark"></span><b>Stark</b></li>
+        <li><span class="d-sw d-sw-medel"></span><b>Medel</b></li>
+        <li><span class="d-sw d-sw-svag"></span><b>Svag</b> (ingen notis)</li>
+      </ul>
+      <ol class="d-items" id="tipslista" tabindex="-1" aria-label="Alla tips"></ol>
+      <p class="d-fineprint">Exempeldata. Platserna är riktiga, händelserna är påhittade för demon.</p>
+    </aside>
+
+    <!-- Tipskortet: högerpanel på dator, bottenark på mobil -->
+    <section class="d-detail d-sheet" id="detailPanel" aria-labelledby="detailPlace" data-state="closed" hidden>
+      <div class="d-grab" data-grab aria-hidden="true"><span></span></div>
+      <div class="d-detail-bar">
+        <span class="d-detail-demo">Exempel på ett tips</span>
+        <span class="d-detail-nav" id="detailNav">
+          <button class="d-iconbtn" type="button" data-step="-1" aria-label="Föregående tips"></button>
+          <button class="d-iconbtn" type="button" data-step="1" aria-label="Nästa tips"></button>
+        </span>
+        <button class="d-iconbtn d-sheet-close" type="button" data-close="detail" aria-label="Stäng tipset"></button>
+      </div>
+      <div class="d-detail-body" id="detailBody"></div>
+    </section>
+
+    <!-- Turen för säljmöten -->
+    <section class="d-tour" id="tourPanel" aria-label="Visa runt" hidden>
+      <div class="d-tour-progress" aria-hidden="true"><span id="tourBar"></span></div>
+      <div class="d-tour-main">
+        <p class="d-tour-step" id="tourStep">1 av 6</p>
+        <p class="d-tour-head" id="tourHead"></p>
+        <p class="d-tour-text" id="tourText" aria-live="polite"></p>
+        <div class="d-tour-end" id="tourEnd" hidden>
+          <a class="d-btn d-btn-gold" href="/registrera" data-track="demo_tour_signup">Prova gratis</a>
+          <a class="d-btn d-btn-ghost" href="/#kontakt" data-track="demo_tour_book">Boka demo</a>
+        </div>
+      </div>
+      <div class="d-tour-ctl">
+        <button class="d-iconbtn" type="button" id="tourPrev" aria-label="Föregående"></button>
+        <button class="d-iconbtn d-iconbtn-gold" type="button" id="tourPlay" aria-label="Pausa"></button>
+        <button class="d-iconbtn" type="button" id="tourNext" aria-label="Nästa"></button>
+        <button class="d-linkbtn" type="button" id="tourOpen">Se hela tipset</button>
+        <button class="d-linkbtn" type="button" id="tourStop">Avsluta</button>
+      </div>
+    </section>
+
+    <!-- Mobil: knappar längst ned -->
+    <nav class="d-dock" id="dock" aria-label="Demo">
+      <button class="d-btn d-btn-gold d-dock-tour" type="button" data-tour-start><span class="d-ico" data-icon="play"></span>Visa runt</button>
+      <button class="d-btn d-btn-dark" type="button" id="listBtn" aria-controls="listPanel" aria-expanded="false"><span class="d-ico" data-icon="list"></span>Lista <span class="d-count" id="dockCount">13</span></button>
+    </nav>
+  </main>
+
+  <dialog class="d-intro" id="intro" aria-labelledby="introTitle">
+    <div class="d-intro-card">
+      <p class="d-eyebrow">Demo · Exempeldata</p>
+      <h2 id="introTitle">Så här funkar Taxi Tips</h2>
+      <p class="d-intro-lead">Appen säger till när många behöver taxi. Här ser du hur det ser ut, på en karta över Sverige. Inget här är live.</p>
+      <ol class="d-intro-steps">
+        <li><span class="d-intro-n">1</span><div><b>Varje prick är ett tips.</b> Guld betyder Stark. Grå betyder Svag.</div></li>
+        <li><span class="d-intro-n">2</span><div><b>Tryck på en prick.</b> Då ser du hela tipset: var, när och varför.</div></li>
+        <li><span class="d-intro-n">3</span><div><b>Tryck på Visa runt.</b> En kort tur genom sex tips, på ungefär en minut.</div></li>
+      </ol>
+      <div class="d-intro-actions">
+        <button class="d-btn d-btn-gold" type="button" data-tour-start data-intro-close>Visa runt</button>
+        <button class="d-btn d-btn-ghost" type="button" data-intro-close autofocus>Utforska själv</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div class="d-toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="/src/demo/main.js"></script>
+</body>
+</html>

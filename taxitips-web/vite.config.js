@@ -17,6 +17,7 @@ export default defineConfig({
         admin: resolve(__dirname, "admin.html"),
         bekraftad: resolve(__dirname, "bekraftad.html"),
         registrera: resolve(__dirname, "registrera.html"),
+        demo: resolve(__dirname, "demo.html"),
       },
     },
   },
