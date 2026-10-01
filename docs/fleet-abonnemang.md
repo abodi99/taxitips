@@ -71,6 +71,33 @@ påslaget. Kontrollen läser `aal`-anspråket ur den verifierade Supabase-JWT:n.
    Android Keystore (`lib/device_credential.dart`).
 3. Servern har bara SHA-256-hashen (`fleet_device_credential`).
 
+### Med e-postinbjudan (huvudvägen sedan 2026-10-01)
+
+Samma godkännande, men beviset är förarens inloggning i stället för en kod som
+läses upp (`fleet/driver_invites.py`, tabellen `fleet_driver_invite`).
+
+1. Administratören (MANAGE_DEVICES) bjuder in en e-postadress för en bil →
+   `POST /api/fleet/driver-invites {email, licenseId, vehicleId?, label?}`.
+   Supabase Auths admin-API (`/auth/v1/admin/generate_link`, typ `invite`,
+   eller `recovery` om kontot redan finns) skapar kontot och en engångslänk;
+   mejlet går genom utkorgen (`driver_invite`). Kräver
+   `SUPABASE_SERVICE_ROLE_KEY` på backenden -- utan den är e-postinbjudan av
+   (`driverInvites.enabled=false` i `/api/fleet/company`) och portalen och
+   appen visar bara koden.
+2. Länken landar på `taxitips.se/forare` (`FLEET_DRIVER_INVITE_REDIRECT`), där
+   föraren väljer lösenord. "Glömt lösenord?" i appen leder till samma sida.
+3. Föraren loggar in i appen under **Jag är förare** → appen anropar
+   `POST /api/fleet/driver-invites/claim` med inloggningen och
+   installations-id:t. E-post och konto läses ur den verifierade JWT:n; kontot
+   måste vara det som länken skapades för. Förbrukningen är ett villkorat
+   UPDATE, och telefonen godkänns genom `pairing.approve_device` -- samma väg
+   som koden. Appen loggar sedan ut kontot; telefonen bär sin enhetsnyckel.
+
+Engångs, sju dygn, en väntande inbjudan per adress och företag (en ny
+ersätter den gamla), "Skicka igen" ger ny länk och sju nya dygn, "Ta bort"
+återkallar. Koden finns kvar som reserv ("Har du en kod?" / "Visa kod i
+stället").
+
 ### Bolagskoden
 
 Får hitta företaget och lägga en **ansökan** (`POST /api/fleet/join-request`).
