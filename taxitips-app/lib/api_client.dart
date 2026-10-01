@@ -432,7 +432,10 @@ class ApiClient {
       auth = await _sb.auth.signUp(
         email: email,
         password: password,
-        data: {'name': name},
+        // Bolagets uppgifter följer med kontot, så att registreringen kan
+        // göras klart var kunden än loggar in först: i appen eller i
+        // kundportalen på webben (portal/main.js:completePendingRegistration).
+        data: {'name': name, 'pending_company': company},
         emailRedirectTo: _confirmedPage,
       );
     } catch (e) {
@@ -488,16 +491,37 @@ class ApiClient {
     final result = await _fleet.ownerPost('register', company, accessToken: token);
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_pendingRegistrationKey);
+    await _clearPendingCompanyMetadata();
     return result;
   }
 
   /// Registreringen som väntade på att e-posten bekräftades. Tyst när inget
   /// väntar; ett fel (t.ex. orgnr som redan finns) lämnas till den som frågar.
+  ///
+  /// Uppgifterna finns på telefonen som registrerade sig, och på kontot
+  /// (`pending_company` i användarens metadata) -- det senare gäller också
+  /// den som registrerade sig på taxitips.se/registrera och loggar in i
+  /// appen först.
   Future<Map<String, dynamic>?> completePendingRegistration() async {
+    if (_accessToken == null) return null;
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_pendingRegistrationKey);
-    if (raw == null || _accessToken == null) return null;
-    return registerCompany(Map<String, dynamic>.from(jsonDecode(raw) as Map));
+    if (raw != null) {
+      return registerCompany(Map<String, dynamic>.from(jsonDecode(raw) as Map));
+    }
+    final pending = _sb.auth.currentUser?.userMetadata?['pending_company'];
+    if (pending is! Map) return null;
+    return registerCompany(Map<String, dynamic>.from(pending));
+  }
+
+  /// Registreringen är klar: uppgifterna behövs inte längre på kontot. Ett
+  /// fel här är ofarligt -- servern säger `company_exists`/redan medlem nästa
+  /// gång, och det tas bort då.
+  Future<void> _clearPendingCompanyMetadata() async {
+    try {
+      if (_sb.auth.currentUser?.userMetadata?['pending_company'] == null) return;
+      await _sb.auth.updateUser(UserAttributes(data: {'pending_company': null}));
+    } catch (_) {}
   }
 
   // --- Företagets administration (den nya modellen, fleet/api.py) ---------

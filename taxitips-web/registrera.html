@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#14213d" />
+  <title>Skapa konto — Taxi Tips</title>
+  <meta name="description" content="Skapa ett konto för ditt taxibolag. Prova gratis, utan kort. Det tar två minuter." />
+  <link rel="canonical" href="https://taxitips.se/registrera" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/brand.css" />
+  <link rel="stylesheet" href="/src/style.css" />
+  <link rel="stylesheet" href="/src/register.css" />
+</head>
+<body class="reg-page">
+  <a class="skip-link" href="#huvudinnehall">Hoppa till innehåll</a>
+
+  <header class="nav">
+    <a class="brand-logo" href="/"><img src="/brand/logo-on-dark.svg" alt="Taxi Tips" height="28" /></a>
+    <a class="nav-login" href="/portal">Logga in</a>
+  </header>
+
+  <main id="huvudinnehall" class="reg">
+    <div class="reg-inner">
+      <aside class="reg-side">
+        <h1>Skapa konto</h1>
+        <p class="reg-lead">För ditt taxibolag. Det tar två minuter.</p>
+        <ul class="reg-points">
+          <li><strong>Gratis att prova.</strong> Du behöver inget kort.</li>
+          <li><strong>En bil i provet.</strong> Du får tips om tåg och buss.</li>
+          <li><strong>Inget händer av sig självt.</strong> Vill du fortsätta efter provet väljer du det själv.</li>
+        </ul>
+        <p class="reg-help">Frågor? Mejla <a href="mailto:hej@taxitips.se">hej@taxitips.se</a>.</p>
+      </aside>
+
+      <section class="reg-card" aria-labelledby="reg-form-title">
+        <!-- Steg 1: formuläret -->
+        <form id="regForm" novalidate>
+          <h2 id="reg-form-title" class="reg-card-title">Om bolaget</h2>
+
+          <div class="rf" data-field="orgNumber">
+            <label for="orgNumber">Organisationsnummer</label>
+            <input id="orgNumber" name="orgNumber" inputmode="numeric" autocomplete="off" required
+              placeholder="556677-8899" aria-describedby="orgHint orgStatus" />
+            <p class="rf-hint" id="orgHint">Har du enskild firma? Skriv ditt personnummer.</p>
+            <p class="rf-status" id="orgStatus" role="status" aria-live="polite"></p>
+          </div>
+
+          <div class="rf" data-field="companyName" id="companyNameField" hidden>
+            <label for="companyName" id="companyNameLabel">Företagets namn</label>
+            <input id="companyName" name="companyName" autocomplete="organization" />
+          </div>
+
+          <h2 class="reg-card-title reg-card-title-2">Om dig</h2>
+
+          <div class="rf" data-field="contactName">
+            <label for="contactName">Ditt namn</label>
+            <input id="contactName" name="contactName" autocomplete="name" required />
+          </div>
+
+          <div class="rf" data-field="phone">
+            <label for="phone">Mobilnummer</label>
+            <input id="phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" required
+              placeholder="070-123 45 67" aria-describedby="phoneHint" />
+            <p class="rf-hint" id="phoneHint">Vi ringer bara om något behöver fixas.</p>
+          </div>
+
+          <div class="rf" data-field="email">
+            <label for="email">E-post</label>
+            <input id="email" name="email" type="email" inputmode="email" autocomplete="email" required
+              placeholder="du@taxibolag.se" />
+          </div>
+
+          <div class="rf" data-field="password">
+            <label for="password">Välj lösenord</label>
+            <div class="rf-pass">
+              <input id="password" name="password" type="password" autocomplete="new-password" required
+                minlength="8" aria-describedby="passHint" />
+              <button type="button" class="rf-show" id="showPass" aria-pressed="false">Visa</button>
+            </div>
+            <p class="rf-hint" id="passHint">Minst 8 tecken.</p>
+          </div>
+
+          <p class="rf-error" id="formError" role="alert" hidden></p>
+
+          <button type="submit" class="btn btn-primary btn-block" id="submitBtn" data-track="register_submit">Skapa konto</button>
+          <p class="reg-fine">Gratis att prova. Inget kort. Du kan logga in i appen och på webben med samma e-post och lösenord.</p>
+        </form>
+
+        <!-- Steg 2: bekräfta e-posten -->
+        <div id="regMail" class="reg-done" hidden>
+          <span class="reg-done-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>
+          </span>
+          <h2 tabindex="-1">Kolla din e-post</h2>
+          <p>Vi har skickat ett mejl till <strong id="mailTo"></strong>.</p>
+          <p>Klicka på länken i mejlet. Sedan är kontot klart och du kommer till din sida.</p>
+          <p class="reg-fine">Inget mejl? Titta i skräpposten. Eller skicka igen.</p>
+          <button type="button" class="btn btn-ghost-light" id="resendBtn">Skicka mejlet igen</button>
+          <p class="rf-status" id="resendStatus" role="status" aria-live="polite"></p>
+        </div>
+
+        <!-- Steg 2 (utan e-postbekräftelse): klart -->
+        <div id="regDone" class="reg-done" hidden>
+          <span class="reg-done-icon reg-done-ok" aria-hidden="true">
+            <svg viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></svg>
+          </span>
+          <h2 tabindex="-1">Klart! Kontot är skapat.</h2>
+          <p id="doneText">Nu kan du lägga till din bil och koppla telefonen.</p>
+          <a class="btn btn-primary btn-block" href="/portal">Gå till din sida</a>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <script type="module" src="/src/register.js"></script>
+</body>
+</html>

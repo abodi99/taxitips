@@ -453,16 +453,18 @@ export function foretag(data) {
     <div class="card">
       <h2>Företaget</h2>
       <table><tbody>
-        <tr><td data-label="Namn">Namn</td><td data-label="">${esc(company.name)}</td></tr>
-        <tr><td data-label="Organisationsnummer">Organisationsnummer</td><td data-label="">${esc(company.orgNumber || "—")}</td></tr>
-        <tr><td data-label="Land">Land</td><td data-label="">${esc(company.country)}</td></tr>
-        <tr><td data-label="Verifiering">Verifiering</td><td data-label="">${esc(verification(company.verificationStatus))}</td></tr>
-        <tr><td data-label="Din roll">Din roll</td><td data-label="">${esc(roleName(data.role))}</td></tr>
+        <tr><td class="kv-key">Namn</td><td>${esc(company.name)}</td></tr>
+        <tr><td class="kv-key">Organisationsnummer</td><td>${esc(company.orgNumber || "—")}</td></tr>
+        <tr><td class="kv-key">Land</td><td>${esc(company.country)}</td></tr>
+        <tr><td class="kv-key">Verifiering</td><td>${esc(verification(company.verificationStatus))}</td></tr>
+        <tr><td class="kv-key">Din roll</td><td>${esc(roleName(data.role))}</td></tr>
       </tbody></table>
       <p class="muted">Ett organisationsnummer eller en verifierad e-post är
       inte i sig bevis på behörighet att företräda företaget. Byte av
       organisationsnummer är ett byte av avtalspart och granskas.</p>
     </div>
+
+    ${detailsCards(data)}
 
     <div class="card">
       <h2>Tvåfaktorsautentisering</h2>
@@ -491,6 +493,68 @@ export function foretag(data) {
           ? '<div class="btn-row"><button class="btn btn-danger" data-action="close-account">Avsluta kontot</button></div>'
           : '<p class="muted">Bara företagsägaren kan avsluta kontot.</p>'
       }
+    </div>
+  `;
+}
+
+/**
+ * Kontaktperson och fakturering, som kunden ändrar själv
+ * (POST /api/fleet/company/details). Fälten är låsta för den som saknar
+ * behörigheten -- servern prövar den ändå.
+ */
+function detailsCards(data) {
+  const d = data.company?.details ?? {};
+  const a = d.billingAddress ?? {};
+  const perms = data.permissions ?? [];
+  const canContact = perms.includes("manage_members");
+  const canBilling = perms.includes("purchase");
+  const lock = (ok) => (ok ? "" : "disabled");
+  return `
+    <div class="card">
+      <h2>Kontaktperson</h2>
+      <p class="muted">Vi ringer det här numret om något behöver fixas.</p>
+      <form id="contactForm" novalidate>
+        <label for="cName">Namn</label>
+        <input id="cName" name="contactName" autocomplete="name" value="${esc(d.contactName)}" ${lock(canContact)} required />
+        <label for="cPhone">Mobilnummer</label>
+        <input id="cPhone" name="contactPhone" type="tel" inputmode="tel" autocomplete="tel" value="${esc(d.contactPhone)}" ${lock(canContact)} required />
+        ${d.contactEmail ? `<p class="muted">Inloggning: ${esc(d.contactEmail)}</p>` : ""}
+        ${
+          canContact
+            ? '<div class="btn-row"><button class="btn btn-primary" type="submit">Spara</button></div><p class="ok" data-saved hidden>Sparat.</p>'
+            : '<p class="muted">Bara ägaren kan ändra kontaktpersonen.</p>'
+        }
+      </form>
+    </div>
+
+    <div class="card">
+      <h2>Fakturering</h2>
+      <p class="muted">Hit skickar vi fakturor och kvitton.</p>
+      <form id="billingForm" novalidate>
+        <label for="bEmail">E-post för fakturor</label>
+        <input id="bEmail" name="billingEmail" type="email" inputmode="email" autocomplete="email" value="${esc(d.billingEmail)}" ${lock(canBilling)} required />
+        <label for="bRef">Er referens (valfritt)</label>
+        <input id="bRef" name="billingReference" value="${esc(d.billingReference)}" ${lock(canBilling)} />
+        <label for="bLine1">Gatuadress</label>
+        <input id="bLine1" name="line1" autocomplete="address-line1" value="${esc(a.line1)}" ${lock(canBilling)} required />
+        <label for="bLine2">c/o eller våning (valfritt)</label>
+        <input id="bLine2" name="line2" autocomplete="address-line2" value="${esc(a.line2)}" ${lock(canBilling)} />
+        <div class="form-pair">
+          <div>
+            <label for="bPostal">Postnummer</label>
+            <input id="bPostal" name="postalCode" inputmode="numeric" autocomplete="postal-code" value="${esc(a.postalCode)}" ${lock(canBilling)} />
+          </div>
+          <div>
+            <label for="bCity">Ort</label>
+            <input id="bCity" name="city" autocomplete="address-level2" value="${esc(a.city)}" ${lock(canBilling)} required />
+          </div>
+        </div>
+        ${
+          canBilling
+            ? '<div class="btn-row"><button class="btn btn-primary" type="submit">Spara</button></div><p class="ok" data-saved hidden>Sparat.</p>'
+            : '<p class="muted">Bara ägaren eller ekonomiansvarig kan ändra faktureringen.</p>'
+        }
+      </form>
     </div>
   `;
 }

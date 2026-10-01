@@ -52,7 +52,17 @@ body.portal {
 .portal-who {
   font-size: 0.9rem;
   color: rgba(255, 255, 255, 0.82);
+  /* En lång e-postadress får inte trycka ut sidan på mobilen */
+  max-width: 45vw;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
+@media (max-width: 520px) {
+  /* Mobil: logotyp och Logga ut får plats; e-posten syns under Företag och uppgifter */
+  .portal-who { display: none; }
+}
+.portal-nav-right { min-width: 0; }
 
 .portal-main {
   max-width: 1040px;
@@ -108,12 +118,30 @@ label {
 input,
 select {
   width: 100%;
+  min-height: 46px;
   padding: 0.6rem 0.7rem;
   border: 1px solid var(--line-strong);
   border-radius: 10px;
   font: inherit;
+  font-size: 1rem; /* 16px: iOS zoomar inte in vid fokus */
   background: var(--vit);
   color: var(--ink);
+}
+input:disabled {
+  background: var(--ljusgra);
+  color: var(--ink-soft);
+}
+input[aria-invalid="true"] { border-color: var(--danger); }
+.field-error { margin: 0.35rem 0 0; font-size: 0.9rem; }
+
+/* Postnummer och ort på samma rad när det får plats */
+.form-pair {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 0 0.75rem;
+}
+@media (max-width: 380px) {
+  .form-pair { grid-template-columns: 1fr; }
 }
 
 .btn {
@@ -308,6 +336,17 @@ th {
     content: attr(data-label) ": ";
     font-weight: 600;
     color: var(--ink-soft);
+  }
+  /* Nyckel/värde-tabeller (Företaget): nyckeln är redan en egen cell */
+  td:not([data-label])::before,
+  td[data-label=""]::before {
+    content: none;
+  }
+  td.kv-key {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--ink-soft);
+    padding-bottom: 0;
   }
 }
 

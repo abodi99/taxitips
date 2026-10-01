@@ -49,6 +49,7 @@ urlpatterns = [
     path("ownership/transfer", api.transfer_ownership),
     path("ownership/<uuid:transfer_id>/accept", api.accept_ownership),
     path("company/close", api.close_account),
+    path("company/details", api.update_company_details),
     path("company/contracting-party", api.change_contracting_party),
     # Plattformens granskning
     path("reviews/<uuid:review_id>/resolve", api.resolve_review),

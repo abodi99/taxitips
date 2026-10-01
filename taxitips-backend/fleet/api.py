@@ -36,6 +36,7 @@ from fleet import (
     archive,
     audit,
     commerce,
+    company_details,
     licensing,
     ownership,
     notifications,
@@ -484,6 +485,8 @@ def company_overview(request):
                 profile.legacy_access_until.isoformat()
                 if profile and profile.legacy_access_until else None
             ),
+            # Kontakt och fakturering, som kunden själv kan ändra i portalen.
+            "details": company_details.view(profile),
         },
         # Samma svar som förarens telefon får, med skälet: appen och portalen
         # visar det i stället för att räkna ut det själva.
@@ -1271,6 +1274,26 @@ def accept_ownership(request, transfer_id):
         raise ownership.OwnershipError("unknown_transfer", "Överföringen finns inte.", 404)
     ownership.accept_transfer(transfer=transfer, by_user_id=principal.user_id)
     return _json(request, {"ok": True, "role": "company_owner"})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def update_company_details(request):
+    """
+    POST /api/fleet/company/details -- kontaktperson och faktureringsuppgifter.
+
+        {"contactName", "contactPhone", "billingEmail", "billingReference",
+         "billingAddress": {"line1", "line2", "postalCode", "city"}}
+
+    Bara fälten som skickas ändras. Behörigheten prövas per område i
+    fleet/company_details.py.
+    """
+    principal = _principal(request, Perm.VIEW_COMPANY)
+    if not principal.company_id:
+        raise PermissionDenied("no_company", "Kontot hör inte till något företag.", status=403)
+    result = company_details.update(principal, _body(request))
+    return _json(request, {"ok": True, **result})
 
 
 @csrf_exempt

@@ -1,0 +1,246 @@
+/* Registreringssidan (registrera.html). Bygger på style.css (knappar,
+   menyn, tokens); här bara det som är eget för formuläret. */
+
+.reg-page { background: var(--ljusgra); }
+
+.nav-login {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0.5rem 1rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid rgba(245, 247, 250, 0.3);
+  color: #fff;
+  font-weight: 600;
+  font-size: 0.92rem;
+  text-decoration: none;
+  transition: border-color 0.15s ease;
+}
+
+.nav-login:hover { border-color: rgba(245, 247, 250, 0.65); }
+
+.reg-inner {
+  max-width: 64rem;
+  margin: 0 auto;
+  padding: clamp(1.75rem, 5vw, 4rem) var(--gutter) clamp(3rem, 8vw, 5rem);
+  display: grid;
+  gap: 1.75rem;
+  align-items: start;
+}
+
+@media (min-width: 880px) {
+  .reg-inner {
+    grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+    gap: 3.5rem;
+  }
+  .reg-side { position: sticky; top: 96px; }
+}
+
+.reg-side h1 {
+  font-size: clamp(2rem, 6vw, 2.75rem);
+  font-weight: 800;
+}
+
+.reg-lead {
+  margin-top: 0.6rem;
+  font-size: 1.12rem;
+  color: var(--ink-soft);
+}
+
+.reg-points {
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.85rem;
+}
+
+.reg-points li {
+  position: relative;
+  padding-left: 1.9rem;
+  color: var(--ink-soft);
+}
+
+.reg-points li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.15rem;
+  width: 1.25rem;
+  height: 1.25rem;
+  background: var(--guld-djup);
+  -webkit-mask: url("/brand/icons/check.svg") center / contain no-repeat;
+  mask: url("/brand/icons/check.svg") center / contain no-repeat;
+}
+
+.reg-points strong { color: var(--ink); }
+
+.reg-help {
+  margin-top: 1.5rem;
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+}
+
+/* På mobilen: fördelarna kort, formuläret direkt under */
+@media (max-width: 879px) {
+  .reg-points { gap: 0.5rem; margin-top: 1rem; }
+  .reg-help { display: none; }
+}
+
+.reg-card {
+  background: var(--vit);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  padding: clamp(1.25rem, 4vw, 2.25rem);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.05);
+}
+
+.reg-card-title {
+  font-size: 1.15rem;
+  margin-bottom: 1rem;
+}
+
+.reg-card-title-2 {
+  margin-top: 1.75rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid var(--line);
+}
+
+.rf { display: grid; gap: 0.35rem; margin-bottom: 1rem; }
+
+.rf label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--midnatt);
+}
+
+.rf input {
+  width: 100%;
+  min-height: 52px;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid rgba(20, 33, 61, 0.22);
+  border-radius: 12px;
+  background: var(--vit);
+  color: var(--midnatt);
+  font: inherit;
+  font-size: 1.05rem; /* över 16px: iOS zoomar inte in */
+}
+
+.rf input::placeholder { color: rgba(82, 96, 120, 0.6); }
+
+.rf input:focus {
+  outline: 3px solid rgba(252, 163, 17, 0.45);
+  border-color: var(--guld);
+}
+
+.rf.has-error input { border-color: var(--danger); }
+
+.rf-hint {
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+}
+
+.rf-status {
+  min-height: 1.4em;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+
+.rf-status:empty { min-height: 0; }
+.rf-status[data-kind="ok"] { color: var(--ok); }
+.rf-status[data-kind="busy"] { font-weight: 500; }
+
+.rf-error-inline,
+.rf-error {
+  font-size: 0.92rem;
+  font-weight: 600;
+  color: var(--danger);
+}
+
+.rf-error {
+  margin: 0.25rem 0 1rem;
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  background: rgba(192, 57, 43, 0.08);
+}
+
+.rf-error a { color: inherit; }
+
+.rf-pass { position: relative; }
+.rf-pass input { padding-right: 5rem; }
+
+.rf-show {
+  position: absolute;
+  right: 0.35rem;
+  top: 50%;
+  translate: 0 -50%;
+  min-height: 44px;
+  min-width: 4rem;
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--midnatt);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.92rem;
+  cursor: pointer;
+}
+
+.rf-show:hover { background: var(--ljusgra); }
+
+#submitBtn { margin-top: 0.5rem; min-height: 56px; font-size: 1.05rem; }
+#submitBtn:disabled { cursor: wait; opacity: 0.8; }
+
+.reg-fine {
+  margin-top: 0.9rem;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+}
+
+/* Klart / kolla e-posten */
+
+.reg-done { display: grid; gap: 0.75rem; justify-items: start; }
+.reg-done[hidden] { display: none; }
+
+.reg-done h2 { font-size: 1.6rem; outline: none; }
+.reg-done p { color: var(--ink-soft); }
+.reg-done p strong { color: var(--ink); word-break: break-all; }
+
+.reg-done-icon {
+  display: grid;
+  place-items: center;
+  width: 3.25rem;
+  height: 3.25rem;
+  border-radius: 50%;
+  background: var(--guld-svag);
+  color: var(--guld-djup);
+  animation: pop 0.5s var(--ease-out) both;
+}
+
+.reg-done-ok { background: rgba(31, 138, 91, 0.12); color: var(--ok); }
+
+.reg-done-icon svg {
+  width: 1.6rem;
+  height: 1.6rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+@keyframes pop {
+  from { scale: 0.6; opacity: 0; }
+  to { scale: 1; opacity: 1; }
+}
+
+.btn-ghost-light {
+  background: transparent;
+  color: var(--midnatt);
+  border: 1px solid var(--line-strong);
+}
+
+.btn-ghost-light:hover { border-color: var(--midnatt); }

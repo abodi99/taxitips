@@ -16,6 +16,7 @@ export default defineConfig({
         portal: resolve(__dirname, "portal.html"),
         admin: resolve(__dirname, "admin.html"),
         bekraftad: resolve(__dirname, "bekraftad.html"),
+        registrera: resolve(__dirname, "registrera.html"),
       },
     },
   },

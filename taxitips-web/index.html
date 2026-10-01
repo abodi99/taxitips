@@ -14,15 +14,16 @@
   </script>
 
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Taxi Tips — Se var taxi behövs, i hela Sverige</title>
-  <meta name="description" content="Taxi Tips är appen för taxiförare i hela Sverige. Den läser öppen trafikdata om tåg, flyg, färjor, olyckor och evenemang och visar var folk snart behöver taxi, och varför. För taxibolag och åkare, från en bil till hela bolaget." />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#14213d" />
+  <title>Taxi Tips — Se var folk behöver taxi, i hela Sverige</title>
+  <meta name="description" content="Ett tåg ställs in. Ett plan landar sent. En konsert slutar. Taxi Tips säger till direkt: var, när och varför. För taxibolag i hela Sverige. Prova gratis, inget kort." />
   <link rel="canonical" href="https://taxitips.se/" />
   <meta property="og:type" content="website" />
   <meta property="og:locale" content="sv_SE" />
   <meta property="og:site_name" content="Taxi Tips" />
-  <meta property="og:title" content="Taxi Tips — Se var taxi behövs, i hela Sverige" />
-  <meta property="og:description" content="Appen läser trafikdata om tåg, flyg, färjor, olyckor och evenemang och visar var folk snart behöver taxi, och varför. För taxibolag och åkare i hela Sverige." />
+  <meta property="og:title" content="Taxi Tips — Se var folk behöver taxi" />
+  <meta property="og:description" content="Appen säger till när många behöver taxi: var, när och varför. För taxibolag i hela Sverige. Prova gratis." />
   <meta property="og:url" content="https://taxitips.se/" />
   <meta property="og:image" content="https://taxitips.se/brand/app-icon.png" />
   <meta name="twitter:card" content="summary" />
@@ -32,7 +33,7 @@
   <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@600;700;800&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="/src/brand.css" />
   <link rel="stylesheet" href="/src/style.css" />
 </head>
@@ -41,25 +42,389 @@
 
   <header class="nav" id="siteNav">
     <a class="brand-logo" href="/"><img src="/brand/logo-on-dark.svg" alt="Taxi Tips" height="28" /></a>
-    <a class="nav-cta" href="#app" data-track="cta_nav">Ladda ned</a>
+    <nav class="nav-links" aria-label="Sidans delar">
+      <a href="#tipset">Tipset</a>
+      <a href="#situationer">Situationer</a>
+      <a href="#bolaget">För bolaget</a>
+      <a href="#faq">Frågor</a>
+      <a href="/portal">Logga in</a>
+    </nav>
+    <a class="nav-signin" href="/portal">Logga in</a>
+    <a class="nav-cta" href="/registrera" data-track="cta_nav">Prova gratis</a>
   </header>
 
   <main id="huvudinnehall">
-    <section class="hero">
+    <!-- ============ Hero ============ -->
+    <section class="hero" aria-labelledby="hero-title">
       <div class="hero-inner">
         <div class="hero-copy">
-          <h1>Se var taxi behövs.<br />Innan kön växer.</h1>
+          <h1 id="hero-title">Se var folk behöver taxi. <span class="hl">Innan kön växer.</span></h1>
           <p class="hero-lead">
-            Appen läser trafikdata i hela Sverige och visar var många snart
-            behöver taxi, till exempel vid inställda tåg, sista planet eller
-            när en konsert slutar. Och varför appen tror det.
+            Ett tåg ställs in. Ett plan landar sent. En konsert slutar.
+            Då behöver många en taxi. Appen säger till dig direkt:
+            var, när och varför.
           </p>
-          <p class="hero-for">För taxibolag och åkare i hela landet, från en enda bil till hela bolaget.</p>
           <div class="hero-actions">
-            <a class="btn btn-ghost-dark" href="#mechanism" data-track="cta_hero_how">Se hur det fungerar</a>
+            <a class="btn btn-primary" href="/registrera" data-track="cta_hero_signup">Prova gratis</a>
+            <a class="btn btn-ghost-dark" href="#kontakt" data-track="cta_hero_demo">Boka en demo</a>
           </div>
+          <ul class="hero-points" aria-label="Kort om Taxi Tips">
+            <li>Hela Sverige</li>
+            <li>Inget kort</li>
+            <li>En bil eller många</li>
+          </ul>
+        </div>
 
-          <div class="store-row store-row-hero">
+        <figure class="lock" aria-label="Exempel på notiser från Taxi Tips">
+          <div class="lock-frame">
+            <div class="lock-screen">
+              <div class="lock-time" aria-hidden="true">
+                <span class="lock-clock">21:04</span>
+                <span class="lock-date">Torsdag</span>
+              </div>
+              <ol class="notif-stack" id="notifStack">
+                <li class="notif">
+                  <img src="/brand/app-icon-96.png" alt="" width="36" height="36" />
+                  <div>
+                    <p class="notif-meta"><span>Taxi Tips</span><span>nu</span></p>
+                    <p class="notif-title">Tåg inställt · Uppsala C</p>
+                    <p class="notif-body">Nästa avgång om 48 min. Buss ersätter. <b class="lvl lvl-hi">Stark</b></p>
+                  </div>
+                </li>
+                <li class="notif">
+                  <img src="/brand/app-icon-96.png" alt="" width="36" height="36" />
+                  <div>
+                    <p class="notif-meta"><span>Taxi Tips</span><span>4 min</span></p>
+                    <p class="notif-title">Konsert slutar · Scandinavium</p>
+                    <p class="notif-body">Publiken går hem cirka 22:15. <b class="lvl lvl-hi">Stark</b></p>
+                  </div>
+                </li>
+                <li class="notif">
+                  <img src="/brand/app-icon-96.png" alt="" width="36" height="36" />
+                  <div>
+                    <p class="notif-meta"><span>Taxi Tips</span><span>11 min</span></p>
+                    <p class="notif-title">Sista planet · Luleå Airport</p>
+                    <p class="notif-body">Landar 23:10, sedan tomt i minst 2 timmar. <b class="lvl lvl-mid">Medel</b></p>
+                  </div>
+                </li>
+              </ol>
+            </div>
+          </div>
+          <figcaption class="lock-caption">Exempel på notiser</figcaption>
+        </figure>
+      </div>
+    </section>
+
+    <!-- ============ Anatomy of a tip ============ -->
+    <section class="tip" id="tipset" aria-labelledby="tip-title">
+      <div class="section-inner tip-inner">
+        <header class="section-head" data-reveal>
+          <p class="eyebrow">Det här får du</p>
+          <h2 id="tip-title">Ett tips säger allt du behöver veta.</h2>
+          <p class="section-lead">Inga svåra siffror. Varje tips säger samma saker, med enkla ord. Då ser du snabbt om det är värt att köra dit.</p>
+        </header>
+
+        <div class="tip-grid">
+          <figure class="tip-shot" data-reveal>
+            <div class="device device-lg" aria-hidden="true">
+              <div class="device-screen">
+                <div class="appcard">
+                  <div class="ac-head mk">
+                    <span class="ac-icon">
+                      <svg viewBox="0 0 24 24"><path d="M8 3.1V7a4 4 0 0 0 8 0V3.1"/><path d="m9 15-1-1"/><path d="m15 15 1-1"/><path d="M9 19c-2.8 0-5-2.2-5-5v-4a8 8 0 0 1 16 0v4c0 2.8-2.2 5-5 5Z"/><path d="m8 19-2 3"/><path d="m16 19 2 3"/></svg>
+                    </span>
+                    <div>
+                      <p class="ac-cat">Tåg · Avgång inställd</p>
+                      <span class="ac-lvl">Stark</span>
+                    </div>
+                    <span class="pin" data-pin="1">1</span>
+                  </div>
+                  <p class="ac-place">Uppsala C</p>
+                  <div class="ac-actions mk">
+                    <span class="ac-btn ac-go"><svg viewBox="0 0 24 24"><path d="M12 3 4.5 20.5 12 17l7.5 3.5z"/></svg>Kör dit</span>
+                    <span class="ac-btn ac-follow"><svg viewBox="0 0 24 24"><path d="m12 3 2.8 5.7 6.2.9-4.5 4.4 1.1 6.2L12 17.3 6.4 20.2l1.1-6.2L3 9.6l6.2-.9z"/></svg>Följ</span>
+                    <span class="pin" data-pin="2">2</span>
+                  </div>
+                  <div class="ac-chips mk">
+                    <span class="ac-chip"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>18:42</span>
+                    <span class="ac-chip ac-live">om <b data-countdown="12">12 min</b></span>
+                    <span class="pin" data-pin="3">3</span>
+                  </div>
+                  <p class="ac-what mk">Avgången 18:42 från Uppsala C mot Stockholm C är inställd.<span class="pin" data-pin="4">4</span></p>
+                  <p class="ac-next mk"><svg viewBox="0 0 24 24"><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16M8 15h.01M16 15h.01M6 19v2M18 21v-2"/></svg><span>Nästa avgång 19:30 (om <b data-countdown="60">1 tim</b>) · Buss ersätter</span><span class="pin" data-pin="5">5</span></p>
+                  <div class="ac-why mk">
+                    <p class="ac-why-t">Varför visas detta?</p>
+                    <p class="ac-why-k">Bedömning</p>
+                    <p class="ac-why-v">Tåget är inställt och nästa går om en timme. Många behöver åka vidare.</p>
+                    <span class="pin" data-pin="6">6</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <figcaption class="tip-caption">Exempel på ett tips i appen</figcaption>
+          </figure>
+
+          <ol class="tip-list">
+            <li data-pin-target="1" data-reveal>
+              <span class="tip-n" aria-hidden="true">1</span>
+              <div>
+                <h3>Hur stort det är</h3>
+                <p>Stark, Medel eller Svag. Svaga tips ger ingen notis.</p>
+              </div>
+            </li>
+            <li data-pin-target="2" data-reveal>
+              <span class="tip-n" aria-hidden="true">2</span>
+              <div>
+                <h3>Vägen dit</h3>
+                <p>Tryck på <em>Kör dit</em>. Då öppnas kartan. Tryck på <em>Följ</em> för att få fler notiser från platsen.</p>
+              </div>
+            </li>
+            <li data-pin-target="3" data-reveal>
+              <span class="tip-n" aria-hidden="true">3</span>
+              <div>
+                <h3>När</h3>
+                <p>Klockslag och hur många minuter det är kvar. Tiden uppdateras hela tiden.</p>
+              </div>
+            </li>
+            <li data-pin-target="4" data-reveal>
+              <span class="tip-n" aria-hidden="true">4</span>
+              <div>
+                <h3>Vad som har hänt</h3>
+                <p>En kort mening: vilket tåg, varifrån och vart.</p>
+              </div>
+            </li>
+            <li data-pin-target="5" data-reveal>
+              <span class="tip-n" aria-hidden="true">5</span>
+              <div>
+                <h3>Vad som händer sen</h3>
+                <p>När nästa tåg går, och om en buss kör i stället. Då vet du hur länge folk väntar.</p>
+              </div>
+            </li>
+            <li data-pin-target="6" data-reveal>
+              <span class="tip-n" aria-hidden="true">6</span>
+              <div>
+                <h3>Varför du ser det</h3>
+                <p>Rutan <em>Varför visas detta?</em> förklarar tipset med enkla ord.</p>
+              </div>
+            </li>
+          </ol>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ Situations ============ -->
+    <section class="situations" id="situationer" aria-labelledby="sit-title">
+      <div class="section-inner">
+        <header class="section-head" data-reveal>
+          <p class="eyebrow eyebrow-dark">Det här får du veta om</p>
+          <h2 id="sit-title">När många behöver en taxi</h2>
+          <p class="section-lead">Appen följer trafiken i hela Sverige, dag och natt. Den säger till när många människor behöver åka vidare.</p>
+        </header>
+
+        <ul class="sit-grid">
+          <li class="sit" data-reveal style="--i: 0">
+            <span class="sit-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M8 3.1V7a4 4 0 0 0 8 0V3.1"/><path d="m9 15-1-1"/><path d="m15 15 1-1"/><path d="M9 19c-2.8 0-5-2.2-5-5v-4a8 8 0 0 1 16 0v4c0 2.8-2.2 5-5 5Z"/><path d="m8 19-2 3"/><path d="m16 19 2 3"/></svg>
+            </span>
+            <h3>Tåg som ställs in eller är sena</h3>
+            <p class="sit-example">”Avgången 18:42 mot Stockholm C är inställd.”</p>
+            <p class="sit-get"><strong>Du får veta:</strong> vilket tåg, när nästa går och om en buss kör i stället.</p>
+          </li>
+          <li class="sit" data-reveal style="--i: 1">
+            <span class="sit-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M4 6 2 7"/><path d="M10 6h4"/><path d="m22 7-2-1"/><rect width="16" height="16" x="4" y="3" rx="2"/><path d="M4 11h16"/><path d="M8 15h.01"/><path d="M16 15h.01"/><path d="M6 19v2"/><path d="M18 21v-2"/></svg>
+            </span>
+            <h3>Buss, tunnelbana och spårvagn</h3>
+            <p class="sit-example">”Linje 4 står still vid Odenplan.”</p>
+            <p class="sit-get"><strong>Du får veta:</strong> vilken linje som står still och var folk väntar.</p>
+          </li>
+          <li class="sit" data-reveal style="--i: 2">
+            <span class="sit-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M2 22h20"/><path d="M3.77 10.77 2 9l2-4.5 1.1.55c.55.28.9.84.9 1.45s.35 1.17.9 1.45L8 8.5l3-6 1.05.53a2 2 0 0 1 1.09 1.52l.72 5.4a2 2 0 0 0 1.09 1.52l4.4 2.2c.42.22.78.55 1.01.96l.6 1.03c.49.88-.06 1.98-1.06 2.1l-1.18.15c-.47.06-.95-.02-1.37-.24L4.29 11.15a2 2 0 0 1-.52-.38Z"/></svg>
+            </span>
+            <h3>Sista planet för kvällen</h3>
+            <p class="sit-example">”Ett plan landar 23:10, sedan tomt i minst 2 timmar.”</p>
+            <p class="sit-get"><strong>Du får veta:</strong> när planet landar, och när inga fler plan kommer.</p>
+          </li>
+          <li class="sit" data-reveal style="--i: 3">
+            <span class="sit-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M12 10.19V14"/><path d="M12 2v3"/><path d="M19 13V7a2 2 0 0 0-2-2H7a2 2 0 0 0-2 2v6"/><path d="M19.38 20A11.6 11.6 0 0 0 21 14l-8.19-3.64a2 2 0 0 0-1.62 0L3 14a11.6 11.6 0 0 0 2.81 7.76"/><path d="M2 21c.6.5 1.2 1 2.5 1 2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1s1.2 1 2.5 1c2.5 0 2.5-2 5-2 1.3 0 1.9.5 2.5 1"/></svg>
+            </span>
+            <h3>Färjor på väg in</h3>
+            <p class="sit-example">”Färjan lägger till i Visby 21:35.”</p>
+            <p class="sit-get"><strong>Du får veta:</strong> vilken färja, vilken hamn och när den kommer.</p>
+          </li>
+          <li class="sit" data-reveal style="--i: 4">
+            <span class="sit-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2Z"/><path d="M13 5v2"/><path d="M13 17v2"/><path d="M13 11v2"/></svg>
+            </span>
+            <h3>Konserter och matcher</h3>
+            <p class="sit-example">”Matchen på Ullevi slutar cirka 21:50.”</p>
+            <p class="sit-get"><strong>Du får veta:</strong> när det slutar och ungefär hur många som är där.</p>
+          </li>
+          <li class="sit" data-reveal style="--i: 5">
+            <span class="sit-icon" aria-hidden="true">
+              <svg viewBox="0 0 24 24"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+            </span>
+            <h3>Olyckor och stängda vägar</h3>
+            <p class="sit-example">”Olycka på E4 vid Sundsvall, trafiken står still.”</p>
+            <p class="sit-get"><strong>Du får veta:</strong> var trafiken står still och var folk behöver åka vidare.</p>
+          </li>
+        </ul>
+
+        <p class="sit-note" data-reveal>Tipsen är bedömningar, inte löften. Vi lovar aldrig en körning eller en viss inkomst. Du bestämmer alltid själv om du kör dit.</p>
+      </div>
+    </section>
+
+    <!-- ============ Showcase ============ -->
+    <section class="showcase" id="appen" aria-labelledby="showcase-title">
+      <div class="section-inner">
+        <header class="section-head" data-reveal>
+          <p class="eyebrow">Ur appen</p>
+          <h2 id="showcase-title">Lätt att läsa i bilen</h2>
+          <p class="section-lead">Bilderna kommer från appen.</p>
+        </header>
+
+        <article class="feature">
+          <div class="feature-copy" data-reveal>
+            <h3>Du ser alltid varför</h3>
+            <p>Under varje tips finns en kort förklaring. Här: det är kvällens sista plan. Sedan landar inga fler på flera timmar.</p>
+            <p>Efter resan trycker du på <em>Fick körning</em> eller <em>Ingen kund</em>. Då blir tipsen bättre.</p>
+          </div>
+          <figure class="feature-media" data-reveal>
+            <div class="device"><div class="device-screen">
+              <img src="/app/varfor-visas-detta.webp" width="720" height="800" alt="Ett flygtips i appen med rutan Varför visas detta?: sista planet, inget mer landar på flera timmar." loading="lazy" decoding="async" />
+            </div></div>
+          </figure>
+        </article>
+
+        <article class="feature feature-flip">
+          <div class="feature-copy" data-reveal>
+            <h3>Färjor: vilket fartyg och var</h3>
+            <p>Du ser vilken färja som kommer, till vilken hamn och om den redan är framme. Vi gissar aldrig hur många som är ombord.</p>
+          </div>
+          <figure class="feature-media" data-reveal>
+            <div class="device"><div class="device-screen">
+              <img src="/app/farja-kort.webp" width="720" height="388" alt="Färjekort i appen: pendelfärjan Tycho Brahe till Helsingborg Knutpunkten, vid kaj." loading="lazy" decoding="async" />
+            </div></div>
+          </figure>
+        </article>
+
+        <article class="feature">
+          <div class="feature-copy" data-reveal>
+            <h3>Notiser bara när det är viktigt</h3>
+            <p>Du väljer län. Slå på <em>I tjänst</em> när du kör. Du kan pausa i 1 timme, 4 timmar eller hela natten.</p>
+            <p>Appen sparar bara ett ungefärligt område, cirka 5 km. Den hämtar aldrig din plats i bakgrunden.</p>
+          </div>
+          <figure class="feature-media" data-reveal>
+            <div class="device"><div class="device-screen">
+              <img src="/app/notiser.webp" width="720" height="584" alt="Notisinställningar i appen: Alla notiser, I tjänst och pausa i en timme, fyra timmar eller i natt." loading="lazy" decoding="async" />
+            </div></div>
+          </figure>
+        </article>
+      </div>
+    </section>
+
+    <!-- ============ For the company ============ -->
+    <section class="owners" id="bolaget" aria-labelledby="owners-title">
+      <div class="section-inner">
+        <header class="section-head" data-reveal>
+          <p class="eyebrow">För bolaget</p>
+          <h2 id="owners-title">Kom igång idag</h2>
+        </header>
+        <ol class="steps">
+          <li class="step" data-reveal style="--i: 0">
+            <span class="step-n" aria-hidden="true">1</span>
+            <h3>Skapa ett konto</h3>
+            <p>Här på webben eller i appen. Skriv organisationsnumret. Provet är gratis och du behöver inget kort.</p>
+            <a class="step-link" href="/registrera" data-track="cta_steps_signup">Skapa konto</a>
+          </li>
+          <li class="step" data-reveal style="--i: 1">
+            <span class="step-n" aria-hidden="true">2</span>
+            <h3>Koppla förarnas telefoner</h3>
+            <p>Föraren får en kod av dig. Föraren behöver inget eget konto och betalar ingenting.</p>
+          </li>
+          <li class="step" data-reveal style="--i: 2">
+            <span class="step-n" aria-hidden="true">3</span>
+            <h3>Betala per bil</h3>
+            <p>En licens per bil och län. Du betalar med faktura eller på webben, inte i appen.</p>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <!-- ============ FAQ ============ -->
+    <section class="faq" id="faq" aria-labelledby="faq-title">
+      <div class="section-inner">
+        <h2 id="faq-title" data-reveal>Vanliga frågor</h2>
+        <div class="faq-list">
+          <div class="faq-item" data-reveal>
+            <button class="faq-question" aria-expanded="false">
+              <span>När kommer appen?</span>
+              <span class="faq-icon" aria-hidden="true"></span>
+            </button>
+            <div class="faq-answer-wrap">
+              <div class="faq-answer"><p>Snart, för iPhone och Android. Du kan skapa ett konto redan nu.</p></div>
+            </div>
+          </div>
+          <div class="faq-item" data-reveal>
+            <button class="faq-question" aria-expanded="false">
+              <span>Vad kostar det?</span>
+              <span class="faq-icon" aria-hidden="true"></span>
+            </button>
+            <div class="faq-answer-wrap">
+              <div class="faq-answer"><p>Bolaget betalar per bil, inte per förare. Du betalar med faktura eller på webben. Hör av dig så berättar vi priset.</p></div>
+            </div>
+          </div>
+          <div class="faq-item" data-reveal>
+            <button class="faq-question" aria-expanded="false">
+              <span>Vad ingår i provet?</span>
+              <span class="faq-icon" aria-hidden="true"></span>
+            </button>
+            <div class="faq-answer-wrap">
+              <div class="faq-answer"><p>En bil och tips om tåg och buss. Du behöver inget kort. Innan provet slutar får du ett mejl. Om du betalar får du allt: flyg, färjor, evenemang och vägar.</p></div>
+            </div>
+          </div>
+          <div class="faq-item" data-reveal>
+            <button class="faq-question" aria-expanded="false">
+              <span>Hur vet appen att det behövs taxi?</span>
+              <span class="faq-icon" aria-hidden="true"></span>
+            </button>
+            <div class="faq-answer-wrap">
+              <div class="faq-answer"><p>Appen läser officiell information om trafiken. Den uppdateras hela tiden. Varje tips säger varför det visas. Det är en bedömning, inte en garanti.</p></div>
+            </div>
+          </div>
+          <div class="faq-item" data-reveal>
+            <button class="faq-question" aria-expanded="false">
+              <span>Behöver varje förare ett eget konto?</span>
+              <span class="faq-icon" aria-hidden="true"></span>
+            </button>
+            <div class="faq-answer-wrap">
+              <div class="faq-answer"><p>Nej. Föraren kopplar sin telefon med en kod. Föraren betalar ingenting.</p></div>
+            </div>
+          </div>
+          <div class="faq-item" data-reveal>
+            <button class="faq-question" aria-expanded="false">
+              <span>Vilka telefoner fungerar?</span>
+              <span class="faq-icon" aria-hidden="true"></span>
+            </button>
+            <div class="faq-answer-wrap">
+              <div class="faq-answer"><p>iPhone och Android. Samma tips på båda.</p></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ Contact ============ -->
+    <section class="capture" id="kontakt" aria-labelledby="capture-title">
+      <div class="section-inner capture-inner">
+        <div class="capture-copy" data-reveal>
+          <p class="eyebrow">Kontakt</p>
+          <h2 id="capture-title">Vill du se appen först?</h2>
+          <p class="section-lead">Vi visar hur appen fungerar och berättar priset. Skriv några rader. Vi svarar från hej@taxitips.se.</p>
+          <p class="capture-alt">Vill du hellre prova själv? <a href="/registrera" data-track="cta_contact_signup">Skapa ett konto gratis</a>.</p>
+          <div class="store-row" id="app">
             <span class="store-badge">
               <img src="/brand/icons/apple.svg" alt="" aria-hidden="true" />
               <span><small>Kommer till</small><strong>App Store</strong></span>
@@ -71,341 +436,28 @@
           </div>
         </div>
 
-        <div class="phone-mockup" id="phoneMockup">
-          <div class="phone-mockup-tilt">
-          <div class="phone-frame">
-            <div class="phone-notch" aria-hidden="true"></div>
-            <div class="phone-screen">
-              <div class="board" aria-label="Exempel på signaltavla, inte live data">
-                <div class="board-head">
-                  <span class="board-dot" aria-hidden="true"></span>
-                  <span class="board-title">AKTIVA SIGNALER</span>
-                  <span class="board-example">Exempel</span>
-                </div>
-                <div class="board-cols" aria-hidden="true">
-                  <span>TID</span><span>PLATS</span><span>STYRKA</span><span>ORSAK</span>
-                </div>
-                <ul class="board-rows">
-                  <li class="board-row board-row-hot">
-                    <span class="col-time">18:42</span>
-                    <span class="col-place">Stockholm C</span>
-                    <span class="col-strength">STARK</span>
-                    <span class="col-reason">Tåg inställt, pendel</span>
-                  </li>
-                  <li class="board-row board-row-hot">
-                    <span class="col-time">19:05</span>
-                    <span class="col-place">Göteborg C</span>
-                    <span class="col-strength">STARK</span>
-                    <span class="col-reason">Konsert slutar</span>
-                  </li>
-                  <li class="board-row">
-                    <span class="col-time">19:20</span>
-                    <span class="col-place">Sundsvall</span>
-                    <span class="col-strength">MEDEL</span>
-                    <span class="col-reason">Olycka, E4</span>
-                  </li>
-                  <li class="board-row board-row-hot">
-                    <span class="col-time">19:47</span>
-                    <span class="col-place">Arlanda</span>
-                    <span class="col-strength">STARK</span>
-                    <span class="col-reason">Sista planet landar</span>
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="benefit" aria-labelledby="benefit-title">
-      <div class="section-inner">
-        <h2 id="benefit-title" data-reveal>Mindre gissning. Mer tid där folk finns.</h2>
-        <div class="benefit-grid">
-          <div class="benefit-item" data-reveal>
-            <img src="/brand/icons/route.svg" alt="" aria-hidden="true" />
-            <h3>Kör mot efterfrågan</h3>
-            <p>Sluta gissa var nästa resa dyker upp. Appen visar var trafiken just nu skapar behov av taxi.</p>
-          </div>
-          <div class="benefit-item" data-reveal>
-            <img src="/brand/icons/clock.svg" alt="" aria-hidden="true" />
-            <h3>Mindre väntetid</h3>
-            <p>Du ser i förväg när ett tåg ställs in eller en publik går hem, så du kan vara på plats i tid. Inga löften om körningar, men ett bättre underlag.</p>
-          </div>
-          <div class="benefit-item" data-reveal>
-            <img src="/brand/icons/drivers.svg" alt="" aria-hidden="true" />
-            <h3>Gäller en bil eller tio</h3>
-            <p>Äger du en eller två bilar och kör själv får du samma tips som ett stort bolag. Har du flera förare ser alla samma läge.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="mechanism" id="mechanism" aria-labelledby="mechanism-title">
-      <div class="section-inner">
-        <h2 id="mechanism-title">Från störning till körning</h2>
-        <ol class="line">
-          <li class="line-stop" data-reveal>
-            <span class="pictogram pictogram-detect" aria-hidden="true">
-              <span class="ping"></span>
-              <span class="ping ping-2"></span>
-              <span class="dot"></span>
-            </span>
-            <h3>Störningen upptäcks</h3>
-            <p>Inställda tåg, olyckor, flygankomster, färjor och evenemang hämtas löpande från öppna källor. Inga gissningar och inga gamla mönster.</p>
-          </li>
-          <li class="line-stop" data-reveal>
-            <span class="pictogram pictogram-rank" aria-hidden="true">
-              <span class="bar bar-1"></span>
-              <span class="bar bar-2"></span>
-              <span class="bar bar-3"></span>
-            </span>
-            <h3>Signalen rangordnas</h3>
-            <p>Varje tips vägs mot plats och tid och får en styrka: Stark, Medel eller Svag. Aldrig ett gissat antal resenärer, bara vad källorna faktiskt visar.</p>
-          </li>
-          <li class="line-stop" data-reveal>
-            <span class="pictogram pictogram-route" aria-hidden="true">
-              <span class="route-path"></span>
-              <span class="route-car"></span>
-              <span class="route-pin"></span>
-            </span>
-            <h3>Föraren kör dit</h3>
-            <p>Signalen och varför den finns visas i appen. Föraren väljer om det är läge att köra dit. Beslutet är alltid förarens.</p>
-          </li>
-        </ol>
-      </div>
-    </section>
-
-    <section class="sources" id="data" aria-labelledby="sources-title">
-      <div class="section-inner">
-        <h2 id="sources-title" data-reveal>Vad tipsen bygger på</h2>
-        <p class="section-lead" data-reveal>Inga egna gissningar och inga gamla mönster. Taxi Tips läser öppna och officiella trafikkällor löpande och översätter dem till en fråga du som förare kan svara på: är det värt att köra dit?</p>
-        <div class="sources-grid">
-          <article class="source-card" data-reveal>
-            <h3>Tåg, i hela landet</h3>
-            <p class="source-from">Trafikverket</p>
-            <p>Inställda avgångar, förseningar, nästa avgång och sista avgången, samt om ersättningsbuss sätts in.</p>
-            <p class="source-help"><strong>För dig:</strong> du ser när resenärer blir stående på en station, och hur länge till nästa tåg går.</p>
-          </article>
-          <article class="source-card" data-reveal>
-            <h3>Olyckor på väg</h3>
-            <p class="source-from">Trafikverket</p>
-            <p>Trafikolyckor och större störningar på vägnätet, i hela landet.</p>
-            <p class="source-help"><strong>För dig:</strong> du vet var det stockar sig och var folk kan behöva ta sig vidare på annat sätt.</p>
-          </article>
-          <article class="source-card" data-reveal>
-            <h3>Buss, tunnelbana och spårvagn</h3>
-            <p class="source-from">SL, Västtrafik och Trafiklab</p>
-            <p>Trafikstörningar från regional kollektivtrafik i de flesta län. Några få län saknar öppna störningsdata, och där ser du färre tips.</p>
-            <p class="source-help"><strong>För dig:</strong> du ser när en linje ligger nere och folk behöver ett alternativ.</p>
-          </article>
-          <article class="source-card" data-reveal>
-            <h3>Flyg</h3>
-            <p class="source-from">Swedavia</p>
-            <p>Ankomster vid Swedavias flygplatser. Vi räknar landningar, aldrig passagerare, och ser när det sista planet landat för kvällen.</p>
-            <p class="source-help"><strong>För dig:</strong> du vet när det kommer folk, och när det sedan är tomt i flera timmar.</p>
-          </article>
-          <article class="source-card" data-reveal>
-            <h3>Färjor</h3>
-            <p class="source-from">AIS och tidtabeller</p>
-            <p>Färjor som är på väg in till större passagerarhamnar, med ankomsttid. Antal passagerare anges aldrig.</p>
-            <p class="source-help"><strong>För dig:</strong> du kan stå vid kajen när färjan lägger till.</p>
-          </article>
-          <article class="source-card" data-reveal>
-            <h3>Evenemang</h3>
-            <p class="source-from">Biljettsystem och arrangörer</p>
-            <p>Konserter och sportevenemang med beräknad sluttid. Antal besökare visas som ungefärligt.</p>
-            <p class="source-help"><strong>För dig:</strong> du är på plats när publiken går hem.</p>
-          </article>
-        </div>
-        <p class="sources-note" data-reveal>Tipsen är bedömningar av öppen trafikdata, inte säkra besked. Appen lovar aldrig en körning eller en viss intäkt, och beslutet om du kör dit är alltid ditt.</p>
-      </div>
-    </section>
-
-    <section class="showcase" id="appen" aria-labelledby="showcase-title">
-      <div class="section-inner">
-        <h2 id="showcase-title" data-reveal>Så ser det ut i bilen</h2>
-        <p class="section-lead" data-reveal>Bilderna är från den riktiga appen.</p>
-
-        <div class="feature">
-          <div class="feature-copy" data-reveal>
-            <h3>Tåget är inställt. Resenärerna står kvar.</h3>
-            <p>Varje tips visar vad som hänt, när, och hur starkt appen bedömer det. För tåg ser du också när nästa avgång går och om buss ersätter, så du förstår hur länge folk kan bli stående.</p>
-            <p>Tryck <em>Kör dit</em> för vägbeskrivning. Efteråt kan du tala om om tipset stämde, så förbättras bedömningarna över tid.</p>
-          </div>
-          <figure class="feature-media" data-reveal>
-            <div class="device"><div class="device-screen">
-              <img src="/app/tag-installt.webp" width="720" height="1147" alt="Tips i appen: en inställd tågavgång med nästa avgång, ersättningsbuss och knapparna Kör dit och Följ." loading="lazy" decoding="async" />
-            </div></div>
-          </figure>
-        </div>
-
-        <div class="feature feature-flip">
-          <div class="feature-copy" data-reveal>
-            <h3>Du får alltid veta varför</h3>
-            <p>Under varje tips finns rutan <em>Varför visas detta?</em> med en kort förklaring i klartext, här att det är sista planet och att inget mer landar på flera timmar. Du behöver inte lita blint på en siffra.</p>
-            <p>Flygtips bygger på antal ankomster, aldrig på hur många som sitter i planen.</p>
-          </div>
-          <figure class="feature-media" data-reveal>
-            <div class="device"><div class="device-screen">
-              <img src="/app/varfor-visas-detta.webp" width="720" height="800" alt="Ett flygtips i appen med rutan Varför visas detta?: sista planet, inget mer landar på flera timmar." loading="lazy" decoding="async" />
-            </div></div>
-          </figure>
-        </div>
-
-        <div class="feature">
-          <div class="feature-copy" data-reveal>
-            <h3>Färjor, konserter och matcher</h3>
-            <p>När en färja är på väg in, eller en publik snart går hem, ser du det i förväg. Färjor visas med fartyg och ankomst, och evenemang med sluttid och ungefärligt antal besökare.</p>
-            <p>Appen skriver ut vilka källor uppgifterna kommer från.</p>
-          </div>
-          <figure class="feature-media" data-reveal>
-            <div class="device"><div class="device-screen">
-              <img src="/app/farja.webp" width="720" height="520" alt="Färjekort i appen: en pendelfärja som är vid kaj, med källorna angivna och utan passagerarantal." loading="lazy" decoding="async" />
-            </div></div>
-          </figure>
-        </div>
-
-        <div class="feature feature-flip">
-          <div class="feature-copy" data-reveal>
-            <h3>Notiser bara när det är värt det</h3>
-            <p>Svaga signaler syns i listan men väcker dig aldrig. Du väljer län, kan pausa en timme, fyra timmar eller över natten, och slår på <em>I tjänst</em> när du kör.</p>
-            <p>Appen sparar bara ett grovt område på ungefär 5 km och hämtar aldrig din plats i bakgrunden.</p>
-          </div>
-          <figure class="feature-media" data-reveal>
-            <div class="device"><div class="device-screen">
-              <img src="/app/notiser.webp" width="720" height="584" alt="Notisinställningar i appen: Alla notiser, I tjänst och pausa i en timme, fyra timmar eller i natt." loading="lazy" decoding="async" />
-            </div></div>
-          </figure>
-        </div>
-      </div>
-    </section>
-
-    <section class="owners" id="for-vem" aria-labelledby="owners-title">
-      <div class="section-inner">
-        <h2 id="owners-title" data-reveal>Så funkar det för bolaget</h2>
-        <div class="owners-grid">
-          <div class="owners-item" data-reveal>
-            <h3>Bolaget prenumererar</h3>
-            <p>Ägaren eller bolaget tecknar abonnemanget, per bil (licens) och med ett baslän. Föraren betalar ingenting själv. Betalningen sker utanför appen, via faktura eller i kundportalen.</p>
-          </div>
-          <div class="owners-item" data-reveal>
-            <h3>Föraren kopplar sin telefon</h3>
-            <p>Bolagets administratör ger föraren en engångskod. Ingen egen registrering eller egen betalning för föraren.</p>
-          </div>
-          <div class="owners-item" data-reveal>
-            <h3>En bil, en licens</h3>
-            <p>Varje licens hör till en bil och ett län. Kör du själv en eller två bilar räcker det med en eller två licenser. Fler bilar, fler län, lägg till efter hand.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="faq" id="faq" aria-labelledby="faq-title">
-      <div class="section-inner">
-        <h2 id="faq-title" data-reveal>Vanliga frågor</h2>
-        <div class="faq-list">
-          <div class="faq-item" data-reveal>
-            <button class="faq-question" aria-expanded="false">
-              <span>När släpps appen?</span>
-              <span class="faq-icon" aria-hidden="true"></span>
-            </button>
-            <div class="faq-answer-wrap">
-              <div class="faq-answer"><p>Inom kort, för både iPhone och Android. Hör av er så mejlar vi så snart den är redo.</p></div>
-            </div>
-          </div>
-          <div class="faq-item" data-reveal>
-            <button class="faq-question" aria-expanded="false">
-              <span>Vad kostar det?</span>
-              <span class="faq-icon" aria-hidden="true"></span>
-            </button>
-            <div class="faq-answer-wrap">
-              <div class="faq-answer"><p>Bolaget prenumererar per bil (licens), inte per förare och inte per nedladdning. Betalningen sker utanför appen, via faktura eller kundportalen. Hör av er så berättar vi om priset för just er, oavsett om ni har en bil eller många.</p></div>
-            </div>
-          </div>
-          <div class="faq-item" data-reveal>
-            <button class="faq-question" aria-expanded="false">
-              <span>Vilken data bygger signalerna på?</span>
-              <span class="faq-icon" aria-hidden="true"></span>
-            </button>
-            <div class="faq-answer-wrap">
-              <div class="faq-answer"><p>Öppna trafikkällor som Trafikverket (tåg och olyckor, hela landet), SL, Västtrafik och Trafiklab (kollektivtrafik i de flesta län), Swedavia (flygankomster), AIS (färjor vid större hamnar) och evenemang med sluttid. Se <a href="#data">Vad tipsen bygger på</a>. Tipsen är bedömningar, inga garantier.</p></div>
-            </div>
-          </div>
-          <div class="faq-item" data-reveal>
-            <button class="faq-question" aria-expanded="false">
-              <span>Behöver varje förare ett eget konto?</span>
-              <span class="faq-icon" aria-hidden="true"></span>
-            </button>
-            <div class="faq-answer-wrap">
-              <div class="faq-answer"><p>Nej. Föraren kopplar sin telefon till bolaget med en engångskod från bolagets administratör och betalar ingenting själv.</p></div>
-            </div>
-          </div>
-          <div class="faq-item" data-reveal>
-            <button class="faq-question" aria-expanded="false">
-              <span>Vilka plattformar stöds?</span>
-              <span class="faq-icon" aria-hidden="true"></span>
-            </button>
-            <div class="faq-answer-wrap">
-              <div class="faq-answer"><p>iPhone och Android. Samma app och samma signaler oavsett plattform.</p></div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="app" id="app" aria-labelledby="app-title">
-      <div class="section-inner" data-reveal>
-        <h2 id="app-title">Allt sker i appen</h2>
-        <p class="app-lead">Samma app för hela bolaget. Ägaren registrerar bolaget i appen och får prova utan kort, föraren kopplar sin telefon med en kod.</p>
-
-        <div class="store-row">
-          <span class="store-badge">
-            <img src="/brand/icons/apple.svg" alt="" aria-hidden="true" />
-            <span><small>Kommer till</small><strong>App Store</strong></span>
-          </span>
-          <span class="store-badge">
-            <img src="/brand/icons/google-play.svg" alt="" aria-hidden="true" />
-            <span><small>Kommer till</small><strong>Google Play</strong></span>
-          </span>
-        </div>
-      </div>
-    </section>
-
-    <section class="capture" id="kontakt" aria-labelledby="capture-title">
-      <div class="section-inner">
-        <h2 id="capture-title" class="capture-heading" data-reveal>Hör av dig</h2>
-        <div class="capture-grid capture-grid-single">
-          <div class="capture-card" data-reveal>
-            <span class="capture-icon" aria-hidden="true">
-              <img src="/brand/icons/office.svg" alt="" />
-            </span>
-            <h3 id="contact-title">Skicka en förfrågan</h3>
-            <p class="capture-lead">
-              Har du en bil eller många, och vill ha en kort demo eller veta priset? Skriv några rader, vi svarar från hej@taxitips.se.
-            </p>
-            <form id="contactForm" class="capture-form" novalidate>
-              <label class="field">
-                <span>Namn</span>
-                <input type="text" name="name" autocomplete="name" required placeholder="Ditt namn" />
-              </label>
-              <label class="field">
-                <span>E-post</span>
-                <input type="email" name="email" autocomplete="email" required placeholder="du@taxibolag.se" />
-              </label>
-              <label class="field">
-                <span>Bolag <em>(valfritt)</em></span>
-                <input type="text" name="company" autocomplete="organization" placeholder="Bolagets namn" />
-              </label>
-              <label class="field">
-                <span>Meddelande</span>
-                <textarea name="message" rows="4" required minlength="10" placeholder="Hur många bilar och i vilket län? När vill ni starta?"></textarea>
-              </label>
-              <button type="submit" class="btn btn-primary" data-track="form_contact">Skicka</button>
-              <p class="form-status" data-form-status hidden></p>
-            </form>
-          </div>
+        <div class="capture-card" data-reveal>
+          <h3 id="contact-title">Skicka en förfrågan</h3>
+          <form id="contactForm" class="capture-form" aria-labelledby="contact-title" novalidate>
+            <label class="field">
+              <span>Namn</span>
+              <input type="text" name="name" autocomplete="name" required placeholder="Ditt namn" />
+            </label>
+            <label class="field">
+              <span>E-post</span>
+              <input type="email" name="email" autocomplete="email" inputmode="email" required placeholder="du@taxibolag.se" />
+            </label>
+            <label class="field">
+              <span>Bolag <em>(valfritt)</em></span>
+              <input type="text" name="company" autocomplete="organization" placeholder="Bolagets namn" />
+            </label>
+            <label class="field">
+              <span>Meddelande</span>
+              <textarea name="message" rows="4" required minlength="10" placeholder="Hur många bilar och i vilket län? När vill ni starta?"></textarea>
+            </label>
+            <button type="submit" class="btn btn-primary btn-block" data-track="form_contact">Skicka</button>
+            <p class="form-status" data-form-status hidden></p>
+          </form>
         </div>
       </div>
     </section>
@@ -420,35 +472,25 @@
         </div>
         <form id="earlyAccessForm" class="newsletter-form" novalidate>
           <label class="visually-hidden" for="newsletterEmail">E-post</label>
-          <input id="newsletterEmail" type="email" name="email" autocomplete="email" required placeholder="du@taxibolag.se" />
+          <input id="newsletterEmail" type="email" name="email" autocomplete="email" inputmode="email" required placeholder="du@taxibolag.se" />
           <button type="submit" class="btn btn-primary" data-track="form_early_access">Prenumerera</button>
           <p class="form-status" data-form-status hidden></p>
         </form>
       </div>
-      <p class="form-fineprint">Dubbel opt-in via Listmonk. Du kan avprenumerera när som helst.</p>
+      <p class="form-fineprint">Du bekräftar via e-post och kan avprenumerera när som helst.</p>
     </div>
 
     <div class="footer-top">
       <div class="footer-brand">
         <a class="brand-logo" href="/"><img src="/brand/logo-on-dark.svg" alt="Taxi Tips" height="26" /></a>
-        <p class="footer-tagline">Tips när taxi behövs. Byggt för taxibolag och åkare i hela Sverige. Appen läser trafiken så förarna slipper gissa.</p>
-        <div class="store-row store-row-footer">
-          <span class="store-badge store-badge-sm">
-            <img src="/brand/icons/apple.svg" alt="" aria-hidden="true" />
-            <span><small>Kommer till</small><strong>App Store</strong></span>
-          </span>
-          <span class="store-badge store-badge-sm">
-            <img src="/brand/icons/google-play.svg" alt="" aria-hidden="true" />
-            <span><small>Kommer till</small><strong>Google Play</strong></span>
-          </span>
-        </div>
+        <p class="footer-tagline">Tips om var det behövs taxi, i hela Sverige. Appen läser trafiken. Du slipper gissa.</p>
       </div>
 
       <div class="footer-col">
         <h3>Produkt</h3>
         <ul>
-          <li><a href="#app">Ladda ned</a></li>
-          <li><a href="#data">Vad tipsen bygger på</a></li>
+          <li><a href="#tipset">Vad ett tips innehåller</a></li>
+          <li><a href="#situationer">Situationer</a></li>
           <li><a href="#faq">Vanliga frågor</a></li>
         </ul>
       </div>
@@ -456,8 +498,10 @@
       <div class="footer-col">
         <h3>Kontakt</h3>
         <ul>
+          <li><a href="/registrera">Skapa konto</a></li>
+          <li><a href="/portal">Logga in</a></li>
           <li><a href="mailto:hej@taxitips.se">hej@taxitips.se</a></li>
-          <li><a href="#kontakt">Skicka en förfrågan</a></li>
+          <li><a href="#kontakt">Boka en demo</a></li>
         </ul>
       </div>
 
@@ -475,7 +519,7 @@
     </div>
   </footer>
 
-  <a class="sticky-cta" id="stickyCta" href="#app" data-track="cta_sticky">Ladda ned</a>
+  <a class="sticky-cta" id="stickyCta" href="/registrera" data-track="cta_sticky">Prova gratis</a>
 
   <script type="module" src="/src/main.js"></script>
 </body>

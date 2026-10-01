@@ -263,18 +263,61 @@ const ADMIN_HOSTS = new Set(
     .filter(Boolean),
 );
 
-function isAdminHost(req) {
-  const host = String(req.headers["x-forwarded-host"] || req.headers.host || "")
+function requestHost(req) {
+  return String(req.headers["x-forwarded-host"] || req.headers.host || "")
     .split(",")[0]
     .split(":")[0]
     .trim()
     .toLowerCase();
-  return ADMIN_HOSTS.has(host);
+}
+
+function isAdminHost(req) {
+  return ADMIN_HOSTS.has(requestHost(req));
+}
+
+// Kundportalen har också en egen värd: portal.taxitips.se. Där är `/`
+// portalen. Registreringen ligger på samma värd, eftersom Supabase sparar
+// inloggningen per värd -- ett konto som skapas på taxitips.se vore annars
+// utloggat på portal.taxitips.se direkt efteråt.
+const PORTAL_ORIGIN = (process.env.PORTAL_ORIGIN || "https://portal.taxitips.se").replace(/\/$/, "");
+const PORTAL_HOST = (() => {
+  try {
+    return new URL(PORTAL_ORIGIN).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
+})();
+// Sökvägar på marknadsvärden som hör till portalen och skickas dit.
+const PORTAL_PATHS = new Map([
+  ["/portal", "/"],
+  ["/portal.html", "/"],
+  ["/registrera", "/registrera"],
+  ["/registrera.html", "/registrera"],
+]);
+
+function isPortalHost(req) {
+  return Boolean(PORTAL_HOST) && requestHost(req) === PORTAL_HOST;
+}
+
+/** Lokalt (localhost, 127.0.0.1) skickas ingen vidare: där finns ingen portalvärd. */
+function isLocalHost(req) {
+  const host = requestHost(req);
+  return host === "localhost" || host === "127.0.0.1" || host === "";
 }
 
 function serveStatic(req, res) {
   let urlPath = decodeURIComponent((req.url || "/").split("?")[0]);
-  if (urlPath === "/") urlPath = isAdminHost(req) ? "/admin.html" : "/index.html";
+  const query = (req.url || "").includes("?") ? (req.url || "").slice((req.url || "").indexOf("?")) : "";
+  if (PORTAL_HOST && !isPortalHost(req) && !isLocalHost(req) && PORTAL_PATHS.has(urlPath)) {
+    // 302, inte 301: en flytt av portalen ska inte fastna i webbläsarnas cache.
+    // Hash (#access_token från e-postlänken) följer med av sig själv.
+    res.writeHead(302, { Location: `${PORTAL_ORIGIN}${PORTAL_PATHS.get(urlPath)}${query}` });
+    res.end();
+    return;
+  }
+  if (urlPath === "/") {
+    urlPath = isAdminHost(req) ? "/admin.html" : isPortalHost(req) ? "/portal.html" : "/index.html";
+  }
   const filePath = path.normalize(path.join(DIST, urlPath));
   if (!filePath.startsWith(DIST)) {
     res.writeHead(403);

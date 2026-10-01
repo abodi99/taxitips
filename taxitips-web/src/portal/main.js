@@ -159,6 +159,7 @@ async function companyOrClaim() {
       await api.claimInvite();
     } catch (claimError) {
       if (claimError instanceof ApiError && claimError.reason === "no_invite") {
+        if (await completePendingRegistration()) return api.company();
         throw new ApiError(
           403,
           "Kontot är inte kopplat till något företag. Be den som sköter ert konto, " +
@@ -170,6 +171,22 @@ async function companyOrClaim() {
     }
     return api.company();
   }
+}
+
+/**
+ * Registreringen från taxitips.se/registrera, när e-posten först måste
+ * bekräftas: bolagets uppgifter sparades i kontots metadata, och görs klart
+ * här vid första inloggningen (samma POST /api/fleet/register som appen).
+ * Servern prövar allt igen och tar e-posten ur den verifierade inloggningen.
+ * Ett fel (t.ex. att bolaget redan har ett konto) visas med serverns text.
+ */
+async function completePendingRegistration() {
+  const { data } = await supabase().auth.getUser();
+  const pending = data?.user?.user_metadata?.pending_company;
+  if (!pending || typeof pending !== "object") return false;
+  await api.register(pending);
+  await supabase().auth.updateUser({ data: { pending_company: null } }).catch(() => {});
+  return true;
 }
 
 /* --- Inloggning --------------------------------------------------------- */
@@ -292,6 +309,11 @@ for (const tab of el.tabs) {
 
 el.view.addEventListener("submit", async (event) => {
   const form = event.target;
+  if (form.id === "contactForm" || form.id === "billingForm") {
+    event.preventDefault();
+    await saveDetails(form);
+    return;
+  }
   if (form.id !== "vehicleForm") return;
   event.preventDefault();
   clearError();
@@ -306,6 +328,55 @@ el.view.addEventListener("submit", async (event) => {
     showError(error);
   }
 });
+
+/** Kontaktperson eller fakturering. Felet visas vid fältet servern pekar ut. */
+async function saveDetails(form) {
+  clearError();
+  const data = new FormData(form);
+  const value = (k) => String(data.get(k) ?? "").trim();
+  const body =
+    form.id === "contactForm"
+      ? { contactName: value("contactName"), contactPhone: value("contactPhone") }
+      : {
+          billingEmail: value("billingEmail"),
+          billingReference: value("billingReference"),
+          billingAddress: {
+            line1: value("line1"), line2: value("line2"),
+            postalCode: value("postalCode"), city: value("city"),
+          },
+        };
+  const button = form.querySelector('button[type="submit"]');
+  const saved = form.querySelector("[data-saved]");
+  form.querySelectorAll("[aria-invalid]").forEach((i) => i.removeAttribute("aria-invalid"));
+  form.querySelector(".field-error")?.remove();
+  button.disabled = true;
+  try {
+    const result = await api.updateDetails(body);
+    if (state.data?.company) state.data.company.details = result.details;
+    if (saved) {
+      saved.hidden = false;
+      window.setTimeout(() => { saved.hidden = true; }, 3000);
+    }
+  } catch (error) {
+    const field = error instanceof ApiError ? error.detail?.field : null;
+    const input = field && form.querySelector(
+      field === "billingAddress" ? '[name="line1"]' : `[name="${field}"]`,
+    );
+    if (input) {
+      input.setAttribute("aria-invalid", "true");
+      const p = document.createElement("p");
+      p.className = "error field-error";
+      p.setAttribute("role", "alert");
+      p.textContent = error.message;
+      input.after(p);
+      input.focus();
+    } else {
+      showError(error);
+    }
+  } finally {
+    button.disabled = false;
+  }
+}
 
 el.view.addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-action]");
