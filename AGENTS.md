@@ -17,9 +17,10 @@ En taxiförare, mitt i ett pass: *"var finns det folk som behöver taxi nu,
 varför tror ni det, och är det värt att köra dit?"*
 
 Affärsmodellen är B2B: taxibolag betalar en Stripe-prenumeration per
-**billicens** (en registrerad bil med ett baslän). Förare ansluter sin telefon
-med en engångskod från företagets administratör -- bolagskoden ger inte längre
-åtkomst, den skickar en ansökan. Ingen App Store-prenumeration, ingen IAP.
+**billicens** (en registrerad bil med ett baslän). Förare bjuds in med e-post
+av företagets administratör och loggar in i appen under "Jag är förare"; en
+engångskod finns kvar som reserv -- bolagskoden ger inte längre åtkomst, den
+skickar en ansökan. Ingen App Store-prenumeration, ingen IAP.
 **Appen säljer ingenting**: inga priser, köpknappar eller betallänkar. Nya
 kunder registrerar sig i appen och får ett kortfritt prov; betalning sker
 utanför appen (säljare, faktura, kundportalen på webben). Skälet och reglerna:
@@ -81,7 +82,8 @@ Kundlivscykeln i `taxitips-backend/fleet/`:
 | `accounts.py` | Spärrar (företag, konto, e-post) och kontokatalogen. |
 | `registration.py` | Självregistrering från appen: företag + kortfritt prov, ingen betalning. |
 | `pricing.py` | **Enda prismotorn.** Heltal ören, volymnivå, introduktion, proportionering, moms. |
-| `pairing.py` | Engångskod -> godkänd telefon. Hashade hemligheter. Spärr. |
+| `pairing.py` | Engångskod -> godkänd telefon. Hashade hemligheter. Spärr. `approve_device` är det enda stället en telefon godkänns. |
+| `driver_invites.py` | E-postinbjudan -> förarens inloggning -> samma godkännande. `auth_admin.py` tar fram länken via Supabase Auths admin-API. |
 | `sessions.py` | Skiftbyte. En telefon per licens, en bil per telefon -- via databasen. |
 | `licensing.py` | Bilar, licenser, länsrättigheter, bilbyten. |
 | `orders.py` | Beställningar, minskningar, uppsägning, betalningsfrist. |
@@ -313,6 +315,14 @@ med "Nästa". Reglerna för vad som är klart och nästa steg bor på ett ställ
 och Google-inloggning är inte konfigurerad i produktionens Supabase Auth, så
 adminwebben loggar in med en e-postlänk.
 
+**Förarinbjudan med e-post** (2026-10-01, `fleet/driver_invites.py`): ägaren
+bjuder in förarens e-post per bil (portalen "Bilar och telefoner", appens bilblad),
+föraren väljer lösenord på `taxitips.se/forare` och loggar in i appen under
+**Jag är förare** -- då kopplas telefonen. Kräver `SUPABASE_SERVICE_ROLE_KEY` på
+backenden (bara för `generate_link`) och att `taxitips.se/forare` godtas som
+redirect av Supabase Auth; utan nyckeln visas bara koden. Detaljer:
+`docs/fleet-abonnemang.md` §3.
+
 **Supportchatten** (`fleet/support.py`, 2026-09-26): användare skriver i appen
 (Inställningar -> Chatta med support), personalen svarar under **Support** i
 adminwebben. Bara text. En konversation per användare: kontot om appen är
@@ -489,7 +499,10 @@ Var och en av dem är skriven efter att ha gått sönder på riktigt.
     permanent enhetstoken ur en sexteckenskod som står på ett papper i
     fikarummet. Den är stängd (`20260920000001`). Telefoner godkänns av en
     administratör, för en bestämd bil, med en engångskod som gäller fem
-    minuter. Se `fleet/pairing.py`.
+    minuter eller en e-postinbjudan som löses in med förarens VERIFIERADE
+    inloggning (adressen och kontot ur JWT:n, aldrig ur anropet). Båda går
+    genom `pairing.approve_device`. Se `fleet/pairing.py`,
+    `fleet/driver_invites.py`.
 17. **En aktiv telefon per billicens, en aktiv bil per telefon** -- som
     partiella unika index i `fleet_vehicle_session`, inte som kontroller i
     Python. Två förare som trycker "Ta över" samtidigt läser båda innan

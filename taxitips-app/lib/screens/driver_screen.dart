@@ -4045,7 +4045,7 @@ class _EntitlementBanner extends StatelessWidget {
     'trial_not_started' => (
       'Välkommen! Ett steg kvar',
       'Lägg till en bil och ge föraren en kod under Inställningar. '
-          'Provperioden på 14 dagar startar när den första telefonen kopplas.',
+          'Provperioden på 7 dagar startar när den första telefonen kopplas.',
       Icons.flag_outlined,
       TbColors.live,
     ),

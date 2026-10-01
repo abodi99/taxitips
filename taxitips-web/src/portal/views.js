@@ -229,8 +229,79 @@ function vantandeAndringar(data) {
 
 /* --- Bilar och telefoner ------------------------------------------------ */
 
+/**
+ * Förare som bjudits in med e-post men inte loggat in i appen än. "Skicka
+ * igen" ger en ny länk och sju nya dagar; "Ta bort" gör att inbjudan inte
+ * längre kan lösas in.
+ */
+function pendingInvites(row, canManage) {
+  const invites = row.pendingInvites ?? [];
+  if (!invites.length) return "";
+  return `<h3>Inbjudna förare</h3>
+    <ul class="invite-list">
+      ${invites
+        .map(
+          (i) => `<li>
+            <div>
+              <strong>${esc(i.label || i.email)}</strong>
+              ${i.label ? `<span class="muted">${esc(i.email)}</span>` : ""}
+              <span class="muted">${
+                i.expired
+                  ? "Inbjudan har gått ut"
+                  : `Väntar på att föraren loggar in · skickad ${esc(date(i.lastSentAt || i.createdAt))}`
+              }</span>
+            </div>
+            ${
+              canManage
+                ? `<div class="btn-row">
+                     <button class="btn btn-quiet" data-action="resend-invite" data-invite="${esc(i.inviteId)}">Skicka igen</button>
+                     <button class="btn btn-quiet" data-action="revoke-invite" data-invite="${esc(i.inviteId)}">Ta bort</button>
+                   </div>`
+                : ""
+            }
+          </li>`,
+        )
+        .join("")}
+    </ul>`;
+}
+
+/**
+ * Huvudvägen för en ny förare: e-post. Koden finns kvar som reserv ("Visa kod
+ * i stället"), och är den enda vägen när servern inte har e-postinbjudan
+ * påslagen -- då visas inget formulär som inte fungerar.
+ */
+function connectDriver(row, invitesOn) {
+  const ids = `data-license="${esc(row.licenseId)}" data-vehicle="${esc(row.vehicleId)}"
+    data-plate="${esc(row.vehicle)}"`;
+  if (!invitesOn) {
+    return `<div class="btn-row">
+        <button class="btn btn-primary" data-action="pair" ${ids}>Anslut en telefon</button>
+        <button class="btn btn-quiet" data-action="change-vehicle"
+          data-license="${esc(row.licenseId)}">Byt bil</button>
+      </div>`;
+  }
+  const key = esc(row.licenseId);
+  return `<form class="invite-form" ${ids}>
+      <h3>Bjud in förare med e-post</h3>
+      <p class="muted">Föraren får ett mejl, väljer lösenord och loggar in i appen.
+      Då kopplas telefonen till bilen.</p>
+      <label for="invite-email-${key}">Förarens e-post</label>
+      <input id="invite-email-${key}" name="email" type="email" required
+        autocomplete="off" inputmode="email" placeholder="namn@exempel.se" />
+      <label for="invite-name-${key}">Förarens namn (valfritt)</label>
+      <input id="invite-name-${key}" name="label" autocomplete="off" placeholder="Anna" />
+      <div class="btn-row">
+        <button class="btn btn-primary" type="submit">Skicka inbjudan</button>
+        <button class="btn btn-quiet" type="button" data-action="pair" ${ids}>Visa kod i stället</button>
+        <button class="btn btn-quiet" type="button" data-action="change-vehicle"
+          data-license="${esc(row.licenseId)}">Byt bil</button>
+      </div>
+    </form>`;
+}
+
 export function bilar(data) {
   const canManage = (data.permissions ?? []).includes("manage_devices");
+  const invitesOn = Boolean(data.driverInvites?.enabled);
   const rows = data.licenses ?? [];
 
   return `
@@ -282,15 +353,10 @@ export function bilar(data) {
                </tbody></table>`
             : '<p class="muted">Ingen telefon godkänd för den här bilen än.</p>'
         }
+        ${pendingInvites(row, canManage)}
         ${
           canManage
-            ? `<div class="btn-row">
-                 <button class="btn btn-primary" data-action="pair"
-                   data-license="${esc(row.licenseId)}" data-vehicle="${esc(row.vehicleId)}"
-                   data-plate="${esc(row.vehicle)}">Anslut en telefon</button>
-                 <button class="btn btn-quiet" data-action="change-vehicle"
-                   data-license="${esc(row.licenseId)}">Byt bil</button>
-               </div>
+            ? `${connectDriver(row, invitesOn)}
                <p class="muted">En spärr gäller direkt, även om telefonen är
                borta. Byten mellan godkända skifttelefoner är avgiftsfria och
                har ingen kvot.</p>`

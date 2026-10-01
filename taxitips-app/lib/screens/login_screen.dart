@@ -12,14 +12,16 @@ class LoginScreen extends StatefulWidget {
     required this.api,
     required this.onLoggedIn,
     required this.onSignup,
-    required this.onJoinPhone,
+    required this.onDriver,
     required this.onBack,
   });
 
   final ApiClient api;
   final VoidCallback onLoggedIn;
   final VoidCallback onSignup;
-  final VoidCallback onJoinPhone;
+
+  /// Föraren som hamnat här: till förarens inloggning (e-post eller kod).
+  final VoidCallback onDriver;
   final VoidCallback onBack;
 
   @override
@@ -157,7 +159,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                   const SizedBox(height: 6),
                   const Text(
-                    'För ägare och kontor',
+                    'För dig som äger bolaget eller sköter kontoret',
                     textAlign: TextAlign.center,
                     style: TextStyle(color: Colors.white70, fontSize: 16),
                   ),
@@ -257,14 +259,14 @@ class _LoginScreenState extends State<LoginScreen> {
                   _Choice(
                     icon: Icons.local_taxi_outlined,
                     title: 'Jag är förare',
-                    subtitle: 'Ange koden från din chef',
-                    onTap: widget.onJoinPhone,
+                    subtitle: 'Logga in med e-posten du fick från chefen',
+                    onTap: widget.onDriver,
                   ),
                   const SizedBox(height: 12),
                   _Choice(
                     icon: Icons.add_business_outlined,
                     title: 'Nytt företag',
-                    subtitle: 'Prova gratis i 14 dagar',
+                    subtitle: 'Prova gratis i 7 dagar',
                     onTap: widget.onSignup,
                   ),
                 ],

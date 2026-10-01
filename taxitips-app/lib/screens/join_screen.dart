@@ -121,7 +121,7 @@ class _JoinScreenState extends State<JoinScreen> {
                   ),
                   const SizedBox(height: 24),
                   Text(
-                    _requestMode ? 'Ansök om åtkomst' : 'Anslut telefonen',
+                    _requestMode ? 'Ansök om åtkomst' : 'Anslut med kod',
                     textAlign: TextAlign.center,
                     style: const TextStyle(
                       fontFamily: kDisplayFont,

@@ -362,3 +362,33 @@ th {
     transition: box-shadow 0.4s ease;
   }
 }
+
+/* Förarinbjudan med e-post (Bilar och telefoner). */
+.invite-form {
+  margin-top: 1rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--line);
+}
+.invite-list {
+  list-style: none;
+  margin: 0.5rem 0 1rem;
+  padding: 0;
+}
+.invite-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  padding: 0.6rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.invite-list li > div:first-child {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.invite-list .btn-row {
+  margin: 0;
+}

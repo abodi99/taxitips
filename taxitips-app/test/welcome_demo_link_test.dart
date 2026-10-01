@@ -14,7 +14,7 @@ void main() {
         home: WelcomeScreen(
           onLogin: () {},
           onSignup: () {},
-          onJoinPhone: () {},
+          onDriver: () {},
         ),
       ),
     );

@@ -91,6 +91,15 @@ export const api = {
       method: "POST",
       body: { license_id: licenseId, vehicle_id: vehicleId, label },
     }),
+  inviteDriver: ({ email, label, licenseId, vehicleId }) =>
+    request("/api/fleet/driver-invites", {
+      method: "POST",
+      body: { email, label, licenseId, vehicleId },
+    }),
+  resendInvite: (inviteId) =>
+    request(`/api/fleet/driver-invites/${inviteId}/resend`, { method: "POST", body: {} }),
+  revokeInvite: (inviteId) =>
+    request(`/api/fleet/driver-invites/${inviteId}/revoke`, { method: "POST", body: {} }),
   blockPhone: (approvalId, reason) =>
     request(`/api/fleet/approvals/${approvalId}/block`, {
       method: "POST",

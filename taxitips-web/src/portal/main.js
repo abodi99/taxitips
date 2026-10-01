@@ -26,6 +26,7 @@ const el = {
   whoami: document.getElementById("whoami"),
   logout: document.getElementById("logout"),
   globalError: document.getElementById("globalError"),
+  globalNotice: document.getElementById("globalNotice"),
   codeDialog: document.getElementById("codeDialog"),
   codeValue: document.getElementById("codeValue"),
   codeFor: document.getElementById("codeFor"),
@@ -67,6 +68,17 @@ function showError(error) {
 function clearError() {
   el.globalError.hidden = true;
   el.globalError.textContent = "";
+  if (el.globalNotice) {
+    el.globalNotice.hidden = true;
+    el.globalNotice.textContent = "";
+  }
+}
+
+/** En bekräftelse som ligger kvar efter omritningen (t.ex. "Inbjudan skickad"). */
+function showNotice(message) {
+  if (!el.globalNotice) return;
+  el.globalNotice.textContent = message;
+  el.globalNotice.hidden = false;
 }
 
 async function boot() {
@@ -162,8 +174,9 @@ async function companyOrClaim() {
         if (await completePendingRegistration()) return api.company();
         throw new ApiError(
           403,
-          "Kontot är inte kopplat till något företag. Be den som sköter ert konto, " +
-            "eller Taxi Tips, att bjuda in din e-postadress.",
+          "Kontot är inte kopplat till något företag. Är du förare? Logga in i appen " +
+            "under Jag är förare. Annars: be den som sköter ert konto, eller Taxi Tips, " +
+            "att bjuda in din e-postadress.",
           "no_company",
         );
       }
@@ -314,6 +327,11 @@ el.view.addEventListener("submit", async (event) => {
     await saveDetails(form);
     return;
   }
+  if (form.classList.contains("invite-form")) {
+    event.preventDefault();
+    await inviteDriver(form);
+    return;
+  }
   if (form.id !== "vehicleForm") return;
   event.preventDefault();
   clearError();
@@ -328,6 +346,36 @@ el.view.addEventListener("submit", async (event) => {
     showError(error);
   }
 });
+
+/** Bjud in en förare med e-post. Servern skapar kontot och skickar mejlet. */
+async function inviteDriver(form) {
+  clearError();
+  const data = new FormData(form);
+  const email = String(data.get("email") ?? "").trim();
+  const button = form.querySelector('button[type="submit"]');
+  if (!email) {
+    showError(new ApiError(400, "Skriv förarens e-post.", "email_required"));
+    form.querySelector('[name="email"]')?.focus();
+    return;
+  }
+  button.disabled = true;
+  try {
+    await api.inviteDriver({
+      email,
+      label: String(data.get("label") ?? "").trim(),
+      licenseId: form.dataset.license,
+      vehicleId: form.dataset.vehicle,
+    });
+    await refresh();
+    showNotice(
+      `Inbjudan skickad till ${email}. Föraren väljer lösenord via mejlet och loggar sedan in i appen.`,
+    );
+  } catch (error) {
+    showError(error);
+  } finally {
+    button.disabled = false;
+  }
+}
 
 /** Kontaktperson eller fakturering. Felet visas vid fältet servern pekar ut. */
 async function saveDetails(form) {
@@ -382,10 +430,10 @@ el.view.addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
   clearError();
-  const { action, license, vehicle, plate, approval } = button.dataset;
+  const { action, license, vehicle, plate, approval, invite } = button.dataset;
   button.disabled = true;
   try {
-    await handle(action, { license, vehicle, plate, approval });
+    await handle(action, { license, vehicle, plate, approval, invite });
   } catch (error) {
     showError(error);
   } finally {
@@ -401,6 +449,17 @@ async function handle(action, ctx) {
       el.codeValue.textContent = result.code;
       el.codeDialog.showModal();
       return;
+    }
+    case "resend-invite": {
+      await api.resendInvite(ctx.invite);
+      await refresh();
+      showNotice("Inbjudan skickad igen. Den nya länken gäller i sju dagar.");
+      return;
+    }
+    case "revoke-invite": {
+      if (!confirm("Ta bort inbjudan? Föraren kan inte längre använda den för att logga in.")) return;
+      await api.revokeInvite(ctx.invite);
+      return refresh();
     }
     case "block": {
       if (

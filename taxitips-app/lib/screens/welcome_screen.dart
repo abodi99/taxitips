@@ -11,12 +11,15 @@ class WelcomeScreen extends StatelessWidget {
     super.key,
     required this.onLogin,
     required this.onSignup,
-    required this.onJoinPhone,
+    required this.onDriver,
   });
 
+  /// "Jag äger bolaget": ägarens och kontorets inloggning.
   final VoidCallback onLogin;
   final VoidCallback onSignup;
-  final VoidCallback onJoinPhone;
+
+  /// "Jag är förare": inloggning med e-postinbjudan, med koden som reserv.
+  final VoidCallback onDriver;
 
   /// Demon finns på webben (taxitips.se/demo), inte i appen. Där syns samma
   /// slags tips på en Sverigekarta utan att någon behöver ett konto.
@@ -117,41 +120,23 @@ class WelcomeScreen extends StatelessWidget {
                     ),
                     const SizedBox(height: 48),
                     
-                    FilledButton.icon(
-                      onPressed: onJoinPhone,
-                      icon: const Icon(Icons.phone_android, size: 28),
-                      label: const Text('Jag är förare (Anslut)', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-                      style: FilledButton.styleFrom(
-                        backgroundColor: TbColors.taxi,
-                        foregroundColor: TbColors.ink,
-                        minimumSize: const Size.fromHeight(64),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        elevation: 4,
-                      ),
+                    // Två vägar, en per person: föraren och den som äger
+                    // bolaget. Föraren loggar in med e-posten chefen bjöd in;
+                    // koden finns kvar inne på förarsidan ("Har du en kod?").
+                    _PathButton(
+                      primary: true,
+                      icon: Icons.local_taxi,
+                      title: 'Jag är förare',
+                      subtitle: 'Logga in med din e-post',
+                      onTap: onDriver,
                     ),
-                    const SizedBox(height: 24),
-                    
-                    Row(
-                      children: [
-                        const Expanded(child: Divider(color: Colors.white24, thickness: 1)),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Text('ADMINISTRATION', style: TextStyle(color: Colors.white54, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 1)),
-                        ),
-                        const Expanded(child: Divider(color: Colors.white24, thickness: 1)),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                    
-                    OutlinedButton(
-                      onPressed: onLogin,
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: TbColors.foam,
-                        side: const BorderSide(color: Colors.white30, width: 2),
-                        minimumSize: const Size.fromHeight(56),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      ),
-                      child: const Text('Logga in som administratör', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 14),
+                    _PathButton(
+                      primary: false,
+                      icon: Icons.business_center_outlined,
+                      title: 'Jag äger bolaget',
+                      subtitle: 'Logga in och sköt bilar och förare',
+                      onTap: onLogin,
                     ),
                     const SizedBox(height: 12),
                     // Nya företag ska inte behöva leta: registreringen låg förut
@@ -163,7 +148,7 @@ class WelcomeScreen extends StatelessWidget {
                         minimumSize: const Size.fromHeight(48),
                       ),
                       child: const Text(
-                        'Nytt företag? Prova gratis i 14 dagar',
+                        'Nytt företag? Prova gratis i 7 dagar',
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
                       ),
                     ),
@@ -194,6 +179,78 @@ class WelcomeScreen extends StatelessWidget {
                 ],
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// En stor knapp per väg: ikon, vem den gäller, och en rad om vad som händer.
+class _PathButton extends StatelessWidget {
+  const _PathButton({
+    required this.primary,
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+
+  final bool primary;
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = primary ? TbColors.ink : TbColors.foam;
+    return Material(
+      color: primary ? TbColors.taxi : Colors.white.withValues(alpha: 0.06),
+      borderRadius: BorderRadius.circular(16),
+      elevation: primary ? 4 : 0,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(minHeight: 72),
+          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+          decoration: primary
+              ? null
+              : BoxDecoration(
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: Colors.white30, width: 2),
+                ),
+          child: Row(
+            children: [
+              Icon(icon, size: 30, color: primary ? TbColors.ink : TbColors.taxi),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      title,
+                      style: TextStyle(
+                        color: fg,
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: TextStyle(
+                        color: primary ? TbColors.ink : Colors.white70,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.chevron_right, color: fg),
+            ],
           ),
         ),
       ),

@@ -739,6 +739,65 @@ class PairingCode(models.Model):
         indexes = [models.Index(fields=["company_id", "-created_at"])]
 
 
+class DriverInvite(models.Model):
+    """
+    Förarinbjudan med e-post: samma godkännande som engångskoden, men beviset
+    är förarens inloggning i stället för en kod som läses upp.
+
+    Administratören bjuder in en adress för en bestämd bil. Föraren får ett
+    mejl med en länk där hen väljer lösenord (Supabase Auth skapar kontot och
+    länken bevisar att hen kommer åt inkorgen), loggar in i appen, och appen
+    löser in inbjudan (fleet/driver_invites.py:claim_invite). Adressen läses
+    ur den VERIFIERADE inloggningen, aldrig ur anropet.
+
+    Engångs, giltig i sju dygn, kan återkallas. Förbrukas med ett villkorat
+    UPDATE av samma skäl som PairingCode: två telefoner som loggar in samtidigt
+    ska ge exakt ett godkännande.
+    """
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Väntar"
+        CONSUMED = "consumed", "Använd"
+        REVOKED = "revoked", "Återkallad"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    company_id = models.UUIDField()
+    license = models.ForeignKey(License, on_delete=models.CASCADE)
+    vehicle = models.ForeignKey(Vehicle, on_delete=models.CASCADE)
+    email = models.TextField()
+    label = models.TextField(blank=True, default="")
+    status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
+    created_by = models.UUIDField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    # Kontot som Supabase Auth skapade (eller redan hade) för adressen när
+    # länken togs fram. Inlösen kräver samma konto, inte bara samma adress.
+    auth_user_id = models.UUIDField(null=True, blank=True)
+    last_sent_at = models.DateTimeField(null=True, blank=True)
+    send_count = models.IntegerField(default=0)
+    consumed_at = models.DateTimeField(null=True, blank=True)
+    consumed_by_user = models.UUIDField(null=True, blank=True)
+    consumed_by_device = models.UUIDField(null=True, blank=True)
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    revoked_by = models.UUIDField(null=True, blank=True)
+
+    class Meta:
+        db_table = "fleet_driver_invite"
+        indexes = [
+            models.Index(fields=["email", "status"]),
+            models.Index(fields=["company_id", "-created_at"]),
+        ]
+        constraints = [
+            # En väntande inbjudan per adress och företag: en ny ersätter den
+            # gamla, så att föraren aldrig har två länkar till två bilar.
+            models.UniqueConstraint(
+                fields=["company_id", "email"],
+                condition=Q(status="pending"),
+                name="fleet_one_pending_driver_invite",
+            ),
+        ]
+
+
 class JoinRequest(models.Model):
     """
     Vad en statisk bolagskod får åstadkomma: en ANSÖKAN, inget mer.

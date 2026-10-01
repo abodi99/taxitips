@@ -34,6 +34,13 @@ PAIRING_ISSUE = Limit("pairing_issue", limit=20, window_seconds=3600)
 SIGNUP = Limit("signup", limit=5, window_seconds=3600)
 JOIN_LOOKUP = Limit("join_lookup", limit=10, window_seconds=3600)
 INVITE_REDEEM = Limit("invite_redeem", limit=10, window_seconds=3600)
+# Förarinbjudan med e-post: varje utskick är ett riktigt mejl till en
+# adress som administratören skrivit. Per företag, och per inbjudan för
+# "Skicka igen", så att portalen inte kan användas för att mejlbomba någon.
+DRIVER_INVITE_SEND = Limit("driver_invite_send", limit=30, window_seconds=3600)
+DRIVER_INVITE_RESEND = Limit("driver_invite_resend", limit=5, window_seconds=3600)
+# Inlösen kräver redan en inloggning; bromsen är per konto och per telefon.
+DRIVER_INVITE_CLAIM = Limit("driver_invite_claim", limit=10, window_seconds=3600)
 # Supportchatten: en människa som skriver många korta rader i rad ska inte
 # stoppas, ett skript som fyller supportens inkorg ska det.
 SUPPORT_MESSAGE = Limit("support_message", limit=30, window_seconds=600)

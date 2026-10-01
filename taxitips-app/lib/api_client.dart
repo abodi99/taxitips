@@ -359,6 +359,11 @@ class ApiClient {
   /// Completes a session that was established by an OAuth redirect (mobile).
   void listenForAuthSignIn(void Function() onSignedIn) {
     _sb.auth.onAuthStateChange.listen((state) {
+      // Förarens inloggning är kortlivad: kontot löser in inbjudan och loggas
+      // ut igen (driverLogin). Den ska inte trigga ägarens väg -- push-
+      // registreringen med JWT hade kunnat skriva installations-id:t som
+      // enhetsnyckel samtidigt som den riktiga hemligheten sparas.
+      if (_driverLoginInProgress) return;
       final session = state.session;
       if (session != null) {
         saveSession(session.accessToken);
@@ -368,6 +373,122 @@ class ApiClient {
   }
 
   static const _pendingRegistrationKey = 'tt_pending_registration';
+
+  // --- Föraren: inloggning med e-postinbjudan (fleet/driver_invites.py) -----
+
+  bool _driverLoginInProgress = false;
+
+  /// Sidan där föraren väljer lösenord: länken i inbjudan och "Glömt
+  /// lösenord?" leder dit. Samma värd som Supabases SITE_URL.
+  static const _driverPasswordPage = 'https://taxitips.se/forare';
+
+  /// Föraren loggar in med e-posten hen bjöds in till. Servern löser in
+  /// inbjudan och godkänner telefonen för bilen -- samma godkännande som en
+  /// engångskod. Sedan loggas kontot ut i appen igen: telefonen bär sin egen
+  /// enhetsnyckel, och föraren ska inte hamna i ägarens vy.
+  ///
+  /// Svarar `{'paired': true, ...}` när telefonen är kopplad. Hör kontot i
+  /// stället till ett företag (en ägare som tryckt "Jag är förare") behålls
+  /// inloggningen och svaret är `{'owner': true}`.
+  Future<Map<String, dynamic>> driverLogin({
+    required String email,
+    required String password,
+  }) => _reported(
+    'driver_login',
+    () => _driverLoginUnreported(email: email, password: password),
+  );
+
+  Future<Map<String, dynamic>> _driverLoginUnreported({
+    required String email,
+    required String password,
+  }) async {
+    await ensureInitialized();
+    _driverLoginInProgress = true;
+    var keepSession = false;
+    try {
+      final AuthResponse res;
+      try {
+        res = await _sb.auth.signInWithPassword(
+          email: email.trim().toLowerCase(),
+          password: password,
+        );
+      } catch (e) {
+        throw asApiIfNetwork(e);
+      }
+      final token = res.session?.accessToken;
+      if (token == null || token.isEmpty) {
+        throw ApiException(401, 'Inloggningen gav ingen giltig session.');
+      }
+      final installation = await ensureInstallationId();
+      Map<String, dynamic> data;
+      try {
+        data = await _fleet.ownerPost('driver-invites/claim', {
+          'installation_id': installation,
+          'label': 'Förare',
+        }, accessToken: token);
+      } on ApiException catch (e) {
+        if (e.reason == 'no_invite' || e.reason == 'invite_used') {
+          // Ägaren som valt fel väg: har kontot ett företag loggas hen in
+          // som ägare i stället för att få ett fel.
+          try {
+            await _fleet.ownerGet('company', accessToken: token);
+            keepSession = true;
+            await saveSession(token);
+            return {'owner': true};
+          } catch (_) {}
+        }
+        rethrow;
+      }
+      final secret = data['deviceToken']?.toString();
+      if (secret == null || secret.isEmpty) {
+        throw ApiException(500, 'Servern gav ingen enhetsnyckel.');
+      }
+      await saveDevice(secret);
+      await clearLocalAreaFilter();
+      return {'paired': true, ...data};
+    } finally {
+      if (!keepSession) {
+        try {
+          await _sb.auth.signOut(scope: SignOutScope.local);
+        } catch (_) {}
+        await saveSession(null);
+      }
+      _driverLoginInProgress = false;
+    }
+  }
+
+  /// "Glömt lösenord?" för föraren: Supabase mejlar en länk till sidan där
+  /// hen väljer ett nytt lösenord. Samma sida som inbjudans länk.
+  Future<void> sendDriverPasswordReset(String email) async {
+    await ensureInitialized();
+    try {
+      await _sb.auth.resetPasswordForEmail(
+        email.trim().toLowerCase(),
+        redirectTo: _driverPasswordPage,
+      );
+    } catch (e) {
+      throw asApiIfNetwork(e);
+    }
+  }
+
+  /// Bjud in en förare med e-post till en bil (fleet/driver_invites.py).
+  Future<Map<String, dynamic>> inviteDriver({
+    required String licenseId,
+    required String vehicleId,
+    required String email,
+    String label = '',
+  }) => _owner('driver-invites', {
+    'licenseId': licenseId,
+    'vehicleId': vehicleId,
+    'email': email,
+    'label': label,
+  });
+
+  Future<Map<String, dynamic>> resendDriverInvite(String inviteId) =>
+      _owner('driver-invites/$inviteId/resend', {});
+
+  Future<Map<String, dynamic>> revokeDriverInvite(String inviteId) =>
+      _owner('driver-invites/$inviteId/revoke', {});
 
   /// Dit bekräftelselänken i mejlet leder: en sida som säger att e-posten är
   /// bekräftad och att nästa steg är att logga in i appen. Samma värd som

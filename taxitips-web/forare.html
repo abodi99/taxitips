@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Välj lösenord — Taxi Tips</title>
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/brand.css" />
+  <link rel="stylesheet" href="/src/portal.css" />
+  <style>
+    .driver {
+      max-width: 440px;
+      margin: 3rem auto;
+    }
+    .driver h1 {
+      font-size: 1.6rem;
+      text-align: center;
+    }
+    .driver .lead {
+      text-align: center;
+    }
+    .driver .mark {
+      width: 72px;
+      height: 72px;
+      margin: 0.5rem auto 1rem;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      font-size: 2.2rem;
+      color: var(--vit);
+      background: var(--ok);
+    }
+    .driver.failed .mark {
+      background: var(--guld);
+      color: var(--midnatt);
+    }
+    .driver form .btn {
+      width: 100%;
+      min-height: 52px;
+      margin-top: 1rem;
+    }
+    .driver ol {
+      margin: 1rem 0 0;
+      padding-left: 1.4rem;
+      line-height: 1.8;
+    }
+    .driver .email {
+      font-weight: 700;
+      word-break: break-all;
+    }
+  </style>
+</head>
+<body class="portal">
+  <header class="portal-nav">
+    <a class="brand-logo" href="/"><img src="/brand/logo-on-dark.svg" alt="Taxi Tips" height="26" /></a>
+  </header>
+
+  <!--
+    Hit leder länken i förarens inbjudan (fleet/driver_invites.py) och "Glömt
+    lösenord?" i appen. Supabase Auth har redan verifierat länken när sidan
+    visas; sidan sätter bara lösenordet och säger vad föraren gör sedan.
+    Telefonen kopplas till bilen först när föraren loggar in i APPEN -- inte här.
+  -->
+  <main class="portal-main">
+    <section id="loading" class="card driver">
+      <p class="muted lead">Ett ögonblick …</p>
+    </section>
+
+    <section id="setPassword" class="card driver" hidden>
+      <h1>Välj ett lösenord</h1>
+      <p class="muted lead">För <span class="email" id="emailShown"></span></p>
+      <form id="passwordForm" novalidate>
+        <label for="password">Nytt lösenord (minst 8 tecken)</label>
+        <input id="password" name="password" type="password" autocomplete="new-password" required minlength="8" />
+        <label for="password2">Skriv lösenordet igen</label>
+        <input id="password2" name="password2" type="password" autocomplete="new-password" required minlength="8" />
+        <p class="error" id="passwordError" role="alert" hidden></p>
+        <button class="btn btn-primary" type="submit" id="passwordSave">Spara lösenordet</button>
+      </form>
+    </section>
+
+    <section id="done" class="card driver" hidden>
+      <div class="mark" aria-hidden="true">✓</div>
+      <h1>Klart! Nu loggar du in i appen</h1>
+      <ol>
+        <li>Hämta appen <b>Taxi Tips</b> i App Store eller Google Play.</li>
+        <li>Öppna appen och tryck <b>Jag är förare</b>.</li>
+        <li>Logga in med <span class="email" id="emailDone"></span> och ditt nya lösenord.</li>
+      </ol>
+      <p class="muted">Då kopplas telefonen till bilen direkt.</p>
+    </section>
+
+    <section id="failed" class="card driver failed" hidden>
+      <div class="mark" aria-hidden="true">!</div>
+      <h1>Länken fungerar inte längre</h1>
+      <p class="muted lead">Den har redan använts eller gått ut.</p>
+      <ol>
+        <li>Har du redan valt lösenord? Logga in i appen under <b>Jag är förare</b>.</li>
+        <li>Annars: tryck <b>Glömt lösenord?</b> i appen och skriv din e-post. Du får en ny länk.</li>
+        <li>Eller be din chef skicka inbjudan igen.</li>
+      </ol>
+      <p class="muted" id="failedDetail"></p>
+    </section>
+  </main>
+
+  <script type="module" src="/src/forare.js"></script>
+</body>
+</html>
