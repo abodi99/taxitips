@@ -2,14 +2,21 @@ import { promptAndSetPassword, sendPasswordReset } from "../auth_password.js";
 import { ApiError, supabase } from "../portal/api.js";
 import * as acc from "./accounts.js";
 import * as activity from "./activity.js";
-import { followUpBody, uppfoljning } from "./followup.js";
+import { callsCell, followUpBody, nextCell, uppfoljning } from "./followup.js";
 import { admin } from "./api.js";
 import * as sales from "./sales.js";
 import { LEVEL, statusBanner, statusView } from "./status.js";
 import { appVersionCard, bindAppVersionForm, loadAppVersion } from "./app_version.js";
 import * as support from "./support.js";
 import * as tipReports from "./tip_reports.js";
-import { pipelineNewLeadPrompt, pipelineView } from "./crm.js";
+import {
+  EMPTY_PIPELINE_FILTERS,
+  nextSort,
+  pipelineNewLeadPrompt,
+  pipelineTags,
+  pipelineView,
+  tasksView,
+} from "./crm.js";
 import * as views from "./views.js";
 
 /**
@@ -39,6 +46,9 @@ function showAuthHashError() {
   el.loginError.hidden = false;
   history.replaceState(null, "", window.location.pathname + window.location.search);
 }
+
+/** Rader per sida i CRM-tabellen; "Visa fler" hämtar nästa portion. */
+const PIPELINE_PAGE = 200;
 
 const el = {
   login: document.getElementById("login"),
@@ -86,7 +96,17 @@ const state = {
   statusFresh: false,
   companyCrm: null,
   pipelineLead: null,
-  pipelineStageFilter: "__board__",
+  pipelineStageFilter: "",
+  pipelineQuery: "",
+  // Segment, län, tier, bolagsform, ort, ☎/@/TF — AND:as på servern.
+  pipelineFilters: { ...EMPTY_PIPELINE_FILTERS },
+  pipelineLimit: PIPELINE_PAGE,
+  pipelineSort: "-updated",
+  // CRM-underflik: "pipeline" eller "tasks" (uppgiftsöversikten).
+  crmTab: "pipeline",
+  taskFilters: { assignee: "me", status: "open" },
+  // Sökning efter befintlig kontakt att koppla i affärsvyn: { q, hits }.
+  crmPeople: null,
   crmDealId: null,
 };
 
@@ -203,14 +223,32 @@ async function renderView(seq) {
           paint(pipelineView(
             {},
             state.config,
-            state.pipelineStageFilter,
+            { peopleQuery: state.crmPeople?.q, peopleHits: state.crmPeople?.hits },
             await admin.crmDeal(state.crmDealId),
           ));
+        } else if (state.crmTab === "tasks") {
+          paint(tasksView(await admin.crmTasks(state.taskFilters), state.config));
         } else {
+          const f = state.pipelineFilters;
           paint(pipelineView(
-            await admin.crmPipeline(state.pipelineStageFilter),
+            await admin.crmPipeline({
+              stage: state.pipelineStageFilter,
+              q: state.pipelineQuery,
+              tags: pipelineTags(f),
+              city: f.city,
+              form: f.form,
+              phone: f.phone,
+              email: f.email,
+              sort: state.pipelineSort,
+              limit: state.pipelineLimit,
+            }),
             state.config,
-            state.pipelineStageFilter,
+            {
+              stage: state.pipelineStageFilter,
+              q: state.pipelineQuery,
+              filters: f,
+              sort: state.pipelineSort,
+            },
           ));
         }
         break;
@@ -561,16 +599,37 @@ el.view.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.target;
   clearError();
+  if (form.dataset.crmForm) {
+    const button = form.querySelector('button[type="submit"]');
+    if (button) button.disabled = true;
+    try {
+      if (await crmSubmit(form)) await render();
+    } catch (error) {
+      showError(error);
+    } finally {
+      if (button) button.disabled = false;
+    }
+    return;
+  }
   if (form.dataset.form === "followup") {
     // Ingen omritning av hela listan: säljaren står mitt i den.
     const button = form.querySelector('button[type="submit"]');
     if (button) button.disabled = true;
     try {
-      const saved = await admin.updateFollowUp(form.dataset.company, followUpBody(form));
-      const meta = form.querySelector(".fu-meta");
-      if (meta) meta.textContent = `Sparat · ${saved.attempts} samtal`;
+      const saved = await admin.updateFollowUp(form.dataset.fuCompany, followUpBody(form));
+      // Uppdatera bara raden och fäll ihop den — listan ligger kvar.
+      const tr = el.view.querySelector(`tr[data-fu-row="${form.dataset.fuCompany}"]`);
+      if (tr) {
+        const labels = new Map(JSON.parse(tr.closest("table")?.dataset.outcomes || "[]"));
+        const cell = (k) => tr.querySelector(`[data-fu-cell="${k}"]`);
+        if (cell("outcome")) cell("outcome").textContent = labels.get(saved.outcome) ?? saved.outcome;
+        if (cell("next")) cell("next").innerHTML = nextCell(saved.nextContactAt);
+        if (cell("calls")) cell("calls").innerHTML = callsCell(saved.attempts, new Date().toISOString());
+        tr.classList.add("fu-saved");
+        toggleFollowUp(form.dataset.fuCompany, false);
+      }
       const box = form.querySelector('input[name="contacted"]');
-      if (box) box.checked = false;
+      if (box) box.checked = true;
     } catch (error) {
       showError(error);
     } finally {
@@ -647,6 +706,13 @@ el.view.addEventListener("submit", async (event) => {
         flash("Anteckningen sparades.");
         break;
       }
+      case "crmSearchForm": {
+        const data = new FormData(form);
+        state.pipelineQuery = String(data.get("q") ?? "").trim();
+        state.pipelineLimit = PIPELINE_PAGE;
+        state.crmDealId = null;
+        break;
+      }
       case "crmDealNoteForm": {
         const data = new FormData(form);
         const dealId = form.dataset.deal || state.crmDealId;
@@ -690,6 +756,25 @@ el.view.addEventListener("change", (event) => {
   if (event.target.id === "pushStatus") {
     state.pushStatus = event.target.value;
     render();
+    return;
+  }
+  const taskId = event.target.dataset?.taskStatus;
+  if (taskId) {
+    admin.crmTaskUpdate(taskId, { status: event.target.value })
+      .then(() => render())
+      .catch(showError);
+    return;
+  }
+  if (event.target.dataset?.crmTasks === "assignee") {
+    state.taskFilters = { ...state.taskFilters, assignee: event.target.value };
+    render();
+    return;
+  }
+  const key = event.target.dataset?.crmFilter;
+  if (key && key in state.pipelineFilters) {
+    state.pipelineFilters = { ...state.pipelineFilters, [key]: event.target.value.trim() };
+    state.pipelineLimit = PIPELINE_PAGE;
+    render();
   }
 });
 
@@ -700,6 +785,8 @@ el.view.addEventListener("click", async (event) => {
     state.quotedChange = null;
     return render();
   }
+  // Ring/maila direkt från CRM-raden utan att raden öppnas.
+  if (event.target.closest("a[href^='tel:'], a[href^='mailto:']")) return;
   const button = event.target.closest("[data-action]");
   if (!button) return;
   if (button.tagName === "A") event.preventDefault();
@@ -713,6 +800,74 @@ el.view.addEventListener("click", async (event) => {
     button.disabled = false;
   }
 });
+
+/**
+ * CRM-formulär med data-crm-form (flera per sida, så inte id). Returnerar
+ * true när vyn ska ritas om.
+ */
+async function crmSubmit(form) {
+  const data = new FormData(form);
+  const val = (k) => String(data.get(k) ?? "").trim();
+  const ds = form.dataset;
+  switch (ds.crmForm) {
+    case "task-new":
+      await admin.crmTaskCreate({
+        title: val("title"),
+        dueDate: val("dueDate"),
+        assigneeUserId: val("assigneeUserId"),
+        dealId: ds.deal || undefined,
+        companyId: ds.customer || undefined,
+      });
+      flash("Uppgiften lades till.");
+      return true;
+    case "task-edit":
+      await admin.crmTaskUpdate(ds.task, {
+        title: val("title"),
+        body: val("body"),
+        dueDate: val("dueDate"),
+        assigneeUserId: val("assigneeUserId"),
+      });
+      flash("Uppgiften sparades.");
+      return true;
+    case "note-edit":
+      await admin.crmNoteUpdate(ds.note, { title: val("title"), body: val("body") });
+      flash("Anteckningen ändrades.");
+      return true;
+    case "contact-new":
+      await admin.crmContactAdd(ds.deal, {
+        name: val("name"), title: val("title"), phone: val("phone"), email: val("email"),
+      });
+      flash("Kontakten sparades.");
+      return true;
+    case "contact-edit":
+      await admin.crmPersonUpdate(ds.person, {
+        name: val("name"), title: val("title"), phone: val("phone"), email: val("email"),
+      });
+      flash("Kontakten sparades.");
+      return true;
+    case "contact-search": {
+      const q = val("q");
+      const res = q.length >= 2 ? await admin.crmPeopleSearch(q, ds.account) : { rows: [] };
+      state.crmPeople = { q, hits: res.rows ?? [] };
+      return true;
+    }
+    default:
+      return false;
+  }
+}
+
+/** Fäll ut/ihop samtalsraden i uppföljningen utan omritning. */
+function toggleFollowUp(companyId, open) {
+  const detail = document.getElementById(`fu-detail-${companyId}`);
+  const button = el.view.querySelector(`.fu-toggle[data-company="${companyId}"]`);
+  if (!detail) return;
+  const show = open ?? detail.hidden;
+  detail.hidden = !show;
+  button?.setAttribute("aria-expanded", String(show));
+  if (button) button.textContent = show ? "Stäng" : "Logga samtal";
+  detail.previousElementSibling?.classList.toggle("is-open", show);
+  if (show) detail.querySelector("select, textarea")?.focus();
+}
 
 /* --- Åtgärder --------------------------------------------------------- */
 
@@ -738,6 +893,10 @@ async function act(action, ds) {
     case "fu-filter":
       state.fuFilter = ds.filter;
       return render();
+
+    case "fu-toggle":
+      toggleFollowUp(ds.company);
+      return;
 
     case "extend": {
       const days = Number(ds.days);
@@ -836,10 +995,70 @@ async function act(action, ds) {
 
     case "pipeline-filter":
       state.pipelineStageFilter = ds.stage ?? "";
+      state.pipelineLimit = PIPELINE_PAGE;
       state.crmDealId = null;
       return render();
 
+    case "pipeline-toggle":
+      state.pipelineFilters = {
+        ...state.pipelineFilters,
+        [ds.key]: !state.pipelineFilters[ds.key],
+      };
+      state.pipelineLimit = PIPELINE_PAGE;
+      return render();
+
+    case "pipeline-clear":
+      state.pipelineFilters = { ...EMPTY_PIPELINE_FILTERS };
+      state.pipelineQuery = "";
+      state.pipelineLimit = PIPELINE_PAGE;
+      return render();
+
+    case "pipeline-sort":
+      state.pipelineSort = nextSort(state.pipelineSort, ds.sort);
+      state.pipelineLimit = PIPELINE_PAGE;
+      return render();
+
+    case "pipeline-more":
+      state.pipelineLimit += PIPELINE_PAGE;
+      return render();
+
+    case "crm-tab":
+      state.crmTab = ds.tab === "tasks" ? "tasks" : "pipeline";
+      state.crmDealId = null;
+      return render();
+
+    case "crm-tasks-status":
+      state.taskFilters = { ...state.taskFilters, status: ds.status || "open" };
+      return render();
+
+    case "crm-tasks-assignee":
+      state.taskFilters = { ...state.taskFilters, assignee: ds.assignee || "me" };
+      return render();
+
+    case "crm-task-toggle":
+      await admin.crmTaskUpdate(ds.task, { status: ds.status });
+      return render();
+
+    case "crm-task-delete":
+      if (!confirm("Ta bort uppgiften?")) return;
+      await admin.crmTaskDelete(ds.task);
+      flash("Uppgiften togs bort.");
+      return render();
+
+    case "crm-contact": {
+      if (ds.op === "unlink" && !confirm("Ta bort kontakten från bolaget? Den finns kvar och kan kopplas igen.")) return;
+      if (ds.op === "link") {
+        await admin.crmContactAdd(ds.deal, { personId: ds.person });
+        state.crmPeople = null;
+        flash("Kontakten kopplades.");
+      } else {
+        await admin.crmContactAction(ds.deal, ds.person, ds.op);
+      }
+      return render();
+    }
+
     case "crm-open-deal":
+      state.crmPeople = null;
       state.crmDealId = ds.deal;
       state.view = "pipeline";
       state.companyId = null;
@@ -847,6 +1066,7 @@ async function act(action, ds) {
       return render();
 
     case "crm-back":
+      state.crmPeople = null;
       state.crmDealId = null;
       return render();
 

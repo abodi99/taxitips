@@ -96,3 +96,26 @@ class RegionIsNullNotEmpty(TestCase):
         write("trafiklab", assessed, [])
         o = Opportunity.objects.get(external_id="test:1")
         self.assertIsNone(o.region)
+
+
+class RoadIsNeverLiftedByWeather(TestCase):
+    def test_road_alerts_keep_their_cap_in_bad_weather(self):
+        from core import thresholds
+
+        assessed = assess([_alert(id="road:1", header="Olycka på E6", description="Olycka, ett körfält avstängt.")])
+        write("trafikverket_road", assessed, [_weather(wind_gust_ms=15.0)], kind="road")
+        o = Opportunity.objects.get(external_id="road:1")
+        self.assertLessEqual(o.demand_score, max(thresholds.ROAD_SCORE_CAP, assessed[0][2].score))
+        self.assertFalse(any("väder" in r for r in o.reasons))
+
+
+class StoredLevelFollowsTheFeedRule(TestCase):
+    def test_written_level_is_the_feed_level(self):
+        from core import thresholds
+
+        assessed = assess([_alert()])
+        write("trafiklab", assessed, [])
+        o = Opportunity.objects.get(external_id="test:1")
+        self.assertEqual(
+            o.level, thresholds.stored_level(o.severity_tier, o.demand_score, o.has_alternative),
+        )

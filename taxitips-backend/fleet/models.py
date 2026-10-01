@@ -1395,6 +1395,10 @@ class CrmAccount(models.Model):
     name = models.TextField(blank=True, default="")
     org_number = models.CharField(max_length=32, blank=True, default="")
     county = models.CharField(max_length=32, blank=True, default="")
+    # Ort och bolagsform från sales_list — egna fält för filter i pipelinen.
+    # db_default så att kod som inte känner till kolumnerna kan skapa rader.
+    city = models.CharField(max_length=100, blank=True, default="", db_default="")
+    legal_form = models.CharField(max_length=64, blank=True, default="", db_default="")
     domain = models.CharField(max_length=255, blank=True, default="")
     source = models.CharField(max_length=100, blank=True, default="")
     twenty_id = models.CharField(max_length=64, null=True, blank=True, unique=True)
@@ -1484,6 +1488,10 @@ class CrmNote(models.Model):
     body = models.TextField()
     twenty_id = models.CharField(max_length=64, null=True, blank=True, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    # Senaste redigering (null = aldrig ändrad). Tidigare text finns i
+    # revisionsloggen (`crm_note_edited`).
+    edited_at = models.DateTimeField(null=True, blank=True)
+    edited_by_label = models.CharField(max_length=320, blank=True, default="", db_default="")
 
     class Meta:
         db_table = "fleet_crm_note"
@@ -1503,6 +1511,105 @@ class CrmNote(models.Model):
                 ),
                 name="fleet_crm_note_has_target",
             ),
+        ]
+
+
+class CrmTaskStatus(models.TextChoices):
+    TODO = "todo", "Att göra"
+    DOING = "doing", "Pågår"
+    DONE = "done", "Klar"
+
+
+class CrmTask(models.Model):
+    """
+    Säljarens att göra — kopplad till affär/konto/kontakt och ev. TaxiTips-kund
+    (samma målfält som CrmNote), eller fristående. Tilldelas en i personalen.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    title = models.CharField(max_length=200)
+    body = models.TextField(blank=True, default="")
+    status = models.CharField(
+        max_length=10, choices=CrmTaskStatus.choices, default=CrmTaskStatus.TODO,
+    )
+    # Bara datum: säljaren tänker "ring på tisdag", inte klockslag.
+    due_date = models.DateField(null=True, blank=True)
+    assignee_user_id = models.UUIDField(null=True, blank=True)
+    assignee_label = models.CharField(max_length=320, blank=True, default="")
+    deal_id = models.UUIDField(null=True, blank=True)
+    account_id = models.UUIDField(null=True, blank=True)
+    person_id = models.UUIDField(null=True, blank=True)
+    company_id = models.UUIDField(null=True, blank=True)
+    created_by_user_id = models.UUIDField(null=True, blank=True)
+    created_by_label = models.CharField(max_length=320, blank=True, default="")
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "fleet_crm_task"
+        indexes = [
+            models.Index(
+                fields=["assignee_user_id", "status", "due_date"],
+                name="fleet_crm_task_assignee_idx",
+            ),
+            models.Index(fields=["status", "due_date"], name="fleet_crm_task_status_idx"),
+            models.Index(fields=["deal_id", "status"], name="fleet_crm_task_deal_idx"),
+            models.Index(fields=["account_id", "status"], name="fleet_crm_task_acc_idx"),
+            models.Index(fields=["company_id", "status"], name="fleet_crm_task_company_idx"),
+        ]
+
+
+class CrmTagCategory(models.TextChoices):
+    COUNTY = "county", "Län"
+    ICP = "icp", "ICP"
+    SOURCE = "source", "Källa"
+    RESEARCH = "research", "Research"
+    SEGMENT = "segment", "Segment"
+    CALL = "call", "Ringordning"
+
+
+class CrmTag(models.Model):
+    """Stabil etikett för filter och framtida automation — ingen Stripe-koppling."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    slug = models.CharField(max_length=64, unique=True)
+    category = models.CharField(max_length=20, choices=CrmTagCategory.choices)
+    label = models.CharField(max_length=120)
+    sort_order = models.SmallIntegerField(default=0)
+    is_active = models.BooleanField(default=True)
+
+    class Meta:
+        db_table = "fleet_crm_tag"
+        indexes = [models.Index(fields=["category", "sort_order"])]
+
+
+class CrmTagging(models.Model):
+    """Koppling tagg ↔ account/person/deal. Idempotent på (tag, entity)."""
+
+    class EntityType(models.TextChoices):
+        ACCOUNT = "account", "Konto"
+        PERSON = "person", "Person"
+        DEAL = "deal", "Affär"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    tag = models.ForeignKey(CrmTag, on_delete=models.CASCADE, related_name="taggings")
+    entity_type = models.CharField(max_length=10, choices=EntityType.choices)
+    entity_id = models.UUIDField()
+    origin = models.CharField(max_length=32, default="manual")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "fleet_crm_tagging"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["tag", "entity_type", "entity_id"],
+                name="fleet_crm_tagging_unique",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["entity_type", "entity_id"]),
+            models.Index(fields=["tag", "entity_type"]),
         ]
 
 

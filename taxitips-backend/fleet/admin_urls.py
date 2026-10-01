@@ -28,6 +28,18 @@ urlpatterns = [
     path("crm/deals/<uuid:deal_id>/update", admin_crm.deal_update),
     path("crm/deals/<uuid:deal_id>/link-company", admin_crm.deal_link_company),
     path("crm/deals/<uuid:deal_id>/notes", admin_crm.deal_note),
+    path("crm/deals/<uuid:deal_id>/contacts", admin_crm.deal_contact_add),
+    path(
+        "crm/deals/<uuid:deal_id>/contacts/<uuid:person_id>/<str:action>",
+        admin_crm.deal_contact_action,
+    ),
+    path("crm/notes/<uuid:note_id>/update", admin_crm.note_update),
+    path("crm/people", admin_crm.people_search),
+    path("crm/people/<uuid:person_id>/update", admin_crm.person_update),
+    path("crm/tasks", admin_crm.tasks),
+    path("crm/tasks/create", admin_crm.task_create),
+    path("crm/tasks/<uuid:task_id>/update", admin_crm.task_update),
+    path("crm/tasks/<uuid:task_id>/delete", admin_crm.task_delete),
     # Alias tills admin-UI:n bara använder /deals
     path("crm/leads", admin_crm.deal_create),
     path("crm/leads/<uuid:lead_id>", admin_crm.deal_detail),

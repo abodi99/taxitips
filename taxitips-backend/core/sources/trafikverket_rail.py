@@ -520,10 +520,19 @@ def _normalize(
         dest = (stations or {}).get(to_sig)
         to = dest.name if dest else to_sig
 
-    # De tre signalerna som gör rangordning möjlig.
+    # De tre signalerna som gör rangordning möjlig. Glappet och "sista avgången"
+    # mäts från den inställda avgången -- det är vad poängen bedömer, och det får
+    # inte dra iväg medan tiden går.
     next_minutes, is_last, next_at, next_is_bus = _next_departure(
         dep, station_departures, when
     )
+    # Men avgången som VISAS är den en resenär på perrongen kan ta nu. Efter den
+    # inställda avgången kan första ersättaren redan ha gått; att då visa den
+    # ("Nästa avgång gick 06:13") räknar från fel tidpunkt.
+    if now > when and next_at is not None and next_at <= now:
+        _, _, later_at, later_is_bus = _next_departure(dep, station_departures, now)
+        if later_at is not None:
+            next_at, next_is_bus = later_at, later_is_bus
 
     # Fjärde signalen, och den starkaste: operatören säger rakt ut om
     # ersättningstrafik är insatt.
@@ -539,7 +548,13 @@ def _normalize(
         )
         departs = _parse_time((alternative or {}).get("departs_at"))
         if departs is not None:
-            next_minutes = max(0, round((departs - when).total_seconds() / 60))
+            # Glappet från den inställda avgången (första svaret); saknas det och
+            # resan frågades fram efter avgången gäller stationens glapp.
+            gap = alternative.get("gap_minutes")
+            if gap is None and departs - when <= timedelta(hours=1) and now <= when:
+                gap = max(0, round((departs - when).total_seconds() / 60))
+            if gap is not None:
+                next_minutes = int(gap)
             next_at, next_is_bus, is_last = departs, alternative.get("mode") == "buss", False
             basis, alternative_label = "resrobot", str(alternative.get("label") or "")
         else:

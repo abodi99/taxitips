@@ -1072,56 +1072,867 @@ ul.todo li + li {
   border-color: var(--accent, #2563eb);
 }
 
-.crm-board {
+/* ---- CRM: filterrad -------------------------------------------------- */
+.crm-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0 0 0.75rem;
+}
+/* Samma höjd, ram och typsnitt för sök, selects och ort — portalens
+   globala input-stil (46 px, 100 % bredd) skrivs över här. */
+.crm-toolbar .crm-field {
+  width: auto;
+  min-height: 0;
+  height: 34px;
+  padding: 0 0.65rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: var(--vit);
+  color: var(--ink);
+  font: inherit;
+  font-size: 0.85rem;
+}
+.crm-toolbar .crm-field:hover {
+  border-color: var(--ink-soft);
+}
+.crm-toolbar .crm-field:focus-visible {
+  outline: 2px solid var(--guld);
+  outline-offset: 1px;
+}
+/* Fast bredd: annars blir selecten lika bred som sitt längsta alternativ. */
+.crm-toolbar select.crm-field {
+  width: 7.5rem;
+  padding: 0 0.2rem 0 0.55rem;
+  color: var(--ink-soft);
+  text-overflow: ellipsis;
+  cursor: pointer;
+}
+.crm-toolbar select[data-crm-filter="segment"] {
+  width: 6.75rem;
+}
+.crm-toolbar select[data-crm-filter="county"] {
+  width: 7rem;
+}
+.crm-toolbar .crm-field.is-set {
+  border-color: var(--midnatt);
+  background: rgba(20, 33, 61, 0.06);
+  color: var(--ink);
+  font-weight: 600;
+}
+.crm-search {
+  flex: 1 1 11rem;
+  min-width: 11rem;
+  max-width: 22rem;
+  margin: 0;
+}
+.crm-search .crm-field {
+  width: 100%;
+  padding-left: 2rem;
+  background: var(--vit) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%23526078' stroke-width='2' stroke-linecap='round'%3E%3Ccircle cx='7' cy='7' r='5'/%3E%3Cpath d='m14 14-3.5-3.5'/%3E%3C/svg%3E") no-repeat 0.65rem center;
+}
+.crm-toolbar .crm-city {
+  width: 6rem;
+}
+.crm-new {
+  min-height: 36px;
+}
+.crm-toggles {
+  display: inline-flex;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  overflow: hidden;
+  height: 34px;
+}
+.crm-toggle {
+  appearance: none;
+  border: 0;
+  border-left: 1px solid var(--line);
+  background: var(--vit);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.85rem;
+  padding: 0 0.6rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.crm-toggle:first-child {
+  border-left: 0;
+}
+.crm-toggle:hover {
+  color: var(--ink);
+  background: var(--ljusgra);
+}
+.crm-toggle.is-on {
+  background: var(--midnatt);
+  color: var(--vit);
+  font-weight: 600;
+}
+.crm-clear {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.85rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  padding: 0 0.3rem;
+  cursor: pointer;
+}
+.crm-clear:hover {
+  color: var(--ink);
+}
+
+/* ---- CRM: stegflikar med antal ---------------------------------------- */
+.crm-tabs-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 0.25rem 1rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 0.25rem;
+}
+.crm-tabs {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.crm-tab {
+  appearance: none;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: 0.88rem;
+  padding: 0.5rem 0.6rem 0.55rem;
+  margin-bottom: -1px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.crm-tab:hover {
+  color: var(--ink);
+}
+.crm-tab[aria-selected="true"] {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom-color: var(--guld);
+}
+.crm-tab-n {
+  margin-left: 0.35rem;
+  padding: 0.05rem 0.4rem;
+  border-radius: var(--radius-pill);
+  background: var(--ljusgra-djup);
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.crm-tab[aria-selected="true"] .crm-tab-n {
+  background: var(--midnatt);
+  color: var(--vit);
+}
+.crm-tabs-sep {
+  width: 1px;
+  height: 1.1rem;
+  background: var(--line-strong);
+  margin: 0 0.4rem;
+  flex: none;
+}
+.crm-count {
+  margin: 0 0 0.55rem;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---- CRM: tabell --------------------------------------------------------- */
+.crm-table {
+  font-size: 0.88rem;
+}
+.crm-table td {
+  padding: 0.6rem 0.5rem;
+  vertical-align: top;
+}
+.crm-table th {
+  padding: 0.45rem 0.5rem;
+  white-space: nowrap;
+}
+.crm-sort {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-transform: inherit;
+  letter-spacing: inherit;
+  cursor: pointer;
+}
+.crm-sort:hover,
+.crm-sort.is-active {
+  color: var(--ink);
+}
+.crm-sort-arrow {
+  margin-left: 0.25rem;
+  opacity: 0.35;
+}
+.crm-sort.is-active .crm-sort-arrow {
+  opacity: 1;
+  color: var(--guld-djup);
+}
+.crm-company {
+  font-weight: 600;
+  color: var(--ink);
+}
+.crm-sub {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+.crm-mono {
+  font-family: var(--font-mono);
+  font-size: 0.74rem;
+}
+.crm-col-company {
+  min-width: 14rem;
+}
+.crm-col-contact {
+  max-width: 16rem;
+}
+.crm-col-contact > * {
+  display: block;
+}
+.crm-contact-link {
+  color: var(--ink);
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+}
+.crm-contact-link:hover {
+  text-decoration: underline;
+}
+.crm-email {
+  color: var(--ink-soft);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crm-col-date {
+  white-space: nowrap;
+  text-align: right;
+}
+th.crm-col-date {
+  text-align: right;
+}
+.crm-col-prio {
+  white-space: nowrap;
+}
+.crm-seg,
+.crm-badge {
+  display: inline-block;
+  min-width: 1.5rem;
+  margin-right: 0.2rem;
+  padding: 0.12rem 0.35rem;
+  border-radius: 5px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.3;
+  background: var(--ljusgra-djup);
+  color: var(--ink-soft);
+}
+.crm-seg-a { background: var(--midnatt); color: var(--vit); }
+.crm-seg-b { background: var(--midnatt-mjuk); color: var(--vit); }
+.crm-seg-c { background: var(--ljusgra-djup); color: var(--ink); }
+.crm-seg-x { background: rgba(192, 57, 43, 0.12); color: var(--danger); }
+.crm-badge-tf {
+  background: rgba(252, 163, 17, 0.2);
+  color: var(--guld-djup);
+}
+.crm-stage {
+  display: inline-block;
+  padding: 0.12rem 0.5rem;
+  border-radius: var(--radius-pill);
+  font-size: 0.75rem;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--ljusgra-djup);
+  color: var(--ink-soft);
+}
+.crm-stage-screening,
+.crm-stage-meeting,
+.crm-stage-proposal {
+  background: rgba(252, 163, 17, 0.18);
+  color: var(--guld-djup);
+}
+.crm-stage-won { background: rgba(31, 138, 91, 0.14); color: var(--ok); }
+.crm-stage-lost,
+.crm-stage-churned { background: rgba(192, 57, 43, 0.1); color: var(--danger); }
+.crm-col-actions {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+.crm-icon-btn {
+  appearance: none;
+  border: 1px solid var(--line-strong);
+  background: var(--vit);
+  width: 1.8rem;
+  height: 1.8rem;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0;
+}
+.crm-icon-btn:hover {
+  border-color: var(--guld-djup);
+  background: rgba(252, 163, 17, 0.12);
+}
+.crm-empty {
+  padding: 2.5rem 1rem;
+  text-align: center;
+  color: var(--ink-soft);
+}
+.crm-more {
+  margin: 1rem 0;
+  text-align: center;
+}
+
+/* Stegknappar och tillbaka-knapp i affärsvyn */
+.crm-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  align-items: center;
+}
+.crm-chip {
+  appearance: none;
+  border: 1px solid var(--line-strong);
+  background: var(--vit);
+  color: inherit;
+  font: inherit;
+  font-size: 0.78rem;
+  line-height: 1;
+  padding: 0.4rem 0.6rem;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.crm-chip:hover {
+  border-color: var(--ink-soft);
+}
+.crm-chip-active {
+  background: var(--midnatt);
+  color: var(--vit);
+  border-color: var(--midnatt);
+}
+
+.crm-detail-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem;
   align-items: start;
 }
-.crm-board-col {
-  background: var(--surface-2, #f3f4f6);
-  border-radius: 8px;
-  padding: 0.5rem;
-  min-height: 12rem;
+.crm-detail-col {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
 }
-.crm-board-col header {
+.crm-detail-col .card h2 {
+  margin-top: 0;
+}
+
+/* ---- CRM: underflikar, affärshuvud ------------------------------------- */
+.crm-subnav {
+  display: inline-flex;
+  gap: 0.15rem;
+  margin-top: 0.4rem;
+  padding: 0.2rem;
+  border-radius: 10px;
+  background: var(--ljusgra-djup);
+}
+.crm-subtab {
+  appearance: none;
+  border: 0;
+  background: none;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  padding: 0.35rem 0.9rem;
+  border-radius: 8px;
+  cursor: pointer;
+}
+.crm-subtab[aria-selected="true"] {
+  background: var(--vit);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(20, 33, 61, 0.12);
+}
+.crm-back {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  margin-bottom: 0.3rem;
+  font: inherit;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.crm-back:hover {
+  color: var(--ink);
+}
+.crm-stage-row {
+  margin: -0.25rem 0 1rem;
+}
+.crm-card-sub {
+  margin: 1rem 0 0.4rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+.crm-brief {
+  margin: 0;
+  font-size: 0.9rem;
+  white-space: normal;
+}
+.crm-dot {
+  margin: 0 0.35rem;
+  opacity: 0.5;
+}
+.crm-empty-inline {
+  margin: 0.5rem 0;
+}
+
+/* ---- CRM: inbäddade formulär (Ändra / Lägg till) ----------------------- */
+.crm-more > summary {
+  display: inline-block;
+  list-style: none;
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+  cursor: pointer;
+  user-select: none;
+}
+.crm-more > summary::-webkit-details-marker {
+  display: none;
+}
+.crm-more > summary:hover {
+  color: var(--ink);
+  text-decoration: underline;
+}
+.crm-more[open] > summary {
+  color: var(--ink);
+  font-weight: 600;
+}
+.crm-add {
+  display: block;
+  margin: 0.5rem 0 0.75rem;
+  text-align: left;
+}
+.crm-add > summary {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--guld-djup);
+}
+.crm-inline-form {
+  margin: 0.5rem 0 0.25rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--ljusgra);
+}
+.crm-inline-form label {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+.crm-inline-form input,
+.crm-inline-form select,
+.crm-inline-form textarea {
+  display: block;
+  width: 100%;
+  min-height: 0;
+  margin-top: 0.2rem;
+  padding: 0.4rem 0.55rem;
+  font-size: 0.9rem;
+  font-weight: 400;
+  color: var(--ink);
+  border-radius: 8px;
+}
+.crm-inline-form textarea {
+  resize: vertical;
+  font: inherit;
+  border: 1px solid var(--line-strong);
+}
+.crm-form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0 0.6rem;
+}
+.crm-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+.crm-danger-link {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-size: 0.82rem;
+  color: var(--danger);
+  cursor: pointer;
+}
+.crm-danger-link:hover {
+  text-decoration: underline;
+}
+
+/* ---- CRM: uppgifter ------------------------------------------------------ */
+.crm-task-new {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0 0 0.75rem;
+}
+.crm-task-new input,
+.crm-task-new select {
+  width: auto;
+  min-height: 0;
+  height: 34px;
+  padding: 0 0.55rem;
+  font-size: 0.85rem;
+  border-radius: 8px;
+}
+.crm-task-new input[name="title"] {
+  flex: 1 1 14rem;
+}
+.crm-task-new select {
+  max-width: 12rem;
+}
+.crm-task-new .btn {
+  min-height: 34px;
+}
+.crm-tasks {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.crm-task {
+  position: relative;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 0.6rem;
+  align-items: start;
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--line);
+}
+.crm-task:first-child {
+  border-top: 0;
+}
+.crm-task-check {
+  appearance: none;
+  display: inline-grid;
+  place-items: center;
+  width: 1.3rem;
+  height: 1.3rem;
+  margin-top: 0.1rem;
+  border: 1.5px solid var(--line-strong);
+  border-radius: 50%;
+  background: var(--vit);
+  color: transparent;
+  font-size: 0.75rem;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+.crm-task-check:hover {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+.crm-task.is-done .crm-task-check {
+  background: var(--ok);
+  border-color: var(--ok);
+  color: var(--vit);
+}
+.crm-task-main {
+  min-width: 0;
+}
+.crm-task-title {
+  display: block;
+  font-weight: 600;
+  font-size: 0.92rem;
+  color: var(--ink);
+}
+.crm-task.is-done .crm-task-title {
+  text-decoration: line-through;
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+.crm-task-body {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+  white-space: pre-line;
+}
+.crm-task-meta {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+.crm-task-meta .linklike {
+  font-size: inherit;
+}
+.crm-due {
+  font-weight: 600;
+}
+.crm-due-overdue { color: var(--danger); }
+.crm-due-today { color: var(--guld-djup); }
+.crm-task-side {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+/* Redigeringsformulären öppnas som en ruta under raden i stället för att
+   trycka isär listan. */
+.crm-task-side .crm-inline-form,
+.crm-contact-actions .crm-inline-form {
+  position: absolute;
+  right: 0;
+  top: calc(100% - 0.35rem);
+  z-index: 5;
+  width: min(24rem, 86vw);
+  text-align: left;
+  background: var(--vit);
+  box-shadow: 0 10px 30px rgba(20, 33, 61, 0.18);
+}
+select.crm-task-status,
+span.crm-task-status {
+  width: auto;
+  min-height: 0;
+  height: 26px;
+  padding: 0 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  font-size: 0.75rem;
+  font-weight: 600;
+  background: var(--ljusgra-djup);
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+span.crm-task-status {
+  display: inline-flex;
+  align-items: center;
+  cursor: default;
+}
+.crm-task-status-doing {
+  background: rgba(252, 163, 17, 0.18);
+  color: var(--guld-djup);
+}
+.crm-task-status-done {
+  background: rgba(31, 138, 91, 0.14);
+  color: var(--ok);
+}
+
+/* ---- CRM: uppgiftsöversikt ---------------------------------------------- */
+.crm-who {
+  min-width: 12rem;
+}
+.crm-toolbar select.crm-who {
+  width: auto;
+  max-width: 16rem;
+}
+.crm-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: 0.6rem;
+  margin: 0.25rem 0 1rem;
+}
+.crm-tile {
+  display: flex;
+  flex-direction: column;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--vit);
+}
+.crm-tile-n {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 700;
+  line-height: 1.1;
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.crm-tile-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.crm-tile-hint {
+  font-size: 0.72rem;
+  color: var(--ink-soft);
+}
+.crm-tile-danger {
+  border-color: rgba(192, 57, 43, 0.35);
+  background: rgba(192, 57, 43, 0.05);
+}
+.crm-tile-danger .crm-tile-n { color: var(--danger); }
+.crm-tile-warn {
+  border-color: rgba(224, 143, 0, 0.4);
+  background: rgba(252, 163, 17, 0.07);
+}
+.crm-tile-warn .crm-tile-n { color: var(--guld-djup); }
+.crm-tile-ok .crm-tile-n { color: var(--ok); }
+.crm-tasks-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 21rem;
+  gap: 1rem;
+  align-items: start;
+}
+@media (max-width: 1100px) {
+  .crm-tasks-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.crm-task-group + .crm-task-group {
+  margin-top: 1rem;
+}
+.crm-task-group h3 {
+  margin: 0 0 0.25rem;
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--ink-soft);
+}
+.crm-task-group-overdue h3 {
+  color: var(--danger);
+}
+.crm-task-group-today h3 {
+  color: var(--guld-djup);
+}
+.crm-seller-card h2 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+.crm-seller-table {
+  font-size: 0.85rem;
+}
+.crm-seller-table th,
+.crm-seller-table td {
+  padding: 0.45rem 0.25rem;
+}
+.crm-seller-table th {
+  font-size: 0.68rem;
+  letter-spacing: 0.02em;
+}
+.crm-seller-table {
+  table-layout: fixed;
+}
+.crm-seller-table th:not(:first-child),
+.crm-seller-table td:not(:first-child) {
+  width: 2.9rem;
+}
+.crm-seller-table td:first-child {
+  max-width: 8rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.crm-seller-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.crm-seller-table tr.is-active td {
+  background: rgba(252, 163, 17, 0.12);
+  font-weight: 600;
+}
+.crm-num-danger {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+/* ---- CRM: kontakter och anteckningar ------------------------------------ */
+.crm-contacts,
+.crm-hits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.crm-contact {
+  position: relative;
+}
+.crm-contact,
+.crm-hits li {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 0.6rem 0;
+  border-top: 1px solid var(--line);
+}
+.crm-contact:first-child,
+.crm-hits li:first-child {
+  border-top: 0;
+}
+.crm-contact > div:first-child {
+  min-width: 0;
+}
+.crm-contact .crm-contact-link {
+  display: block;
+  font-size: 0.88rem;
+}
+.crm-contact-name {
+  font-weight: 600;
+}
+.crm-contact-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  text-align: right;
+}
+.crm-contact-actions .linklike {
+  font-size: 0.8rem;
+}
+.crm-badge-primary {
+  margin-left: 0.35rem;
+  background: rgba(252, 163, 17, 0.2);
+  color: var(--guld-djup);
+  font-size: 0.68rem;
+  vertical-align: 0.1em;
+}
+.crm-link-search {
+  background: transparent;
+  border-style: dashed;
+}
+.crm-note-head {
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  margin-bottom: 0.5rem;
+  gap: 0.75rem;
 }
-.crm-board-col h2 {
-  font-size: 0.9rem;
-  margin: 0;
+.crm-note-head .crm-more {
+  flex: none;
+  text-align: right;
 }
-.crm-board-cards {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4rem;
+.crm-note-head .crm-more[open] {
+  flex: 1;
 }
-.crm-board-card {
+.crm-note-head .crm-inline-form {
   text-align: left;
-  background: #fff;
-  border: 1px solid var(--border, #e5e7eb);
-  border-radius: 6px;
-  padding: 0.55rem 0.65rem;
-  cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  gap: 0.15rem;
-  font: inherit;
-  color: inherit;
-}
-.crm-board-card:hover {
-  border-color: var(--accent, #2563eb);
-}
-.crm-board-card strong {
-  font-size: 0.9rem;
-}
-.crm-detail-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 1rem;
 }
 .muted-card {
   background: transparent;
@@ -1264,30 +2075,100 @@ ul.st-detail li {
 }
 
 /* --- Uppföljning (src/admin/followup.js) ------------------------------- */
-.fu-card {
-  margin-bottom: 0.9rem;
+.fu-table {
+  font-size: 0.88rem;
 }
-.fu-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: 0.75rem;
-  flex-wrap: wrap;
+.fu-table th {
+  white-space: nowrap;
+  padding: 0.45rem 0.5rem;
 }
-.fu-name {
-  margin: 0;
-  font-size: 1.15rem;
+.fu-row td {
+  padding: 0.6rem 0.5rem;
+  vertical-align: middle;
 }
-.fu-head p {
-  margin: 0.15rem 0 0;
+.fu-row:hover td,
+.fu-row.is-open td {
+  background: var(--ljusgra);
 }
-.fu-contact {
-  margin: 0.6rem 0 0.2rem;
-  overflow-wrap: anywhere;
+.fu-row.is-open td {
+  border-bottom-color: transparent;
+}
+.fu-row.fu-saved td:first-child {
+  box-shadow: inset 3px 0 0 var(--ok);
+}
+.fu-name,
+.fu-contact-name {
+  font-weight: 600;
+  color: var(--ink);
+}
+.fu-sub {
+  display: block;
+  margin-top: 0.1rem;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
 }
 .fu-phone {
-  font-weight: 700;
+  color: var(--ink);
+  font-weight: 600;
   white-space: nowrap;
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+}
+.fu-phone:hover {
+  text-decoration: underline;
+}
+.fu-nophone {
+  color: var(--danger);
+}
+.fu-warnmark {
+  margin-left: 0.25rem;
+  padding: 0.05rem 0.35rem;
+  border-radius: 5px;
+  background: rgba(224, 143, 0, 0.16);
+  color: var(--guld-djup);
+  font-size: 0.72rem;
+  font-weight: 700;
+  cursor: help;
+}
+.fu-table .pill {
+  white-space: nowrap;
+  font-size: 0.75rem;
+}
+.fu-due {
+  color: var(--danger);
+  font-weight: 600;
+}
+.fu-col-actions {
+  width: 1%;
+  white-space: nowrap;
+  text-align: right;
+}
+.fu-toggle {
+  min-height: 32px;
+  font-size: 0.82rem;
+}
+/* Mobilens tabell-som-kort sätter display på tr; hidden ska ändå gälla. */
+.fu-detail[hidden] {
+  display: none !important;
+}
+.fu-detail > td {
+  padding: 0 0.5rem 1rem;
+  background: var(--ljusgra);
+}
+.fu-detail-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr);
+  gap: 1.25rem;
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--vit);
+}
+.fu-info-col {
+  font-size: 0.85rem;
+}
+.fu-info-col p {
+  margin: 0 0 0.45rem;
 }
 .fu-flags {
   list-style: none;
@@ -1299,8 +2180,8 @@ ul.st-detail li {
 }
 .fu-flag {
   display: inline-block;
-  font-size: 0.85rem;
-  padding: 0.15rem 0.55rem;
+  font-size: 0.8rem;
+  padding: 0.12rem 0.5rem;
   border-radius: 999px;
   border: 1px solid var(--line-strong);
 }
@@ -1317,56 +2198,75 @@ ul.st-detail li {
   color: var(--ink-soft);
 }
 .fu-hint {
-  margin: 0.35rem 0 0;
-  font-size: 0.9rem;
-}
-.fu-stated {
-  margin: 0.35rem 0 0;
-}
-.fu-mails {
-  font-size: 0.88rem;
-  margin: 0.2rem 0 0.6rem;
+  font-size: 0.82rem;
 }
 .fu-form {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 0.4rem 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.5rem 0.75rem;
   align-items: end;
-  border-top: 1px solid var(--line);
-  padding-top: 0.75rem;
+}
+.fu-form label {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--ink-soft);
+}
+.fu-form select,
+.fu-form input[type="date"] {
+  min-height: 0;
+  height: 36px;
+  margin-top: 0.2rem;
+  padding: 0 0.55rem;
+  font-size: 0.9rem;
+  border-radius: 8px;
 }
 .fu-note {
   grid-column: 1 / -1;
 }
 .fu-note textarea {
+  display: block;
   width: 100%;
+  margin-top: 0.2rem;
   font: inherit;
-  padding: 0.5rem 0.7rem;
+  font-size: 0.9rem;
+  padding: 0.45rem 0.6rem;
   border: 1px solid var(--line-strong);
-  border-radius: 10px;
+  border-radius: 8px;
   resize: vertical;
 }
-.fu-check {
+.fu-actions {
+  grid-column: 1 / -1;
+  display: flex;
+  gap: 0.75rem;
+  justify-content: flex-end;
+  align-items: center;
+}
+.fu-form .fu-check {
   display: flex;
   gap: 0.4rem;
   align-items: center;
+  font-size: 0.85rem;
+  color: var(--ink);
+  font-weight: 500;
 }
-.fu-actions {
-  display: flex;
-  gap: 0.5rem;
-  justify-content: flex-end;
-  flex-wrap: wrap;
+.fu-check input {
+  width: auto;
+  min-height: 0;
 }
 .fu-meta {
   grid-column: 1 / -1;
   margin: 0;
-  font-size: 0.85rem;
+  font-size: 0.8rem;
 }
-@media (max-width: 600px) {
-  .fu-form {
+.fu-meta:empty {
+  display: none;
+}
+@media (max-width: 760px) {
+  .fu-detail-grid {
     grid-template-columns: minmax(0, 1fr);
   }
-  .fu-actions {
-    justify-content: flex-start;
-  }
+}
+.crm-table-note {
+  margin: 0.6rem 0 0;
+  font-size: 0.75rem;
 }

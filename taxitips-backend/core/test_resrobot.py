@@ -189,3 +189,73 @@ class RailIntegrationTests(SimpleTestCase):
     def test_without_an_answer_the_station_next_departure_stands(self):
         (alert,) = build_alerts(self.departures(), STATIONS, WHEN - timedelta(minutes=20), alternative_for=lambda *a: None)
         self.assertEqual((alert.next_departure_minutes, alert.alternative_basis), (15, "station"))
+
+
+class AfterTheCancelledDepartureTests(SimpleTestCase):
+    """
+    Efter den inställda avgången ska tipset visa resan en resenär som står där NU
+    kan ta -- inte en som redan gått, och inte falla tillbaka till stationens
+    riktningslösa nästa tåg. Glappet i poängen mäts fortfarande från den inställda.
+    """
+
+    def test_a_cached_answer_survives_past_the_cancelled_departure(self):
+        previous = {"tvr:Ldo:3022:x": {
+            "basis": "resrobot", "departs_at": (WHEN + timedelta(minutes=26)).isoformat(),
+            "trains": ["3024"], "gap_minutes": 11, "checked_at": (WHEN + timedelta(minutes=5)).isoformat(),
+        }}
+        session = Session({})
+        finder = resrobot.AlternativeFinder(KEY, stations=STATIONS, now=WHEN + timedelta(minutes=10),
+                                            session=session, previous=previous)
+        answer = finder("tvr:Ldo:3022:x", "Ldo", "G", WHEN, {"3022"})
+        self.assertIsNotNone(answer)
+        self.assertEqual(session.calls, [])
+
+    def test_a_cached_trip_that_has_left_is_asked_again_from_now(self):
+        previous = {"tvr:Ldo:3022:x": {
+            "basis": "resrobot", "departs_at": (WHEN + timedelta(minutes=11)).isoformat(),
+            "trains": ["3174"], "gap_minutes": 11, "checked_at": (WHEN - timedelta(minutes=2)).isoformat(),
+        }}
+        seen = {}
+
+        def trip(params):
+            seen.update(params)
+            return Response(TRIP)
+
+        session = Session({"location.nearbystops": nearby, "trip": trip})
+        now = WHEN + timedelta(minutes=15)
+        finder = resrobot.AlternativeFinder(KEY, stations=STATIONS, now=now, session=session, previous=previous)
+        answer = finder("tvr:Ldo:3022:x", "Ldo", "G", WHEN, {"3022"})
+        # Frågan ställs från nu (06:17), inte från den inställda avgången (06:02).
+        self.assertEqual(seen["time"], "06:17")
+        self.assertEqual(answer["label"], "Länstrafik tåg 3024")
+        # Glappet för poängen följer med från första svaret.
+        self.assertEqual(answer["gap_minutes"], 11)
+
+    def test_first_answer_records_the_gap_from_the_cancelled_departure(self):
+        session = Session({"location.nearbystops": nearby, "trip": Response(TRIP)})
+        finder = resrobot.AlternativeFinder(KEY, stations=STATIONS, now=WHEN - timedelta(minutes=20), session=session)
+        answer = finder("tvr:Ldo:3022:x", "Ldo", "G", WHEN, {"3022"})
+        self.assertEqual(answer["gap_minutes"], 11)
+
+    def test_rail_alert_shows_the_trip_after_now_but_scores_the_original_gap(self):
+        def alternative_for(external_id, sig, to_sig, when, cancelled):
+            return {"basis": "resrobot", "departs_at": (WHEN + timedelta(minutes=26)).isoformat(),
+                    "label": "Länstrafik tåg 3024", "mode": "tåg", "trains": ["3024"], "gap_minutes": 11}
+
+        departures = RailIntegrationTests().departures()
+        (alert,) = build_alerts(departures, STATIONS, WHEN + timedelta(minutes=15), alternative_for=alternative_for)
+        self.assertEqual(alert.next_departure_at, WHEN + timedelta(minutes=26))
+        self.assertEqual(alert.next_departure_minutes, 11)
+        self.assertIn("06:28", alert.description)
+
+    def test_station_fallback_shows_the_next_train_after_now(self):
+        departures = RailIntegrationTests().departures() + [
+            {"AdvertisedTrainIdent": "3177", "LocationSignature": "Ldo",
+             "AdvertisedTimeAtLocation": (WHEN + timedelta(minutes=45)).isoformat(),
+             "ToLocation": [{"LocationName": "Kb"}]},
+        ]
+        # 06:22: tåget 06:17 har gått; nästa som går att ta är 06:47.
+        (alert,) = build_alerts(departures, STATIONS, WHEN + timedelta(minutes=20), alternative_for=lambda *a: None)
+        self.assertEqual(alert.next_departure_at, WHEN + timedelta(minutes=45))
+        self.assertEqual(alert.next_departure_minutes, 15)
+        self.assertFalse(alert.is_last_departure)

@@ -270,7 +270,7 @@ class Command(BaseCommand):
                 # Samma grova nivå som de andra pollarna skriver. Det föraren
                 # ser är INTE den här utan thresholds.customer_likelihood(),
                 # som core/api.py räknar fram vid varje svar.
-                "level": "high" if assessment.score >= 60 else "medium",
+                "level": thresholds.stored_level(assessment.tier, assessment.score),
                 "title": flight_scoring.title(window),
                 "summary": flight_scoring.summary(window),
                 "lat": window.config["lat"],

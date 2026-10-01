@@ -29,13 +29,47 @@ export const admin = {
     request(`/api/admin/companies/${id}/delete`, { method: "POST", body: { confirmName } }),
   company: (id) => request(`/api/admin/companies/${id}`),
   crmStatus: () => request("/api/admin/crm/status"),
-  crmPipeline: (stage = "") => {
-    if (stage === "__board__") {
-      return request("/api/admin/crm/pipeline?board=1");
-    }
-    return request(`/api/admin/crm/pipeline${stage ? `?stage=${encodeURIComponent(stage)}` : ""}`);
+  /** f: { stage, q, tags[], city, form, phone, email, sort, limit } — filter AND:as på servern. */
+  crmPipeline: (f = {}) => {
+    const params = new URLSearchParams();
+    if (f.stage) params.set("stage", f.stage);
+    if (f.q) params.set("q", f.q);
+    for (const t of f.tags ?? []) if (t) params.append("tag", t);
+    if (f.city) params.set("city", f.city);
+    if (f.form) params.set("form", f.form);
+    if (f.phone) params.set("phone", "1");
+    if (f.email) params.set("email", "1");
+    if (f.sort) params.set("sort", f.sort);
+    if (f.limit) params.set("limit", String(f.limit));
+    const qs = params.toString();
+    return request(`/api/admin/crm/pipeline${qs ? `?${qs}` : ""}`);
   },
   crmDeal: (id) => request(`/api/admin/crm/deals/${id}`),
+  crmNoteUpdate: (id, body) =>
+    request(`/api/admin/crm/notes/${id}/update`, { method: "POST", body }),
+  crmPeopleSearch: (q, excludeAccount = "") => {
+    const params = new URLSearchParams({ q });
+    if (excludeAccount) params.set("excludeAccount", excludeAccount);
+    return request(`/api/admin/crm/people?${params}`);
+  },
+  crmContactAdd: (dealId, body) =>
+    request(`/api/admin/crm/deals/${dealId}/contacts`, { method: "POST", body }),
+  crmContactAction: (dealId, personId, action) =>
+    request(`/api/admin/crm/deals/${dealId}/contacts/${personId}/${action}`, { method: "POST", body: {} }),
+  crmPersonUpdate: (id, body) =>
+    request(`/api/admin/crm/people/${id}/update`, { method: "POST", body }),
+  /** f: { assignee: "me"|"all"|"none"|userId, status: "open"|"todo"|"doing"|"done" } */
+  crmTasks: (f = {}) => {
+    const params = new URLSearchParams();
+    if (f.assignee) params.set("assignee", f.assignee);
+    if (f.status) params.set("status", f.status);
+    return request(`/api/admin/crm/tasks?${params}`);
+  },
+  crmTaskCreate: (body) => request("/api/admin/crm/tasks/create", { method: "POST", body }),
+  crmTaskUpdate: (id, body) =>
+    request(`/api/admin/crm/tasks/${id}/update`, { method: "POST", body }),
+  crmTaskDelete: (id) =>
+    request(`/api/admin/crm/tasks/${id}/delete`, { method: "POST", body: {} }),
   crmCreateLead: (body) => request("/api/admin/crm/deals", { method: "POST", body }),
   crmUpdateLead: (id, body) =>
     request(`/api/admin/crm/deals/${id}/update`, { method: "POST", body }),

@@ -1353,16 +1353,23 @@ class _DriverScreenState extends State<DriverScreen>
                   count == 1
                       ? 'Just nu finns 1 sådant tips i ditt område.'
                       : 'Just nu finns $count sådana tips i ditt område.',
-                  style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ],
               const SizedBox(height: 12),
               Text(
                 (_features['lockedMessage']?.toString().isNotEmpty ?? false)
                     ? '${_features['lockedMessage']} Den som sköter företagets '
-                        'konto har fått ett mejl om hur ni fortsätter.'
+                          'konto har fått ett mejl om hur ni fortsätter.'
                     : 'Under provet visas tåg och buss.',
-                style: TextStyle(fontSize: 14, height: 1.4, color: Colors.grey.shade700),
+                style: TextStyle(
+                  fontSize: 14,
+                  height: 1.4,
+                  color: Colors.grey.shade700,
+                ),
               ),
             ],
           ),
@@ -3849,14 +3856,21 @@ class _ExplainSectionState extends State<_ExplainSection> {
               value:
                   severityTierLabels[severityTier] ?? severityTier ?? 'Okänd',
             ),
+            // Betyget och varför -- räknat av backend (thresholds.explain_grade),
+            // samma beslutslista som färgen på kortet.
+            if (_detail?['grade'] is Map) ...[
+              const SizedBox(height: 10),
+              _GradeBlock(
+                grade: Map<String, dynamic>.from(_detail!['grade'] as Map),
+              ),
+            ],
             // Skälen bakom tipset, i klartext ("försenat 25 min").
             if ((opp['reasons'] as List?)?.isNotEmpty ?? false) ...[
               const SizedBox(height: 10),
               _ExplainRow(
                 label: 'Därför',
                 value: [
-                  for (final r in opp['reasons'] as List)
-                    '• ${r.toString()}',
+                  for (final r in opp['reasons'] as List) '• ${r.toString()}',
                 ].join('\n'),
               ),
             ],
@@ -4003,6 +4017,100 @@ class _DetailStat extends StatelessWidget {
 /// brings this up to the same glanceable size as the sheet's main hint text
 /// above it, since this used to be the smallest, lowest-contrast text in the
 /// whole sheet despite being the "why should I trust this" answer.
+/// "Betyg: Stark — …" och, hopfällt, kriterierna i den ordning de prövas.
+/// Säkerheten ligger bara i den hopfällda delen: som egen rad upplevdes den
+/// som brus, men den hör till förklaringen för den som vill förstå betyget.
+class _GradeBlock extends StatelessWidget {
+  const _GradeBlock({required this.grade});
+  final Map<String, dynamic> grade;
+
+  @override
+  Widget build(BuildContext context) {
+    final steps = (grade['steps'] as List?)?.cast<Map>() ?? const [];
+    final rule = grade['rule'] as Map?;
+    final ruleBits = [
+      if (grade['ruleId'] != null && '${grade['ruleId']}'.isNotEmpty)
+        '${grade['ruleId']}',
+      if (rule?['floor'] != null) 'golv ${rule!['floor']}',
+      if (rule?['cap'] != null) 'tak ${rule!['cap']}',
+    ];
+    const small = TextStyle(fontSize: 13, color: TbColors.ink, height: 1.35);
+    const muted = TextStyle(
+      fontSize: 12.5,
+      color: TbColors.muted,
+      height: 1.35,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _ExplainRow(
+          label: 'Betyg',
+          value: '${grade['label'] ?? ''} — ${grade['because'] ?? ''}',
+        ),
+        Theme(
+          data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+          child: ExpansionTile(
+            tilePadding: EdgeInsets.zero,
+            childrenPadding: const EdgeInsets.only(bottom: 4),
+            expandedCrossAxisAlignment: CrossAxisAlignment.start,
+            dense: true,
+            title: const Text(
+              'Så räknas betyget',
+              style: TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w600,
+                color: TbColors.ink,
+              ),
+            ),
+            children: [
+              for (final s in steps)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 4),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Icon(
+                        s['ok'] == true
+                            ? Icons.check_circle_outline
+                            : Icons.remove_circle_outline,
+                        size: 16,
+                        color: s['decided'] == true
+                            ? TbColors.ink
+                            : TbColors.muted,
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          '${s['text']}',
+                          style: s['decided'] == true
+                              ? small.copyWith(fontWeight: FontWeight.w700)
+                              : small,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 6),
+              Text(
+                'Poäng ${grade['score'] ?? '–'}/100'
+                '${ruleBits.isEmpty ? '' : ' · regel ${ruleBits.join(', ')}'}',
+                style: muted,
+              ),
+              if (grade['scoreNote'] != null)
+                Text('${grade['scoreNote']}', style: muted),
+              if (grade['confidenceText'] != null &&
+                  '${grade['confidenceText']}'.isNotEmpty)
+                Text('Säkerhet: ${grade['confidenceText']}', style: muted),
+              if (grade['notifyWhy'] != null)
+                Text('${grade['notifyWhy']}', style: muted),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 class _ExplainRow extends StatelessWidget {
   const _ExplainRow({required this.label, required this.value});
   final String label;

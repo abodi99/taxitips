@@ -762,14 +762,17 @@ def opportunity_detail(request, opportunity_id):
 
     events = SourceEvent.objects.filter(id__in=[str(i) for i in (o.source_event_ids or [])])
     now = timezone.now()
+    row = _serialize(o, None, now)
+    rule = _rule_for_tip(o)
     return _json(
         request,
         {
             "opportunity": {
-                **_serialize(o, None, now),
+                **row,
                 "computed_at": _iso(o.computed_at),
                 "expired_reason": o.expired_reason,
-                "level_label": o.level,
+                # Samma betyg som kortet visar, inte det sparade fältet.
+                "level_label": row["level"],
             },
             "source_events": [
                 {
@@ -784,17 +787,58 @@ def opportunity_detail(request, opportunity_id):
             ],
             # Regeln som gav poängen, inte bara dess id -- förklaringen ska
             # gå att läsa utan att öppna admin.
-            "rule": next(
-                (
-                    {"tier": r.tier, "mode": r.mode, "condition": r.condition,
-                     "floor": r.floor, "cap": r.cap, "note": r.note}
-                    for r in ScoringRule.objects.filter(tier=o.severity_tier)
-                    if r.mode in ("", o.mode)
-                ),
-                None,
-            ),
+            "rule": rule,
+            "grade": _grade_explanation(o, row, rule, [se.source for se in events]),
         },
     )
+
+
+def _rule_for_tip(o: Opportunity) -> dict | None:
+    """
+    ScoringRule-raden bakom rule_id (färdsätt.typ.villkor) -- villkoret måste
+    stämma. Förut valdes första regeln för typen, så en "lång lucka" kunde visa
+    golvet för "hela linjen stoppad".
+    """
+    parts = (o.rule_id or "").split(".")
+    mode = parts[0] if parts else o.mode
+    condition = parts[2] if len(parts) > 2 else ""
+    for r in ScoringRule.objects.filter(tier=o.severity_tier):
+        if (r.condition or "") == condition and (r.mode or "") in ("", mode):
+            return {"tier": r.tier, "mode": r.mode, "condition": r.condition,
+                    "floor": r.floor, "cap": r.cap, "note": r.note}
+    return None
+
+
+def _grade_explanation(o: Opportunity, row: dict, rule: dict | None, sources: list[str]) -> dict:
+    """
+    "Varför Stark/Medel/Svag?" i ord: betygets beslutssteg, poängen och dess
+    regel, säkerheten och notisregeln. Allt räknat här, så att appen bara visar.
+    """
+    grade = thresholds.explain_grade(
+        o.severity_tier, o.demand_score, row["worth_it_score"], o.has_alternative,
+    )
+    if o.has_alternative:
+        notify_why = "Ingen notis: källan anger ersättningstrafik."
+    elif o.severity_tier not in thresholds.NOTIFY_WORTHY_TIERS:
+        notify_why = "Ingen notis: typen väcker aldrig någon (syns bara i listan)."
+    elif o.demand_score < thresholds.NOTIFY_SCORE_FLOOR:
+        notify_why = f"Ingen notis: poängen {o.demand_score} är under {thresholds.NOTIFY_SCORE_FLOOR}."
+    else:
+        notify_why = f"Kan ge notis: rätt typ och poäng {o.demand_score} ≥ {thresholds.NOTIFY_SCORE_FLOOR}."
+    ai = [r for r in (o.reasons or []) if str(r).startswith("AI ")]
+    return {
+        **grade,
+        "score": o.demand_score,
+        "scoreNote": "Poängen 0–100 avgör ordningen i listan; betyget avgör färgen.",
+        "ruleId": o.rule_id,
+        "rule": rule,
+        "confidence": o.confidence,
+        "confidenceText": thresholds.CONFIDENCE_TEXT.get(o.confidence, ""),
+        "aiAdjusted": bool(ai),
+        "notifyWorthy": row["notify_worthy"],
+        "notifyWhy": notify_why,
+        "sources": sorted(set(sources)),
+    }
 
 
 @csrf_exempt

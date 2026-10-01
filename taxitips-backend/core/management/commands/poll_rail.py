@@ -12,6 +12,7 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
+from core import thresholds
 from core.alternatives import route_note
 
 from core.health import polling
@@ -127,7 +128,7 @@ class Command(BaseCommand):
                 "kind": "transit",
                 "mode": "train",
                 "severity_tier": r.tier,
-                "level": "high" if r.score >= 60 else "medium",
+                "level": thresholds.stored_level(r.tier, r.score, a.has_replacement or a.next_departure_is_bus),
                 "title": a.header,
                 "summary": a.description,
                 "lat": a.lat, "lon": a.lon,

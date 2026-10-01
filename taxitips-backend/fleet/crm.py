@@ -11,7 +11,10 @@ import logging
 import re
 from typing import Any
 
-from django.db.models import Q
+from django.db.models import (
+    Case, Count, Exists, F, IntegerField, OuterRef, Q, Subquery, TextField, Value, When,
+)
+from django.db.models.functions import Collate, Lower, NullIf
 from django.utils import timezone
 
 from fleet.models import (
@@ -20,6 +23,9 @@ from fleet.models import (
     CrmDealStage,
     CrmNote,
     CrmPerson,
+    CrmTag,
+    CrmTagCategory,
+    CrmTagging,
 )
 
 log = logging.getLogger(__name__)
@@ -64,6 +70,8 @@ def account_row(account: CrmAccount) -> dict[str, Any]:
         "name": account.name or "",
         "orgNumber": account.org_number or "",
         "county": account.county or "",
+        "city": account.city or "",
+        "legalForm": account.legal_form or "",
         "domain": account.domain or "",
         "source": account.source or "",
         "twentyId": account.twenty_id,
@@ -123,19 +131,223 @@ def note_row(note: CrmNote) -> dict[str, Any]:
         "body": note.body,
         "authorLabel": note.author_label or "",
         "createdAt": _iso(note.created_at),
+        "editedAt": _iso(note.edited_at),
+        "editedByLabel": note.edited_by_label or "",
     }
 
 
-def pipeline_deals(*, stage: str | None = None, limit: int = 120) -> list[dict]:
-    qs = (
-        CrmDeal.objects.select_related("account", "person")
-        .order_by("-updated_at")
+PIPELINE_PAGE = 200
+PIPELINE_MAX = 1000
+
+
+def _tag_filter(slug: str) -> Q:
+    """Affären eller dess konto bär taggen."""
+    account_ids = CrmTagging.objects.filter(
+        entity_type="account", tag__slug=slug,
+    ).values("entity_id")
+    deal_ids = CrmTagging.objects.filter(
+        entity_type="deal", tag__slug=slug,
+    ).values("entity_id")
+    return Q(id__in=deal_ids) | Q(account_id__in=account_ids)
+
+
+def _contact_filter(field: str) -> Q:
+    """Affärens kontakt — eller någon kontakt på kontot — har fältet ifyllt."""
+    people = CrmPerson.objects.filter(
+        account_id=OuterRef("account_id"),
+    ).exclude(**{field: ""})
+    return Q(**{f"person__{field}__gt": ""}) | Q(Exists(people))
+
+
+def _account_tag_order(*, category: str, slug_prefix: str = ""):
+    """sort_order för kontots tagg i en kategori (segment A=1 … X=5, tier 1–6)."""
+    qs = CrmTagging.objects.filter(
+        entity_type="account",
+        entity_id=OuterRef("account_id"),
+        tag__category=category,
     )
-    if stage:
+    if slug_prefix:
+        qs = qs.filter(tag__slug__startswith=slug_prefix)
+    return Subquery(
+        qs.order_by("tag__sort_order").values("tag__sort_order")[:1],
+        output_field=IntegerField(),
+    )
+
+
+_STAGE_ORDER = Case(
+    *[When(stage=v, then=Value(i)) for i, v in enumerate(CrmDealStage.values)],
+    output_field=IntegerField(),
+)
+
+# Sortering: nyckel → (extra annoteringar, fält i stigande ordning).
+# "-nyckel" vänder ordningen; tomma värden hamnar alltid sist.
+_SV = "sv-x-icu"  # svensk ordning: Å Ä Ö efter Z (ICU, finns i Supabase-Postgres)
+_SORT_BASE = {
+    "_s_name": Collate(Lower(NullIf("account__name", Value("", output_field=TextField()))), _SV),
+    "_s_deal": Collate(Lower("name"), _SV),
+}
+SORTS = {
+    "updated": ({}, ["updated_at"]),
+    "name": ({}, ["_s_name", "_s_deal"]),
+    "city": (
+        {"_s_city": Collate(Lower(NullIf("account__city", Value(""))), _SV)},
+        ["_s_city", "_s_name"],
+    ),
+    "priority": (
+        {
+            "_s_call": _account_tag_order(category="call"),
+            "_s_seg": _account_tag_order(category="segment", slug_prefix="segment:"),
+        },
+        ["_s_call", "_s_seg", "_s_name"],
+    ),
+    "stage": ({"_s_stage": _STAGE_ORDER}, ["_s_stage", "_s_name"]),
+}
+DEFAULT_SORT = "-updated"
+
+
+def _apply_sort(qs, sort: str):
+    raw = (sort or DEFAULT_SORT).strip()
+    desc = raw.startswith("-")
+    key = raw.lstrip("-")
+    if key not in SORTS:
+        key, desc = "updated", True
+    extra, fields = SORTS[key]
+    qs = qs.annotate(**_SORT_BASE, **extra)
+    order = [
+        F(f).desc(nulls_last=True) if desc else F(f).asc(nulls_last=True)
+        for f in fields
+    ]
+    return qs.order_by(*order, "id")
+
+
+def pipeline_queryset(
+    *,
+    stage: str | None = None,
+    q: str = "",
+    tags: list[str] | tuple[str, ...] = (),
+    city: str = "",
+    legal_form: str = "",
+    has_phone: bool = False,
+    has_email: bool = False,
+    sort: str = "",
+    all_stages: bool = False,
+):
+    """
+    Alla filter AND:as. Utan steg visas bara öppna affärer; `all_stages`
+    struntar i steget helt (för antal per steg).
+    """
+    qs = CrmDeal.objects.select_related("account", "person")
+    if all_stages:
+        pass
+    elif stage:
         qs = qs.filter(stage=stage)
     else:
         qs = qs.exclude(stage__in=CLOSED_STAGES)
+    query = (q or "").strip()
+    if query:
+        qs = qs.filter(
+            Q(name__icontains=query)
+            | Q(notes_summary__icontains=query)
+            | Q(account__name__icontains=query)
+            | Q(account__org_number__icontains=_normalize_org(query) or query)
+            | Q(account__county__icontains=query)
+            | Q(account__city__icontains=query)
+            | Q(person__name__icontains=query)
+            | Q(person__email__icontains=query)
+            | Q(person__phone__icontains=query)
+        )
+    for slug in dict.fromkeys(t.strip() for t in tags if t and t.strip()):
+        qs = qs.filter(_tag_filter(slug))
+    if (city or "").strip():
+        qs = qs.filter(account__city__iexact=city.strip())
+    if (legal_form or "").strip():
+        qs = qs.filter(account__legal_form__iexact=legal_form.strip())
+    if has_phone:
+        qs = qs.filter(_contact_filter("phone"))
+    if has_email:
+        qs = qs.filter(_contact_filter("email"))
+    return _apply_sort(qs, sort)
+
+
+def pipeline_deals(
+    *,
+    stage: str | None = None,
+    q: str = "",
+    tag: str = "",
+    limit: int = 500,
+) -> list[dict]:
+    qs = pipeline_queryset(stage=stage, q=q, tags=[tag] if tag else [])
     return [deal_row(d) for d in qs[:limit]]
+
+
+def _stage_counts(**filters) -> dict[str, int]:
+    """Antal per steg för samma filter (utom steget) — till flikarna."""
+    filters.pop("stage", None)
+    filters.pop("sort", None)
+    qs = pipeline_queryset(all_stages=True, **filters).order_by()
+    counts = {v: 0 for v in CrmDealStage.values}
+    for row in qs.values("stage").annotate(n=Count("id")):
+        counts[row["stage"]] = row["n"]
+    counts[""] = sum(counts[s] for s in OPEN_STAGES)
+    return counts
+
+
+def _attach_tags(rows: list[dict]) -> None:
+    """Kontots taggar (segment, ringordning, län …) på varje rad, i en fråga."""
+    account_ids = {r["accountId"] for r in rows if r.get("accountId")}
+    by_account: dict[str, list[dict]] = {}
+    taggings = (
+        CrmTagging.objects.filter(entity_type="account", entity_id__in=account_ids)
+        .filter(tag__is_active=True)
+        .select_related("tag")
+        .order_by("tag__category", "tag__sort_order")
+    )
+    for t in taggings:
+        by_account.setdefault(str(t.entity_id), []).append(tag_row(t.tag))
+    for r in rows:
+        r["tags"] = by_account.get(r.get("accountId") or "", [])
+
+
+def pipeline_page(*, limit: int = PIPELINE_PAGE, offset: int = 0, **filters) -> dict:
+    """En sida av pipelinen + totalt antal träffar och antal per steg."""
+    limit = max(1, min(int(limit or PIPELINE_PAGE), PIPELINE_MAX))
+    offset = max(0, int(offset or 0))
+    qs = pipeline_queryset(**filters)
+    rows = [deal_row(d) for d in qs[offset:offset + limit]]
+    _attach_tags(rows)
+    return {
+        "total": qs.count(),
+        "limit": limit,
+        "offset": offset,
+        "sort": filters.get("sort") or DEFAULT_SORT,
+        "stageCounts": _stage_counts(**filters),
+        "rows": rows,
+    }
+
+
+def pipeline_facets() -> dict:
+    """Val till filterraden: orter, bolagsformer och taggar per kategori."""
+    cities = (
+        CrmAccount.objects.exclude(city="")
+        .values_list("city", flat=True).distinct().order_by("city")
+    )
+    forms = (
+        CrmAccount.objects.exclude(legal_form="")
+        .values_list("legal_form", flat=True).distinct().order_by("legal_form")
+    )
+    tags = CrmTag.objects.filter(
+        is_active=True,
+        category__in=[CrmTagCategory.COUNTY, CrmTagCategory.CALL],
+    ).order_by("category", "sort_order")
+    grouped: dict[str, list[dict]] = {}
+    for t in tags:
+        grouped.setdefault(t.category, []).append(tag_row(t))
+    return {
+        "cities": list(cities),
+        "legalForms": list(forms),
+        "counties": grouped.get(CrmTagCategory.COUNTY, []),
+        "callTiers": grouped.get(CrmTagCategory.CALL, []),
+    }
 
 
 def pipeline_board(*, limit_per_stage: int = 40) -> dict:
@@ -199,6 +411,8 @@ def create_account(
     name: str = "",
     org_number: str = "",
     county: str = "",
+    city: str = "",
+    legal_form: str = "",
     domain: str = "",
     source: str = "",
     twenty_id: str | None = None,
@@ -207,6 +421,8 @@ def create_account(
         name=(name or "")[:500],
         org_number=_normalize_org(org_number),
         county=(county or "")[:32],
+        city=(city or "").strip()[:100],
+        legal_form=(legal_form or "").strip()[:64],
         domain=(domain or "")[:255],
         source=(source or "")[:100],
         twenty_id=_tid(twenty_id),
@@ -265,6 +481,8 @@ def update_account(account: CrmAccount, data: dict) -> CrmAccount:
         "name": "name",
         "orgNumber": "org_number",
         "county": "county",
+        "city": "city",
+        "legalForm": "legal_form",
         "domain": "domain",
         "source": "source",
     }
@@ -276,6 +494,8 @@ def update_account(account: CrmAccount, data: dict) -> CrmAccount:
             val = _normalize_org(str(val or ""))
         else:
             val = str(val or "")
+            if attr in ("city", "legal_form"):
+                val = val.strip()[:CrmAccount._meta.get_field(attr).max_length]
         setattr(account, attr, val)
         fields.append(attr)
     if fields:
@@ -422,12 +642,135 @@ def create_note(
     )
 
 
+def get_note(note_id) -> CrmNote | None:
+    return CrmNote.objects.filter(id=note_id).first()
+
+
+def update_note(note: CrmNote, *, title=None, body=None, editor_label: str = "") -> CrmNote:
+    """Ändra rubrik/text. Returnerar anteckningen; tidigare text loggas av anroparen."""
+    fields: list[str] = []
+    if title is not None:
+        note.title = (str(title).strip() or "Anteckning")[:200]
+        fields.append("title")
+    if body is not None:
+        text = str(body).strip()
+        if not text:
+            raise ValueError("body_required")
+        note.body = text[:12000]
+        fields.append("body")
+    if fields:
+        note.edited_at = timezone.now()
+        note.edited_by_label = (editor_label or "")[:320]
+        note.save(update_fields=fields + ["edited_at", "edited_by_label"])
+    return note
+
+
+# ---- Kontakter -------------------------------------------------------------
+
+
+def contacts_for_deal(deal: CrmDeal) -> list[dict]:
+    """Alla kontakter på affärens konto; huvudkontakten först."""
+    if deal.account_id:
+        people = list(CrmPerson.objects.filter(account_id=deal.account_id).order_by("name"))
+    else:
+        people = []
+    if deal.person_id and all(p.id != deal.person_id for p in people):
+        primary = CrmPerson.objects.filter(id=deal.person_id).first()
+        if primary:
+            people.insert(0, primary)
+    people.sort(key=lambda p: p.id != deal.person_id)
+    rows = []
+    for p in people:
+        row = person_row(p)
+        row["isPrimary"] = p.id == deal.person_id
+        rows.append(row)
+    return rows
+
+
+def _ensure_account(deal: CrmDeal) -> CrmAccount:
+    """Kontakter hör till ett konto — skapa ett av affärens namn om det saknas."""
+    if deal.account_id:
+        return deal.account
+    account = create_account(name=deal.name or "Okänt bolag", source=deal.source or "admin")
+    deal.account = account
+    deal.save(update_fields=["account", "updated_at"])
+    return account
+
+
+def add_contact(deal: CrmDeal, data: dict) -> CrmPerson:
+    name = str(data.get("name") or "").strip()
+    email = str(data.get("email") or "").strip()
+    phone = str(data.get("phone") or "").strip()
+    if not (name or email or phone):
+        raise ValueError("contact_required")
+    account = _ensure_account(deal)
+    person = create_person(
+        name=name, email=email, phone=phone,
+        title=str(data.get("title") or ""), account=account,
+    )
+    if not deal.person_id or data.get("primary"):
+        set_primary_contact(deal, person)
+    return person
+
+
+def link_contact(deal: CrmDeal, person: CrmPerson) -> CrmPerson:
+    """Koppla en befintlig kontakt till affärens konto."""
+    account = _ensure_account(deal)
+    if person.account_id != account.id:
+        person.account = account
+        person.save(update_fields=["account", "updated_at"])
+    if not deal.person_id:
+        set_primary_contact(deal, person)
+    return person
+
+
+def set_primary_contact(deal: CrmDeal, person: CrmPerson) -> CrmDeal:
+    deal.person = person
+    deal.save(update_fields=["person", "updated_at"])
+    return deal
+
+
+def unlink_contact(deal: CrmDeal, person: CrmPerson) -> None:
+    """Ta bort kontakten från kontot (raden finns kvar och kan kopplas igen)."""
+    if deal.account_id and person.account_id == deal.account_id:
+        person.account = None
+        person.save(update_fields=["account", "updated_at"])
+    if deal.person_id == person.id:
+        nxt = (
+            CrmPerson.objects.filter(account_id=deal.account_id).exclude(id=person.id)
+            .order_by("name").first()
+            if deal.account_id else None
+        )
+        deal.person = nxt
+        deal.save(update_fields=["person", "updated_at"])
+
+
+def search_people(q: str, *, exclude_account_id=None, limit: int = 15) -> list[dict]:
+    query = (q or "").strip()
+    if len(query) < 2:
+        return []
+    qs = CrmPerson.objects.select_related("account").filter(
+        Q(name__icontains=query) | Q(email__icontains=query) | Q(phone__icontains=query)
+    )
+    if exclude_account_id:
+        qs = qs.exclude(account_id=exclude_account_id)
+    out = []
+    for p in qs.order_by("name")[:limit]:
+        row = person_row(p)
+        row["accountName"] = p.account.name if p.account_id and p.account else ""
+        out.append(row)
+    return out
+
+
 def crm_summary_for_company(company_id) -> dict:
+    from fleet import crm_tasks
+
     deal = deal_for_company(company_id)
     return {
         "linked": deal is not None,
         "deal": deal_row(deal) if deal else None,
         "notes": list_notes_for_company(company_id),
+        "tasks": crm_tasks.tasks_for(deal=deal, company_id=company_id),
     }
 
 
@@ -527,3 +870,79 @@ def upsert_from_twenty_deal(*, twenty_id: str, account: CrmAccount | None = None
         source=fields.get("source", "twenty"),
         amount_ore=fields.get("amount_ore"),
     )
+
+
+def tag_row(tag: CrmTag) -> dict[str, Any]:
+    return {
+        "slug": tag.slug,
+        "category": tag.category,
+        "label": tag.label,
+    }
+
+
+def list_tags_for(*, entity_type: str, entity_id) -> list[dict]:
+    ids = CrmTagging.objects.filter(
+        entity_type=entity_type, entity_id=entity_id,
+    ).values_list("tag_id", flat=True)
+    tags = CrmTag.objects.filter(id__in=ids, is_active=True).order_by("category", "sort_order")
+    return [tag_row(t) for t in tags]
+
+
+def ensure_tag(slug: str, *, category: str, label: str | None = None) -> CrmTag:
+    tag, _ = CrmTag.objects.get_or_create(
+        slug=slug,
+        defaults={
+            "category": category,
+            "label": label or slug,
+            "sort_order": 0,
+            "is_active": True,
+        },
+    )
+    return tag
+
+
+def set_tags(
+    *,
+    entity_type: str,
+    entity_id,
+    slugs: list[str],
+    origin: str = "manual",
+    replace_categories: list[str] | None = None,
+) -> None:
+    """
+    Sätter taggar på ett CRM-objekt. Om replace_categories anges tas befintliga
+    taggar i de kategorierna bort först (en ICP, ett län, osv.).
+    """
+    if replace_categories:
+        old = CrmTagging.objects.filter(
+            entity_type=entity_type,
+            entity_id=entity_id,
+            tag__category__in=replace_categories,
+        )
+        old.delete()
+    for slug in slugs:
+        tag = CrmTag.objects.filter(slug=slug, is_active=True).first()
+        if tag is None:
+            continue
+        CrmTagging.objects.get_or_create(
+            tag=tag,
+            entity_type=entity_type,
+            entity_id=entity_id,
+            defaults={"origin": origin[:32]},
+        )
+
+
+def find_account(*, org_number: str = "", name: str = "", twenty_id: str | None = None) -> CrmAccount | None:
+    if twenty_id:
+        acc = CrmAccount.objects.filter(twenty_id=twenty_id).first()
+        if acc:
+            return acc
+    org = _normalize_org(org_number)
+    if org:
+        acc = CrmAccount.objects.filter(org_number=org).first()
+        if acc:
+            return acc
+    n = (name or "").strip()
+    if n:
+        return CrmAccount.objects.filter(name__iexact=n).order_by("-updated_at").first()
+    return None

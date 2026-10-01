@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import json
 import uuid
 from unittest import mock
@@ -97,3 +98,213 @@ class CrmAdminApiTests(FleetTestCase):
         self.assertIn("columns", res)
         ids = [c["id"] for c in res["columns"]]
         self.assertIn(CrmDealStage.MEETING, ids)
+
+
+class CrmPipelineFilterTests(FleetTestCase):
+    """Filter i pipeline_deals/pipeline_page — alla AND:as server-side."""
+
+    def _deal(self, name, *, city="", form="", stage=CrmDealStage.NEW,
+              tags=(), phone="", email=""):
+        account = crm.create_account(name=name, city=city, legal_form=form)
+        person = crm.create_person(
+            name=f"Kontakt {name}", phone=phone, email=email, account=account,
+        )
+        deal = crm.create_deal(name=name, account=account, person=person, stage=stage)
+        if tags:
+            crm.set_tags(entity_type="account", entity_id=account.id, slugs=list(tags))
+        return deal
+
+    def _names(self, **filters):
+        return {r["name"] for r in crm.pipeline_page(**filters)["rows"]}
+
+    def setUp(self):
+        super().setUp()
+        self._deal("Malmö Taxi", city="Malmö", form="Aktiebolag",
+                   tags=["segment:a", "lan:12", "call:1"], phone="040-1")
+        self._deal("Lund Bil", city="Lund", form="Enskild firma",
+                   tags=["segment:c", "lan:12", "call:1"], email="lund@example.test")
+        self._deal("Göteborg Åkeri", city="Göteborg", form="Aktiebolag",
+                   tags=["segment:a", "lan:14", "medlem:taxiforbundet"])
+        self._deal("Malmö Stängd", city="Malmö", form="Aktiebolag",
+                   tags=["segment:a", "lan:12"], stage=CrmDealStage.LOST)
+
+    def test_city_and_legal_form(self):
+        self.assertEqual(self._names(city="malmö"), {"Malmö Taxi"})
+        self.assertEqual(self._names(legal_form="Aktiebolag"),
+                         {"Malmö Taxi", "Göteborg Åkeri"})
+        self.assertEqual(self._names(legal_form="enskild firma"), {"Lund Bil"})
+
+    def test_tags_are_anded(self):
+        self.assertEqual(self._names(tags=["lan:12"]), {"Malmö Taxi", "Lund Bil"})
+        self.assertEqual(self._names(tags=["lan:12", "segment:a"]), {"Malmö Taxi"})
+        self.assertEqual(self._names(tags=["medlem:taxiforbundet"]), {"Göteborg Åkeri"})
+        self.assertEqual(self._names(tags=["segment:x"]), set())
+
+    def test_q_stage_tag_city_combined(self):
+        self.assertEqual(self._names(q="malmö"), {"Malmö Taxi"})
+        self.assertEqual(
+            self._names(stage=CrmDealStage.LOST, q="malmö", tags=["segment:a"], city="Malmö"),
+            {"Malmö Stängd"},
+        )
+        self.assertEqual(self._names(q="göteborg", tags=["lan:12"]), set())
+        # Fritextsök träffar även ort.
+        self.assertEqual(self._names(q="Lund"), {"Lund Bil"})
+
+    def test_has_phone_and_email(self):
+        self.assertEqual(self._names(has_phone=True), {"Malmö Taxi"})
+        self.assertEqual(self._names(has_email=True), {"Lund Bil"})
+        self.assertEqual(self._names(has_phone=True, has_email=True), set())
+
+    def test_contact_on_account_counts_for_phone(self):
+        deal = self._deal("Extra Kontakt", city="Ystad")
+        crm.create_person(name="Växel", phone="0411-1", account=deal.account)
+        self.assertIn("Extra Kontakt", self._names(has_phone=True))
+
+    def test_pagination_total_and_offset(self):
+        first = crm.pipeline_page(limit=2)
+        self.assertEqual(first["total"], 3)
+        self.assertEqual(len(first["rows"]), 2)
+        rest = crm.pipeline_page(limit=2, offset=2)
+        self.assertEqual(len(rest["rows"]), 1)
+        ids = {r["id"] for r in first["rows"]} | {r["id"] for r in rest["rows"]}
+        self.assertEqual(len(ids), 3)
+
+    def _order(self, sort, **filters):
+        return [r["name"] for r in crm.pipeline_page(sort=sort, **filters)["rows"]]
+
+    def test_sort_by_name_uses_swedish_order(self):
+        self._deal("Åby Taxi", city="Åby")
+        self._deal("Zeta Taxi", city="Zinkgruvan")
+        names = self._order("name")
+        self.assertEqual(names[0], "Göteborg Åkeri")
+        self.assertEqual(names[-2:], ["Zeta Taxi", "Åby Taxi"])
+        self.assertEqual(self._order("-name")[0], "Åby Taxi")
+        cities = [r["account"]["city"] for r in crm.pipeline_page(sort="city")["rows"]]
+        self.assertEqual(cities[-1], "Åby")
+
+    def test_sort_by_priority_tier_then_segment(self):
+        # Tier 1: Malmö (A) före Lund (C); Göteborg saknar tier → sist.
+        self.assertEqual(
+            self._order("priority"), ["Malmö Taxi", "Lund Bil", "Göteborg Åkeri"],
+        )
+
+    def test_sort_by_stage_and_unknown_falls_back(self):
+        self.assertEqual(self._order("stage", stage=CrmDealStage.LOST), ["Malmö Stängd"])
+        self.assertEqual(len(self._order("nonsens")), 3)
+
+    def test_stage_counts_follow_filters(self):
+        page = crm.pipeline_page(city="Malmö")
+        counts = page["stageCounts"]
+        self.assertEqual(counts[CrmDealStage.NEW], 1)
+        self.assertEqual(counts[CrmDealStage.LOST], 1)
+        self.assertEqual(counts[""], 1)
+        self.assertEqual(page["total"], 1)
+
+    def test_rows_carry_account_tags(self):
+        row = next(r for r in crm.pipeline_page()["rows"] if r["name"] == "Göteborg Åkeri")
+        slugs = {t["slug"] for t in row["tags"]}
+        self.assertEqual(slugs, {"segment:a", "lan:14", "medlem:taxiforbundet"})
+
+    def test_facets(self):
+        facets = crm.pipeline_facets()
+        self.assertEqual(facets["cities"], ["Göteborg", "Lund", "Malmö"])
+        self.assertEqual(facets["legalForms"], ["Aktiebolag", "Enskild firma"])
+        self.assertIn("lan:12", [t["slug"] for t in facets["counties"]])
+        self.assertIn("call:1", [t["slug"] for t in facets["callTiers"]])
+
+
+class CrmPipelineApiFilterTests(FleetTestCase):
+    def setUp(self):
+        super().setUp()
+        self.client = Client()
+        self.staff_user = uuid.uuid4()
+        StaffRole.objects.create(user_id=self.staff_user, role=StaffRole.Role.SALES)
+        for name, city, slugs, phone in [
+            ("Skåne A", "Malmö", ["segment:a", "lan:12"], "040-1"),
+            ("Skåne C", "Malmö", ["segment:c", "lan:12"], ""),
+            ("Sthlm A", "Solna", ["segment:a", "lan:01"], "08-1"),
+        ]:
+            account = crm.create_account(name=name, city=city, legal_form="Aktiebolag")
+            person = crm.create_person(name=name, phone=phone, account=account)
+            crm.create_deal(name=name, account=account, person=person)
+            crm.set_tags(entity_type="account", entity_id=account.id, slugs=slugs)
+
+    def get(self, qs):
+        with mock.patch("fleet.admin_crm._staff", return_value=mock.Mock(
+            user_id=self.staff_user, email="sales@taxitips.test",
+        )):
+            return self.client.get(f"/api/admin/crm/pipeline?{qs}").json()
+
+    def test_repeated_tag_and_city(self):
+        res = self.get("tag=segment:a&tag=lan:12")
+        self.assertTrue(res["ok"])
+        self.assertEqual([r["name"] for r in res["rows"]], ["Skåne A"])
+        self.assertEqual(res["tags"], ["segment:a", "lan:12"])
+        res = self.get("city=Malm%C3%B6&phone=1")
+        self.assertEqual([r["name"] for r in res["rows"]], ["Skåne A"])
+        self.assertEqual(res["rows"][0]["account"]["city"], "Malmö")
+        self.assertEqual(res["rows"][0]["account"]["legalForm"], "Aktiebolag")
+
+    def test_limit_and_facets(self):
+        res = self.get("limit=1&form=Aktiebolag")
+        self.assertEqual(res["total"], 3)
+        self.assertEqual(len(res["rows"]), 1)
+        self.assertEqual(res["facets"]["cities"], ["Malmö", "Solna"])
+
+    def test_sort_param(self):
+        res = self.get("sort=-name")
+        self.assertEqual(res["sort"], "-name")
+        self.assertEqual([r["name"] for r in res["rows"]], ["Sthlm A", "Skåne C", "Skåne A"])
+        self.assertEqual(res["stageCounts"][""], 3)
+
+    def test_bad_limit_falls_back(self):
+        res = self.get("limit=abc&offset=-5")
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["offset"], 0)
+        self.assertEqual(res["total"], 3)
+
+
+class ImportSalesListTests(FleetTestCase):
+    def test_reimport_fills_city_and_legal_form(self):
+        import tempfile
+        from pathlib import Path
+
+        from django.core.management import call_command
+
+        from fleet.models import CrmAccount, CrmTagging
+
+        row = {
+            "name": "Testtaxi Malmö", "legal_name": "Testtaxi AB", "orgnr": "556600-1122",
+            "legal_form": "Aktiebolag", "city": "Malmö", "county": "Skåne",
+            "phone": "040-123", "email": "info@testtaxi.test", "website": None,
+            "decision_makers": [{"name": "Eva", "role": "VD"}],
+            "segment": "A – Beställningscentral / stort bolag", "call_tier": 1,
+            "taxiforbundet": True, "brief": "Ring Eva.",
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "sales_list.json"
+            # Första körningen saknar ort/form — som en import före 0017.
+            path.write_text(json.dumps([{**row, "city": "", "legal_form": None}]))
+            call_command("import_sales_list", path=str(path), stdout=io.StringIO())
+            acc = CrmAccount.objects.get(org_number="5566001122")
+            self.assertEqual((acc.city, acc.legal_form), ("", ""))
+
+            path.write_text(json.dumps([row]))
+            call_command("import_sales_list", path=str(path), stdout=io.StringIO())
+            call_command("import_sales_list", path=str(path), stdout=io.StringIO())
+
+        self.assertEqual(CrmAccount.objects.filter(org_number="5566001122").count(), 1)
+        acc.refresh_from_db()
+        self.assertEqual((acc.city, acc.legal_form), ("Malmö", "Aktiebolag"))
+        self.assertEqual(CrmDeal.objects.filter(account=acc).count(), 1)
+        slugs = set(CrmTagging.objects.filter(
+            entity_type="account", entity_id=acc.id,
+        ).values_list("tag__slug", flat=True))
+        self.assertTrue({"lan:12", "segment:a", "call:1", "medlem:taxiforbundet"} <= slugs)
+        names = {
+            r["name"] for r in crm.pipeline_page(
+                city="Malmö", legal_form="Aktiebolag",
+                tags=["lan:12", "medlem:taxiforbundet"], has_phone=True, has_email=True,
+            )["rows"]
+        }
+        self.assertEqual(names, {"Testtaxi Malmö"})

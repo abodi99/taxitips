@@ -362,6 +362,93 @@ def customer_likelihood(
     return "low"
 
 
+# Det föraren läser. Samma ord som appens signal_kinds.dart (Stark/Medel/Svag).
+LEVEL_LABELS = {"high": "Stark", "medium": "Medel", "low": "Svag"}
+CONFIDENCE_TEXT = {
+    "high": "Hög — strukturerad data från källan (t.ex. Trafikverkets avgångstavla).",
+    "medium": "Medel — tolkad men bekräftad (allvarlighetsgrad från källan, AI-granskad eller AIS-fart).",
+    "low": "Låg — tolkad ur fritext eller en prognos långt fram; granskas av AI innan den får väcka någon.",
+}
+_TIER_WHY = {
+    "line_paused": "hela linjen står still eller det var sista avgången — resenärer blir kvar",
+    "vehicle_cancelled": "en avgång är inställd",
+    "line_delayed": "linjen är försenad",
+    "arrival_wave": "många ankommer samtidigt",
+    "last_arrival": "sista ankomsten på flera timmar",
+}
+
+
+def explain_grade(
+    severity_tier: str | None,
+    demand_score: int,
+    worth_it_score: int,
+    has_alternative: bool = False,
+) -> dict:
+    """
+    Varför betyget blev det det blev -- samma beslutslista som
+    `customer_likelihood`, steg för steg och i ord. Testet
+    core/test_tip_audit.py säkerställer att de två aldrig säger olika saker.
+
+    `steps` är kriterierna i den ordning de prövas; det första som avgör
+    markeras `decided`. Appens "Varför visas detta?" visar listan rakt av.
+    """
+    steps: list[dict] = []
+    level = None
+
+    def step(text: str, ok: bool, decides: str | None = None) -> None:
+        nonlocal level
+        decided = decides is not None and level is None
+        steps.append({"text": text, "ok": ok, "decided": decided})
+        if decided:
+            level = decides
+
+    active = worth_it_score > 0
+    step("Tipset gäller nu (inte avslutat)" if active else "Tipset har avslutats", active,
+         None if active else "low")
+    if level is None:
+        step(
+            "Källan anger ersättningstrafik — resenärerna har ett alternativ" if has_alternative
+            else "Källan anger ingen ersättningstrafik",
+            not has_alternative, "low" if has_alternative else None,
+        )
+    if level is None:
+        why = _TIER_WHY.get(severity_tier or "", "typen räknas inte som strandsättande")
+        if severity_tier in HIGH_SEVERITY_TIERS:
+            step(f"Typ: {why} → Stark oavsett poäng", True, "high")
+        elif severity_tier in MEDIUM_SEVERITY_TIERS:
+            if severity_tier == "vehicle_cancelled":
+                strong = demand_score >= NOTIFY_SCORE_FLOOR
+                step(
+                    f"Typ: {why}; poäng {demand_score} "
+                    + (f"≥ {NOTIFY_SCORE_FLOOR} → Stark" if strong else f"< {NOTIFY_SCORE_FLOOR} → Medel"),
+                    strong, "high" if strong else "medium",
+                )
+            else:
+                step(f"Typ: {why} → Medel (kan aldrig bli Stark)", True, "medium")
+        else:
+            step(f"Typ: {why} → Svag", False, "low")
+    level = level or "low"
+    because = next((s["text"] for s in steps if s["decided"]), "")
+    return {"level": level, "label": LEVEL_LABELS[level], "because": because, "steps": steps}
+
+
+def stored_level(
+    severity_tier: str | None,
+    demand_score: int,
+    has_alternative: bool = False,
+) -> str:
+    """
+    Betyget som sparas på tipset (`Opportunity.level`) och följer med i notiser
+    och favoriter -- samma regel som flödet, med poängen som "värt det" eftersom
+    tipset är aktivt när det skrivs.
+
+    Förut skrev fem pipelines `"high" if score >= 60 else "medium"`. Då kunde
+    samma tips vara "high" i notislistan och "low" i flödet (t.ex. med
+    ersättningsbuss), och ett "low" sparades aldrig.
+    """
+    return customer_likelihood(severity_tier, demand_score, demand_score, has_alternative)
+
+
 def market_region(lat: float | None, lon: float | None) -> str | None:
     """
     Vilken marknad föraren står i, som regionnyckel (skane/sl/vt/ul/...).
@@ -455,6 +542,9 @@ HEARTBEAT_MAX_AGE_SECONDS = 180
 # förväg. Klassningen i core/text_scoring.road_tier är kvar (villkoret står i
 # rule_id, road.<nivå>.<villkor>), så varje dold händelse går att förklara.
 ROAD_SHOWN_CONDITIONS = frozenset({"accident"})
+# Vägtipsens tak (core/taxi_relevance.py, score_road_alert). En olycka försenar
+# dem som redan sitter i bil; den strandsätter ingen. Inget påslag får lyfta över.
+ROAD_SCORE_CAP = 15
 
 
 def road_shown(rule_id: str | None) -> bool:

@@ -386,6 +386,36 @@ administratör, ingen telefon kopplad", så att "Kör bilen själv med den här
 telefonen" kan provas igen; `--stuck-on` återskapar felet med ett annat bolags
 bil kvar. Vägrar röra ett bolag som betalat.
 
+Säljlistan → native CRM (adminwebbens CRM-flik, ingen Stripe-koppling):
+
+```bash
+cd taxitips-backend && ./.venv/bin/python manage.py import_sales_list \
+  --path ../ops/crm/sales_list.json [--dry-run] [--limit N] [--skip-notes]
+```
+
+`ops/crm/` är gitignorerad (PII) och finns bara lokalt. Importen är
+idempotent (matchar orgnr → twenty_id → namn) och fyller vid omkörning på
+`CrmAccount.city`/`legal_form` samt sätter om taggarna län/segment/ICP/
+ringordning/Taxiförbundet; avancerade säljsteg behålls. ~8 min för 3 677 rader.
+Pipelinen (`GET /api/admin/crm/pipeline`) AND:ar `stage`, `q`, upprepade
+`tag`, `city`, `form`, `phone=1`, `email=1`, sorterar med `sort`
+(`updated|name|city|priority|stage`, `-` = fallande; svensk ICU-kollation
+`sv-x-icu`) och pagineras med `limit`/`offset`. Svaret har `stageCounts`
+för samma filter (flikarna) och kontots taggar per rad.
+
+CRM-uppgifter (`CrmTask`, `fleet/crm_tasks.py`): att göra med status
+todo/doing/done, datum och ansvarig ur `StaffRole` (säljare/plattformsadmin),
+kopplat till affär/konto/kontakt/TaxiTips-kund eller fristående. Översikten
+`GET /api/admin/crm/tasks?assignee=me|all|none|<id>&status=open|todo|doing|done`
+ger tidsfack (försenade/idag/7 dagar/utan datum) och en rad per säljare.
+Anteckningar kan redigeras (`crm/notes/<id>/update`, tidigare text i
+revisionsloggen `crm_note_edited`); kontakter läggs till, kopplas, görs till
+huvudkontakt eller tas bort från kontot via `crm/deals/<id>/contacts…`.
+
+Hur ett tips får poäng och betyg (kriterier per källa, betygets beslutslista,
+notisregeln, kända svagheter): **`docs/betygsmetod.md`**. Kvaliteten på aktiva tips
+prövas med `manage.py audit_tips [--hours 24] [--json] [--strict]` (rent läsande).
+
 Kundlivscykeln (konton, billicenser, abonnemang): **`docs/fleet-abonnemang.md`**
 -- datamodellen, affärsreglerna, utrullningsordningen och återställningen.
 Utrullningen styrs av `FLEET_ENFORCE_LICENSES`, som är AV tills

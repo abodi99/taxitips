@@ -47,6 +47,9 @@ TZ = ZoneInfo("Europe/Stockholm")
 MONTHLY_BUDGET = 25_000
 CALLS_PER_RUN = 20
 ACTIONABLE = timedelta(hours=2)
+# Så länge tipset lever efter den inställda avgången (trafikverket_rail.PLATFORM_LIFETIME)
+# står det folk kvar på perrongen, och de behöver resan som går EFTER NU.
+AFTER_DEPARTURE = timedelta(hours=1)
 ANSWER_TTL = timedelta(minutes=30)
 STOP_RADIUS_M = 600
 NUM_TRIPS = 3
@@ -98,11 +101,14 @@ def _point_time(point: dict) -> datetime | None:
         return None
 
 
-def first_alternative(body: dict, when: datetime, cancelled_trains) -> dict | None:
+def first_alternative(body: dict, when: datetime, cancelled_trains, after: datetime | None = None) -> dict | None:
     """
-    Första resan som går vid eller efter `when` utan ett inställt tåg och utan
-    inställd eller onåbar delsträcka. Rent: inga anrop.
+    Första resan som går vid eller efter `after` (standard: `when`, den inställda
+    avgången) utan ett inställt tåg och utan inställd eller onåbar delsträcka.
+    `when` är alltid den inställda avgångens tid -- den avgör vad som räknas som
+    samma tåg. Rent: inga anrop.
     """
+    after = after or when
     cancelled = {str(t) for t in cancelled_trains}
     for trip in body.get("Trip") or []:
         legs = (trip.get("LegList") or {}).get("Leg") or []
@@ -117,7 +123,7 @@ def first_alternative(body: dict, when: datetime, cancelled_trains) -> dict | No
         if any(leg.get("cancelled") is True or leg.get("reachable") is False for leg in journeys):
             continue
         start = _point_time(legs[0].get("Origin") or {})
-        if start is None or start < when:
+        if start is None or start < after:
             continue
         first = journeys[0]
         first_start = _point_time(first.get("Origin") or {})
@@ -189,11 +195,23 @@ class AlternativeFinder:
         self.run: Counter = Counter()
 
     def __call__(self, external_id: str, sig: str, to_sig: str, when: datetime, cancelled_trains) -> dict | None:
-        if not (self.now - timedelta(minutes=5) <= when <= self.now + ACTIONABLE):
+        """
+        Nästa resa mot slutstationen för den som står på perrongen nu.
+
+        Före den inställda avgången frågas från avgångstiden; efter den från nu, så att
+        tipset aldrig visar en resa som redan gått. `gap_minutes` är glappet från den
+        inställda avgången till första resan efter den -- det poängen bygger på -- och
+        följer med från första svaret, så att poängen inte drar iväg medan tiden går.
+        """
+        if not (self.now - AFTER_DEPARTURE <= when <= self.now + ACTIONABLE):
             self.run["outside_window"] += 1
             return None
+        after = max(when, self.now)
         cached = self.previous.get(external_id)
-        if cached and self._fresh(cached) and not set(cached.get("trains") or []) & {str(t) for t in cancelled_trains}:
+        if (
+            cached and self._fresh(cached) and not self._departed(cached, after)
+            and not set(cached.get("trains") or []) & {str(t) for t in cancelled_trains}
+        ):
             self.run["reused"] += 1
             return cached
         origin = self._stop(sig)
@@ -201,21 +219,35 @@ class AlternativeFinder:
         if not origin or not destination or origin == destination:
             self.run["no_stop"] += 1
             return None
-        local = when.astimezone(TZ)
+        local = after.astimezone(TZ)
         body = self._get("trip", originId=origin, destId=destination,
                          date=local.strftime("%Y-%m-%d"), time=local.strftime("%H:%M"), numF=NUM_TRIPS)
         if body is None:
             return None
-        answer = first_alternative(body, when, cancelled_trains)
+        answer = first_alternative(body, when, cancelled_trains, after=after)
         if answer is None:
             self.run["no_trip"] += 1
             return None
+        if cached and cached.get("gap_minutes") is not None:
+            answer["gap_minutes"] = cached["gap_minutes"]
+        elif after == when:
+            departs = datetime.fromisoformat(answer["departs_at"])
+            answer["gap_minutes"] = max(0, round((departs - when).total_seconds() / 60))
         answer["checked_at"] = self.now.isoformat()
         self.run["answered"] += 1
         return answer
 
     def detail(self) -> dict:
         return {**self.state, "budget": MONTHLY_BUDGET, "run": dict(self.run)}
+
+    @staticmethod
+    def _departed(answer: dict, after: datetime) -> bool:
+        """Den sparade resan har redan gått: den hjälper ingen som står där nu."""
+        try:
+            departs = datetime.fromisoformat(answer.get("departs_at") or "")
+        except ValueError:
+            return True
+        return departs < after
 
     def _fresh(self, answer: dict) -> bool:
         try:

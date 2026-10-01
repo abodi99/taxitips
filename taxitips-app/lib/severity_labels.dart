@@ -6,7 +6,9 @@ library;
 const severityTierLabels = {
   'line_paused': 'Hela linjen är stoppad',
   'line_delayed': 'Försening på linjen',
-  'vehicle_cancelled': 'En avgång inställd (andra avgångar/ersättning finns)',
+  // Inget löfte om ersättning här: den finns bara när källan säger det, och då
+  // står den i resealternativet (has_alternative) -- inte i typens namn.
+  'vehicle_cancelled': 'En avgång inställd',
   'vehicle_delayed': 'En avgång försenad',
   'arrival_wave': 'Många flyg landar samtidigt',
   'last_arrival': 'Sista planet — inget mer landar på flera timmar',

@@ -556,10 +556,9 @@ def push_body(opportunity) -> str:
         and "nästa avgång" not in summary.lower()
     ):
         # Järnvägens summary skriver redan ut nästa avgång i sin egen text
-        # ("Nästa avgång går om 20 min."). Utan den kontrollen blev
-        # låsskärmsraden "... Nästa avgång går om 20 min. Nästa avgång om
-        # 20 min." -- samma uppgift två gånger, i en text där varje tecken
-        # konkurrerar om en sekunds uppmärksamhet.
+        # ("Nästa avgång går 06:13."). Utan den kontrollen stod samma uppgift
+        # två gånger på låsskärmen, där varje tecken konkurrerar om en
+        # sekunds uppmärksamhet.
         # Klockslag: en push läses minuter eller timmar efter att den skickades,
         # och "om 20 min" är då fel. Utan absolut tid säger notisen inget.
         clock = opportunity.next_departure_at.astimezone(ZoneInfo("Europe/Stockholm")).strftime("%H:%M")
@@ -583,7 +582,12 @@ def snapshot_of(opportunity) -> dict:
         "kind": opportunity.kind,
         "mode": opportunity.mode,
         "severity_tier": opportunity.severity_tier,
-        "level": opportunity.level,
+        # Räknat som i flödet, inte det sparade fältet: äldre rader bär den
+        # gamla tumregeln (>= 60 = high) och skulle annars visa ett annat
+        # betyg i notislistan än samma tips har i flödet.
+        "level": thresholds.stored_level(
+            opportunity.severity_tier, opportunity.demand_score, opportunity.has_alternative,
+        ),
         "demand_score": opportunity.demand_score,
         "confidence": opportunity.confidence,
         "region": opportunity.region,

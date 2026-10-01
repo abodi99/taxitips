@@ -516,6 +516,24 @@ class DetailTests(ApiTestCase):
         self.assertEqual(body["source_events"][0]["source"], "trafikverket_rail")
         self.assertEqual(body["source_events"][0]["raw"], {"Advertised": True})
 
+    def test_detail_explains_the_grade_in_words(self):
+        from core.models import ScoringRule
+
+        ScoringRule.objects.create(tier="line_paused", mode="", condition="whole_line_stop", floor=85)
+        ScoringRule.objects.create(tier="line_paused", mode="", condition="ambiguous", floor=70)
+        o = opportunity(rule_id="train.line_paused.ambiguous", severity_tier="line_paused",
+                        demand_score=70, confidence="low", reasons=["allvarlig störning"])
+        body = self.client.get(
+            f"/api/opportunities/{o.id}", headers={"x-device-token": DEVICE_TOKEN}
+        ).json()
+        grade = body["grade"]
+        self.assertEqual((grade["level"], grade["label"], grade["confidence"]), ("high", "Stark", "low"))
+        self.assertIn("Stark oavsett poäng", grade["because"])
+        self.assertTrue(grade["confidenceText"].startswith("Låg"))
+        # Regeln med rätt villkor, inte första regeln för typen.
+        self.assertEqual(body["rule"]["condition"], "ambiguous")
+        self.assertEqual(body["opportunity"]["level_label"], body["opportunity"]["level"])
+
     def test_detail_is_gated(self):
         o = opportunity()
         res = self.client.get(f"/api/opportunities/{o.id}", headers={"x-device-token": "nope"})

@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from collections import Counter
 from datetime import timedelta
+from zoneinfo import ZoneInfo
 
 from django.conf import settings
 from django.db.models import Q
@@ -214,8 +215,13 @@ def _card(o: Opportunity, now) -> dict:
         badges.append({"text": f"ersättning {o.compensation_amount_kr or ''} kr".replace("  ", " "), "tone": "none"})
     if o.is_last_departure:
         badges.append({"text": "sista avgången", "tone": "warn"})
+    elif o.next_departure_at is not None:
+        # Klockslag, inte "om X min": minuterna är glappet från den inställda
+        # avgången, uträknat när tipset skrevs -- inte avståndet från nu.
+        clock = o.next_departure_at.astimezone(ZoneInfo("Europe/Stockholm")).strftime("%H:%M")
+        badges.append({"text": f"nästa avgång {clock}", "tone": "none"})
     elif o.next_departure_minutes is not None:
-        badges.append({"text": f"nästa avgång om {o.next_departure_minutes} min", "tone": "none"})
+        badges.append({"text": f"glapp {o.next_departure_minutes} min", "tone": "none"})
     if o.has_alternative:
         badges.append({"text": "alternativ finns", "tone": "none"})
     return {

@@ -16,6 +16,7 @@ import json
 from dataclasses import dataclass
 from zoneinfo import ZoneInfo
 
+from core import thresholds
 from core.models import Confidence, SeverityTier
 from core.repository import upsert_opportunities, upsert_source_events
 from maritime import ais
@@ -161,7 +162,7 @@ def write_tip(vessel, port: Port, assessment: Assessment, reason: str) -> str:
         "kind": "ferry",
         "mode": "boat",
         "severity_tier": assessment.tier,
-        "level": "high" if assessment.score >= 60 else "medium",
+        "level": thresholds.stored_level(assessment.tier, assessment.score),
         "title": f"{title_name} {verb} i {port.name}",
         "summary": f"{assessment.band.capitalize()} ({vessel.length_m} m) {verb} kl {local:%H:%M}.",
         # Terminalen, inte fartygets position: det är dit föraren kör.

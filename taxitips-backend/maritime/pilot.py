@@ -29,6 +29,7 @@ from collections import deque
 from dataclasses import dataclass, field
 from zoneinfo import ZoneInfo
 
+from core import thresholds
 from core.geo import haversine_km
 from maritime import ais
 from maritime.register import TERMINALS, PilotTerminal
@@ -280,7 +281,7 @@ def write_tip(call, est: BerthEstimate, *, name: str, length_m: int | None) -> s
         "kind": "ferry",
         "mode": "boat",
         "severity_tier": SeverityTier.ARRIVAL_WAVE.value,
-        "level": "high" if score >= 60 else "medium",
+        "level": thresholds.stored_level(SeverityTier.ARRIVAL_WAVE.value, score),
         "title": f"{name.title()} lägger till i {port.name} ≈ {berth_local:%H:%M}",
         "summary": (
             f"Folk går iland ≈ {pickup_start.astimezone(STOCKHOLM):%H:%M}–"

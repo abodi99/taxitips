@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import json
 
+from core import thresholds
 from core.alternatives import alternative_from_text
 from core.compensation import compensation_signal
 from core.geo import REGION_ANCHOR, resolve_coords
@@ -157,9 +158,11 @@ def write(
         # skapa en. Samma ordning och gräns som poller.js:s mapOpportunity.
         score = result.score
         source_event_ids = [source_ids[alert["id"]]] if alert["id"] in source_ids else []
+        # Inte på väg: vägpoängen är kapad lågt med avsikt (thresholds.ROAD_SCORE_CAP),
+        # och +12 lyfte en olycka från 15 till 27 -- över taket.
         weather = (
             nearest_weather(lat, lon, region_weather)
-            if result.tier != SeverityTier.IGNORE
+            if result.tier != SeverityTier.IGNORE and kind != "road"
             else None
         )
         if is_adverse_weather(weather):
@@ -174,9 +177,8 @@ def write(
             "kind": kind,
             "mode": result.mode,
             "severity_tier": result.tier,
-            # Räknas från poängen EFTER väderbonusen -- annars flippar inte
-            # en 55 som blivit 67 över till "high".
-            "level": "high" if score >= 60 else "medium",
+            # Räknas från poängen EFTER väderbonusen, med samma regel som flödet.
+            "level": thresholds.stored_level(result.tier, score, has_alt),
             "title": alert["header"],
             "summary": alert["description"],
             "lat": lat,
