@@ -346,6 +346,11 @@ class Opportunity(models.Model):
         blank=True,
         help_text="Skrivs ENDAST av push-steget. Se klassdocstringen.",
     )
+    # Personal undertrycker felaktiga tips efter förarnas rapporter. Pipelinen
+    # skriver inte över rader där suppressed_at är satt (repository.py).
+    suppressed_at = models.DateTimeField(null=True, blank=True, db_index=True)
+    suppressed_by = models.UUIDField(null=True, blank=True)
+    suppression_note = models.TextField(blank=True, null=True)
 
     class Meta:
         db_table = "opportunities"
@@ -528,6 +533,42 @@ class OpportunityFeedback(models.Model):
 
     def __str__(self) -> str:
         return f"{self.verdict} · {self.opportunity_id}"
+
+
+class OpportunityReport(models.Model):
+    """Förarens rapport att ett tips visar felaktig information."""
+
+    class Status(models.TextChoices):
+        OPEN = "open", "Öppen"
+        RESOLVED = "resolved", "Avslutad"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    opportunity = models.ForeignKey(
+        Opportunity, on_delete=models.CASCADE, related_name="reports"
+    )
+    device_token = models.TextField(db_index=True, blank=True)
+    reporter_user_id = models.UUIDField(null=True, blank=True, db_index=True)
+    reason = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=10,
+        choices=Status.choices,
+        default=Status.OPEN,
+        db_index=True,
+    )
+    created_at = models.DateTimeField(db_default=models.functions.Now())
+    resolved_at = models.DateTimeField(null=True, blank=True)
+    resolved_by = models.UUIDField(null=True, blank=True)
+    resolution_note = models.TextField(blank=True)
+
+    class Meta:
+        db_table = "opportunity_report"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["status", "created_at"]),
+        ]
+
+    def __str__(self) -> str:
+        return f"{self.status} · {self.opportunity_id}"
 
 
 class SourceStatus(models.Model):

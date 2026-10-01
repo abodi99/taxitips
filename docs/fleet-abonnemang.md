@@ -398,10 +398,14 @@ samma prövning körs före kontot via `POST /api/fleet/register/check`:
 Bolagsverket nere stoppar aldrig en registrering (bolagsverket.py); den flaggas
 och `fleet_tick` hämtar registret igen.
 
-**Uppföljning** (adminwebben, `fleet/admin_followup.py`): varje prov som pågår
-eller slutat de senaste 60 dagarna, i ringordning (utlovade samtal, prov som tar
-slut, prov som slutat), med telefon, e-post, flaggor, skickade mejl, och
-säljarens utfall/anteckning/"ring igen" i `fleet_sales_followup`.
+**Uppföljning** (adminwebben, `fleet/admin_followup.py`): säljarens ringlista.
+Visar **inte** friska betalande abonnemang. I kön: prov (pågående / snart slut /
+slutade 60 dagar utan konvertering), förfallen betalning, uppsagt med kvarvarande
+åtkomst, och nyligen avslutade betalande kunder. Ringordning, telefon, flaggor,
+kundens angivna uppsägningsorsak (`PendingChange`), och säljarens utfall /
+strukturerade `churn_reason` / anteckning / "ring igen" i `fleet_sales_followup`.
+Från kortet: **förläng prov** eller sätt **prisrabatt** under Betalning
+(`fleet/trials.extend_trial`, `fleet/discounts`).
 
 Ägaren lägger själv till provbilar upp till provets gräns
 (`POST /api/fleet/trial/vehicles`) och kopplar förare med engångskod. **Fortsatt

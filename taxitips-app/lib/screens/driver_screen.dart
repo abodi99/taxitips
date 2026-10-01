@@ -23,6 +23,7 @@ import '../push_service.dart';
 import '../severity_labels.dart';
 import '../theme.dart';
 import '../widgets/alert_feedback_bar.dart';
+import '../widgets/tip_report_button.dart';
 import '../widgets/brand_icons.dart';
 import '../followed_events.dart';
 import '../signal_kinds.dart';
@@ -2709,6 +2710,11 @@ class _DriverScreenState extends State<DriverScreen>
                           opportunityId: a['id'].toString(),
                           api: widget.api,
                           likelihood: likelihood,
+                        ),
+                        const SizedBox(height: 8),
+                        TipReportButton(
+                          api: widget.api,
+                          opportunityId: a['id'].toString(),
                         ),
                       ],
                       const SizedBox(height: 8),

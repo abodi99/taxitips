@@ -663,7 +663,7 @@ def sync_company_amount(company_id) -> SyncResult | None:
     med `proration_behavior="none"`: det som ändras är NÄSTA faktura, aldrig
     en retroaktiv post. Gör ingenting för ett företag utan abonnemang i Stripe.
     """
-    from fleet import licensing, pricing
+    from fleet import discounts, licensing, pricing
 
     subscription = Subscription.objects.filter(company_id=company_id).select_related(
         "price_version"
@@ -678,7 +678,11 @@ def sync_company_amount(company_id) -> SyncResult | None:
         and subscription.current_period_end < subscription.intro_ends_at
     )
     quote = pricing.monthly_quote(
-        subscription.price_version, licenses=licenses, extra_counties=extras, intro=intro_next
+        subscription.price_version,
+        licenses=licenses,
+        extra_counties=extras,
+        intro=intro_next,
+        discount=discounts.active_spec(company_id, now=now),
     )
     return sync_subscription_amount(
         subscription, quote=quote, licenses=licenses, extra_counties=extras,

@@ -1038,6 +1038,100 @@ ul.todo li + li {
   gap: 0.75rem;
   flex-wrap: wrap;
 }
+.crm-note {
+  border-top: 1px solid var(--border, #e5e7eb);
+  padding-top: 0.75rem;
+  margin-top: 0.75rem;
+}
+.crm-note:first-of-type {
+  border-top: none;
+  margin-top: 0;
+  padding-top: 0;
+}
+.crm-note h3 {
+  font-size: 0.95rem;
+  margin: 0 0 0.35rem;
+}
+.crm-note-body {
+  white-space: pre-wrap;
+  margin: 0 0 0.25rem;
+  font-size: 0.92rem;
+}
+.crm-note-form {
+  margin-top: 1rem;
+  display: grid;
+  gap: 0.5rem;
+}
+.pipeline-filters {
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.btn-active {
+  font-weight: 600;
+  border-color: var(--accent, #2563eb);
+}
+
+.crm-board {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 0.75rem;
+  align-items: start;
+}
+.crm-board-col {
+  background: var(--surface-2, #f3f4f6);
+  border-radius: 8px;
+  padding: 0.5rem;
+  min-height: 12rem;
+}
+.crm-board-col header {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  margin-bottom: 0.5rem;
+}
+.crm-board-col h2 {
+  font-size: 0.9rem;
+  margin: 0;
+}
+.crm-board-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.crm-board-card {
+  text-align: left;
+  background: #fff;
+  border: 1px solid var(--border, #e5e7eb);
+  border-radius: 6px;
+  padding: 0.55rem 0.65rem;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  font: inherit;
+  color: inherit;
+}
+.crm-board-card:hover {
+  border-color: var(--accent, #2563eb);
+}
+.crm-board-card strong {
+  font-size: 0.9rem;
+}
+.crm-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 1rem;
+}
+.muted-card {
+  background: transparent;
+  border-style: dashed;
+}
+
+.crm-note-form textarea {
+  min-height: 5rem;
+}
+
 .card-head h2 {
   margin: 0;
 }
@@ -1221,6 +1315,13 @@ ul.st-detail li {
 }
 .fu-info {
   color: var(--ink-soft);
+}
+.fu-hint {
+  margin: 0.35rem 0 0;
+  font-size: 0.9rem;
+}
+.fu-stated {
+  margin: 0.35rem 0 0;
 }
 .fu-mails {
   font-size: 0.88rem;

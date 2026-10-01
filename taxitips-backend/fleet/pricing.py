@@ -41,6 +41,7 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from datetime import date, datetime, timedelta
 
+from fleet.discounts import DiscountSpec
 from fleet.models import PriceVersion, Subscription
 
 
@@ -207,12 +208,45 @@ def _unit_price_ore(price: PriceVersion, quantity: int, intro: bool) -> tuple[in
     return tier_price, tier_basis
 
 
+def _license_lines_subtotal(lines: list[LineItem]) -> int:
+    return sum(line.amount_ore for line in lines if line.key.startswith("licenses_"))
+
+
+def _apply_company_discount(lines: list[LineItem], discount: DiscountSpec | None) -> list[LineItem]:
+    if discount is None:
+        return lines
+    subtotal = _license_lines_subtotal(lines)
+    if subtotal <= 0:
+        return lines
+    if discount.kind == "percent_bp":
+        off = _round_div(subtotal * discount.value, 10_000)
+        label = f"Rabatt ({discount.value / 100:.2f} %)"
+    else:
+        off = min(discount.value, subtotal)
+        label = "Rabatt (fast belopp)"
+    if off <= 0:
+        return lines
+    note = discount.description or "Gäller billicenser, inte extra län."
+    return [
+        *lines,
+        LineItem(
+            key="company_discount",
+            label=label,
+            quantity=1,
+            unit_price_ore=-off,
+            amount_ore=-off,
+            note=note,
+        ),
+    ]
+
+
 def monthly_quote(
     price: PriceVersion,
     *,
     licenses: int,
     extra_counties: int,
     intro: bool,
+    discount: DiscountSpec | None = None,
 ) -> Quote:
     """
     Det löpande månadsbeloppet för ett givet antal licenser och extra län.
@@ -250,6 +284,7 @@ def monthly_quote(
             )
         )
 
+    lines = _apply_company_discount(lines, discount)
     amount = sum(line.amount_ore for line in lines)
     vat = vat_of(amount, price.vat_rate_bp)
     return Quote(
@@ -333,6 +368,7 @@ def quote_change(
     new_licenses: int,
     new_extra_counties: int,
     immediate: bool,
+    discount: DiscountSpec | None = None,
 ) -> ChangeQuote:
     """
     Hela underlaget för en ändring.
@@ -347,16 +383,25 @@ def quote_change(
     faktureras.
     """
     current = monthly_quote(
-        price, licenses=current_licenses, extra_counties=current_extra_counties, intro=intro_now
+        price,
+        licenses=current_licenses,
+        extra_counties=current_extra_counties,
+        intro=intro_now,
+        discount=discount,
     )
     after = monthly_quote(
-        price, licenses=new_licenses, extra_counties=new_extra_counties, intro=intro_now
+        price,
+        licenses=new_licenses,
+        extra_counties=new_extra_counties,
+        intro=intro_now,
+        discount=discount,
     )
     next_period = monthly_quote(
         price,
         licenses=new_licenses,
         extra_counties=new_extra_counties,
         intro=intro_next_period,
+        discount=discount,
     )
 
     first_period = not (period_start and period_end and period_end > period_start)

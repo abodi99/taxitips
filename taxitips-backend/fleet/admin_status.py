@@ -248,6 +248,9 @@ def _sources(statuses, now) -> list[dict]:
     names += sorted(
         s for s in statuses if s not in thresholds.SOURCE_MAX_AGE_MINUTES and s != thresholds.HEARTBEAT_SOURCE
     )
+    # Lokal/dev med EAGER: beat körs inte, så gamla SourceStatus-rader är
+    # inte ett produktionshaveri -- visa Av i stället för Nere.
+    polling_idle = bool(getattr(settings, "CELERY_TASK_ALWAYS_EAGER", False))
     out = []
     for source in names:
         label = SOURCE_LABEL.get(source, source)
@@ -259,9 +262,15 @@ def _sources(statuses, now) -> list[dict]:
             out.append(_check(source, label, OFF, f"{setting} saknas -- hämtas inte"))
             continue
         if row is None:
-            out.append(_check(
-                source, label, DOWN if core else WARN, "Har aldrig hämtats i den här miljön",
-            ))
+            if polling_idle:
+                out.append(_check(
+                    source, label, OFF,
+                    "Hämtas inte här (CELERY_TASK_ALWAYS_EAGER) -- kör poll_*/worker lokalt om du vill",
+                ))
+            else:
+                out.append(_check(
+                    source, label, DOWN if core else WARN, "Har aldrig hämtats i den här miljön",
+                ))
             continue
 
         last = row.last_success_at
@@ -287,7 +296,14 @@ def _sources(statuses, now) -> list[dict]:
             detail.append(f"{len(failing)} av {len(parts)} delkällor fallerar")
             detail.extend(failing[:8])
 
-        if last is None and max_age is None:
+        if polling_idle and stale:
+            status = OFF
+            summary = (
+                f"Pollas inte här (EAGER) -- senaste lyckade {_ago(age)}"
+                if age is not None else "Pollas inte här (CELERY_TASK_ALWAYS_EAGER)"
+            )
+            detail.append("I lokal utveckling räknas inte gamla hämtningar som haveri")
+        elif last is None and max_age is None:
             status = OFF if row.ok else WARN
             summary = "Ingen lyckad hämtning ännu"
         elif stale:

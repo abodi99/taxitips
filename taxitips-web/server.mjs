@@ -2,15 +2,15 @@
  * Tiny production server for the static Vite build.
  * Serves dist/ and exposes:
  *   POST /api/subscribe  → Listmonk public subscription (CORS-safe)
- *   POST /api/lead       → Listmonk private leads + optional Twenty CRM person
+ *   POST /api/lead       → Listmonk private leads + optional Django CRM (native)
  *
  * Coolify env (optional for CRM/leads):
  *   LISTMONK_URL=https://lm.a2m-tech.com
  *   LISTMONK_USER=...
  *   LISTMONK_TOKEN=...
  *   LISTMONK_LEADS_LIST_ID=7
- *   TWENTY_API_URL=https://taxitips.tw.a2m-tech.com
- *   TWENTY_API_KEY=...   (Settings → APIs in the Taxi Tips workspace)
+ *   CRM_LEAD_BACKEND_URL=https://backend.taxitips.se
+ *   CRM_LEAD_INGEST_SECRET=...   (samma som på taxitips-backend)
  */
 
 import http from "node:http";
@@ -29,11 +29,8 @@ const LISTMONK_LEADS_LIST_ID = Number(process.env.LISTMONK_LEADS_LIST_ID || 7);
 const PUBLIC_LIST_UUID =
   process.env.LISTMONK_PUBLIC_LIST_UUID || "e2f8a9bc-674d-47a0-8dd8-77d1272cbfa5";
 
-const TWENTY_API_URL = (process.env.TWENTY_API_URL || "https://taxitips.tw.a2m-tech.com").replace(
-  /\/$/,
-  ""
-);
-const TWENTY_API_KEY = process.env.TWENTY_API_KEY || "";
+const CRM_LEAD_BACKEND_URL = (process.env.CRM_LEAD_BACKEND_URL || "").replace(/\/$/, "");
+const CRM_LEAD_INGEST_SECRET = process.env.CRM_LEAD_INGEST_SECRET || "";
 const CHATWOOT_WEBSITE_TOKEN = process.env.CHATWOOT_WEBSITE_TOKEN || "";
 const GLITCHTIP_DSN = process.env.GLITCHTIP_DSN || "";
 
@@ -151,105 +148,23 @@ async function listmonkPrivateLead({ email, name, attribs }) {
   return { ok: false, status: res.status, body: await res.text() };
 }
 
-async function twentyCreateLead({ name, email, company, message, source, page }) {
-  if (!TWENTY_API_KEY) {
-    return { skipped: true, reason: "twenty_api_key_missing" };
+async function djangoCrmLead({ name, email, company, message, source, page }) {
+  if (!CRM_LEAD_BACKEND_URL || !CRM_LEAD_INGEST_SECRET) {
+    return { skipped: true, reason: "crm_backend_not_configured" };
   }
-
-  const [firstName, ...rest] = String(name || "Okänd").trim().split(/\s+/);
-  const lastName = rest.join(" ") || "-";
-
-  const mutation = `
-    mutation CreateWebLead($data: PersonCreateInput!) {
-      createPerson(data: $data) { id }
-    }
-  `;
-
-  const variables = {
-    data: {
-      name: { firstName, lastName },
-      emails: { primaryEmail: email },
-      jobTitle: company || undefined,
-      // Custom fields may not exist — keep payload minimal and put context in city/note via company name.
-    },
-  };
-
-  const res = await fetch(`${TWENTY_API_URL}/graphql`, {
+  const res = await fetch(`${CRM_LEAD_BACKEND_URL}/api/crm/lead`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${TWENTY_API_KEY}`,
       "Content-Type": "application/json",
+      "X-Crm-Lead-Secret": CRM_LEAD_INGEST_SECRET,
     },
-    body: JSON.stringify({ query: mutation, variables }),
+    body: JSON.stringify({ name, email, company, message, source, page }),
   });
-
   const payload = await res.json().catch(() => ({}));
-  if (!res.ok || payload.errors) {
-    // Fallback: create a Note-only style via REST if GraphQL shape differs across Twenty versions.
-    const restRes = await fetch(`${TWENTY_API_URL}/rest/people`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${TWENTY_API_KEY}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        name: { firstName, lastName },
-        emails: { primaryEmail: email },
-        jobTitle: company || undefined,
-        city: source || "taxitips_web",
-      }),
-    });
-    if (!restRes.ok) {
-      return {
-        ok: false,
-        status: restRes.status,
-        graphql: payload,
-        rest: await restRes.text(),
-      };
-    }
-    const person = await restRes.json();
-    await twentyCreateNote({
-      personId: person?.data?.id || person?.id,
-      message,
-      company,
-      email,
-      page,
-    });
-    return { ok: true, via: "rest", person };
+  if (!res.ok) {
+    return { ok: false, status: res.status, body: payload };
   }
-
-  const personId = payload?.data?.createPerson?.id;
-  await twentyCreateNote({ personId, message, company, email, page });
-  return { ok: true, via: "graphql", personId };
-}
-
-async function twentyCreateNote({ personId, message, company, email, page }) {
-  if (!TWENTY_API_KEY || !message) return;
-  const title = `Webbförfrågan${company ? ` — ${company}` : ""}`;
-  const body = [
-    message,
-    "",
-    `E-post: ${email || ""}`,
-    company ? `Bolag: ${company}` : null,
-    page ? `Sida: ${page}` : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
-
-  await fetch(`${TWENTY_API_URL}/rest/notes`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${TWENTY_API_KEY}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      title,
-      bodyV2: { markdown: body },
-      ...(personId
-        ? { noteTargets: [{ personId }] }
-        : {}),
-    }),
-  }).catch(() => null);
+  return { ok: true, leadId: payload.leadId };
 }
 
 // Adminwebben har en egen värd. På den värden är `/` adminsidan, inte
@@ -373,7 +288,6 @@ const server = http.createServer(async (req, res) => {
       ok: true,
       chatwootWebsiteToken: CHATWOOT_WEBSITE_TOKEN || null,
       glitchtipDsn: GLITCHTIP_DSN || null,
-      twentyWorkspace: TWENTY_API_URL,
       listmonkPublicList: PUBLIC_LIST_UUID,
     });
     return;
@@ -423,13 +337,13 @@ const server = http.createServer(async (req, res) => {
         return;
       }
 
-      const [listmonkResult, twentyResult] = await Promise.all([
+      const [listmonkResult, crmResult] = await Promise.all([
         listmonkPrivateLead({
           email,
           name: company ? `${name} · ${company}` : name,
           attribs: { source, company, message: message.slice(0, 1000), page },
         }),
-        twentyCreateLead({ name, email, company, message, source, page }),
+        djangoCrmLead({ name, email, company, message, source, page }),
       ]);
 
       // Always also put them on the public launch list (double opt-in).
@@ -447,7 +361,7 @@ const server = http.createServer(async (req, res) => {
         ok: true,
         listmonk_leads: listmonkResult,
         listmonk_public: publicSub,
-        twenty: twentyResult,
+        crm: crmResult,
       });
     } catch (err) {
       console.error("[api]", err);

@@ -30,6 +30,7 @@ from django.views.decorators.http import require_GET, require_http_methods, requ
 from billing.models import Company, CompanyMember
 from core.api import _json
 from core import areas
+from core.tip_reports import TipReportError
 from fleet import (
     accounts,
     access,
@@ -37,6 +38,7 @@ from fleet import (
     audit,
     commerce,
     company_details,
+    discounts,
     driver_invites,
     licensing,
     ownership,
@@ -94,6 +96,8 @@ _DOMAIN_ERRORS = (
     ownership.OwnershipError,
     sales.SalesError,
     support.SupportError,
+    discounts.DiscountError,
+    TipReportError,
     PermissionDenied,
 )
 

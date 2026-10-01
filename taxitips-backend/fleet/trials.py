@@ -45,6 +45,9 @@ SALES_TRIAL_VEHICLE_LIMIT = 3
 # avbrutet prov inte kan användas för att korta ner den.
 TRIAL_COOLDOWN_MONTHS = 24
 INVITE_VALID_DAYS = 7
+# Säljaren/admin kan förlänga eller sätta längre prov, men inte obegränsat.
+TRIAL_MAX_PLANNED_DAYS = 365
+TRIAL_EXTEND_MAX_DAYS = 366
 
 
 class TrialError(Exception):
@@ -107,6 +110,16 @@ def eligibility(*, country: str, org_number: str, now=None) -> Eligibility:
 
 
 @transaction.atomic
+def _validate_planned_days(days: int | None) -> None:
+    if days is None:
+        return
+    if not 1 <= int(days) <= TRIAL_MAX_PLANNED_DAYS:
+        raise TrialError(
+            "invalid_trial_days",
+            f"Provlängd: 1–{TRIAL_MAX_PLANNED_DAYS} dagar.",
+        )
+
+
 def create_trial(
     *,
     company_id,
@@ -115,6 +128,7 @@ def create_trial(
     source: str,
     invite: SalesInvite | None = None,
     requires_payment_method: bool = True,
+    planned_days: int | None = None,
     actor_user_id=None,
     now=None,
 ) -> Trial:
@@ -126,6 +140,7 @@ def create_trial(
     check = eligibility(country=country, org_number=org_number, now=now)
     if not check.ok:
         raise TrialError(check.reason, check.message)
+    _validate_planned_days(planned_days)
 
     trial = Trial.objects.create(
         company_id=company_id,
@@ -134,13 +149,18 @@ def create_trial(
         invite=invite,
         requires_payment_method=requires_payment_method,
         vehicle_limit=vehicle_limit_for(source),
+        planned_days=planned_days,
         status=Trial.Status.PENDING,
     )
     audit.record(
         "trial_created", company_id=company_id, actor_user_id=actor_user_id,
         actor_kind="sales" if invite else "customer",
         subject_type="trial", subject_id=trial.id,
-        detail={"source": source, "requires_payment_method": requires_payment_method},
+        detail={
+            "source": source,
+            "requires_payment_method": requires_payment_method,
+            "planned_days": planned_days,
+        },
     )
     return trial
 
@@ -161,7 +181,8 @@ def start_trial(trial: Trial, *, now=None) -> Trial:
     slutdatum eftersom det bor på provet och inte på bilen (§7).
     """
     now = now or timezone.now()
-    ends_at = now + timedelta(days=TRIAL_DAYS)
+    days = trial.planned_days or TRIAL_DAYS
+    ends_at = now + timedelta(days=days)
     updated = Trial.objects.filter(
         id=trial.id, started_at__isnull=True, status=Trial.Status.PENDING
     ).update(started_at=now, ends_at=ends_at, status=Trial.Status.ACTIVE)
@@ -170,8 +191,72 @@ def start_trial(trial: Trial, *, now=None) -> Trial:
         audit.record(
             "trial_started", company_id=trial.company_id, actor_kind="system",
             subject_type="trial", subject_id=trial.id,
-            detail={"started_at": now.isoformat(), "ends_at": ends_at.isoformat()},
+            detail={
+                "started_at": now.isoformat(),
+                "ends_at": ends_at.isoformat(),
+                "days": days,
+            },
         )
+    return trial
+
+
+@transaction.atomic
+def extend_trial(
+    company_id,
+    days: int,
+    *,
+    reason: str,
+    actor_user_id,
+    actor_kind: str = "sales",
+    now=None,
+) -> Trial:
+    """Förlänger ett väntande eller pågående prov. Kräver skäl (audit)."""
+    now = now or timezone.now()
+    try:
+        days = int(days)
+    except (TypeError, ValueError):
+        raise TrialError("invalid_days", "Antal dagar ska vara ett heltal.")
+    if not 1 <= days <= TRIAL_EXTEND_MAX_DAYS:
+        raise TrialError("invalid_days", f"Förlängning: 1–{TRIAL_EXTEND_MAX_DAYS} dagar.")
+    if not (reason or "").strip():
+        raise TrialError("reason_required", "Skriv varför provet förlängs.")
+
+    trial = active_trial(company_id)
+    if trial is None:
+        raise TrialError("no_trial", "Företaget har inget prov att förlänga.")
+    if trial.status not in (Trial.Status.PENDING, Trial.Status.ACTIVE):
+        raise TrialError("trial_not_open", "Provet är redan avslutat.")
+
+    before = {
+        "status": trial.status,
+        "endsAt": trial.ends_at.isoformat() if trial.ends_at else None,
+        "plannedDays": trial.planned_days,
+    }
+    if trial.status == Trial.Status.PENDING:
+        base_days = trial.planned_days or TRIAL_DAYS
+        new_planned = min(base_days + days, TRIAL_MAX_PLANNED_DAYS)
+        Trial.objects.filter(id=trial.id).update(planned_days=new_planned)
+    else:
+        base = trial.ends_at if trial.ends_at and trial.ends_at > now else now
+        Trial.objects.filter(id=trial.id).update(ends_at=base + timedelta(days=days))
+    trial.refresh_from_db()
+    audit.record(
+        "trial_extended",
+        company_id=company_id,
+        actor_user_id=actor_user_id,
+        actor_kind=actor_kind,
+        subject_type="trial",
+        subject_id=trial.id,
+        detail={
+            "before": before,
+            "addedDays": days,
+            "after": {
+                "endsAt": trial.ends_at.isoformat() if trial.ends_at else None,
+                "plannedDays": trial.planned_days,
+            },
+            "reason": reason.strip()[:300],
+        },
+    )
     return trial
 
 

@@ -7,8 +7,8 @@ det här inte är kundens väg.
 from django.urls import path
 
 from fleet import (
-    admin_accounts, admin_activity, admin_api, admin_app_version, admin_followup, admin_sales, admin_status, admin_support,
-    admin_vehicles,
+    admin_accounts, admin_activity, admin_api, admin_app_version, admin_crm, admin_followup, admin_sales,
+    admin_status, admin_support, admin_tip_reports, admin_vehicles,
 )
 
 urlpatterns = [
@@ -21,6 +21,21 @@ urlpatterns = [
     # Säljarens uppföljning av prov (vem ska ringas, vad sa de).
     path("followups", admin_followup.followups),
     path("followups/<uuid:company_id>", admin_followup.update_followup),
+    path("crm/status", admin_crm.crm_status),
+    path("crm/pipeline", admin_crm.pipeline),
+    path("crm/deals", admin_crm.deal_create),
+    path("crm/deals/<uuid:deal_id>", admin_crm.deal_detail),
+    path("crm/deals/<uuid:deal_id>/update", admin_crm.deal_update),
+    path("crm/deals/<uuid:deal_id>/link-company", admin_crm.deal_link_company),
+    path("crm/deals/<uuid:deal_id>/notes", admin_crm.deal_note),
+    # Alias tills admin-UI:n bara använder /deals
+    path("crm/leads", admin_crm.deal_create),
+    path("crm/leads/<uuid:lead_id>", admin_crm.deal_detail),
+    path("crm/leads/<uuid:lead_id>/update", admin_crm.deal_update),
+    path("crm/leads/<uuid:lead_id>/link-company", admin_crm.deal_link_company),
+    path("crm/leads/<uuid:lead_id>/notes", admin_crm.deal_note),
+    path("companies/<uuid:company_id>/crm", admin_crm.company_crm),
+    path("companies/<uuid:company_id>/crm/notes", admin_crm.company_crm_note),
     path("companies/new", admin_sales.create_company),
     path("companies/<uuid:company_id>", admin_api.company_detail),
     path("companies/<uuid:company_id>/profile", admin_sales.update_profile),
@@ -37,6 +52,10 @@ urlpatterns = [
     path("companies/<uuid:company_id>/quote", admin_sales.quote),
     path("companies/<uuid:company_id>/orders", admin_sales.create_order),
     path("companies/<uuid:company_id>/trial", admin_sales.start_trial),
+    path("companies/<uuid:company_id>/trial/extend", admin_sales.extend_trial),
+    path("companies/<uuid:company_id>/discount", admin_sales.set_discount),
+    path("companies/<uuid:company_id>/discount/clear", admin_sales.clear_discount),
+    path("companies/<uuid:company_id>/discounts", admin_sales.list_discounts),
     path("companies/<uuid:company_id>/coupon", admin_sales.redeem_coupon),
     path("companies/<uuid:company_id>/cancel", admin_sales.cancel_subscription),
     path("companies/<uuid:company_id>/undo-cancel", admin_sales.undo_cancel),
@@ -77,4 +96,9 @@ urlpatterns = [
     path("staff/set", admin_accounts.set_staff),
     path("reviews", admin_api.reviews),
     path("reviews/<uuid:review_id>/resolve", admin_api.resolve_review),
+    path("tip-reports/summary", admin_tip_reports.summary),
+    path("tip-reports", admin_tip_reports.list_reports),
+    path("tip-reports/<uuid:report_id>", admin_tip_reports.report_detail),
+    path("tip-reports/<uuid:report_id>/resolve", admin_tip_reports.resolve_report),
+    path("opportunities/<uuid:opportunity_id>/suppress", admin_tip_reports.suppress_opportunity),
 ]

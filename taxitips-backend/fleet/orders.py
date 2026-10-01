@@ -31,7 +31,7 @@ from datetime import timedelta
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from fleet import audit, licensing, pricing
+from fleet import audit, discounts, licensing, pricing
 from fleet.models import (
     License,
     LicenseCounty,
@@ -160,6 +160,7 @@ def plan_change(
 
     subscription = get_or_create_subscription(company_id)
     price = subscription.price_version
+    discount = discounts.active_spec(company_id, now=now)
 
     current_licenses = licensing.billable_license_count(company_id)
     current_extra = licensing.extra_county_count(company_id, now)
@@ -210,6 +211,7 @@ def plan_change(
             current_licenses=current_licenses, current_extra_counties=current_extra,
             new_licenses=upgrade_licenses, new_extra_counties=upgrade_extra,
             immediate=True,
+            discount=discount,
         )
         # Nästa period speglar hela slutläget, inklusive minskningarna.
         quote = pricing.ChangeQuote(
@@ -217,6 +219,7 @@ def plan_change(
             next_period=pricing.monthly_quote(
                 price, licenses=new_licenses, extra_counties=new_extra,
                 intro=_intro_next_period(subscription, now),
+                discount=discount,
             ),
             current=quote.current,
             effective_at=quote.effective_at,
@@ -235,6 +238,7 @@ def plan_change(
             current_licenses=current_licenses, current_extra_counties=current_extra,
             new_licenses=new_licenses, new_extra_counties=new_extra,
             immediate=False,
+            discount=discount,
         )
 
     request = {

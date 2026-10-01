@@ -34,8 +34,8 @@ from django.views.decorators.http import require_GET, require_POST
 
 from billing.models import Company, CompanyMember, Device
 from core.api import _json
-from core.models import PushDelivery
-from fleet import access, archive, audit, licensing, pairing, pricing, risk, roles, sessions, trials
+from core.models import OpportunityReport, PushDelivery
+from fleet import access, archive, audit, discounts, licensing, pairing, pricing, risk, roles, sessions, trials
 from fleet.api import _DOMAIN_ERRORS, _error
 from fleet.models import (
     AccountBlock,
@@ -137,8 +137,11 @@ def _monthly_ore(subscription: Subscription, now) -> int:
     if not count and not extras:
         return 0
     quote = pricing.monthly_quote(
-        subscription.price_version, licenses=count, extra_counties=extras,
+        subscription.price_version,
+        licenses=count,
+        extra_counties=extras,
         intro=pricing.intro_active(subscription, now),
+        discount=discounts.active_spec(subscription.company_id, now=now),
     )
     return quote.amount_ore
 
@@ -181,6 +184,9 @@ def overview(request):
             status=SubscriptionStatus.PAST_DUE, grace_until__gt=now
         ).count(),
         "reviewsOpen": ChangeReview.objects.filter(status=ChangeReview.Status.OPEN).count(),
+        "tipReportsOpen": OpportunityReport.objects.filter(
+            status=OpportunityReport.Status.OPEN
+        ).count(),
         # Självregistrerade företag vars behörighet ingen kontrollerat än (§7).
         "unverifiedCompanies": CompanyProfile.objects.filter(
             verification_status="unverified"
@@ -424,10 +430,12 @@ def company_detail(request, company_id):
         "trial": (
             {"status": trial.status, "source": trial.source,
              "startedAt": _iso(trial.started_at), "endsAt": _iso(trial.ends_at),
+             "plannedDays": trial.planned_days,
              "vehicleLimit": trial.vehicle_limit,
              "vehicles": trials.trial_vehicle_count(trial)}
             if trial else None
         ),
+        "discount": discounts.discount_row(discounts.active_discount(company.id, now=now)),
         "couponRedemptions": admin_sales_rows.redemptions_for(company.id),
         "ownerInvites": [
             {"id": str(i.id), "email": i.email, "status": i.status,

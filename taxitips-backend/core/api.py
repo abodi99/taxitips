@@ -42,10 +42,12 @@ from core.models import (
     Opportunity,
     OpportunityFavorite,
     OpportunityFeedback,
+    OpportunityReport,
     PushDelivery,
     ScoringRule,
     SourceEvent,
 )
+from core import tip_reports
 
 log = logging.getLogger(__name__)
 
@@ -444,6 +446,7 @@ def feed_for(
             demand_score__gt=0,
         )
         .exclude(severity_tier="ignore")
+        .filter(suppressed_at__isnull=True)
         # Bara de väghändelser föraren ska se, se thresholds.ROAD_SHOWN_CONDITIONS.
         .exclude(Q(kind="road") & ~Q(rule_id__regex=_ROAD_SHOWN_RE))
     )
@@ -573,7 +576,7 @@ def _favorites_for(owner_key: str, lat, lon, now) -> list[dict]:
     )
     for fav in rows:
         o = fav.opportunity
-        if o is None:
+        if o is None or o.suppressed_at is not None:
             snapshot = dict(fav.snapshot or {})
             snapshot.update(
                 {
@@ -745,7 +748,7 @@ def opportunity_detail(request, opportunity_id):
         return _json(request, {"error": "not_entitled", "reason": ent.reason}, status=403)
 
     o = Opportunity.objects.filter(id=opportunity_id).first()
-    if o is None:
+    if o is None or o.suppressed_at is not None:
         return _json(request, {"error": "not_found"}, status=404)
     if not tip_within_entitlement(ent, o):
         # Samma svar som ett okänt id: en direktlänk ska inte kunna användas
@@ -839,6 +842,74 @@ def feedback(request):
         # Samma omdöme igen = dubbeltryckning. Idempotent, inte ett fel.
         return _json(request, {"ok": True, "duplicate": True})
     return _json(request, {"ok": True})
+
+
+def _reporter_user_id(request) -> str | None:
+    auth = request.headers.get("Authorization") or ""
+    if not auth.startswith("Bearer "):
+        return None
+    payload = verify_supabase_jwt(auth[7:].strip())
+    sub = payload.get("sub") if payload else None
+    return str(sub) if sub else None
+
+
+@csrf_exempt
+@require_POST
+def tip_report(request):
+    """
+    POST /api/tip-reports  {"opportunity_id": uuid, "reason": "..."}
+
+    Separat från 🚕/👍/👎 -- här rapporterar föraren att tipset i sig är fel.
+    """
+    ent = entitlement_for_request(request)
+    if not ent.ok:
+        return _json(request, {"error": "not_entitled", "reason": ent.reason}, status=403)
+
+    try:
+        body = json.loads(request.body or b"{}")
+    except ValueError:
+        return _json(request, {"error": "invalid_json"}, status=400)
+
+    opportunity_id = body.get("opportunity_id") or body.get("alert_id")
+    reason = str(body.get("reason") or "").strip()[:2000]
+    if not opportunity_id:
+        return _json(request, {"error": "missing_opportunity_id"}, status=400)
+
+    o = Opportunity.objects.filter(id=opportunity_id, suppressed_at__isnull=True).first()
+    if o is None:
+        return _json(request, {"error": "unknown_opportunity"}, status=404)
+    if not tip_within_entitlement(ent, o):
+        return _json(request, {"error": "unknown_opportunity"}, status=404)
+
+    token = request.headers.get("X-Device-Token") or ""
+    user_id = _reporter_user_id(request)
+    open_qs = OpportunityReport.objects.filter(
+        opportunity_id=o.id,
+        status=OpportunityReport.Status.OPEN,
+    )
+    if token:
+        open_qs = open_qs.filter(device_token=token)
+    elif user_id:
+        open_qs = open_qs.filter(reporter_user_id=user_id)
+    if open_qs.exists():
+        return _json(request, {"ok": True, "duplicate": True})
+
+    reporter_uuid = None
+    if user_id:
+        try:
+            import uuid as _uuid
+
+            reporter_uuid = _uuid.UUID(user_id)
+        except ValueError:
+            reporter_uuid = None
+
+    report = OpportunityReport.objects.create(
+        opportunity=o,
+        device_token=token,
+        reporter_user_id=reporter_uuid,
+        reason=reason,
+    )
+    return _json(request, {"ok": True, "reportId": str(report.id)})
 
 
 @require_GET

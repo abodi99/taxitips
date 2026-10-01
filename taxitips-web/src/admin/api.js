@@ -28,6 +28,24 @@ export const admin = {
   deleteCompany: (id, confirmName) =>
     request(`/api/admin/companies/${id}/delete`, { method: "POST", body: { confirmName } }),
   company: (id) => request(`/api/admin/companies/${id}`),
+  crmStatus: () => request("/api/admin/crm/status"),
+  crmPipeline: (stage = "") => {
+    if (stage === "__board__") {
+      return request("/api/admin/crm/pipeline?board=1");
+    }
+    return request(`/api/admin/crm/pipeline${stage ? `?stage=${encodeURIComponent(stage)}` : ""}`);
+  },
+  crmDeal: (id) => request(`/api/admin/crm/deals/${id}`),
+  crmCreateLead: (body) => request("/api/admin/crm/deals", { method: "POST", body }),
+  crmUpdateLead: (id, body) =>
+    request(`/api/admin/crm/deals/${id}/update`, { method: "POST", body }),
+  crmLinkLeadCompany: (id, body) =>
+    request(`/api/admin/crm/deals/${id}/link-company`, { method: "POST", body }),
+  crmDealNote: (id, body) =>
+    request(`/api/admin/crm/deals/${id}/notes`, { method: "POST", body }),
+  companyCrm: (id) => request(`/api/admin/companies/${id}/crm`),
+  crmNote: (id, body) =>
+    request(`/api/admin/companies/${id}/crm/notes`, { method: "POST", body }),
   /* --- Uppföljning av prov (fleet/admin_followup.py) --- */
   followUps: () => request("/api/admin/followups"),
   updateFollowUp: (companyId, body) =>
@@ -109,6 +127,14 @@ export const admin = {
     }),
   reviews: (status = "open") => request(`/api/admin/reviews?status=${status}`),
 
+  /* --- Tipprapporter (fleet/admin_tip_reports.py) --- */
+  tipReportsSummary: () => request("/api/admin/tip-reports/summary"),
+  tipReports: (status = "open") =>
+    request(`/api/admin/tip-reports?status=${encodeURIComponent(status)}`),
+  tipReport: (id) => request(`/api/admin/tip-reports/${id}`),
+  resolveTipReport: (id, body) =>
+    request(`/api/admin/tip-reports/${id}/resolve`, { method: "POST", body }),
+
   /* --- Säljflödet (fleet/admin_sales.py) --- */
   salesConfig: () => request("/api/admin/sales/config"),
   lookup: (orgNumber) =>
@@ -119,8 +145,20 @@ export const admin = {
   quote: (id, change) =>
     request(`/api/admin/companies/${id}/quote`, { method: "POST", body: change }),
   order: (id, body) => request(`/api/admin/companies/${id}/orders`, { method: "POST", body }),
-  startTrial: (id, vehicles) =>
-    request(`/api/admin/companies/${id}/trial`, { method: "POST", body: { vehicles } }),
+  startTrial: (id, vehicles, days) =>
+    request(`/api/admin/companies/${id}/trial`, {
+      method: "POST",
+      body: { vehicles, ...(days != null ? { days } : {}) },
+    }),
+  extendTrial: (id, days, reason) =>
+    request(`/api/admin/companies/${id}/trial/extend`, {
+      method: "POST",
+      body: { days, reason },
+    }),
+  setDiscount: (id, body) =>
+    request(`/api/admin/companies/${id}/discount`, { method: "POST", body }),
+  clearDiscount: (id, reason) =>
+    request(`/api/admin/companies/${id}/discount/clear`, { method: "POST", body: { reason } }),
   redeemCoupon: (id, code, vehicles) =>
     request(`/api/admin/companies/${id}/coupon`, { method: "POST", body: { code, vehicles } }),
   cancelSubscription: (id, reason, immediate = false) =>

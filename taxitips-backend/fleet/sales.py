@@ -368,9 +368,17 @@ def _profile_or_error(company: Company) -> CompanyProfile:
 
 
 @transaction.atomic
-def start_trial(company: Company, vehicles: list, *, actor_user_id, now=None) -> Trial:
+def start_trial(
+    company: Company,
+    vehicles: list,
+    *,
+    days: int | None = None,
+    actor_user_id,
+    now=None,
+) -> Trial:
     """
-    Kortfritt prov i 7 dagar, eller fler provbilar i ett pågående prov.
+    Kortfritt prov i 7 dagar (eller valfri längd som säljaren anger), eller fler
+    provbilar i ett pågående prov.
 
     Samma regler som självregistreringen: ett prov per organisationsnummer och
     24 månader, högst tre bilar när säljaren lägger upp provet (en vid
@@ -382,10 +390,11 @@ def start_trial(company: Company, vehicles: list, *, actor_user_id, now=None) ->
     trial = trials.active_trial(company.id)
     if trial is None:
         profile = _profile_or_error(company)
+        planned = int(days) if days not in (None, "") else None
         trial = trials.create_trial(
             company_id=company.id, country=profile.country, org_number=profile.org_number,
             source=Trial.Source.SALES, requires_payment_method=False,
-            actor_user_id=actor_user_id, now=now,
+            planned_days=planned, actor_user_id=actor_user_id, now=now,
         )
     _add_trial_vehicles(trial, specs, actor_user_id=actor_user_id, now=now)
     orders.get_or_create_subscription(company.id)

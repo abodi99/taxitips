@@ -48,6 +48,8 @@
         <button id="magicLink" class="btn btn-quiet" type="button">Skicka inloggningslänk i stället</button>
         <button id="forgotPassword" class="btn btn-quiet" type="button">Glömt lösenord</button>
       </div>
+      <!-- #devLogin fylls bara av Vite DEV (npm run dev) — borttaget i prod-bygge. -->
+      <div id="devLogin" class="dev-login" hidden></div>
       <p class="muted">Loggar du in med Google har kontot inget lösenord. Skriv
         din e-post ovan och be om en inloggningslänk.</p>
       <p id="magicSent" class="ok" role="status" hidden></p>
@@ -57,9 +59,12 @@
       <nav class="admin-side" aria-label="Adminvyer">
         <button class="tab tab-main" data-view="oversikt" aria-current="page">Hem</button>
         <button class="tab tab-main" data-view="kunder">Kunder</button>
+        <button class="tab tab-main" data-view="pipeline">CRM</button>
         <button class="tab tab-main" data-view="uppfoljning">Uppföljning</button>
         <button class="tab tab-main" data-view="support">Support
           <span id="supportCount" class="nav-count" aria-label="väntar på svar" hidden></span></button>
+        <button class="tab tab-main" data-view="tipprapporter">Tipprapporter
+          <span id="tipReportCount" class="nav-count" aria-label="öppna rapporter" hidden></span></button>
         <button class="tab tab-main" data-view="evenemang">Evenemang</button>
         <button class="tab tab-main" data-view="status">Status
           <span id="statusDot" class="st-dot st-nav" aria-label="" hidden></span></button>

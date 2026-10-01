@@ -8,6 +8,8 @@ import * as sales from "./sales.js";
 import { LEVEL, statusBanner, statusView } from "./status.js";
 import { appVersionCard, bindAppVersionForm, loadAppVersion } from "./app_version.js";
 import * as support from "./support.js";
+import * as tipReports from "./tip_reports.js";
+import { pipelineNewLeadPrompt, pipelineView } from "./crm.js";
 import * as views from "./views.js";
 
 /**
@@ -82,6 +84,10 @@ const state = {
   // hämtning ska köra om kontrollerna i stället för att ta serverns cache.
   status: null,
   statusFresh: false,
+  companyCrm: null,
+  pipelineLead: null,
+  pipelineStageFilter: "__board__",
+  crmDealId: null,
 };
 
 function showError(error) {
@@ -134,8 +140,13 @@ async function renderView(seq) {
   try {
     if (!state.config) state.config = await admin.salesConfig();
     if (state.companyId) {
+      const [detail, crm] = await Promise.all([
+        admin.company(state.companyId),
+        admin.companyCrm(state.companyId).catch(() => null),
+      ]);
+      state.companyCrm = crm;
       paint(views.kund(
-        await admin.company(state.companyId), state.config, state.companyTab, state.pending,
+        detail, state.config, state.companyTab, state.pending, crm,
       ));
       // Hopfälld ruta sist: företagets appar och fel (activity.js).
       activity.companyPanel(el.view, state.companyId, { isCurrent: current });
@@ -143,12 +154,14 @@ async function renderView(seq) {
     }
     switch (state.view) {
       case "oversikt": {
-        const [overview, list, sup] = await Promise.all([
+        const [overview, list, sup, tipRep] = await Promise.all([
           admin.overview(), admin.companies(),
           // Hem ska fungera även om supporten inte svarar.
           admin.supportSummary().catch(() => ({ waiting: 0 })),
+          admin.tipReportsSummary().catch(() => ({ open: 0 })),
         ]);
         setSupportCount(sup.waiting ?? 0);
+        setTipReportCount(tipRep.open ?? overview.tipReportsOpen ?? 0);
         paint(statusBanner(state.status) + views.oversikt(overview, list, sup.waiting ?? 0));
         break;
       }
@@ -185,8 +198,25 @@ async function renderView(seq) {
       case "uppfoljning":
         paint(uppfoljning(await admin.followUps(), state.fuFilter));
         break;
+      case "pipeline": {
+        if (state.crmDealId) {
+          paint(pipelineView(
+            {},
+            state.config,
+            state.pipelineStageFilter,
+            await admin.crmDeal(state.crmDealId),
+          ));
+        } else {
+          paint(pipelineView(
+            await admin.crmPipeline(state.pipelineStageFilter),
+            state.config,
+            state.pipelineStageFilter,
+          ));
+        }
+        break;
+      }
       case "nykund":
-        paint(sales.nyKund(state.config, state.lookup, state.lookupOrg));
+        paint(sales.nyKund(state.config, state.lookup, state.lookupOrg, state.pipelineLead));
         break;
       case "kuponger":
         paint(sales.kuponger(await admin.coupons(), state.config));
@@ -214,6 +244,13 @@ async function renderView(seq) {
         break;
       case "granskning":
         paint(views.granskning(await admin.reviews("open")));
+        break;
+      case "tipprapporter":
+        if (!current()) return;
+        await tipReports.mount(el.view, {
+          onError: showError,
+          onOpenChange: setTipReportCount,
+        });
         break;
       default:
         paint("");
@@ -289,10 +326,26 @@ function setSupportCount(n) {
   badge.hidden = !n;
 }
 
+function setTipReportCount(n) {
+  const badge = document.getElementById("tipReportCount");
+  if (!badge) return;
+  badge.textContent = String(n);
+  badge.hidden = !n;
+}
+
 async function refreshSupportCount() {
   if (document.hidden) return;
   try {
     setSupportCount((await admin.supportSummary()).waiting ?? 0);
+  } catch {
+    // Räknaren är en hjälp, inte ett felmeddelande.
+  }
+}
+
+async function refreshTipReportCount() {
+  if (document.hidden) return;
+  try {
+    setTipReportCount((await admin.tipReportsSummary()).open ?? 0);
   } catch {
     // Räknaren är en hjälp, inte ett felmeddelande.
   }
@@ -326,6 +379,8 @@ async function enterApp(session) {
   entered = true;
   refreshSupportCount();
   setInterval(refreshSupportCount, 30_000);
+  refreshTipReportCount();
+  setInterval(refreshTipReportCount, 60_000);
   refreshStatus();
   setInterval(refreshStatus, 120_000);
   el.login.hidden = true;
@@ -353,6 +408,48 @@ el.loginForm?.addEventListener("submit", async (event) => {
     el.loginError.hidden = false;
   }
 });
+
+/**
+ * Lokal debug-inloggning. Vite sätter `import.meta.env.DEV` bara under
+ * `npm run dev` — hela blocket (knapp + lösenord) plockas bort i prod-bygget.
+ * Kontot skapas lokalt: admin@taxitips.local / taxitips-admin-dev + StaffRole.
+ */
+if (import.meta.env.DEV) {
+  const DEV_EMAIL = "admin@taxitips.local";
+  const DEV_PASSWORD = "taxitips-admin-dev";
+  const mount = document.getElementById("devLogin");
+  if (mount) {
+    mount.hidden = false;
+    mount.innerHTML = `
+      <p class="muted" style="margin:1rem 0 0.4rem">Lokal utveckling</p>
+      <button id="devLoginBtn" class="btn btn-primary" type="button">
+        Logga in som lokal admin
+      </button>
+      <p class="muted" style="margin-top:0.4rem;font-size:0.85rem">
+        ${DEV_EMAIL} — syns bara i Vite-dev, inte i produktionsbygget.
+      </p>`;
+    document.getElementById("devLoginBtn")?.addEventListener("click", async () => {
+      el.loginError.hidden = true;
+      const emailInput = el.loginForm?.querySelector('[name="email"]');
+      const passInput = el.loginForm?.querySelector('[name="password"]');
+      if (emailInput) emailInput.value = DEV_EMAIL;
+      if (passInput) passInput.value = DEV_PASSWORD;
+      try {
+        const { data, error } = await supabase().auth.signInWithPassword({
+          email: DEV_EMAIL,
+          password: DEV_PASSWORD,
+        });
+        if (error) throw error;
+        await enterApp(data.session);
+      } catch (error) {
+        el.loginError.textContent =
+          error?.message ??
+          "Kunde inte logga in. Kör seed/StaffRole för admin@taxitips.local.";
+        el.loginError.hidden = false;
+      }
+    });
+  }
+}
 
 /**
  * Inloggningslänk via e-post.
@@ -523,6 +620,14 @@ el.view.addEventListener("submit", async (event) => {
         break;
       case "companyForm": {
         const created = await admin.createCompany(sales.companyBody(form));
+        const lead = state.pipelineLead;
+        if (lead?.leadId) {
+          await admin.crmLinkLeadCompany(lead.leadId, {
+            companyId: created.companyId,
+            stage: "won",
+          }).catch(() => null);
+        }
+        state.pipelineLead = null;
         state.lookup = null;
         state.lookupOrg = "";
         state.companyId = created.companyId;
@@ -533,6 +638,25 @@ el.view.addEventListener("submit", async (event) => {
         flash("Företaget är upplagt. Lägg till bilarna.");
         break;
       }
+      case "crmNoteForm": {
+        const data = new FormData(form);
+        await admin.crmNote(state.companyId, {
+          title: String(data.get("title") ?? "Anteckning"),
+          body: String(data.get("body") ?? ""),
+        });
+        flash("Anteckningen sparades.");
+        break;
+      }
+      case "crmDealNoteForm": {
+        const data = new FormData(form);
+        const dealId = form.dataset.deal || state.crmDealId;
+        await admin.crmDealNote(dealId, {
+          title: String(data.get("title") ?? "Anteckning"),
+          body: String(data.get("body") ?? ""),
+        });
+        flash("Anteckningen sparades.");
+        break;
+      }
       case "profileForm":
         await admin.updateProfile(state.companyId, sales.profileBody(form));
         flash("Uppgifterna är sparade.");
@@ -540,6 +664,11 @@ el.view.addEventListener("submit", async (event) => {
       case "couponForm": {
         const result = await admin.createCoupon(sales.couponBody(form));
         flash(`Kupongen ${result.coupon.code} är skapad.`);
+        break;
+      }
+      case "discountForm": {
+        await admin.setDiscount(state.companyId, sales.discountBody(form));
+        flash("Prisrabatten är sparad.");
         break;
       }
       default:
@@ -703,6 +832,49 @@ async function act(action, ds) {
       state.companyId = null;
       state.companyTab = "";
       setTab(ds.view === "nykund" ? "kunder" : ds.view);
+      return render();
+
+    case "pipeline-filter":
+      state.pipelineStageFilter = ds.stage ?? "";
+      state.crmDealId = null;
+      return render();
+
+    case "crm-open-deal":
+      state.crmDealId = ds.deal;
+      state.view = "pipeline";
+      state.companyId = null;
+      setTab("pipeline");
+      return render();
+
+    case "crm-back":
+      state.crmDealId = null;
+      return render();
+
+    case "pipeline-new-lead": {
+      const body = pipelineNewLeadPrompt();
+      if (!body?.contactName || !body.contactEmail) return;
+      await admin.crmCreateLead(body);
+      flash("Affären sparades i CRM.");
+      return render();
+    }
+
+    case "pipeline-stage":
+      await admin.crmUpdateLead(ds.deal || ds.lead, { stage: ds.stage });
+      flash("Steget uppdaterades.");
+      return render();
+
+    case "pipeline-new-customer":
+      state.pipelineLead = {
+        leadId: ds.deal || ds.lead,
+        contactName: ds.name || "",
+        contactEmail: ds.email || "",
+        companyName: ds.company || "",
+        orgNumber: ds.org || "",
+      };
+      state.view = "nykund";
+      state.lookup = null;
+      state.lookupOrg = ds.org || "";
+      setTab("kunder");
       return render();
 
     /* --- Konton och spärrar --- */
@@ -971,12 +1143,33 @@ async function salesAction(action, ds) {
 
     case "pkg-trial": {
       const { vehicles } = packageChange();
-      const result = await admin.startTrial(companyId, vehicles);
+      const daysRaw = document.getElementById("trialDays")?.value;
+      const days = daysRaw ? Number(daysRaw) : undefined;
+      const result = await admin.startTrial(companyId, vehicles, days);
       flash(
-        `Provet omfattar nu ${result.vehicles} av högst ${result.vehicleLimit} bilar. ` +
+        `Provet omfattar nu ${result.vehicles} av högst ${result.vehicleLimit} bilar` +
+          (result.plannedDays ? ` (${result.plannedDays} dagar)` : "") +
+          ". " +
           (result.endsAt ? "" : "Det startar när första telefonen ansluts. ") +
           "Lägg till förare under Licenser och bilar.",
       );
+      return render();
+    }
+
+    case "trial-extend": {
+      const days = Number(document.getElementById("trialExtendDays")?.value || 0);
+      const reason = prompt(`Förläng provet med ${days} dagar.\n\nSkriv varför (sparas i loggen):`);
+      if (reason === null || !reason.trim()) return;
+      await admin.extendTrial(state.companyId, days, reason.trim());
+      flash("Provperioden är förlängd.");
+      return render();
+    }
+
+    case "discount-clear": {
+      const reason = prompt("Ta bort prisrabatten?\n\nSkäl (valfritt):");
+      if (reason === null) return;
+      await admin.clearDiscount(state.companyId, reason.trim());
+      flash("Rabatten är borttagen.");
       return render();
     }
 

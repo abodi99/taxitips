@@ -1,5 +1,9 @@
 import { countyName, date, dateTime, money } from "../portal/api.js";
-import { addCarsBlock, cancelBlock, ordersCard, ownerBlock, profileBlock, quoteBox, redemptionsCard, registryBlock } from "./sales.js";
+import {
+  addCarsBlock, cancelBlock, discountBlock, ordersCard, ownerBlock, profileBlock,
+  quoteBox, redemptionsCard, registryBlock, trialExtendBlock,
+} from "./sales.js";
+import { crmNotesCard } from "./crm.js";
 
 /**
  * Adminwebbens vyer, som rena funktioner från data till HTML.
@@ -115,6 +119,7 @@ const ACCESS_TEXT = {
 function customerStatus(c, { suspended, trial, subscriptionStatus, accessOk }) {
   if (suspended) return ["pill-danger", "Avstängd"];
   if (subscriptionStatus === "past_due") return ["pill-danger", "Obetald"];
+  if (c.cancelAtPeriodEnd) return ["pill-warn", "Säger upp"];
   if (subscriptionStatus === "active") return ["pill-ok", "Betalande"];
   if (trial?.status === "active") return ["pill-warn", "Prov pågår"];
   if (trial?.status === "pending") return ["pill-warn", "Prov väntar"];
@@ -129,9 +134,13 @@ function statusPill([cls, label]) {
 /** Det som faktiskt kräver någon: en rad per kund, med skälet först. */
 function attention(c) {
   const days = c.trial?.endsAt ? Math.ceil((new Date(c.trial.endsAt) - Date.now()) / 86400000) : null;
+  const healthyPaid = c.subscriptionStatus === "active" && !c.cancelAtPeriodEnd;
   if (c.suspended) return null;
   if (c.subscriptionStatus === "past_due") return { why: "Betalningen har inte kommit in", step: "betalning", level: 3 };
+  if (c.cancelAtPeriodEnd) return { why: "Säger upp vid periodens slut – ring och fråga varför", step: "betalning", level: 2 };
   if (c.unpaidOrders) return { why: "Beställning väntar på betalning", step: "betalning", level: 2 };
+  // Friska betalande utan öppen faktura: inget brus — Uppföljning tar risklägen.
+  if (healthyPaid) return null;
   if (c.verificationStatus === "unverified") return { why: "Registrerade sig själv – kontrollera behörigheten", step: "foretag", level: 2 };
   if (c.trial?.status === "active" && days !== null && days <= 3) return { why: `Provet slutar om ${Math.max(days, 0)} dag(ar) – dags att sälja`, step: "betalning", level: 2 };
   if (c.trial && !c.phones && c.licenses) return { why: "Har bilar men ingen förare kopplad", step: "forare", level: 1 };
@@ -166,6 +175,8 @@ export function oversikt(d, list = { companies: [] }, supportWaiting = 0) {
         : '<p class="muted">Inget att göra just nu. 🎉</p>'}
       ${d.reviewsOpen ? `<p><button class="btn btn-quiet" data-action="goto" data-view="granskning">
         ${esc(d.reviewsOpen)} riskgranskning(ar) väntar →</button></p>` : ""}
+      ${d.tipReportsOpen ? `<p><button class="btn btn-primary" data-action="goto" data-view="tipprapporter">
+        ${esc(d.tipReportsOpen)} ${d.tipReportsOpen === 1 ? "tipprapport" : "tipprapporter"} att granska →</button></p>` : ""}
     </div>
 
     <div class="kpis">
@@ -242,7 +253,7 @@ export function kunder(list, query = "", filter = "alla") {
 
 /* --- En kund ------------------------------------------------------------ */
 
-export function kund(d, config = null, tab = "", pending = null) {
+export function kund(d, config = null, tab = "", pending = null, crm = null) {
   const c = d.company;
   const done = doneFromDetail(d);
   const next = firstOpen(done);
@@ -256,12 +267,12 @@ export function kund(d, config = null, tab = "", pending = null) {
     accessOk: d.access?.ok,
   });
   const panel = {
-    foretag: () => stepForetag(d, config),
+    foretag: () => stepForetag(d, config, crm),
     bilar: () => stepBilar(d, config, pending),
     forare: () => stepForare(d),
     konto: () => stepKonto(d, config),
     betalning: () => stepBetalning(d, config),
-    mer: () => stepMer(d, config),
+    mer: () => stepMer(d, config, crm),
   }[active]();
 
   return `
@@ -302,9 +313,14 @@ export function kund(d, config = null, tab = "", pending = null) {
   `;
 }
 
-function stepForetag(d, config) {
+function stepForetag(d, config, crm) {
   const p = d.profile ?? {};
+  const deal = crm?.deal;
+  const crmLink = deal?.id
+    ? `<p class="muted small"><button type="button" class="linklike" data-action="crm-open-deal" data-deal="${esc(deal.id)}">Öppna i CRM</button></p>`
+    : "";
   return `
+    ${crmLink}
     ${verificationCard(d, config)}
     <div class="card">
       <h2>Företaget</h2>
@@ -379,14 +395,17 @@ function stepBetalning(d, config) {
       </dl>
       <p class="muted">Ny beställning (fler bilar eller län) görs under <button class="linklike" data-action="kund-tab" data-tab="bilar">Bilar</button>.</p>
     </div>
+    ${trialExtendBlock(d, config)}
+    ${discountBlock(d, config)}
     ${ordersCard(d.orders, config)}
     ${redemptionsCard(d.couponRedemptions)}
     ${cancelBlock(d, config)}
   `;
 }
 
-function stepMer(d, config) {
+function stepMer(d, config, crm) {
   return `
+    ${crmNotesCard(crm, config)}
     ${config?.canManage ? `
     <div class="card">
       <h2>Supportåtgärder</h2>

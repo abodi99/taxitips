@@ -422,6 +422,10 @@ FLEET_SMTP_HOST = os.environ.get("FLEET_SMTP_HOST", "smtp.hostinger.com")
 FLEET_SMTP_PORT = int(os.environ.get("FLEET_SMTP_PORT", "465") or 465)
 FLEET_SMTP_USER = os.environ.get("FLEET_SMTP_USER", "")
 FLEET_SMTP_PASSWORD = os.environ.get("FLEET_SMTP_PASSWORD", "")
+# Webleads från taxitips-web → fleet/crm_ingest.py (POST /api/crm/lead).
+CRM_LEAD_INGEST_SECRET = os.environ.get("CRM_LEAD_INGEST_SECRET", "")
+TWENTY_API_KEY = os.environ.get("TWENTY_API_KEY", "")
+TWENTY_BASE_URL = os.environ.get("TWENTY_BASE_URL", "https://taxitips.tw.a2m-tech.com")
 FLEET_MAIL_FROM = os.environ.get("FLEET_MAIL_FROM", "")
 FLEET_MAIL_REPLY_TO = os.environ.get("FLEET_MAIL_REPLY_TO", "hej@taxitips.se")
 # Kundportalen, som mejlen länkar till. Betalning sker där, aldrig i appen (§9c).

@@ -336,6 +336,9 @@ class Trial(models.Model):
 
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
     vehicle_limit = models.IntegerField(default=3)
+    # Säljaren kan sätta längre prov än standard (7 dagar). Gäller när klockan
+    # startar (`fleet.trials.start_trial`), inte vid självregistrering.
+    planned_days = models.IntegerField(null=True, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     ends_at = models.DateTimeField(null=True, blank=True)
     ended_reason = models.TextField(blank=True, default="")
@@ -395,6 +398,41 @@ class Coupon(models.Model):
 
     class Meta:
         db_table = "fleet_coupon"
+
+
+class CompanyDiscount(models.Model):
+    """
+    Företagsspecifik prisrabatt på billicenser (inte extra län).
+
+    Kombineras med volym och introduktion enligt samma regel som de två
+    sistnämnda: rabatten dras av det beräknade licensbeloppet efter att
+    styckpris valts. Gäller tills `valid_until` eller tills raden stängs av.
+    """
+
+    class Kind(models.TextChoices):
+        PERCENT_BP = "percent_bp", "Procent (basispunkter)"
+        FIXED_ORE = "fixed_ore", "Fast belopp per månad"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    company_id = models.UUIDField(db_index=True)
+    kind = models.CharField(max_length=16, choices=Kind.choices)
+    value = models.IntegerField()
+    description = models.TextField(blank=True, default="")
+    valid_until = models.DateTimeField(null=True, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_by = models.UUIDField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    deactivated_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "fleet_company_discount"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["company_id"],
+                condition=Q(is_active=True),
+                name="fleet_one_active_discount_per_company",
+            ),
+        ]
 
 
 class CouponRedemption(models.Model):
@@ -1338,16 +1376,149 @@ class SupportMessage(models.Model):
         indexes = [models.Index(fields=["thread", "created_at"])]
 
 
+class CrmDealStage(models.TextChoices):
+    """Säljpipeline — speglar Twenty Opportunity, utan auto-koppling till Stripe."""
+
+    NEW = "new", "Ny"
+    SCREENING = "screening", "Kvalificering"
+    MEETING = "meeting", "Möte"
+    PROPOSAL = "proposal", "Offert"
+    WON = "won", "Vunnen"
+    LOST = "lost", "Förlorad"
+    CHURNED = "churned", "Churnad"
+
+
+class CrmAccount(models.Model):
+    """Prospektbolag i CRM (motsvarar Twenty Company) — inte fleet Company."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.TextField(blank=True, default="")
+    org_number = models.CharField(max_length=32, blank=True, default="")
+    county = models.CharField(max_length=32, blank=True, default="")
+    domain = models.CharField(max_length=255, blank=True, default="")
+    source = models.CharField(max_length=100, blank=True, default="")
+    twenty_id = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "fleet_crm_account"
+        indexes = [
+            models.Index(fields=["-updated_at"]),
+            models.Index(fields=["org_number"]),
+        ]
+
+
+class CrmPerson(models.Model):
+    """Kontaktperson i CRM (motsvarar Twenty Person)."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    account = models.ForeignKey(
+        CrmAccount, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="people",
+    )
+    name = models.TextField(blank=True, default="")
+    email = models.TextField(blank=True, default="")
+    phone = models.TextField(blank=True, default="")
+    title = models.CharField(max_length=200, blank=True, default="")
+    twenty_id = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "fleet_crm_person"
+        indexes = [
+            models.Index(fields=["email"]),
+            models.Index(fields=["account", "-updated_at"]),
+        ]
+
+
+class CrmDeal(models.Model):
+    """
+    Affär/opportunity i säljpipelinen. `company_id` sätts bara när säljaren
+    manuellt kopplar eller skapar en TaxiTips-kund — aldrig av Stripe/självreg.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    account = models.ForeignKey(
+        CrmAccount, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="deals",
+    )
+    person = models.ForeignKey(
+        CrmPerson, null=True, blank=True, on_delete=models.SET_NULL,
+        related_name="deals",
+    )
+    name = models.TextField(blank=True, default="")
+    stage = models.CharField(
+        max_length=20, choices=CrmDealStage.choices, default=CrmDealStage.NEW,
+    )
+    amount_ore = models.BigIntegerField(null=True, blank=True)
+    notes_summary = models.TextField(blank=True, default="")
+    source = models.CharField(max_length=100, blank=True, default="")
+    company_id = models.UUIDField(null=True, blank=True)
+    twenty_id = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "fleet_crm_deal"
+        indexes = [
+            models.Index(fields=["stage", "-updated_at"]),
+            models.Index(fields=["company_id"]),
+            models.Index(fields=["account", "-updated_at"]),
+            models.Index(fields=["-updated_at"]),
+        ]
+
+
+class CrmNote(models.Model):
+    """Säljanteckningar — kopplade till CRM-objekt och/eller fleet-kund."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    account_id = models.UUIDField(null=True, blank=True)
+    person_id = models.UUIDField(null=True, blank=True)
+    deal_id = models.UUIDField(null=True, blank=True)
+    company_id = models.UUIDField(null=True, blank=True)
+    author_user_id = models.UUIDField(null=True, blank=True)
+    author_label = models.TextField(blank=True, default="")
+    title = models.CharField(max_length=200, blank=True, default="")
+    body = models.TextField()
+    twenty_id = models.CharField(max_length=64, null=True, blank=True, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "fleet_crm_note"
+        indexes = [
+            models.Index(fields=["company_id", "-created_at"]),
+            models.Index(fields=["deal_id", "-created_at"]),
+            models.Index(fields=["account_id", "-created_at"]),
+            models.Index(fields=["person_id", "-created_at"]),
+        ]
+        constraints = [
+            models.CheckConstraint(
+                condition=(
+                    Q(account_id__isnull=False)
+                    | Q(person_id__isnull=False)
+                    | Q(deal_id__isnull=False)
+                    | Q(company_id__isnull=False)
+                ),
+                name="fleet_crm_note_has_target",
+            ),
+        ]
+
+
 class SalesFollowUp(models.Model):
     """
-    Säljarens anteckning om ett provföretag: har vi ringt, vad sa de, när
-    ringer vi igen. En rad per företag -- historiken finns i revisionsloggen
-    (`sales_followup_updated`), inte i fler rader här.
+    Säljarens anteckning i uppföljningskön: har vi ringt, vad sa de, när
+    ringer vi igen, och (vid churn) varför de lämnade. En rad per företag --
+    historiken finns i revisionsloggen (`sales_followup_updated`).
 
-    **Varför en egen tabell.** Provet slutar utan debitering om ingen beställer
-    (fleet/trials.py), så det som avgör om ett prov blir en kund är samtalet.
-    Utan en plats att skriva ner det vet nästa person som ringer inte att
-    kunden redan sagt "hör av er i november".
+    **Prov.** Provet slutar utan debitering om ingen beställer, så samtalet
+    avgör konverteringen. Utan anteckning vet nästa person inte att kunden
+    redan sagt "hör av er i november".
+
+    **Churn.** Samma rad används när en betalande kund säger upp eller
+    slutar betala: `churn_reason` är säljarens strukturerade orsak,
+    separat från kundens fritext i PendingChange.
     """
 
     class Outcome(models.TextChoices):
@@ -1358,10 +1529,26 @@ class SalesFollowUp(models.Model):
         NOT_INTERESTED = "not_interested", "Inte intresserad"
         WRONG_DETAILS = "wrong_details", "Fel uppgifter"
         CUSTOMER = "customer", "Blev kund"
+        WIN_BACK = "win_back", "Vill komma tillbaka"
+
+    class ChurnReason(models.TextChoices):
+        NOT_ASKED = "not_asked", "Ej frågat"
+        PRICE = "price", "Pris"
+        LOW_USAGE = "low_usage", "Använder inte"
+        COMPETITOR = "competitor", "Bytt leverantör"
+        BUSINESS = "business", "Sålt/lägger ner"
+        FEATURES = "features", "Saknar funktion"
+        SUPPORT = "support", "Support/teknik"
+        TEMPORARY = "temporary", "Paus – kan komma tillbaka"
+        OTHER = "other", "Annat"
 
     company_id = models.UUIDField(primary_key=True)
     outcome = models.CharField(
         max_length=20, choices=Outcome.choices, default=Outcome.NOT_CONTACTED,
+    )
+    churn_reason = models.CharField(
+        max_length=20, choices=ChurnReason.choices,
+        blank=True, default=ChurnReason.NOT_ASKED,
     )
     note = models.TextField(blank=True, default="")
     next_contact_at = models.DateTimeField(null=True, blank=True)

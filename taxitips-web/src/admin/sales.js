@@ -101,7 +101,7 @@ export function registryBlock(r, { checkedAt = "" } = {}) {
 
 /* --- Ny kund ---------------------------------------------------------- */
 
-export function nyKund(config, lookup = null, orgValue = "") {
+export function nyKund(config, lookup = null, orgValue = "", pipelineLead = null) {
   if (!config?.canSell) {
     return `<div class="card"><h2>Ny kund</h2>
       <p class="muted">Din roll kan läsa men inte lägga upp kunder.</p></div>`;
@@ -141,14 +141,14 @@ export function nyKund(config, lookup = null, orgValue = "") {
     <form id="companyForm" class="card form-grid">
       <h2 class="span-2">Företaget</h2>
       <input type="hidden" name="orgNumber" value="${esc(lookup.normalized)}" />
-      <label>Företagsnamn (som kunden kallar det)<input name="name" required value="${esc(reg?.name ?? "")}" /></label>
+      <label>Företagsnamn (som kunden kallar det)<input name="name" required value="${esc(reg?.name ?? pipelineLead?.companyName ?? "")}" /></label>
       <label>Juridiskt namn <span class="muted">${reg?.found ? "(från Bolagsverket)" : "(om annat)"}</span>
         <input name="legalName" value="${esc(reg?.name ?? "")}" /></label>
 
       <h3 class="span-2">Kontaktperson</h3>
-      <label>Namn<input name="contactName" required autocomplete="off" /></label>
+      <label>Namn<input name="contactName" required autocomplete="off" value="${esc(pipelineLead?.contactName ?? "")}" /></label>
       <label>Roll<input name="contactRole" placeholder="t.ex. VD, trafikledare" /></label>
-      <label>E-post<input name="contactEmail" type="email" required /></label>
+      <label>E-post<input name="contactEmail" type="email" required value="${esc(pipelineLead?.contactEmail ?? "")}" /></label>
       <label>Telefon<input name="contactPhone" type="tel" /></label>
 
       <h3 class="span-2">Fakturering</h3>
@@ -270,8 +270,12 @@ export function addCarsBlock(d, config) {
         ${!paying ? `
         <div class="start-option">
           <h4>${trialOpen ? "Lägg till i provet" : "Starta gratis prov"}</h4>
-          <p class="muted">${esc(config.trial?.days)} dagar, högst ${esc(config.trial?.vehicleLimit)} bilar.
-            Startar när första telefonen kopplas. Kostar inget.</p>
+          <p class="muted">Standard ${esc(config.trial?.days)} dagar (justera nedan), högst
+            ${esc(config.trial?.vehicleLimit)} bilar. Startar när första telefonen kopplas. Kostar inget.</p>
+          <label>Provlängd (dagar)
+            <input id="trialDays" type="number" min="1" max="${esc(config.trial?.maxDays ?? 365)}"
+              value="${esc(d.trial?.plannedDays ?? config.trial?.days ?? 7)}" />
+          </label>
           <button class="btn btn-primary" type="button" data-action="pkg-trial">
             ${trialOpen ? "Lägg till provbilar" : "Starta prov"}</button>
         </div>` : ""}
@@ -415,6 +419,74 @@ export function ordersCard(orders, config) {
           </td>
         </tr>`).join("")}</tbody></table>
     </div>`;
+}
+
+/** Steg Betalning: förläng pågående prov (säljare). */
+export function trialExtendBlock(d, config) {
+  if (!config?.canSell) return "";
+  const t = d.trial;
+  if (!t || !["pending", "active"].includes(t.status)) return "";
+  const pending = t.status === "pending";
+  return `
+    <div class="card">
+      <h2>Provperiod</h2>
+      <p class="muted">${pending
+        ? `Provet startar vid första telefonen. Planerad längd: ${esc(t.plannedDays ?? config.trial?.days ?? 7)} dagar.`
+        : `Provet pågår till ${esc(date(t.endsAt))}.`}</p>
+      <div class="inline-field">
+        <input id="trialExtendDays" type="number" min="1" max="366" value="7" />
+        <button class="btn btn-quiet" type="button" data-action="trial-extend">Förläng med dagar</button>
+      </div>
+      <p class="muted">Skälet sparas i händelselogg. Gäller bara det här bolagets prov.</p>
+    </div>`;
+}
+
+/** Steg Betalning: månadsrabatt på billicenser (plattformsadmin). */
+export function discountBlock(d, config) {
+  if (!config?.canManage) return "";
+  const active = d.discount;
+  const label = active
+    ? (active.kind === "percent_bp"
+      ? `${(active.value / 100).toFixed(2)} % på billicenser`
+      : `${money(active.value)} / mån exkl. moms`)
+    : null;
+  return `
+    <div class="card">
+      <h2>Prisrabatt</h2>
+      ${active ? `<p><span class="pill pill-ok">Aktiv</span> ${esc(label)}
+        ${active.validUntil ? `<span class="muted"> till ${esc(date(active.validUntil))}</span>` : ""}
+        ${active.description ? `<span class="muted"> — ${esc(active.description)}</span>` : ""}</p>
+        <button class="btn btn-danger" type="button" data-action="discount-clear">Ta bort rabatt</button>` : `
+      <p class="muted">Procent eller fast belopp dras av billicenserna i prismotorn (inte extra län).
+        Syns i offerter och MRR.</p>
+      <form id="discountForm" class="form-grid">
+        <label>Typ<select name="kind">
+          <option value="percent_bp">Procent</option>
+          <option value="fixed_ore">Fast belopp (kr/mån exkl. moms)</option>
+        </select></label>
+        <label>Värde<input name="value" type="number" min="1" required placeholder="10 eller 50000" /></label>
+        <label>Giltig till <span class="muted">(valfritt)</span><input name="validUntil" type="date" /></label>
+        <label class="span-2">Anteckning<input name="description" placeholder="Avtal med VD 2026-10-01" /></label>
+        <div class="btn-row span-2"><button class="btn btn-primary" type="submit">Spara rabatt</button></div>
+      </form>`}
+    </div>`;
+}
+
+export function discountBody(form) {
+  const data = new FormData(form);
+  const kind = String(data.get("kind") ?? "percent_bp");
+  let value = Number(data.get("value"));
+  if (kind === "fixed_ore") {
+    value = Math.round(value * 100);
+  } else {
+    value = Math.round(value * 100);
+  }
+  return {
+    kind,
+    value,
+    description: String(data.get("description") ?? "").trim(),
+    validUntil: String(data.get("validUntil") ?? "").trim() || null,
+  };
 }
 
 export function redemptionsCard(list) {

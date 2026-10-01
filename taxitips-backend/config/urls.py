@@ -8,7 +8,7 @@ from maritime import views as maritime_views
 from core.views import health, pipeline_health
 from events import api as events_api
 from events import live as events_live
-from fleet import client_log_api, support_api
+from fleet import client_log_api, crm_ingest, support_api
 
 urlpatterns = [
     path("health", health),
@@ -30,6 +30,7 @@ urlpatterns = [
     path("api/events", events_api.upcoming),
     path("api/opportunities/<uuid:opportunity_id>", api.opportunity_detail),
     path("api/feedback", api.feedback),
+    path("api/tip-reports", api.tip_report),
     path("api/config", api.config),
     # Notiser och favoriter. Favoritlistan ligger både i /api/alerts (som
     # `favorites`, så ett kort aldrig kan försvinna bakom ett filter) och
@@ -44,6 +45,7 @@ urlpatterns = [
     # Appens krascher och misslyckade inloggningar/parkopplingar/flöden, för
     # adminwebbens fellista. Se fleet/client_log_api.py och docs/loggning.md.
     path("api/client-log", client_log_api.client_log),
+    path("api/crm/lead", crm_ingest.web_lead),
     # DEBUG-only: lista enheter + skicka test-FCM (pipeline-viz).
     path("api/dev/devices", api.push_devices),
     path("api/dev/push", api.push_send),

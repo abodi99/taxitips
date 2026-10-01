@@ -185,6 +185,26 @@ class BackendApi {
     return _decode(res, 'feedback');
   }
 
+  /// Rapport att tipset i sig är fel (skilt från 👍/👎).
+  Future<Map<String, dynamic>> submitTipReport({
+    required String opportunityId,
+    String reason = '',
+    String? deviceToken,
+    String? accessToken,
+  }) async {
+    final res = await _client
+        .post(
+          Uri.parse('$baseUrl/api/tip-reports'),
+          headers: _headers(deviceToken: deviceToken, accessToken: accessToken),
+          body: jsonEncode({
+            'opportunity_id': opportunityId,
+            'reason': reason,
+          }),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'tipReport');
+  }
+
   /// Förarens sparade tips. Skickas ALLTID av backend, oavsett filter,
   /// marknadsradie eller om störningen hunnit ta slut -- se
   /// core/api.py:_favorites_for. Appen behöver därför inte gissa vilka som

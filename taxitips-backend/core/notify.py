@@ -621,6 +621,7 @@ def candidates(now=None, limit: int = 200) -> list[Opportunity]:
     return list(
         Opportunity.objects.filter(
             notified_at__isnull=True,
+            suppressed_at__isnull=True,
             end_time__gt=now,
             demand_score__gte=thresholds.NOTIFY_SCORE_FLOOR,
             severity_tier__in=sorted(thresholds.NOTIFY_WORTHY_TIERS),

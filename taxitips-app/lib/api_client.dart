@@ -1773,6 +1773,22 @@ class ApiClient {
     }
   }
 
+  Future<Map<String, dynamic>> submitTipReport({
+    required String opportunityId,
+    String reason = '',
+  }) async {
+    final backend = _backend;
+    if (backend != null) {
+      return backend.submitTipReport(
+        opportunityId: opportunityId,
+        reason: reason,
+        deviceToken: deviceToken,
+        accessToken: _accessToken,
+      );
+    }
+    throw StateError('tip_report_requires_backend');
+  }
+
   Future<List> _smartAlertsViaRpc(double? lat, double? lon) async {
     final rows = await _sb.rpc(
       'get_smart_alerts',

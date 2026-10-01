@@ -27,9 +27,9 @@ from django.views.decorators.http import require_GET, require_POST
 
 from core import areas
 from core.api import _json
-from fleet import audit, commerce, orders, pricing, sales, stripe_sync, trials
+from fleet import audit, commerce, discounts, orders, pricing, sales, stripe_sync, trials
 from fleet.admin_api import _body, _company_or_404, _iso, _staff, handle
-from fleet.models import Coupon, CouponRedemption, Order, RiskConfig
+from fleet.models import CompanyDiscount, Coupon, CouponRedemption, Order, RiskConfig
 from fleet.roles import Perm
 
 
@@ -95,7 +95,11 @@ def config(request):
             "volumeOre": price.volume_price_ore, "volumeThreshold": price.volume_threshold,
             "extraCountyOre": price.extra_county_price_ore,
         },
-        "trial": {"days": trials.TRIAL_DAYS, "vehicleLimit": trials.SALES_TRIAL_VEHICLE_LIMIT},
+        "trial": {
+            "days": trials.TRIAL_DAYS,
+            "vehicleLimit": trials.SALES_TRIAL_VEHICLE_LIMIT,
+            "maxDays": trials.TRIAL_MAX_PLANNED_DAYS,
+        },
         "pairingCodeTtlSeconds": RiskConfig.current().pairing_code_ttl_seconds,
         "stripe": stripe_sync.status(),
     })
@@ -288,16 +292,44 @@ def order_cancel(request, order_id):
 @require_POST
 @handle
 def start_trial(request, company_id):
-    """POST /api/admin/companies/<id>/trial {"vehicles": [...]}"""
+    """POST /api/admin/companies/<id>/trial {"vehicles": [...], "days": 14}"""
     principal = _staff(request, Perm.ADMIN_SELL)
+    body = _body(request)
     company = _company_or_404(company_id)
     trial = sales.start_trial(
-        company, _body(request).get("vehicles") or [], actor_user_id=principal.user_id
+        company,
+        body.get("vehicles") or [],
+        days=body.get("days"),
+        actor_user_id=principal.user_id,
     )
     return _json(request, {
         "ok": True, "trialId": str(trial.id), "status": trial.status,
-        "endsAt": _iso(trial.ends_at), "vehicleLimit": trial.vehicle_limit,
+        "endsAt": _iso(trial.ends_at), "plannedDays": trial.planned_days,
+        "vehicleLimit": trial.vehicle_limit,
         "vehicles": trials.trial_vehicle_count(trial),
+    })
+
+
+@csrf_exempt
+@require_POST
+@handle
+def extend_trial(request, company_id):
+    """POST /api/admin/companies/<id>/trial/extend {"days": 7, "reason": "..."}"""
+    principal = _staff(request, Perm.ADMIN_SELL)
+    body = _body(request)
+    company = _company_or_404(company_id)
+    trial = trials.extend_trial(
+        company.id,
+        body.get("days"),
+        reason=str(body.get("reason", "")),
+        actor_user_id=principal.user_id,
+        actor_kind="sales" if principal.can(Perm.ADMIN_SELL) else "platform_admin",
+    )
+    return _json(request, {
+        "ok": True,
+        "status": trial.status,
+        "endsAt": _iso(trial.ends_at),
+        "plannedDays": trial.planned_days,
     })
 
 
@@ -374,6 +406,59 @@ def create_coupon(request):
 @csrf_exempt
 @require_POST
 @handle
+@csrf_exempt
+@require_POST
+@handle
+def set_discount(request, company_id):
+    """POST /api/admin/companies/<id>/discount — prisrabatt på billicenser."""
+    principal = _staff(request, Perm.ADMIN_MANAGE)
+    body = _body(request)
+    company = _company_or_404(company_id)
+    kind = str(body.get("kind", "percent_bp"))
+    if kind == "percent":
+        kind = "percent_bp"
+    row = discounts.set_discount(
+        company.id,
+        kind=kind,
+        value=body.get("value"),
+        description=str(body.get("description", "")),
+        valid_until=_parse_until(body.get("validUntil")),
+        actor_user_id=principal.user_id,
+    )
+    return _json(request, {"ok": True, "discount": discounts.discount_row(row)})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def clear_discount(request, company_id):
+    """POST /api/admin/companies/<id>/discount/clear"""
+    principal = _staff(request, Perm.ADMIN_MANAGE)
+    company = _company_or_404(company_id)
+    cleared = discounts.clear_discount(
+        company.id,
+        actor_user_id=principal.user_id,
+        reason=str(_body(request).get("reason", "")),
+    )
+    return _json(request, {"ok": True, "cleared": cleared})
+
+
+@require_GET
+@handle
+def list_discounts(request, company_id):
+    """GET /api/admin/companies/<id>/discounts"""
+    _staff(request, Perm.ADMIN_VIEW)
+    company = _company_or_404(company_id)
+    now = timezone.now()
+    active = discounts.active_discount(company.id, now=now)
+    history = CompanyDiscount.objects.filter(company_id=company.id).order_by("-created_at")[:20]
+    return _json(request, {
+        "ok": True,
+        "active": discounts.discount_row(active),
+        "history": [discounts.discount_row(r) for r in history],
+    })
+
+
 def deactivate_coupon(request, coupon_id):
     """POST /api/admin/coupons/<id>/deactivate"""
     principal = _staff(request, Perm.ADMIN_MANAGE)

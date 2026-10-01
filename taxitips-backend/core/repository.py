@@ -125,7 +125,7 @@ def upsert_opportunities(rows: Iterable[dict]) -> int:
         f"insert into opportunities (id, {cols}) "
         f"values (gen_random_uuid(), {placeholders}) "
         f"on conflict (external_id) do update set {updates} "
-        f"where {changed}"
+        f"where opportunities.suppressed_at is null and {changed}"
     )
 
     with connection.cursor() as cur:
