@@ -7,7 +7,7 @@ const esc = (value) =>
     /[&<>"']/g,
     (c) =>
       ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
-    10:  );
+  );
 
 const STAGE_LABEL = {
   new: "Ny",
