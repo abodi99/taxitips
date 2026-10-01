@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:taxitips_app/api_client.dart';
 import 'package:taxitips_app/config.dart';
 import 'package:taxitips_app/screens/welcome_screen.dart';
 
@@ -12,13 +13,14 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: WelcomeScreen(
-          onLogin: () {},
-          onSignup: () {},
+          api: ApiClient(supabaseUrl: 'http://localhost', supabaseAnonKey: 'x'),
+          onOwner: () {},
           onDriver: () {},
+          onUseCode: () {},
+          onSignup: () {},
         ),
       ),
     );
-    expect(find.text('Se demon'), findsOneWidget);
-    expect(find.text('Öppnas i webbläsaren'), findsOneWidget);
+    expect(find.text('Se demon på webben'), findsOneWidget);
   });
 }

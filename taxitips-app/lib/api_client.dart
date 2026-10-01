@@ -292,45 +292,6 @@ class ApiClient {
     return (email: null, password: null);
   }
 
-  Future<Map<String, dynamic>> login({
-    required String email,
-    required String password,
-  }) async {
-    try {
-      await ensureInitialized();
-      final res = await _sb.auth.signInWithPassword(
-        email: email,
-        password: password,
-      );
-      final accessToken = res.session?.accessToken;
-      if (accessToken == null || accessToken.isEmpty) {
-        throw ApiException(401, 'Inloggningen gav ingen giltig session.');
-      }
-      await saveSession(accessToken);
-      await saveCredentials(email, password);
-      // Koppla telefonen till kontot + FCM sker i registerForPush efter
-      // login (main/login_screen). Här räcker sessionen.
-
-      // Auth is enough to consider login successful; profile/company bootstrap
-      // can fail in environments where those tables are not yet provisioned.
-      try {
-        return await me();
-      } catch (_) {
-        return {
-          'user': {'id': res.user?.id, 'email': res.user?.email, 'name': null},
-          'profile': null,
-          'company': null,
-          'role': null,
-          'devices': const [],
-          'isOwner': false,
-          'degraded': true,
-        };
-      }
-    } catch (e, st) {
-      _rethrowAsApiException(e, stackTrace: st, operation: 'login');
-    }
-  }
-
   Future<void> logout() async {
     try {
       await ensureInitialized();
@@ -359,11 +320,11 @@ class ApiClient {
   /// Completes a session that was established by an OAuth redirect (mobile).
   void listenForAuthSignIn(void Function() onSignedIn) {
     _sb.auth.onAuthStateChange.listen((state) {
-      // Förarens inloggning är kortlivad: kontot löser in inbjudan och loggas
-      // ut igen (driverLogin). Den ska inte trigga ägarens väg -- push-
+      // Inloggningen avgör rollen själv (signIn): en förare löser in inbjudan
+      // och loggas ut igen. Den ska inte trigga ägarens väg -- push-
       // registreringen med JWT hade kunnat skriva installations-id:t som
       // enhetsnyckel samtidigt som den riktiga hemligheten sparas.
-      if (_driverLoginInProgress) return;
+      if (_signInInProgress) return;
       final session = state.session;
       if (session != null) {
         saveSession(session.accessToken);
@@ -374,42 +335,43 @@ class ApiClient {
 
   static const _pendingRegistrationKey = 'tt_pending_registration';
 
-  // --- Föraren: inloggning med e-postinbjudan (fleet/driver_invites.py) -----
+  // --- Inloggning: en för alla (fleet/driver_invites.py, fleet/api.py) -------
 
-  bool _driverLoginInProgress = false;
+  bool _signInInProgress = false;
 
-  /// Sidan där föraren väljer lösenord: länken i inbjudan och "Glömt
+  /// Sidan där man väljer lösenord: länken i förarinbjudan och "Glömt
   /// lösenord?" leder dit. Samma värd som Supabases SITE_URL.
-  static const _driverPasswordPage = 'https://taxitips.se/forare';
+  static const _passwordPage = 'https://taxitips.se/forare';
 
-  /// Föraren loggar in med e-posten hen bjöds in till. Servern löser in
-  /// inbjudan och godkänner telefonen för bilen -- samma godkännande som en
-  /// engångskod. Sedan loggas kontot ut i appen igen: telefonen bär sin egen
-  /// enhetsnyckel, och föraren ska inte hamna i ägarens vy.
+  /// En inloggning för alla: e-post och lösenord, och servern avgör rollen.
   ///
-  /// Svarar `{'paired': true, ...}` när telefonen är kopplad. Hör kontot i
-  /// stället till ett företag (en ägare som tryckt "Jag är förare") behålls
-  /// inloggningen och svaret är `{'owner': true}`.
-  Future<Map<String, dynamic>> driverLogin({
-    required String email,
-    required String password,
-  }) => _reported(
-    'driver_login',
-    () => _driverLoginUnreported(email: email, password: password),
-  );
+  /// * Medlem i ett företag (ägare, kontor) eller en registrering som väntar
+  ///   på bekräftad e-post → `'owner'`. Sessionen behålls.
+  /// * Annars förare: inbjudan löses in, eller samma konto loggar in igen
+  ///   (fleet/driver_invites.py `_relogin`) → `'driver'`. Telefonen bär sin
+  ///   egen enhetsnyckel och kontot loggas ut i appen igen.
+  ///
+  /// Ägaren prövas först: en ägare som också kör kopplar bilen från
+  /// inställningarna ("Kör bilen själv") och ska inte tappa företagsvyn.
+  Future<String> signIn({required String email, required String password}) =>
+      _reported(
+        'sign_in',
+        () => _signInUnreported(email: email, password: password),
+      );
 
-  Future<Map<String, dynamic>> _driverLoginUnreported({
+  Future<String> _signInUnreported({
     required String email,
     required String password,
   }) async {
     await ensureInitialized();
-    _driverLoginInProgress = true;
+    final address = email.trim().toLowerCase();
+    _signInInProgress = true;
     var keepSession = false;
     try {
       final AuthResponse res;
       try {
         res = await _sb.auth.signInWithPassword(
-          email: email.trim().toLowerCase(),
+          email: address,
           password: password,
         );
       } catch (e) {
@@ -419,33 +381,40 @@ class ApiClient {
       if (token == null || token.isEmpty) {
         throw ApiException(401, 'Inloggningen gav ingen giltig session.');
       }
-      final installation = await ensureInstallationId();
-      Map<String, dynamic> data;
+
+      var owner = false;
       try {
-        data = await _fleet.ownerPost('driver-invites/claim', {
-          'installation_id': installation,
-          'label': 'Förare',
-        }, accessToken: token);
+        await _fleet.ownerGet('company', accessToken: token);
+        owner = true;
       } on ApiException catch (e) {
-        if (e.reason == 'no_invite' || e.reason == 'invite_used') {
-          // Ägaren som valt fel väg: har kontot ett företag loggas hen in
-          // som ägare i stället för att få ett fel.
-          try {
-            await _fleet.ownerGet('company', accessToken: token);
-            keepSession = true;
-            await saveSession(token);
-            return {'owner': true};
-          } catch (_) {}
-        }
-        rethrow;
+        // 403 = kontot hör inte till något företag. Allt annat är ett riktigt fel.
+        if (e.status != 403 && e.status != 404) rethrow;
       }
+      if (!owner) {
+        final prefs = await SharedPreferences.getInstance();
+        owner =
+            prefs.getString(_pendingRegistrationKey) != null ||
+            res.user?.userMetadata?['pending_company'] is Map;
+      }
+      if (owner) {
+        keepSession = true;
+        await saveSession(token);
+        await saveCredentials(address, password);
+        return 'owner';
+      }
+
+      final installation = await ensureInstallationId();
+      final data = await _fleet.ownerPost('driver-invites/claim', {
+        'installation_id': installation,
+        'label': 'Förare',
+      }, accessToken: token);
       final secret = data['deviceToken']?.toString();
       if (secret == null || secret.isEmpty) {
         throw ApiException(500, 'Servern gav ingen enhetsnyckel.');
       }
       await saveDevice(secret);
       await clearLocalAreaFilter();
-      return {'paired': true, ...data};
+      return 'driver';
     } finally {
       if (!keepSession) {
         try {
@@ -453,18 +422,18 @@ class ApiClient {
         } catch (_) {}
         await saveSession(null);
       }
-      _driverLoginInProgress = false;
+      _signInInProgress = false;
     }
   }
 
-  /// "Glömt lösenord?" för föraren: Supabase mejlar en länk till sidan där
-  /// hen väljer ett nytt lösenord. Samma sida som inbjudans länk.
-  Future<void> sendDriverPasswordReset(String email) async {
+  /// "Glömt lösenord?": Supabase mejlar en länk till sidan där man väljer
+  /// ett nytt lösenord. Samma sida för förare och ägare som inbjudans länk.
+  Future<void> sendPasswordReset(String email) async {
     await ensureInitialized();
     try {
       await _sb.auth.resetPasswordForEmail(
         email.trim().toLowerCase(),
-        redirectTo: _driverPasswordPage,
+        redirectTo: _passwordPage,
       );
     } catch (e) {
       throw asApiIfNetwork(e);
@@ -609,7 +578,11 @@ class ApiClient {
   ) async {
     final token = _accessToken;
     if (token == null) throw ApiException(401, 'Logga in för att fortsätta.');
-    final result = await _fleet.ownerPost('register', company, accessToken: token);
+    final result = await _fleet.ownerPost(
+      'register',
+      company,
+      accessToken: token,
+    );
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_pendingRegistrationKey);
     await _clearPendingCompanyMetadata();
@@ -640,8 +613,12 @@ class ApiClient {
   /// gång, och det tas bort då.
   Future<void> _clearPendingCompanyMetadata() async {
     try {
-      if (_sb.auth.currentUser?.userMetadata?['pending_company'] == null) return;
-      await _sb.auth.updateUser(UserAttributes(data: {'pending_company': null}));
+      if (_sb.auth.currentUser?.userMetadata?['pending_company'] == null) {
+        return;
+      }
+      await _sb.auth.updateUser(
+        UserAttributes(data: {'pending_company': null}),
+      );
     } catch (_) {}
   }
 
@@ -885,11 +862,14 @@ class ApiClient {
     if (backend != null && _accessToken != null) {
       try {
         final overview = await fleetCompany();
-        final access = Map<String, dynamic>.from(overview['access'] as Map? ?? {});
+        final access = Map<String, dynamic>.from(
+          overview['access'] as Map? ?? {},
+        );
         final licensed = <String>{
           for (final l in (overview['licenses'] as List?) ?? const [])
             if (l is Map)
-              for (final c in (l['counties'] as List?) ?? const []) c.toString(),
+              for (final c in (l['counties'] as List?) ?? const [])
+                c.toString(),
         };
         return {
           'ok': true,
@@ -1653,15 +1633,8 @@ class ApiClient {
             };
       final company = status['company'] is Map
           ? Map<String, dynamic>.from(status['company'] as Map)
-          : <String, dynamic>{
-              'id': status['companyId'],
-              'name': '',
-            };
-      return {
-        ...status,
-        'device': device,
-        'company': company,
-      };
+          : <String, dynamic>{'id': status['companyId'], 'name': ''};
+      return {...status, 'device': device, 'company': company};
     }
     try {
       final data = await _sb.rpc(

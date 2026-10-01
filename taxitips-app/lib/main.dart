@@ -12,10 +12,8 @@ import 'crashlytics.dart';
 import 'performance_monitoring.dart';
 import 'push_service.dart';
 import 'remote_config_service.dart';
-import 'screens/driver_login_screen.dart';
 import 'screens/driver_screen.dart';
 import 'screens/join_screen.dart';
-import 'screens/login_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/signup_screen.dart';
 import 'theme.dart';
@@ -53,15 +51,9 @@ class TaxiPrognosApp extends StatefulWidget {
   State<TaxiPrognosApp> createState() => _TaxiPrognosAppState();
 }
 
-enum AppRoute {
-  welcome,
-  login,
-  signup,
-  join,
-  driverLogin,
-  shell,
-  driverInvite,
-}
+/// `welcome` är inloggningen -- en för förare, ägare och kontor
+/// (screens/welcome_screen.dart). Rollen avgörs av servern efter inloggning.
+enum AppRoute { welcome, signup, join, shell, driverInvite }
 
 class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
   late AppRoute _route;
@@ -75,9 +67,7 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
     widget.api.listenForAuthSignIn(() {
       if (!mounted) return;
       registerForPush(widget.api);
-      if (_route == AppRoute.welcome ||
-          _route == AppRoute.login ||
-          _route == AppRoute.signup) {
+      if (_route == AppRoute.welcome || _route == AppRoute.signup) {
         _goShell();
       }
     });
@@ -155,17 +145,20 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
       home: _booting
           ? const _SplashScreen()
           : switch (_route) {
-              AppRoute.login => LoginScreen(
-                api: widget.api,
-                onLoggedIn: _afterLogin,
-                onSignup: () => setState(() => _route = AppRoute.signup),
-                onDriver: () => setState(() => _route = AppRoute.driverLogin),
-                onBack: () => setState(() => _route = AppRoute.welcome),
-              ),
               AppRoute.welcome => WelcomeScreen(
-                onLogin: () => setState(() => _route = AppRoute.login),
+                api: widget.api,
+                // Ägare/kontor: registrering som väntade görs klart först.
+                onOwner: () async {
+                  await registerForPush(widget.api);
+                  await _afterLogin();
+                },
+                // Förare: telefonen är kopplad till bilen, samma väg som en kod.
+                onDriver: () async {
+                  await registerForPush(widget.api);
+                  _goShell();
+                },
+                onUseCode: () => setState(() => _route = AppRoute.join),
                 onSignup: () => setState(() => _route = AppRoute.signup),
-                onDriver: () => setState(() => _route = AppRoute.driverLogin),
               ),
               AppRoute.signup => SignupScreen(
                 api: widget.api,
@@ -173,21 +166,7 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
                   await registerForPush(widget.api);
                   _goShell();
                 },
-                onLogin: () => setState(() => _route = AppRoute.login),
-                onBack: () => setState(() => _route = AppRoute.welcome),
-              ),
-              AppRoute.driverLogin => DriverLoginScreen(
-                api: widget.api,
-                // Telefonen är kopplad till bilen: samma väg som efter en kod.
-                onPaired: () async {
-                  await registerForPush(widget.api);
-                  _goShell();
-                },
-                onOwner: () async {
-                  await registerForPush(widget.api);
-                  await _afterLogin();
-                },
-                onUseCode: () => setState(() => _route = AppRoute.join),
+                onLogin: () => setState(() => _route = AppRoute.welcome),
                 onBack: () => setState(() => _route = AppRoute.welcome),
               ),
               AppRoute.join => JoinScreen(
@@ -196,8 +175,8 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
                   await registerForPush(widget.api);
                   _goShell();
                 },
-                // Koden nås från förarens inloggning ("Har du en kod?").
-                onBack: () => setState(() => _route = AppRoute.driverLogin),
+                // Koden nås från inloggningen ("Anslut med kod").
+                onBack: () => setState(() => _route = AppRoute.welcome),
               ),
               AppRoute.shell => _AppShell(
                 api: widget.api,

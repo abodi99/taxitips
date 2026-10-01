@@ -2,56 +2,70 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:taxitips_app/api_client.dart';
-import 'package:taxitips_app/screens/driver_login_screen.dart';
 import 'package:taxitips_app/screens/welcome_screen.dart';
 
-/// Startsidan har två tydliga vägar -- förare och ägare -- och förarens
-/// inloggning har koden kvar som reserv. Inget här pratar med servern.
+/// Startsidan är EN inloggning för förare, ägare och kontor -- servern avgör
+/// rollen. Koden, nytt företag och demon är länkar, inte konkurrerande vägar.
+/// Inget här pratar med servern.
 void main() {
-  testWidgets('startsidan: förare och ägare har var sin knapp', (tester) async {
-    var driver = 0;
-    var owner = 0;
+  Future<({List<String> taps})> pump(WidgetTester tester) async {
+    final taps = <String>[];
+    tester.view.physicalSize = const Size(1170, 2532);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
     await tester.pumpWidget(
       MaterialApp(
         home: WelcomeScreen(
-          onLogin: () => owner++,
-          onSignup: () {},
-          onDriver: () => driver++,
+          api: ApiClient(supabaseUrl: 'http://localhost', supabaseAnonKey: 'x'),
+          onOwner: () => taps.add('owner'),
+          onDriver: () => taps.add('driver'),
+          onUseCode: () => taps.add('code'),
+          onSignup: () => taps.add('signup'),
         ),
       ),
     );
-    await tester.tap(find.text('Jag är förare'));
-    await tester.tap(find.text('Jag äger bolaget'));
-    expect((driver, owner), (1, 1));
+    return (taps: taps);
+  }
+
+  testWidgets('en inloggning, inga rollval', (tester) async {
+    await pump(tester);
+    expect(find.text('Logga in'), findsNWidgets(2)); // rubrik + knapp
+    expect(find.text('Jag är förare'), findsNothing);
+    expect(find.text('Jag äger bolaget'), findsNothing);
     // Inga priser eller köp i appen (docs/fleet-abonnemang.md §9c).
-    expect(find.textContaining('kr'), findsNothing);
+    expect(find.textContaining(' kr'), findsNothing);
   });
 
-  testWidgets('förarens inloggning: tomma fält ger ett tydligt fel och koden finns kvar', (
+  testWidgets('tomma fält ger ett tydligt fel, Glömt lösenord kräver e-post', (
     tester,
   ) async {
-    var usedCode = false;
-    await tester.pumpWidget(
-      MaterialApp(
-        home: DriverLoginScreen(
-          api: ApiClient(supabaseUrl: 'http://localhost', supabaseAnonKey: 'x'),
-          onPaired: () {},
-          onOwner: () {},
-          onUseCode: () => usedCode = true,
-          onBack: () {},
-        ),
-      ),
-    );
-    await tester.tap(find.text('Logga in'));
+    await pump(tester);
+    await tester.enterText(find.byType(TextField).at(0), '');
+    await tester.enterText(find.byType(TextField).at(1), '');
+    await tester.tap(find.widgetWithText(FilledButton, 'Logga in'));
     await tester.pump();
     expect(find.text('Skriv din e-post och ditt lösenord.'), findsOneWidget);
 
     await tester.tap(find.text('Glömt lösenord?'));
     await tester.pump();
     expect(find.textContaining('Skriv din e-post först'), findsOneWidget);
+  });
 
-    await tester.ensureVisible(find.text('Har du en kod?'));
-    await tester.tap(find.text('Har du en kod?'));
-    expect(usedCode, isTrue);
+  testWidgets('lösenordet kan visas och döljas', (tester) async {
+    await pump(tester);
+    TextField password() =>
+        tester.widget<TextField>(find.byType(TextField).at(1));
+    expect(password().obscureText, isTrue);
+    await tester.tap(find.byTooltip('Visa lösenord'));
+    await tester.pump();
+    expect(password().obscureText, isFalse);
+  });
+
+  testWidgets('kod och nytt företag finns som länkar', (tester) async {
+    final r = await pump(tester);
+    await tester.ensureVisible(find.textContaining('Har du en kod'));
+    await tester.tap(find.textContaining('Har du en kod'));
+    await tester.tap(find.textContaining('Nytt företag?'));
+    expect(r.taps, ['code', 'signup']);
   });
 }

@@ -227,13 +227,69 @@ class DriverInviteTests(FleetTestCase):
         self.assertEqual(me.status_code, 200, me.content)
         self.assertEqual([v["plate"] for v in me.json()["vehicles"]], ["EPO123"])
 
-    def test_an_invite_is_single_use(self):
+    def test_an_invite_cannot_be_used_by_another_account(self):
         self.invite()
         self.assertEqual(self.claim().status_code, 200)
-        again = self.claim(installation="install-another-phone")
+        again = self.claim(user=str(uuid.uuid4()), installation="install-another-phone")
         self.assertEqual(again.status_code, 404)
         self.assertEqual(again.json()["reason"], "invite_used")
         self.assertEqual(DeviceApproval.objects.count(), 1)
+
+    # --- logga in igen ---------------------------------------------------------
+
+    def test_the_driver_logs_in_again_on_the_same_phone(self):
+        self.invite()
+        first = self.claim().json()
+        again = self.claim()
+        self.assertEqual(again.status_code, 200, again.content)
+        body = again.json()
+        self.assertEqual(body["deviceId"], first["deviceId"])
+        self.assertNotEqual(body["deviceToken"], first["deviceToken"])
+        self.assertEqual(
+            DeviceApproval.objects.filter(status=DeviceApproval.Status.ACTIVE).count(), 1,
+        )
+        self.assertTrue(AuditEvent.objects.filter(action="driver_relogin").exists())
+
+    def test_a_new_phone_replaces_the_old_one(self):
+        self.invite()
+        first = self.claim().json()
+        again = self.claim(installation="install-anna-new-phone")
+        self.assertEqual(again.status_code, 200, again.content)
+        body = again.json()
+        self.assertNotEqual(body["deviceId"], first["deviceId"])
+        old = DeviceApproval.objects.get(id=first["approvalId"])
+        self.assertEqual((old.status, old.revoke_reason), (DeviceApproval.Status.REPLACED, "driver_relogin"))
+        # Den gamla telefonens hemlighet fungerar inte längre.
+        gone = self.client.get("/api/fleet/me", headers={"X-Device-Token": first["deviceToken"]})
+        self.assertIn(gone.status_code, (401, 403))
+        ok = self.client.get("/api/fleet/me", headers={"X-Device-Token": body["deviceToken"]})
+        self.assertEqual(ok.status_code, 200, ok.content)
+        self.assertEqual(str(DriverInvite.objects.get().consumed_by_device), body["deviceId"])
+
+    def test_a_blocked_driver_cannot_log_in_again(self):
+        from fleet import pairing
+
+        self.invite()
+        first = self.claim().json()
+        pairing.block_device(
+            approval=DeviceApproval.objects.get(id=first["approvalId"]),
+            actor_user_id=str(self.owner.user_id),
+        )
+        again = self.claim(installation="install-anna-new-phone")
+        self.assertEqual(again.status_code, 403)
+        self.assertEqual(again.json()["reason"], "driver_blocked")
+        self.assertFalse(
+            DeviceApproval.objects.filter(status=DeviceApproval.Status.ACTIVE).exists(),
+        )
+
+    def test_a_canceled_license_stops_a_new_login(self):
+        self.invite()
+        self.assertEqual(self.claim().status_code, 200)
+        self.license.status = self.license.Status.CANCELED
+        self.license.save(update_fields=["status"])
+        again = self.claim(installation="install-anna-new-phone")
+        self.assertEqual(again.status_code, 400, again.content)
+        self.assertEqual(again.json()["reason"], "license_inactive")
 
     def test_another_address_gets_nothing(self):
         self.invite()

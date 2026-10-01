@@ -225,6 +225,14 @@ def claim_invite(
         .first()
     )
     if invite is None:
+        # Föraren som loggar in igen (utloggad, ny telefon): samma konto som
+        # löste in inbjudan får tillbaka bilen -- så länge chefen inte spärrat.
+        again = _relogin(
+            user_id=user_id, email=email, installation_id=installation_id,
+            label=label, platform=platform, push_token=push_token, now=now,
+        )
+        if again is not None:
+            return again
         # Den inloggade äger adressen; att säga att inbjudan redan är använd
         # avslöjar inget för någon annan och sparar ett supportärende.
         if DriverInvite.objects.filter(email=email, status=DriverInvite.Status.CONSUMED).exists():
@@ -285,6 +293,94 @@ def claim_invite(
         "driver_invite_claimed", company_id=invite.company_id, actor_user_id=user_id,
         actor_kind="driver", subject_type="driver_invite", subject_id=invite.id,
         detail={"email": email, "device_id": paired.device_id, "approval_id": paired.approval_id},
+    )
+    return paired
+
+
+def _relogin(
+    *, user_id: str, email: str, installation_id: str, label: str,
+    platform: str, push_token: str | None, now,
+) -> pairing.PairedDevice | None:
+    """
+    E-post och lösenord ska gå att använda igen, inte bara första gången.
+
+    Bara samma konto som löste in inbjudan (`consumed_by_user`), och bara om
+    förarens senaste godkännande inte är spärrat av chefen. En ny telefon
+    ersätter den förra: ett förarkonto kör aldrig på två telefoner samtidigt,
+    annars hade en inbjudan kunnat delas mellan flera förare.
+
+    Returnerar None när det inte finns något att logga in igen till -- då
+    gäller de vanliga felen (`invite_used`, `no_invite`).
+    """
+    from fleet import sessions
+    from fleet.models import DeviceApproval, DeviceCredential, VehicleSession
+
+    invite = (
+        DriverInvite.objects.select_for_update()
+        .filter(email=email, status=DriverInvite.Status.CONSUMED, consumed_by_user=user_id)
+        .order_by("-consumed_at")
+        .first()
+    )
+    if invite is None or invite.consumed_by_device is None:
+        return None
+    previous = (
+        DeviceApproval.objects.filter(device_id=invite.consumed_by_device, license_id=invite.license_id)
+        .order_by("-approved_at")
+        .first()
+    )
+    if previous is not None and previous.status == DeviceApproval.Status.BLOCKED:
+        raise DriverInviteError(
+            "driver_blocked",
+            "Din chef har tagit bort telefonen från bilen. Be om en ny inbjudan.",
+            status=403,
+        )
+    if previous is not None and (previous.revoke_reason or "").startswith("vehicle_"):
+        raise DriverInviteError(
+            "vehicle_changed",
+            "Bilen har bytts ut. Be din chef bjuda in dig till den nya bilen.",
+            status=409,
+        )
+
+    license = License.objects.get(id=invite.license_id)
+    vehicle = Vehicle.objects.get(id=invite.vehicle_id)
+    pairing.check_pairable(license, vehicle)
+
+    name = invite.label or label or "Förare"
+    paired = pairing.approve_device(
+        company_id=invite.company_id,
+        license=license,
+        vehicle=vehicle,
+        approved_by=invite.created_by,
+        installation_id=installation_id,
+        device_label=name,
+        approval_label=name,
+        platform=platform,
+        push_token=push_token,
+        via="email_relogin",
+        now=now,
+    )
+    old_device = str(invite.consumed_by_device)
+    if old_device != str(paired.device_id):
+        # Den förra telefonen släpper bilen: godkännande, hemlighet och pass.
+        old = list(DeviceApproval.objects.filter(
+            device_id=old_device, license_id=invite.license_id, status=DeviceApproval.Status.ACTIVE,
+        ).values_list("id", flat=True))
+        DeviceApproval.objects.filter(id__in=old).update(
+            status=DeviceApproval.Status.REPLACED, revoked_at=now, revoke_reason="driver_relogin",
+        )
+        DeviceCredential.objects.filter(
+            device_id=old_device, approval_id__in=old, revoked_at__isnull=True,
+        ).update(revoked_at=now, revoke_reason="driver_relogin")
+        for open_session in VehicleSession.objects.filter(
+            device_id=old_device, approval_id__in=old, ended_at__isnull=True,
+        ):
+            sessions.end_session(open_session, reason=VehicleSession.EndReason.TAKEOVER, now=now)
+    DriverInvite.objects.filter(id=invite.id).update(consumed_by_device=paired.device_id)
+    audit.record(
+        "driver_relogin", company_id=invite.company_id, actor_user_id=user_id,
+        actor_kind="driver", subject_type="driver_invite", subject_id=invite.id,
+        detail={"device_id": paired.device_id, "previous_device_id": old_device,
+                "replaced_previous": old_device != str(paired.device_id)},
     )
     return paired
 
