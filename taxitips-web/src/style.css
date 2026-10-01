@@ -447,7 +447,7 @@ p { margin: 0; text-wrap: pretty; }
   position: absolute;
   right: var(--gutter);
   bottom: 0.6rem;
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   color: rgba(245, 247, 250, 0.4);
 }
 

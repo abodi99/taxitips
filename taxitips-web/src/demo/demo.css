@@ -86,7 +86,7 @@ svg { width: 1em; height: 1em; flex-shrink: 0; fill: none; stroke: currentColor;
 .d-btn:active { transform: scale(0.97); }
 .d-btn svg { font-size: 1.05rem; }
 
-.d-btn-gold { background: var(--guld); color: var(--midnatt); box-shadow: 0 6px 18px rgba(252, 163, 17, 0.22); }
+.d-btn-gold { background: var(--guld); color: var(--midnatt); box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25); }
 .d-btn-gold svg { fill: currentColor; stroke: none; }
 .d-btn-ghost { background: transparent; color: #fff; border-color: rgba(245, 247, 250, 0.3); }
 .d-btn-dark { background: var(--glass); color: #fff; border-color: var(--glass-line); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
@@ -178,13 +178,7 @@ svg { width: 1em; height: 1em; flex-shrink: 0; fill: none; stroke: currentColor;
   height: 7px;
   border-radius: 50%;
   background: var(--guld);
-  box-shadow: 0 0 0 0 rgba(252, 163, 17, 0.6);
-  animation: badge 2.4s ease-out infinite;
-}
-
-@keyframes badge {
-  0% { box-shadow: 0 0 0 0 rgba(252, 163, 17, 0.55); }
-  70%, 100% { box-shadow: 0 0 0 7px rgba(252, 163, 17, 0); }
+  /* Stilla: datan är exempel, inte live, så pricken ska inte låtsas pulsera. */
 }
 
 .d-top-actions { display: flex; align-items: center; gap: 0.5rem; margin-left: auto; }
@@ -211,9 +205,7 @@ svg { width: 1em; height: 1em; flex-shrink: 0; fill: none; stroke: currentColor;
 #map {
   position: absolute;
   inset: 0;
-  background:
-    radial-gradient(120% 80% at 50% 110%, rgba(37, 53, 81, 0.9), transparent 60%),
-    radial-gradient(80% 60% at 50% 40%, #16223d, var(--midnatt-djup));
+  background: linear-gradient(180deg, #16223d 0%, var(--midnatt-djup) 100%);
 }
 
 .d-maploading {
@@ -613,7 +605,7 @@ svg { width: 1em; height: 1em; flex-shrink: 0; fill: none; stroke: currentColor;
   flex-direction: column;
   background: var(--ljusgra);
   color: var(--midnatt);
-  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.35);
+  box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.35);
 }
 .d-detail .d-grab span { background: var(--line-strong); }
 
@@ -755,7 +747,7 @@ svg { width: 1em; height: 1em; flex-shrink: 0; fill: none; stroke: currentColor;
   border-left: 3px solid var(--guld);
   border-radius: 0 12px 12px 0;
   background: var(--vit);
-  box-shadow: 0 2px 10px rgba(20, 33, 61, 0.07);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
 }
 .tc-why-t { font-weight: 700; font-size: 1rem; }
 .tc-why-k {
@@ -804,8 +796,8 @@ svg { width: 1em; height: 1em; flex-shrink: 0; fill: none; stroke: currentColor;
   background: rgba(13, 23, 41, 0.95);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(252, 163, 17, 0.3);
-  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.45);
+  border: 0;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
 }
 
 .d-tour-progress { height: 3px; background: rgba(245, 247, 250, 0.08); }
@@ -903,8 +895,8 @@ svg { width: 1em; height: 1em; flex-shrink: 0; fill: none; stroke: currentColor;
   padding: 1.5rem;
   border-radius: 20px;
   background: var(--midnatt);
-  border: 1px solid rgba(252, 163, 17, 0.28);
-  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  border: 0;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.45);
 }
 .d-intro h2 {
   margin-top: 0.4rem;
@@ -947,7 +939,7 @@ svg { width: 1em; height: 1em; flex-shrink: 0; fill: none; stroke: currentColor;
   color: var(--midnatt);
   font-weight: 600;
   font-size: 0.9rem;
-  box-shadow: 0 14px 40px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4);
   opacity: 0;
   translate: -50% 12px;
   pointer-events: none;
@@ -1017,7 +1009,7 @@ svg { width: 1em; height: 1em; flex-shrink: 0; fill: none; stroke: currentColor;
     width: var(--list-w);
     padding: 1.25rem 1.1rem 1rem;
     border-radius: 18px;
-    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.35);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
   }
   .d-items { flex: 1; min-height: 0; }
 
@@ -1043,7 +1035,7 @@ svg { width: 1em; height: 1em; flex-shrink: 0; fill: none; stroke: currentColor;
     width: var(--detail-w);
     padding-top: 12px;
     border-radius: 18px;
-    box-shadow: 0 24px 60px rgba(0, 0, 0, 0.45);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
     transform: translateX(calc(100% + var(--gap) * 2));
     opacity: 0;
     transition: transform 0.42s var(--ease-out), opacity 0.3s;
