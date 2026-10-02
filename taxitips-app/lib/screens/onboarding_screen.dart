@@ -5,9 +5,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../analytics.dart';
 import '../theme.dart';
 
-/// Visad en gång, före välkomstskärmen: vad appen gör, vad färgerna betyder,
-/// notiserna och hur man kommer igång. En sak per sida, kort svenska --
-/// många förare har svenska som andraspråk.
+/// Visad en gång, före välkomstskärmen: vad appen gör, att tipsen är tips
+/// och inte löften, hur man svarar på ett tips och hur man kommer igång. En
+/// sak per sida, kort svenska -- många förare har svenska som andraspråk.
 ///
 /// Sidorna byts med liquid_swipe (svep eller "Nästa"). "Hoppa över" finns
 /// hela tiden: den som redan kan appen ska inte tvingas igenom.
@@ -36,35 +36,52 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   final _controller = LiquidController();
   int _page = 0;
 
+  @override
+  void initState() {
+    super.initState();
+    // Sedd redan när den visas, inte först när den klickats igenom: den som
+    // stänger appen mitt i ska inte mötas av samma introduktion igen.
+    _markSeen();
+  }
+
+  static Future<void> _markSeen() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(OnboardingScreen.seenKey, true);
+    } catch (_) {}
+  }
+
   static const _pages = <_PageData>[
     _PageData(
       background: TbColors.navy,
       foreground: TbColors.foam,
       accent: TbColors.taxi,
       icon: Icons.location_on_rounded,
-      title: 'Hitta körningarna först',
+      title: 'Tips från trafiken',
       body:
-          'Taxi Tips visar var folk snart behöver taxi: inställda tåg, sena '
-          'flyg och evenemang som slutar.',
+          'Inställda tåg, sena flyg, färjor och event som slutar. Vi visar '
+          'var folk kan behöva taxi.',
     ),
     _PageData(
       background: Colors.white,
       foreground: TbColors.ink,
       accent: TbColors.navy,
       icon: Icons.traffic_rounded,
-      title: 'Färgen säger hur bra tipset är',
-      body: 'Tryck på ett tips för att se varför det fick sin färg.',
+      title: 'Färgen visar hur starkt tipset är',
+      body:
+          'Det är tips, inte beställningar. Du avgör själv om det är värt '
+          'att åka.',
       levels: true,
     ),
     _PageData(
       background: TbColors.taxi,
       foreground: TbColors.ink,
       accent: TbColors.navy,
-      icon: Icons.notifications_active_rounded,
-      title: 'Vi säger till när det händer',
+      icon: Icons.thumbs_up_down_rounded,
+      title: 'Säg hur det gick',
       body:
-          'Slå på notiser och välj ditt område. Du får bara starka tips nära '
-          'dig — inget brus.',
+          'Tryck på ett tips och välj Fick körning eller Ingen kund. Då blir '
+          'tipsen bättre för alla.',
     ),
     _PageData(
       background: TbColors.navyDeep,
@@ -73,18 +90,15 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       icon: Icons.local_taxi_rounded,
       title: 'Kom igång',
       body:
-          'Förare: logga in med e-posten din chef bjöd in.\n'
-          'Företag: registrera er och prova gratis i 7 dagar.',
+          'Logga in med din e-post. Slå på notiser så säger vi till när ett '
+          'starkt tips dyker upp nära dig.',
     ),
   ];
 
   bool get _last => _page == _pages.length - 1;
 
   Future<void> _finish({required bool skipped}) async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(OnboardingScreen.seenKey, true);
-    } catch (_) {}
+    await _markSeen();
     await logAnalyticsEvent(
       skipped ? 'onboarding_skip' : 'onboarding_complete',
       params: {'page': _page + 1},
@@ -237,62 +251,75 @@ class _Page extends StatelessWidget {
           // Plats under för prickar och knapp (ritas ovanpå i skärmen).
           // Höger: plats för liquid_swipes kant med nästa sida och pilen.
           padding: const EdgeInsets.fromLTRB(32, 64, 56, 140),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                width: 88,
-                height: 88,
-                decoration: BoxDecoration(
-                  color: data.accent.withValues(alpha: 0.14),
-                  borderRadius: BorderRadius.circular(26),
-                ),
-                child: Icon(data.icon, size: 48, color: data.accent),
+          // Skrollbar men centrerad: stor textstorlek eller en liten
+          // telefon ska inte klippa texten.
+          child: LayoutBuilder(
+            builder: (context, box) => SingleChildScrollView(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(minHeight: box.maxHeight),
+                child: _content(),
               ),
-              const SizedBox(height: 32),
-              Text(
-                data.title,
-                style: TextStyle(
-                  fontFamily: kDisplayFont,
-                  color: data.foreground,
-                  fontSize: 30,
-                  height: 1.15,
-                  fontWeight: FontWeight.w800,
-                ),
-              ),
-              const SizedBox(height: 14),
-              if (data.levels) ...[
-                const SizedBox(height: 6),
-                const _Level(
-                  color: TbColors.likelihoodHigh,
-                  label: 'Stark',
-                  text: 'Folk står kvar — kör dit.',
-                ),
-                const _Level(
-                  color: TbColors.likelihoodMedium,
-                  label: 'Medel',
-                  text: 'Kan bli körningar. Håll koll.',
-                ),
-                const _Level(
-                  color: TbColors.likelihoodLow,
-                  label: 'Svag',
-                  text: 'Bra att veta, sällan värt att åka.',
-                ),
-                const SizedBox(height: 14),
-              ],
-              Text(
-                data.body,
-                style: TextStyle(
-                  color: data.foreground.withValues(alpha: 0.85),
-                  fontSize: 18,
-                  height: 1.45,
-                ),
-              ),
-            ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _content() {
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 88,
+          height: 88,
+          decoration: BoxDecoration(
+            color: data.accent.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(26),
+          ),
+          child: Icon(data.icon, size: 48, color: data.accent),
+        ),
+        const SizedBox(height: 32),
+        Text(
+          data.title,
+          style: TextStyle(
+            fontFamily: kDisplayFont,
+            color: data.foreground,
+            fontSize: 30,
+            height: 1.15,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+        const SizedBox(height: 14),
+        if (data.levels) ...[
+          const SizedBox(height: 6),
+          const _Level(
+            color: TbColors.likelihoodHigh,
+            label: 'Stark',
+            text: 'Många kan behöva taxi.',
+          ),
+          const _Level(
+            color: TbColors.likelihoodMedium,
+            label: 'Medel',
+            text: 'Kan bli körningar. Håll koll.',
+          ),
+          const _Level(
+            color: TbColors.likelihoodLow,
+            label: 'Svag',
+            text: 'Bra att veta, sällan värt att åka.',
+          ),
+          const SizedBox(height: 14),
+        ],
+        Text(
+          data.body,
+          style: TextStyle(
+            color: data.foreground.withValues(alpha: 0.85),
+            fontSize: 18,
+            height: 1.45,
+          ),
+        ),
+      ],
     );
   }
 }

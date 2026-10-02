@@ -154,6 +154,12 @@ class _LoginScreenState extends State<LoginScreen> {
         return 'Kontot är inte kopplat till något företag. Be din chef bjuda '
             'in dig, eller registrera ditt företag nedan.';
       }
+      if (e.reason == 'device_swap_limit') {
+        return e.message.isNotEmpty
+            ? e.message
+            : 'Du har bytt telefon två gånger den här månaden. '
+                'Kontakta support så hjälper vi dig byta igen.';
+      }
       return e.message;
     }
     final net = netFailureOf(e);

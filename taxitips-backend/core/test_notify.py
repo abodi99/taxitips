@@ -28,11 +28,15 @@ from core.models import (
 
 
 def opportunity(**kwargs) -> Opportunity:
+    """
+    Ett tips som pipelinen hade skrivit det: styrkan räknas med samma regel
+    som när tipset sparas (line_paused = strandsatt), om testet inte sätter den.
+    """
     defaults = {
         "external_id": f"test:{uuid.uuid4()}",
         "kind": "transit",
         "mode": "train",
-        "severity_tier": SeverityTier.VEHICLE_CANCELLED,
+        "severity_tier": SeverityTier.LINE_PAUSED,
         "title": "Avgång inställd",
         "summary": "Avgången 08:00 från Lund C är inställd.",
         "demand_score": 70,
@@ -40,7 +44,11 @@ def opportunity(**kwargs) -> Opportunity:
         "places": ["Lund C"],
         "end_time": timezone.now() + timedelta(hours=2),
     }
-    return Opportunity.objects.create(**{**defaults, **kwargs})
+    fields = {**defaults, **kwargs}
+    fields.setdefault("level", thresholds.stored_level(
+        fields["severity_tier"], fields["demand_score"], fields.get("has_alternative", False),
+    ))
+    return Opportunity.objects.create(**fields)
 
 
 class FakeDevice:
@@ -167,11 +175,22 @@ class NotifyWorthyTests(TestCase):
         self.assertEqual(match.reason, "not_notify_worthy")
 
     def test_score_floor_applies_within_a_worthy_tier(self):
-        o = opportunity(severity_tier=SeverityTier.VEHICLE_CANCELLED, demand_score=49)
+        o = opportunity(demand_score=thresholds.NOTIFY_SCORE_FLOOR - 1, level="high")
         skane = {"counties": ["12"]}
         self.assertEqual(notify.decide(skane, o).reason, "not_notify_worthy")
         o.demand_score = thresholds.NOTIFY_SCORE_FLOOR
         self.assertTrue(notify.decide(skane, o).ok)
+
+    def test_only_a_strong_tip_wakes_anyone(self):
+        """
+        Hyllie 2026-10-02: inställt tåg, nästa 5 min senare, 61 poäng --
+        Stark och push. Poängen ensam räcker inte längre: styrkan räknades
+        när tipset skrevs, och bara Stark väcker någon.
+        """
+        skane = {"counties": ["12"]}
+        o = opportunity(severity_tier=SeverityTier.VEHICLE_CANCELLED, demand_score=61, level="medium")
+        self.assertEqual(notify.decide(skane, o).reason, "not_notify_worthy")
+        self.assertNotIn(o, notify.candidates())
 
     def test_stated_replacement_traffic_stops_the_push(self):
         """
@@ -421,9 +440,8 @@ class NotifyPrefsApiTests(TestCase):
 class FavoriteTests(TestCase):
     def test_favorite_survives_the_tip_being_purged(self):
         """
-        `purge_old` tar bort tips efter sju dagar. En favoritlista som tömmer
-        sig själv är värre än ingen favoritlista -- föraren minns att hen
-        sparade något, inte att databasen har en retention.
+        Tipset kan gallras medan favoriten fortfarande är ung. Då visas
+        tipset ur snapshot tills favoriten själv gallras efter sju dagar.
         """
         o = opportunity(title="Sparat tips")
         fav = OpportunityFavorite.objects.create(
@@ -437,6 +455,30 @@ class FavoriteTests(TestCase):
         fav.refresh_from_db()
         self.assertIsNone(fav.opportunity)
         self.assertEqual(fav.snapshot["title"], "Sparat tips")
+
+    def test_purge_removes_favorites_older_than_seven_days(self):
+        from core.repository import purge_old
+
+        o = opportunity(title="Gammalt sparat")
+        fav = OpportunityFavorite.objects.create(
+            owner_key="device:abc",
+            opportunity=o,
+            opportunity_external_id=o.external_id,
+            snapshot=notify.snapshot_of(o),
+        )
+        OpportunityFavorite.objects.filter(id=fav.id).update(
+            created_at=timezone.now() - timedelta(days=8),
+        )
+        recent = OpportunityFavorite.objects.create(
+            owner_key="device:abc",
+            opportunity=o,
+            opportunity_external_id=f"{o.external_id}:recent",
+            snapshot=notify.snapshot_of(o),
+        )
+        result = purge_old(days=7)
+        self.assertEqual(result["favorites"], 1)
+        self.assertFalse(OpportunityFavorite.objects.filter(id=fav.id).exists())
+        self.assertTrue(OpportunityFavorite.objects.filter(id=recent.id).exists())
 
     def test_same_tip_cannot_be_favorited_twice_by_one_owner(self):
         from django.db import IntegrityError, transaction
@@ -475,7 +517,6 @@ class ReachTests(TestCase):
     def test_a_tip_you_could_never_see_in_the_list_never_wakes_you(self):
         o = opportunity(
             region="rail",
-            severity_tier=SeverityTier.VEHICLE_CANCELLED,
             demand_score=80,
             lat=self.ORNSKOLDSVIK[0],
             lon=self.ORNSKOLDSVIK[1],
@@ -487,7 +528,6 @@ class ReachTests(TestCase):
     def test_the_same_choice_still_delivers_trains_at_home(self):
         o = opportunity(
             region="rail",
-            severity_tier=SeverityTier.VEHICLE_CANCELLED,
             demand_score=80,
             lat=self.MALMO[0],
             lon=self.MALMO[1],

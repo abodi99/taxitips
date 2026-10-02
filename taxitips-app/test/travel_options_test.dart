@@ -138,4 +138,52 @@ void main() {
       expect(o.text(), 'Sista avgången härifrån');
     });
   });
+
+  group('den drabbade avgången', () {
+    // Landskrona 2026-10-02: 20:39 mot Göteborg C inställd, nästa dit 20:50.
+    // Klockan 19:50 sa appen "om 1 tim" -- räknat till nästa tåg från nu.
+    final now = DateTime(2026, 10, 2, 19, 50);
+    final dep = DateTime(2026, 10, 2, 20, 39);
+    TravelOptions withGap(int gap, String next) => TravelOptions.of({
+      'travel_options': {
+        'departure': {
+          'at': dep.toIso8601String(),
+          'clock': '20:39',
+          'destination': 'Göteborg C',
+          'status': 'cancelled',
+        },
+        'gap_minutes': gap,
+        'next_clock': next,
+      },
+    })!;
+
+    test('om X räknas mot den inställda avgången, väntan från den', () {
+      expect(
+        withGap(11, '20:50').text(now: now),
+        'Inställd 20:39 mot Göteborg C (om 49 min) · nästa dit 20:50, 11 min senare',
+      );
+    });
+
+    test('lång väntan sägs ut och är stark', () {
+      final t = withGap(64, '21:43');
+      expect(t.waitText, 'Nästa dit först 21:43, 1 tim 4 min senare');
+      expect(t.isStrong, isTrue);
+      expect(withGap(11, '20:50').isStrong, isFalse);
+    });
+
+    test('försening visar den nya tiden', () {
+      final t = TravelOptions.of({
+        'travel_options': {
+          'departure': {
+            'at': dep.toIso8601String(),
+            'clock': '20:39',
+            'status': 'delayed',
+            'delay_minutes': 35,
+            'new_clock': '21:14',
+          },
+        },
+      })!;
+      expect(t.departure!.headline, 'Försenad 35 min · 20:39 → 21:14');
+    });
+  });
 }

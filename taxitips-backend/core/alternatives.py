@@ -21,7 +21,7 @@ Modulen gör två saker:
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 LOCAL_TZ = ZoneInfo("Europe/Stockholm")
@@ -106,6 +106,9 @@ def travel_options(
     has_alternative: bool,
     alternative_note: str,
     now: datetime,
+    departure_at: datetime | None = None,
+    destination: str = "",
+    delay_minutes: int | None = None,
 ) -> dict:
     """
     Det appen visar under tipset: när går nästa, och finns det något annat?
@@ -161,7 +164,30 @@ def travel_options(
         # Avgången har gått: det gäller även om anropet skedde före, appen avgör själv.
         head_departed = head_departed or f"Nästa avgång gick {clock}"
 
+    # Den drabbade avgången och hur länge resenären blir stående efter den.
+    # Glappet räknas från den inställda avgången och åldras inte -- "om 1 tim"
+    # räknat från nu (Landskrona 2026-10-02: inställt 20:39, nästa 20:50, appen
+    # sa "om 1 tim" kl 19:50) svarar på fel fråga. Appen räknar "om X" mot den
+    # inställda avgången i stället, med sin egen klocka.
+    departure = None
+    if departure_at:
+        local = departure_at.astimezone(LOCAL_TZ)
+        departure = {
+            "at": departure_at.isoformat(),
+            "clock": local.strftime("%H:%M"),
+            "destination": destination or None,
+            "status": "delayed" if delay_minutes else "cancelled",
+            "delay_minutes": delay_minutes,
+            "new_clock": (
+                (local + timedelta(minutes=delay_minutes)).strftime("%H:%M") if delay_minutes else None
+            ),
+        }
+    gap = next_departure_minutes if departure_at and not delay_minutes else None
+
     return {
+        "departure": departure,
+        "gap_minutes": gap,
+        "next_clock": next_departure_at.astimezone(LOCAL_TZ).strftime("%H:%M") if next_departure_at else None,
         "summary_head_upcoming": head_upcoming,
         "summary_head_departed": head_departed if next_departure_at else None,
         "summary_tail": tail or None,

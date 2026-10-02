@@ -12,14 +12,14 @@ from django.conf import settings
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 
-from core import thresholds
 from core.alternatives import route_note
 
 from core.health import polling
 from core.models import SourceStatus, Station
 from core.repository import upsert_opportunities, upsert_source_events
-from core.scoring import classify
+from core.scoring import classify, taxi_outcome
 from core.sources import resrobot
+from core.sources.smhi import cached_region_weather
 from core.sources.trafikverket_rail import TrafikverketRail
 
 
@@ -82,11 +82,15 @@ class Command(BaseCommand):
             self.stdout.write("inga störningar just nu")
             return
 
-        assessed = [(a, classify(a)) for a in alerts]
+        region_weather = [] if options["dry_run"] else cached_region_weather()
+        assessed = [
+            (a, r, *taxi_outcome(a, r, region_weather))
+            for a, r in ((a, classify(a)) for a in alerts)
+        ]
 
         if options["dry_run"]:
-            for a, r in sorted(assessed, key=lambda p: -p[1].score):
-                self.stdout.write(f"  {r.score:3}  {r.tier:22} {a.header[:56]}")
+            for a, r, _comp, o in sorted(assessed, key=lambda p: -p[3].score):
+                self.stdout.write(f"  {o.score:3} {o.level:6} {r.tier:22} {a.header[:56]}")
             self.stdout.write(f"\n{len(alerts)} störningar (inget skrevs)")
             return
 
@@ -128,7 +132,10 @@ class Command(BaseCommand):
                 "kind": "transit",
                 "mode": "train",
                 "severity_tier": r.tier,
-                "level": thresholds.stored_level(r.tier, r.score, a.has_replacement or a.next_departure_is_bus),
+                # Läge + omständigheter, räknat i scoring.taxi_outcome. Flödet
+                # och notiserna läser styrkan härifrån.
+                "level": o.level,
+                "factors": json.dumps(o.factors, ensure_ascii=False),
                 "title": a.header,
                 "summary": a.description,
                 "lat": a.lat, "lon": a.lon,
@@ -137,23 +144,26 @@ class Command(BaseCommand):
                 "region": "rail",
                 "start_time": a.active_from,
                 "end_time": a.active_to,
-                "demand_score": r.score,
+                "demand_score": o.score,
                 "confidence": r.confidence,
-                "reasons": json.dumps(r.reasons, ensure_ascii=False),
+                "reasons": json.dumps([*r.reasons, *o.reasons], ensure_ascii=False),
                 "rule_id": r.rule_id,
                 "source_event_ids": json.dumps(
                     [source_ids[a.external_id]] if a.external_id in source_ids else []
                 ),
-                # Lagstadgad förseningsersättning är medvetet inte byggd för
-                # Trafikverkets järnvägsdata än -- se core/compensation.py:s
-                # docstring (inget regionfält, blandar regionala korttåg med
-                # fjärrtåg under andra EU-regler).
-                "compensation_eligible": False,
-                "compensation_amount_kr": None,
+                # Bara regionala tåg vi kan knyta till en huvudman, och bara
+                # när väntan säkert når gränsen -- se compensation.rail_region.
+                "compensation_eligible": bool(comp),
+                "compensation_amount_kr": comp["cap_kr"] if comp else None,
+                "compensation_per_person": comp.get("per_person") if comp else None,
                 # Signalerna som gav tiern, sparade som tal -- se
                 # Opportunity.next_departure_minutes.
                 "next_departure_minutes": a.next_departure_minutes,
                 "next_departure_at": a.next_departure_at,
+                # Den drabbade avgången -- det föraren ska se först.
+                "departure_at": a.departure_at,
+                "destination": a.destination,
+                "delay_minutes": None if a.cancelled else a.delay_minutes,
                 "is_last_departure": a.is_last_departure,
                 # Trafikverkets ReplacementTraffic säger rakt ut när
                 # ersättningstrafik är insatt -- den starkaste signalen vi
@@ -175,11 +185,11 @@ class Command(BaseCommand):
                     or ("Nästa avgång härifrån är en buss" if a.next_departure_is_bus else "")
                 ),
             }
-            for a, r in assessed
+            for a, r, comp, o in assessed
         ])
 
         status.written = written
-        spread = sorted({r.score for _, r in assessed}, reverse=True)
+        spread = sorted({o.score for _a, _r, _c, o in assessed}, reverse=True)
         self.stdout.write(self.style.SUCCESS(
             f"skrev {written} tips | poängnivåer: {spread}"
         ))

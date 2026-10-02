@@ -1,50 +1,52 @@
 """
-Klassificering och poängsättning av järnvägsstörningar.
+Klassificering och poängsättning av järnvägsstörningar: LÄGET.
 
-Problemet detta löser
----------------------
-Mätt mot live-data: 27 av 27 aktiva tågtips hade poäng 97, tier
-line_paused, confidence low. Bevisat i Node-koden att två helt olika
-situationer fick samma svar:
+Frågan här är bara en: hur strandsatta är resenärerna? Svaret är en
+lägespoäng, en strandsättningsflagga och lägets skäl i klartext. Tid på
+dygnet, ersättningsrätt, väder och stationens storlek läggs på efteråt av
+core/taxi_context.py -- de gör en strandsatt resenär mer eller mindre benägen
+att ta taxi, men de skapar inget läge.
 
-    Ingen ersättning (verkligt strandsatt)   -> line_paused  85  low
-    Nästa tåg om 10 min (ingen strandsatt)   -> line_paused  85  low
-
-Orsaken: scoring.js har redan en vehicle_cancelled-nivå med tak 55 byggd
-för "inställd men alternativ finns" -- men tågen når den aldrig, eftersom
-hasStatedAlternative() letar efter fraser ("övriga avgångar",
-"ersättningsbuss") som Trafikverkets normalisering aldrig skriver. Alla
-faller i grenen "allvarligt ordval, men otydligt".
-
-Lösningen är inte fler regexar utan de strukturella signaler Trafikverket
-redan ger och Node kastar bort: finns nästa avgång, är detta sista tåget,
-hur stor är stationen.
+Historik: Node gav varje inställt tåg 85-97 poäng oavsett om nästa tåg gick
+om tio minuter. Första Django-versionen skilde på glappet men gav "nästa tåg
+inom 30 min" 55 + stationsbonus 6 = 61, alltså Stark och push (mätt
+2026-10-02: 1 415 Starka och 215 notiser på en vecka, hälften med nästa tåg
+inom tio minuter). Skalan nedan följer glappet hela vägen.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from core import taxi_context as tc
 from core.models import Confidence, SeverityTier, TransportMode
 from core.rules import rule_for
 from core.sources.trafikverket_rail import RailAlert
 
-# En ersättare inom det här fönstret betyder att ingen är strandsatt.
+# Glapp till nästa resa (minuter) -> lägespoäng. Upp till 30 minuter står
+# ingen strandsatt: de väntar. Över 30 är de strandsatta, men först från en
+# timme räcker läget ensamt till Stark -- däremellan avgör omständigheterna.
 ALTERNATIVE_SOON_MIN = 30
+QUICK_ALTERNATIVE_MIN = 10
+GAP_LADDER = (
+    (10, 15),
+    (20, 28),
+    (30, 40),
+    (59, 50),
+)
+LONG_GAP_SCORE = 68
+LAST_DEPARTURE_SCORE = 80
+REPLACEMENT_SCORE = 30
+UNKNOWN_SCORE = 50
 
-# Stora stationer ger fler resenärer per inställd avgång. Bonusen är
-# medvetet liten -- den rangordnar mellan lika starka tips, den skapar
-# inte ett tips.
+# Försening. En timme sent är i praktiken en inställd avgång med en timmes glapp.
+SERIOUS_DELAY_MIN = 60
+SERIOUS_DELAY_SCORE = 55
+DELAY_SCORE = 40
+
+# Stora stationer: många på samma perrong. Påslaget görs i taxi_context
+# (BUSY_STATION_BONUS); här bestäms bara vad "stor" är.
 BUSY_STATION_DEPARTURES = 20
-BUSY_STATION_BONUS = 6
-
-# Fallback-tak, speglar scoring.js. ScoringRule i databasen är sanningen,
-# men de här gäller när tabellen är tom.
-DEFAULT_CAPS = {
-    SeverityTier.LINE_DELAYED: 45,
-    SeverityTier.VEHICLE_DELAYED: 25,
-    SeverityTier.IGNORE: 0,
-}
 
 
 @dataclass
@@ -54,6 +56,25 @@ class Assessment:
     confidence: str
     reasons: list[str]
     rule_id: str
+    stranded: bool = False
+    quick_alternative: bool = False
+    wait_minutes: int | None = None
+    factors: list = field(default_factory=list)
+
+    def situation(self) -> tc.Situation:
+        return tc.Situation(
+            base=self.score, stranded=self.stranded, confidence=self.confidence,
+            quick_alternative=self.quick_alternative, wait_minutes=self.wait_minutes,
+            factors=list(self.factors),
+        )
+
+
+def gap_score(minutes: int) -> int:
+    """Lägespoängen för ett glapp. Delas med fritextens kända nästa avgång (SL)."""
+    for limit, score in GAP_LADDER:
+        if minutes <= limit:
+            return score
+    return LONG_GAP_SCORE
 
 
 def _next_text(alert: RailAlert) -> str:
@@ -72,105 +93,129 @@ def _gap_text(alert: RailAlert) -> str:
     return f"{alert.next_departure_minutes} min efter den inställda avgången"
 
 
+def is_busy_station(alert: RailAlert) -> bool:
+    return alert.station_departures_in_window >= BUSY_STATION_DEPARTURES
+
+
 def classify(alert: RailAlert) -> Assessment:
     """
-    RailAlert -> tier, poäng, konfidens och motivering.
+    RailAlert -> läge: tier, lägespoäng, säkerhet, strandsättning och skäl.
 
-    Rangordningen bygger på vad som faktiskt strandsätter folk:
-
-      1. Sista tåget, ingen ersättare      -> line_paused, golv 85, hög
-      2. Inställt, ingen ersättare i sikte -> line_paused, golv 70, medel
-      3. Inställt, ersättare inom 30 min   -> vehicle_cancelled, tak 55
-      4. Kraftig försening                 -> line_delayed, tak 45
+      1. Ersättningstrafik insatt           -> 30, inte strandsatt
+      2. Inställt, nästa resa inom 30 min   -> 15-40, inte strandsatt
+      3. Sista avgången                     -> 80, strandsatt
+      4. Inställt, nästa resa om 31+ min    -> 50-68, strandsatt
+      5. Inställt, okänt när nästa går      -> 50, strandsatt men osäkert
+      6. Försenat                           -> 40, eller 55 och strandsatt från 60 min
     """
     reasons: list[str] = []
 
     if not alert.cancelled:
         reasons.append(f"försenat {alert.delay_minutes} min")
+        serious = alert.delay_minutes >= SERIOUS_DELAY_MIN
         return _finish(
-            SeverityTier.LINE_DELAYED, alert.delay_minutes + 20,
+            SeverityTier.LINE_DELAYED, SERIOUS_DELAY_SCORE if serious else DELAY_SCORE,
             Confidence.HIGH, reasons, alert, "train.line_delayed",
+            stranded=serious, wait=alert.delay_minutes,
+            factors=[tc.delay_factor(alert.delay_minutes)],
         )
 
     reasons.append("inställd avgång")
 
-    # Starkaste signalen, och den kommer från operatören själv: är
-    # ersättningstrafik insatt tas resenärerna om hand. De står inte och
-    # väntar på taxi. Mätt: 35 av 59 inställda avgångar har detta -- utan
-    # kontrollen blir de den vanligaste falska högnoteringen i flödet.
+    # Operatören säger själv att ersättningstrafik är insatt: resenärerna tas
+    # om hand. Mätt: 35 av 59 inställda avgångar har det.
     if alert.has_replacement:
         reasons.append(alert.replacement_note.lower() or "ersättningstrafik insatt")
         return _finish(
-            SeverityTier.VEHICLE_CANCELLED, 40, Confidence.HIGH,
+            SeverityTier.VEHICLE_CANCELLED, REPLACEMENT_SCORE, Confidence.HIGH,
             reasons, alert, "train.vehicle_cancelled.replacement",
+            quick=True, factors=[tc.REPLACEMENT],
         )
 
-    soon = (
-        alert.next_departure_minutes is not None
-        and alert.next_departure_minutes <= ALTERNATIVE_SOON_MIN
-    )
-
-    if soon:
-        # Det HÄR är fallet som saknades. Resenärerna väntar en kvart --
-        # de tar inte taxi. Ett tips här är inte fel, men det ska inte
-        # konkurrera med en verkligt strandsatt perrong.
+    gap = alert.next_departure_minutes
+    what = "Nästa resa" if alert.alternative_basis == "resrobot" else "Nästa tåg"
+    if gap is not None and gap <= ALTERNATIVE_SOON_MIN:
         reasons.append(f"{_next_text(alert)} {_gap_text(alert)}")
         return _finish(
-            SeverityTier.VEHICLE_CANCELLED, 55, Confidence.HIGH,
+            SeverityTier.VEHICLE_CANCELLED, gap_score(gap), Confidence.HIGH,
             reasons, alert, "train.vehicle_cancelled.alternative_soon",
+            quick=gap <= QUICK_ALTERNATIVE_MIN, wait=gap,
+            factors=[tc.wait_factor(gap, what)],
         )
 
     if alert.is_last_departure:
         reasons.append("sista avgången härifrån")
         return _finish(
-            SeverityTier.LINE_PAUSED, 85, Confidence.HIGH,
+            SeverityTier.LINE_PAUSED, LAST_DEPARTURE_SCORE, Confidence.HIGH,
             reasons, alert, "train.line_paused.last_departure",
+            stranded=True, factors=[tc.LAST_DEPARTURE],
         )
 
-    if alert.next_departure_minutes is not None:
+    if gap is not None:
         reasons.append(f"{_next_text(alert)} {_gap_text(alert)}")
         return _finish(
-            SeverityTier.LINE_PAUSED, 78, Confidence.HIGH,
+            SeverityTier.LINE_PAUSED, gap_score(gap), Confidence.HIGH,
             reasons, alert, "train.line_paused.long_gap",
+            stranded=True, wait=gap, factors=[tc.wait_factor(gap, what)],
         )
 
-    # Ingen information om nästa avgång. Behåll Node-beteendet -- golv 70,
-    # låg konfidens -- men nu är det ett litet undantag i stället för
-    # regeln som alla tips föll i.
     reasons.append("okänt om ersättning finns")
     return _finish(
-        SeverityTier.LINE_PAUSED, 70, Confidence.LOW,
+        SeverityTier.LINE_PAUSED, UNKNOWN_SCORE, Confidence.LOW,
         reasons, alert, "train.line_paused.unknown",
+        stranded=True, factors=[tc.UNKNOWN_NEXT],
     )
 
 
 def _finish(
     tier: str, score: int, confidence: str,
     reasons: list[str], alert: RailAlert, rule_id: str,
+    *, stranded: bool = False, quick: bool = False, wait: int | None = None,
+    factors: list | None = None,
 ) -> Assessment:
-    """Applicerar stationsbonus och eventuell ScoringRule från databasen."""
-    if alert.station_departures_in_window >= BUSY_STATION_DEPARTURES:
-        score += BUSY_STATION_BONUS
-        reasons.append(f"stor station ({alert.station_departures_in_window} avgångar)")
-
-    # Inbyggda tak som fallback. Reglerna ska vara data i ScoringRule --
-    # men en tom tabell (nytt system, test, glömd seed_rules) får inte
-    # betyda att en försening kan poängsättas som en stoppad linje.
-    # Databasen får skärpa gränserna, aldrig vara det enda skyddet.
-    cap = DEFAULT_CAPS.get(tier)
-    if cap is not None:
-        score = min(score, cap)
-
-    # Regeln måste matcha grenen, inte bara nivån. Slår man upp enbart på
-    # tier höjer line_paused/golv-85 även long_gap-fallet (78) till 85 --
-    # och raderar den rangordning som är hela poängen med fasen.
+    """Applicerar eventuell ScoringRule från databasen och skriver stationsraderna."""
+    # Regeln måste matcha grenen, inte bara nivån -- se rules.rule_for.
     condition = rule_id.rsplit(".", 1)[-1] if "." in rule_id else ""
     rule = rule_for(tier, TransportMode.TRAIN, condition)
     score = rule.apply(score) if rule else max(0, min(100, score))
 
+    if is_busy_station(alert):
+        reasons.append(f"stor station ({alert.station_departures_in_window} avgångar)")
     if alert.station:
         reasons.append(f"station: {alert.station}")
     brand = alert.information_owner or alert.operator
     if brand:
         reasons.append(f"operatör: {brand}")
-    return Assessment(tier, score, confidence, reasons, rule_id)
+    return Assessment(
+        tier, score, confidence, reasons, rule_id,
+        stranded=stranded, quick_alternative=quick, wait_minutes=wait,
+        factors=factors or [],
+    )
+
+
+def taxi_outcome(alert: RailAlert, assessment: Assessment, region_weather: list[dict] | None = None):
+    """
+    Läget plus omständigheterna för ett tåg -> (ersättning, taxi_context.Outcome).
+
+    Omständigheterna räknas mot den inställda avgångens tid, inte mot när
+    pollningen råkade gå: ett tips om 07:55-tåget är ett morgontips även om
+    det syntes redan 06:25.
+    """
+    from core.compensation import rail_compensation_signal
+    from core.sources.smhi import nearest_weather
+
+    has_alternative = alert.has_replacement or alert.next_departure_is_bus
+    compensation = rail_compensation_signal(
+        product=alert.product, lat=alert.lat, lon=alert.lon,
+        cancelled=alert.cancelled, wait_minutes=assessment.wait_minutes,
+        is_last_departure=alert.is_last_departure, has_replacement=alert.has_replacement,
+    )
+    outcome = tc.assess(
+        assessment.situation(),
+        when=alert.departure_at,
+        weather=nearest_weather(alert.lat, alert.lon, region_weather or []),
+        compensation=compensation,
+        busy_station=is_busy_station(alert),
+        has_alternative=has_alternative,
+    )
+    return compensation, outcome

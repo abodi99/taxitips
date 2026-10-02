@@ -48,7 +48,14 @@ const MIME = {
   ".woff2": "font/woff2",
   ".json": "application/json",
   ".webmanifest": "application/manifest+json",
+  ".txt": "text/plain; charset=utf-8",
+  ".xml": "application/xml; charset=utf-8",
+  ".mp4": "video/mp4",
+  ".webm": "video/webm",
 };
+
+/** Filändelser som aldrig får falla tillbaka till index.html (SEO/crawlers). */
+const NO_HTML_FALLBACK = new Set([".txt", ".xml", ".json", ".webmanifest", ".mp4", ".webm"]);
 
 function cors(res, origin) {
   const allowed =
@@ -254,7 +261,14 @@ function serveStatic(req, res) {
           return;
         }
       }
-      // SPA-ish fallback for pretty paths
+      // robots.txt / sitemap.xml m.m. får aldrig bli HTML — Google tolkar det
+      // som "saknas" och indexerar fel. Pretty paths utan ändelse → index.
+      const missingExt = path.extname(filePath).toLowerCase();
+      if (missingExt && NO_HTML_FALLBACK.has(missingExt)) {
+        res.writeHead(404, { "Content-Type": "text/plain; charset=utf-8" });
+        res.end("Not found");
+        return;
+      }
       const html = path.join(DIST, "index.html");
       fs.readFile(html, (err2, indexData) => {
         if (err2) {

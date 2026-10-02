@@ -30,6 +30,7 @@ from django.test import Client, TestCase, override_settings
 from django.utils import timezone
 
 from billing.models import Company, CompanyMember, Device
+from core import thresholds
 from core.models import Opportunity, OpportunityFeedback, SeverityTier
 
 JWT_SECRET = "test-secret-at-least-32-characters-long!"
@@ -68,6 +69,10 @@ def opportunity(**overrides) -> Opportunity:
         "rule_id": "train.line_paused",
     }
     fields.update(overrides)
+    # Styrkan som pipelinen hade sparat den (line_paused = strandsatt).
+    fields.setdefault("level", thresholds.stored_level(
+        fields["severity_tier"], fields["demand_score"], fields.get("has_alternative", False),
+    ))
     return Opportunity.objects.create(**fields)
 
 
@@ -329,17 +334,27 @@ class MarketHorizonTests(ApiTestCase):
         opportunity(demand_score=0)
         self.assertEqual(self.get_alerts()["alerts"], [])
 
-    def test_expired_within_24h_is_shown_but_scored_zero(self):
+    def test_just_ended_is_shown_but_scored_zero(self):
+        """"Nyss slut": en kvart gråmarkerat, sedan borta."""
         now = timezone.now()
-        opportunity(end_time=now - timedelta(hours=2))
+        opportunity(end_time=now - timedelta(minutes=10), factors=[{"text": "x", "sign": "+"}])
         alert = self.get_alerts()["alerts"][0]
         self.assertFalse(alert["is_active"])
         self.assertEqual(alert["worth_it_score"], 0)
         self.assertEqual(alert["level"], "low")
+        self.assertEqual(alert["factors"], [])
 
-    def test_older_than_24h_is_gone(self):
-        opportunity(end_time=timezone.now() - timedelta(hours=30))
+    def test_ended_more_than_a_quarter_ago_is_gone(self):
+        opportunity(end_time=timezone.now() - timedelta(minutes=thresholds.FEED_ENDED_GRACE_MINUTES + 1))
         self.assertEqual(self.get_alerts()["alerts"], [])
+
+    def test_far_future_is_not_shown_yet(self):
+        now = timezone.now()
+        opportunity(start_time=now + timedelta(hours=3), end_time=now + timedelta(hours=5))
+        self.assertEqual(self.get_alerts()["alerts"], [])
+        cache.clear()  # nytt tips i samma test: flödescachen får inte svara med det förra
+        opportunity(start_time=now + timedelta(minutes=90), end_time=now + timedelta(hours=3))
+        self.assertEqual(len(self.get_alerts()["alerts"]), 1)
 
 
 class CorsTests(ApiTestCase):
@@ -419,14 +434,15 @@ class LevelTests(ApiTestCase):
         #   ROAD_ACCIDENT/90 -- fortfarande True: vägolyckor ÄR notisvärda,
         #   de får bara ligga i `context` i stället för i tipslistan.
         #
-        # `level` är oförändrad -- den beskriver hur troligt det är att det
-        # står folk där, vilket är en annan fråga än om telefonen ska ringa.
+        # Sedan 2026-10-02 kräver notisen dessutom Stark (sparad styrka, räknad
+        # med läge + omständigheter): en inställd avgång med nästa inom en
+        # halvtimme står ingen strandsatt vid, hur hög poängen än är.
         cases = [
             (SeverityTier.LINE_PAUSED, 85, "high", True),
-            (SeverityTier.VEHICLE_CANCELLED, 72, "high", True),
+            (SeverityTier.VEHICLE_CANCELLED, 72, "medium", False),
             (SeverityTier.VEHICLE_CANCELLED, 45, "medium", False),
             (SeverityTier.LINE_DELAYED, 60, "medium", False),
-            (SeverityTier.ROAD_ACCIDENT_OR_CLOSURE, 90, "low", True),
+            (SeverityTier.ROAD_ACCIDENT_OR_CLOSURE, 90, "medium", False),
         ]
         for tier, score, level, notify in cases:
             with self.subTest(f"{tier}/{score}"):
@@ -453,9 +469,20 @@ class LevelTests(ApiTestCase):
 
     def test_config_endpoint_serves_the_same_numbers(self):
         config = self.client.get("/api/config").json()
-        self.assertEqual(config["notifyScoreFloor"], 50)
+        self.assertEqual(config["notifyScoreFloor"], 60)
         self.assertEqual(config["marketRadiusKm"], 150)
-        self.assertEqual(config["feedLookbackHours"], 24)
+        self.assertEqual(config["feedEndedGraceMinutes"], 15)
+        self.assertEqual(config["feedHorizonHours"], 2)
+
+    def test_the_stored_level_is_what_the_driver_sees(self):
+        """Styrkan räknas när tipset skrivs; flödet räknar inte om den."""
+        opportunity(severity_tier=SeverityTier.LINE_DELAYED, demand_score=62, level="high",
+                    factors=[{"text": "Försenat 1 tim 5 min", "sign": "+"}])
+        alert = self.get_alerts()["alerts"][0]
+        self.assertEqual(alert["level"], "high")
+        self.assertEqual(alert["factors"][0]["text"], "Försenat 1 tim 5 min")
+        # Försening väcker aldrig någon, även Stark.
+        self.assertFalse(alert["notify_worthy"])
 
 
 class FeedbackTests(ApiTestCase):
@@ -477,10 +504,27 @@ class FeedbackTests(ApiTestCase):
     def test_legacy_result_boolean_still_works(self):
         o = opportunity()
         self.post({"alert_id": str(o.id), "result": True})
-        self.post({"alert_id": str(o.id), "result": False})
+        self.assertEqual(OpportunityFeedback.objects.get().verdict, "fare")
+
+    def test_fare_and_empty_replace_each_other(self):
+        o = opportunity()
+        self.post({"opportunity_id": str(o.id), "verdict": "heading"})
+        self.post({"opportunity_id": str(o.id), "verdict": "fare"})
+        self.post({"opportunity_id": str(o.id), "verdict": "empty"})
         self.assertEqual(
             sorted(OpportunityFeedback.objects.values_list("verdict", flat=True)),
-            ["empty", "fare"],
+            ["empty", "heading"],
+        )
+
+    def test_none_clears_the_answer_for_this_device_only(self):
+        o = opportunity()
+        self.post({"opportunity_id": str(o.id), "verdict": "fare"})
+        OpportunityFeedback.objects.create(opportunity=o, device_token="other", verdict="fare")
+        res = self.post({"opportunity_id": str(o.id), "verdict": "none"})
+        self.assertTrue(res.json()["cleared"])
+        self.assertEqual(
+            list(OpportunityFeedback.objects.values_list("device_token", flat=True)),
+            ["other"],
         )
 
     def test_double_tap_is_idempotent(self):
@@ -519,16 +563,20 @@ class DetailTests(ApiTestCase):
     def test_detail_explains_the_grade_in_words(self):
         from core.models import ScoringRule
 
-        ScoringRule.objects.create(tier="line_paused", mode="", condition="whole_line_stop", floor=85)
-        ScoringRule.objects.create(tier="line_paused", mode="", condition="ambiguous", floor=70)
+        ScoringRule.objects.create(tier="line_paused", mode="", condition="whole_line_stop", cap=70)
+        ScoringRule.objects.create(tier="line_paused", mode="", condition="ambiguous", cap=45)
         o = opportunity(rule_id="train.line_paused.ambiguous", severity_tier="line_paused",
-                        demand_score=70, confidence="low", reasons=["allvarlig störning"])
+                        demand_score=50, confidence="low", reasons=["allvarlig störning"],
+                        level="medium", factors=[
+                            {"text": "Oklart läge – bygger på trafikbolagets text", "sign": "-"},
+                            {"text": "Eftermiddag en vardag – folk ska hem", "sign": "+"},
+                        ])
         body = self.client.get(
             f"/api/opportunities/{o.id}", headers={"x-device-token": DEVICE_TOKEN}
         ).json()
         grade = body["grade"]
-        self.assertEqual((grade["level"], grade["label"], grade["confidence"]), ("high", "Stark", "low"))
-        self.assertIn("Stark oavsett poäng", grade["because"])
+        self.assertEqual((grade["level"], grade["label"], grade["confidence"]), ("medium", "Medel", "low"))
+        self.assertEqual(grade["because"], "Eftermiddag en vardag – folk ska hem")
         self.assertTrue(grade["confidenceText"].startswith("Låg"))
         # Regeln med rätt villkor, inte första regeln för typen.
         self.assertEqual(body["rule"]["condition"], "ambiguous")

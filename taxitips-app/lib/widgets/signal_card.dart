@@ -89,6 +89,15 @@ class SignalCard extends StatelessWidget {
                           category: category,
                           muted: !active,
                         ),
+                        if (followed)
+                          const Text(
+                            'Sparat',
+                            style: TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                              color: TbColors.guldDjup,
+                            ),
+                          ),
                         Text(
                           shortWhat(alert),
                           style: const TextStyle(
@@ -303,11 +312,11 @@ class FollowButton extends StatelessWidget {
       onPressed: () => onChanged(!followed),
       iconSize: 28,
       constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-      tooltip: followed ? 'Sluta följa' : 'Följ',
+      tooltip: followed ? 'Ta bort sparat' : 'Spara tipset',
       icon: Icon(
         followed ? Icons.star_rounded : Icons.star_outline_rounded,
         color: followed ? TbColors.guldDjup : TbColors.skiffer,
-        semanticLabel: followed ? 'Sluta följa' : 'Följ',
+        semanticLabel: followed ? 'Ta bort sparat' : 'Spara tipset',
       ),
     );
   }
@@ -360,4 +369,63 @@ class _LiveTravelTextState extends State<LiveTravelText> {
     maxLines: widget.maxLines,
     overflow: widget.overflow,
   );
+}
+
+/// Tipsen är vad vi läser ut ur trafiken, inte beställda körningar.
+///
+/// En kort rad längst ner -- den syns varje gång, så den ska inte ta plats.
+/// Tryck för en mening till.
+class TipsNotPromisesNote extends StatelessWidget {
+  const TipsNotPromisesNote({super.key});
+
+  static const title = 'Tips, inte beställningar';
+  static const body =
+      'Vi läser av trafiken och visar var folk kan behöva taxi. Du avgör '
+      'själv om det är värt att åka.';
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: '$title. Visa mer',
+      child: InkWell(
+        borderRadius: BorderRadius.circular(8),
+        onTap: () => showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: const Text(title),
+            content: const Text(body),
+            actions: [
+              FilledButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Uppfattat'),
+              ),
+            ],
+          ),
+        ),
+        child: const Padding(
+          padding: EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.info_outline_rounded,
+                size: 15,
+                color: TbColors.skiffer,
+              ),
+              SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  'Tips från trafikläget, ingen garanti för körning',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12.5, color: TbColors.skiffer),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }

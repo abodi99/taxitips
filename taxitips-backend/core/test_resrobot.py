@@ -186,9 +186,12 @@ class RailIntegrationTests(SimpleTestCase):
         self.assertIn("Nästa resa mot Göteborg C: Länstrafik tåg 3174 06:13", alert.description)
         self.assertIn("nästa resa mot Göteborg C 11 min efter den inställda avgången", classify(alert).reasons)
 
-    def test_without_an_answer_the_station_next_departure_stands(self):
+    def test_without_an_answer_a_train_the_other_way_is_not_an_alternative(self):
+        # Förut stod stationens nästa tåg (mot Kb, 15 min) som glappet. Nu räknas
+        # bara samma slutstation; utan en sådan är nästa resa okänd.
         (alert,) = build_alerts(self.departures(), STATIONS, WHEN - timedelta(minutes=20), alternative_for=lambda *a: None)
-        self.assertEqual((alert.next_departure_minutes, alert.alternative_basis), (15, "station"))
+        self.assertEqual((alert.next_departure_minutes, alert.alternative_basis), (None, "station"))
+        self.assertFalse(alert.is_last_departure)
 
 
 class AfterTheCancelledDepartureTests(SimpleTestCase):
@@ -250,11 +253,14 @@ class AfterTheCancelledDepartureTests(SimpleTestCase):
 
     def test_station_fallback_shows_the_next_train_after_now(self):
         departures = RailIntegrationTests().departures() + [
+            {"AdvertisedTrainIdent": "3176", "LocationSignature": "Ldo",
+             "AdvertisedTimeAtLocation": (WHEN + timedelta(minutes=15)).isoformat(),
+             "ToLocation": [{"LocationName": "G"}]},
             {"AdvertisedTrainIdent": "3177", "LocationSignature": "Ldo",
              "AdvertisedTimeAtLocation": (WHEN + timedelta(minutes=45)).isoformat(),
-             "ToLocation": [{"LocationName": "Kb"}]},
+             "ToLocation": [{"LocationName": "G"}]},
         ]
-        # 06:22: tåget 06:17 har gått; nästa som går att ta är 06:47.
+        # 06:22: tåget 06:17 mot Göteborg har gått; nästa dit som går att ta är 06:47.
         (alert,) = build_alerts(departures, STATIONS, WHEN + timedelta(minutes=20), alternative_for=lambda *a: None)
         self.assertEqual(alert.next_departure_at, WHEN + timedelta(minutes=45))
         self.assertEqual(alert.next_departure_minutes, 15)

@@ -284,45 +284,90 @@ String distanceText(num? km) {
   return '${km.round()} km';
 }
 
+const _weekdaysShort = ['mån', 'tis', 'ons', 'tor', 'fre', 'lör', 'sön'];
+const _weekdaysLong = [
+  'måndag',
+  'tisdag',
+  'onsdag',
+  'torsdag',
+  'fredag',
+  'lördag',
+  'söndag',
+];
+const _monthsShort = [
+  'jan',
+  'feb',
+  'mar',
+  'apr',
+  'maj',
+  'jun',
+  'jul',
+  'aug',
+  'sep',
+  'okt',
+  'nov',
+  'dec',
+];
+const _monthsLong = [
+  'januari',
+  'februari',
+  'mars',
+  'april',
+  'maj',
+  'juni',
+  'juli',
+  'augusti',
+  'september',
+  'oktober',
+  'november',
+  'december',
+];
+
+String _clockText(DateTime d) =>
+    '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+
+/// "I dag", "I går", "I morgon" -- eller null för andra dagar.
+String? _relativeDay(DateTime date, DateTime now) {
+  final day = DateTime(date.year, date.month, date.day);
+  final today = DateTime(now.year, now.month, now.day);
+  // Avrundat: över sommartidsbytet är ett dygn 23 eller 25 timmar.
+  return switch ((day.difference(today).inHours / 24).round()) {
+    0 => 'I dag',
+    -1 => 'I går',
+    1 => 'I morgon',
+    _ => null,
+  };
+}
+
+/// Kortets tid: "I dag 1 okt · 22:15", "Tor 2 okt · 07:40".
+///
+/// Datumet står alltid med, också i dag: ett tips som ligger kvar över
+/// midnatt eller läses i efterhand ska inte gå att ta för en annan dag.
 String dateText(DateTime? date, {DateTime? now}) {
   if (date == null) return '';
   final current = now ?? DateTime.now();
-  final yesterday = current.subtract(const Duration(days: 1));
+  final rel = _relativeDay(date, current);
+  final day =
+      rel ??
+      '${_weekdaysShort[date.weekday - 1][0].toUpperCase()}'
+          '${_weekdaysShort[date.weekday - 1].substring(1)}';
+  final year = date.year == current.year ? '' : ' ${date.year}';
+  return '$day ${date.day} ${_monthsShort[date.month - 1]}$year · '
+      '${_clockText(date)}';
+}
 
-  final time =
-      '${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
-
-  if (date.year == current.year &&
-      date.month == current.month &&
-      date.day == current.day) {
-    return 'Idag $time';
-  } else if (date.year == yesterday.year &&
-      date.month == yesterday.month &&
-      date.day == yesterday.day) {
-    return 'Igår $time';
-  }
-
-  const months = [
-    'jan',
-    'feb',
-    'mar',
-    'apr',
-    'maj',
-    'jun',
-    'jul',
-    'aug',
-    'sep',
-    'okt',
-    'nov',
-    'dec',
-  ];
-  final monthName = months[date.month - 1];
-
-  if (date.year == current.year) {
-    return '${date.day} $monthName $time';
-  }
-
-  return '${date.day} $monthName ${date.year} $time';
+/// Detaljvyns tid: "I dag, onsdag 1 oktober · 22:15".
+String longDateText(DateTime? date, {DateTime? now}) {
+  if (date == null) return '';
+  final current = now ?? DateTime.now();
+  final rel = _relativeDay(date, current);
+  final weekday = _weekdaysLong[date.weekday - 1];
+  final year = date.year == current.year ? '' : ' ${date.year}';
+  final dayText = rel == null
+      ? '${weekday[0].toUpperCase()}${weekday.substring(1)}'
+      : '$rel, $weekday';
+  return '$dayText ${date.day} ${_monthsLong[date.month - 1]}$year · '
+      '${_clockText(date)}';
 }
 
 /// "Nu", "5 min", "2 tim" -- hur färskt något är.

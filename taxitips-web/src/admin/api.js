@@ -141,9 +141,33 @@ export const admin = {
     request(`/api/admin/licenses/${licenseId}/counties`, { method: "POST", body: { base, extras } }),
   removeLicense: (licenseId, reason) =>
     request(`/api/admin/licenses/${licenseId}/remove`, { method: "POST", body: { reason } }),
+  setBaseCountyNow: (licenseId, county, reason) =>
+    request(`/api/admin/licenses/${licenseId}/base-county`, { method: "POST", body: { county, reason } }),
+  setCompanyBaseCounty: (companyId, county, reason) =>
+    request(`/api/admin/companies/${companyId}/base-county`, { method: "POST", body: { county, reason } }),
+  undoPendingChange: (changeId, reason) =>
+    request(`/api/admin/pending-changes/${changeId}/undo`, { method: "POST", body: { reason } }),
 
   /* --- Konton och spärrar (fleet/admin_accounts.py) --- */
-  accounts: (q) => request(`/api/admin/accounts?q=${encodeURIComponent(q)}`),
+  accounts: (q = "") => request(`/api/admin/accounts?q=${encodeURIComponent(q)}`),
+  account: (userId) => request(`/api/admin/accounts/${userId}`),
+  accountRecovery: (userId, redirectTo) =>
+    request(`/api/admin/accounts/${userId}/recovery`, {
+      method: "POST",
+      body: redirectTo ? { redirectTo } : {},
+    }),
+  deleteAccount: (userId, confirmEmail) =>
+    request(`/api/admin/accounts/${userId}/delete`, {
+      method: "POST",
+      body: { confirmEmail },
+    }),
+  accountTestPush: (userId) =>
+    request(`/api/admin/accounts/${userId}/test-push`, { method: "POST", body: {} }),
+  allowDeviceSwap: (userId, note = "") =>
+    request(`/api/admin/accounts/${userId}/allow-device-swap`, {
+      method: "POST",
+      body: { note },
+    }),
   blocks: () => request("/api/admin/blocks"),
   block: (kind, value, reason) =>
     request("/api/admin/blocks/new", { method: "POST", body: { kind, value, reason } }),

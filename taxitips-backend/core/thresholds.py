@@ -15,12 +15,14 @@ En förändring här ska synas i förarens telefon utan att någon rör Dart.
 from __future__ import annotations
 
 from core.geo import REGION_ANCHOR, haversine_km, resolve_place_coords
+from core.taxi_context import final_level
 
-# Poänggränsen där ett tips är värt att buzza en telefon. Samma tal som
-# fcmPush.js NOTIFY_SCORE_FLOOR och samma tal som lyfter en inställd avgång
-# till "hög" nedan -- avsiktligt EN konstant: det som väcker en förare mitt
-# i natten och det som visas som starkt på kortet ska vara samma bedömning.
-NOTIFY_SCORE_FLOOR = 50
+# Poänggränsen där ett tips är värt att buzza en telefon -- samma tal som
+# gränsen för Stark (taxi_context.STRONG_SCORE), avsiktligt: det som väcker en
+# förare mitt i natten och det som visas som starkt på kortet ska vara samma
+# bedömning. Höjd från 50 till 60 2026-10-02 tillsammans med att poängen
+# började räkna läge + omständigheter (core/taxi_context.py).
+NOTIFY_SCORE_FLOOR = 60
 
 # Marknadshorisont, inte en poängjustering. Avståndet påverkar aldrig
 # poängen (se 20260905000006_drop_reachability_from_score.sql) -- men ett
@@ -28,9 +30,12 @@ NOTIFY_SCORE_FLOOR = 50
 # taget, och ska därför inte nå listan alls.
 MARKET_RADIUS_KM = 150
 
-# Hur långt bakåt flödet visar. Störningen är över, men frågan "vad hände
-# i natt?" är fortfarande relevant för en förare som börjar sitt pass.
-FEED_LOOKBACK_HOURS = 24
+# Flödets tidsfönster. Ett tips som tagit slut ligger kvar gråmarkerat en
+# kvart ("Nyss slut") och försvinner sedan; ett som börjar mer än två timmar
+# fram är inte förarens affär än. Förut visades avslutade tips i 24 timmar --
+# historik som tog plats i en lista föraren ska kunna agera på.
+FEED_ENDED_GRACE_MINUTES = 15
+FEED_HORIZON_HOURS = 2
 
 # Vilka tiers som faktiskt strandar folk. Vägtiers är medvetet uteslutna:
 # en olycka försenar dem som redan sitter i bil, den lämnar ingen
@@ -298,6 +303,7 @@ def is_notify_worthy(
     severity_tier: str | None,
     demand_score: int | None,
     has_alternative: bool = False,
+    level: str | None = None,
 ) -> bool:
     """
     Får det här tipset väcka en telefon alls? (Före förarens egna val.)
@@ -323,6 +329,11 @@ def is_notify_worthy(
         return False
     if has_alternative:
         return False
+    # Styrkan när den är känd: bara Stark väcker någon. Poängen ensam räcker
+    # inte -- ett tips kan ha hög poäng av omständigheter utan att någon står
+    # strandsatt (taxi_context.final_level).
+    if level is not None and level != "high":
+        return False
     return (demand_score or 0) >= NOTIFY_SCORE_FLOOR
 
 
@@ -333,33 +344,48 @@ def customer_likelihood(
     has_alternative: bool = False,
 ) -> str:
     """
-    "Hur troligt är det att det står folk här" -- high/medium/low.
+    "Hur troligt är det att det står folk här" -- high/medium/low -- för ett
+    tips utan sparad styrka (äldre rader, flyg, färja).
 
-    Port av severity_labels.darts customerLikelihood(). Flyttad hit av
-    samma skäl som poängreglerna: bedömningen ska göras en gång, av den som
-    har datan, inte räknas om i varje klient som råkar visa samma tips.
-
-    `has_alternative` sänker till low: källan har själv skrivit ut
-    ersättningstrafik, så resenären har redan ett alternativ. Utan den
-    här grinden fylldes "Bara hög prio" av planerade ombyggnader ("bussar
-    ersätter spårvagnarna … till oktober") där ingen står strandsatt.
-    Kortet ligger kvar i listan -- det är bara färgen/filtret som ska
-    spegla verkligheten (samma resonemang som is_notify_worthy).
+    Styrkan räknas numera när tipset skrivs, av core/taxi_context.final_level,
+    med full kännedom om läge och omständigheter, och sparas i
+    Opportunity.level. Den här funktionen är reserven: utan sparat läge
+    räknas `line_paused` som strandsatt och allt annat som inte.
     """
     if worth_it_score <= 0:
         return "low"
-    if has_alternative:
+    return final_level(
+        demand_score, severity_tier in HIGH_SEVERITY_TIERS, has_alternative,
+    )
+
+
+def effective_level(opportunity, active: bool = True) -> str:
+    """
+    Styrkan föraren ser: den sparade, räknad när tipset skrevs.
+
+    Svag när tipset tagit slut. Har AI-granskningen sänkt poängen efteråt
+    (core/genkit.py) räknas styrkan om från den nya poängen -- men aldrig
+    uppåt förbi det pipelinen själv sa: en språkmodell gör inte ensam ett
+    tips Starkt.
+    """
+    if not active:
         return "low"
-    if severity_tier in HIGH_SEVERITY_TIERS:
-        return "high"
-    if severity_tier in MEDIUM_SEVERITY_TIERS:
-        # En inställd avgång spänner från ett strandsatt tågperrong-fullt
-        # med folk till en enstaka svag avgång. Låt poängen lyfta den, med
-        # samma golv som pushen använder.
-        if severity_tier == "vehicle_cancelled" and demand_score >= NOTIFY_SCORE_FLOOR:
-            return "high"
-        return "medium"
-    return "low"
+    if getattr(opportunity, "has_alternative", False):
+        return "low"
+    stored = getattr(opportunity, "level", None)
+    score = getattr(opportunity, "demand_score", 0) or 0
+    has_alternative = bool(getattr(opportunity, "has_alternative", False))
+    if stored not in ("high", "medium", "low"):
+        return customer_likelihood(
+            getattr(opportunity, "severity_tier", None), score, score, has_alternative,
+        )
+    if getattr(opportunity, "ai_adjusted_at", None) is not None:
+        rescored = final_level(score, stored == "high", has_alternative)
+        return min(stored, rescored, key=lambda lvl: _LEVEL_ORDER[lvl])
+    return stored
+
+
+_LEVEL_ORDER = {"low": 0, "medium": 1, "high": 2}
 
 
 # Det föraren läser. Samma ord som appens signal_kinds.dart (Stark/Medel/Svag).
@@ -369,67 +395,22 @@ CONFIDENCE_TEXT = {
     "medium": "Medel — tolkad men bekräftad (allvarlighetsgrad från källan, AI-granskad eller AIS-fart).",
     "low": "Låg — tolkad ur fritext eller en prognos långt fram; granskas av AI innan den får väcka någon.",
 }
-_TIER_WHY = {
-    "line_paused": "hela linjen står still eller det var sista avgången — resenärer blir kvar",
-    "vehicle_cancelled": "en avgång är inställd",
-    "line_delayed": "linjen är försenad",
-    "arrival_wave": "många ankommer samtidigt",
-    "last_arrival": "sista ankomsten på flera timmar",
-}
-
-
-def explain_grade(
-    severity_tier: str | None,
-    demand_score: int,
-    worth_it_score: int,
-    has_alternative: bool = False,
-) -> dict:
+def explain_grade(level: str, factors: list[dict] | None) -> dict:
     """
-    Varför betyget blev det det blev -- samma beslutslista som
-    `customer_likelihood`, steg för steg och i ord. Testet
-    core/test_tip_audit.py säkerställer att de två aldrig säger olika saker.
-
-    `steps` är kriterierna i den ordning de prövas; det första som avgör
-    markeras `decided`. Appens "Varför visas detta?" visar listan rakt av.
+    Varför styrkan blev det den blev, i förarens ord: styrkan och de skäl
+    (taxi_context-faktorerna) som räknades. Inga poäng -- skälen är
+    beslutsunderlaget, inte siffran.
     """
-    steps: list[dict] = []
-    level = None
-
-    def step(text: str, ok: bool, decides: str | None = None) -> None:
-        nonlocal level
-        decided = decides is not None and level is None
-        steps.append({"text": text, "ok": ok, "decided": decided})
-        if decided:
-            level = decides
-
-    active = worth_it_score > 0
-    step("Tipset gäller nu (inte avslutat)" if active else "Tipset har avslutats", active,
-         None if active else "low")
-    if level is None:
-        step(
-            "Källan anger ersättningstrafik — resenärerna har ett alternativ" if has_alternative
-            else "Källan anger ingen ersättningstrafik",
-            not has_alternative, "low" if has_alternative else None,
-        )
-    if level is None:
-        why = _TIER_WHY.get(severity_tier or "", "typen räknas inte som strandsättande")
-        if severity_tier in HIGH_SEVERITY_TIERS:
-            step(f"Typ: {why} → Stark oavsett poäng", True, "high")
-        elif severity_tier in MEDIUM_SEVERITY_TIERS:
-            if severity_tier == "vehicle_cancelled":
-                strong = demand_score >= NOTIFY_SCORE_FLOOR
-                step(
-                    f"Typ: {why}; poäng {demand_score} "
-                    + (f"≥ {NOTIFY_SCORE_FLOOR} → Stark" if strong else f"< {NOTIFY_SCORE_FLOOR} → Medel"),
-                    strong, "high" if strong else "medium",
-                )
-            else:
-                step(f"Typ: {why} → Medel (kan aldrig bli Stark)", True, "medium")
-        else:
-            step(f"Typ: {why} → Svag", False, "low")
-    level = level or "low"
-    because = next((s["text"] for s in steps if s["decided"]), "")
-    return {"level": level, "label": LEVEL_LABELS[level], "because": because, "steps": steps}
+    shown = [f for f in (factors or []) if isinstance(f, dict) and f.get("text")]
+    because = next((f["text"] for f in shown if f.get("sign") == "+"), "")
+    if not because and shown:
+        because = shown[0]["text"]
+    return {
+        "level": level,
+        "label": LEVEL_LABELS.get(level, LEVEL_LABELS["low"]),
+        "because": because,
+        "steps": [{"text": f["text"], "ok": f.get("sign") != "-", "decided": False} for f in shown],
+    }
 
 
 def stored_level(
@@ -438,13 +419,9 @@ def stored_level(
     has_alternative: bool = False,
 ) -> str:
     """
-    Betyget som sparas på tipset (`Opportunity.level`) och följer med i notiser
-    och favoriter -- samma regel som flödet, med poängen som "värt det" eftersom
-    tipset är aktivt när det skrivs.
-
-    Förut skrev fem pipelines `"high" if score >= 60 else "medium"`. Då kunde
-    samma tips vara "high" i notislistan och "low" i flödet (t.ex. med
-    ersättningsbuss), och ett "low" sparades aldrig.
+    Styrkan för källor som inte räknar omständigheter själva (flyg, färja):
+    `line_paused` är strandsatt, allt annat inte. Samma gränser som
+    taxi_context.final_level -- så flyg och färja blir högst Medel.
     """
     return customer_likelihood(severity_tier, demand_score, demand_score, has_alternative)
 
@@ -481,7 +458,10 @@ def as_config() -> dict:
     return {
         "notifyScoreFloor": NOTIFY_SCORE_FLOOR,
         "marketRadiusKm": MARKET_RADIUS_KM,
-        "feedLookbackHours": FEED_LOOKBACK_HOURS,
+        # Kvar för äldre appar som läser fältet: hur länge ett avslutat tips syns.
+        "feedLookbackHours": 0,
+        "feedEndedGraceMinutes": FEED_ENDED_GRACE_MINUTES,
+        "feedHorizonHours": FEED_HORIZON_HOURS,
         "highSeverityTiers": sorted(HIGH_SEVERITY_TIERS),
         "mediumSeverityTiers": sorted(MEDIUM_SEVERITY_TIERS),
         "notifyWorthyTiers": sorted(NOTIFY_WORTHY_TIERS),

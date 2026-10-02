@@ -127,7 +127,7 @@ class _EventsScreenState extends State<EventsScreen> {
         SnackBar(
           content: Text(
             follow
-                ? 'Du följer eventet. Det finns under ⭐ Följer på kartan.'
+                ? 'Du följer eventet. Det finns under ⭐ Sparat på kartan.'
                 : 'Du följer det inte längre.',
           ),
         ),

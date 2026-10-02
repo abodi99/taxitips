@@ -291,6 +291,87 @@ def apply_base_county_change(*, license: License, now=None) -> License:
     return license
 
 
+def change_base_county_now(*, license: License, county: str, now=None) -> dict:
+    """
+    Byter baslän DIREKT -- plattformsadministratörens väg, när kunden behöver
+    det nu och inte vid förnyelsen (§5 gäller kundens egen ändring).
+
+    Prisneutralt: baslänet ingår i bilens pris oavsett län. Ett extra län som
+    blir baslän avslutas, som vid ett schemalagt byte -- annars hade det
+    fortsatt debiteras bredvid baslänet. Ett schemalagt byte på samma bil
+    ersätts: det gamla beslutet gäller inte längre.
+    """
+    from fleet.models import PendingChange
+
+    now = now or timezone.now()
+    county = assert_county_available(county)
+    old = license.base_county
+    with transaction.atomic():
+        removed_extra = 0
+        if county != old:
+            LicenseCounty.objects.filter(
+                license=license, kind=LicenseCounty.Kind.BASE
+            ).exclude(active_to__lte=now).update(active_to=now)
+            removed_extra = LicenseCounty.objects.filter(
+                license=license, county_code=county, kind=LicenseCounty.Kind.EXTRA
+            ).exclude(active_to__lte=now).update(active_to=now)
+            LicenseCounty.objects.create(
+                license=license, county_code=county, kind=LicenseCounty.Kind.BASE, active_from=now,
+            )
+        License.objects.filter(id=license.id).update(base_county=county, scheduled_base_county="")
+        superseded = PendingChange.objects.filter(
+            company_id=license.company_id, kind=PendingChange.Kind.CHANGE_BASE_COUNTY,
+            status=PendingChange.Status.PENDING, payload__licenseId=str(license.id),
+        ).update(status=PendingChange.Status.SUPERSEDED, canceled_at=now)
+    license.refresh_from_db()
+    return {
+        "licenseId": str(license.id), "from": old, "to": county,
+        "removedRedundantExtra": bool(removed_extra), "supersededScheduled": superseded,
+    }
+
+
+def undo_pending_change(change, *, now=None):
+    """
+    Ångrar en schemalagd ändring innan den verkställts, och tar tillbaka det
+    den redan hunnit sätta (schemalagt baslän, slutdatum på ett län eller en bil).
+    En uppsägning ångras med "Ångra uppsägning" -- den rör Stripe.
+    """
+    from fleet.models import PendingChange
+
+    now = now or timezone.now()
+    if change.status != PendingChange.Status.PENDING:
+        raise LicensingError("not_pending", "Ändringen är redan verkställd eller ångrad.")
+    payload = change.payload or {}
+    with transaction.atomic():
+        if change.kind == PendingChange.Kind.CHANGE_BASE_COUNTY:
+            License.objects.filter(
+                id=payload.get("licenseId"), company_id=change.company_id,
+                scheduled_base_county=payload.get("county", ""),
+            ).update(scheduled_base_county="")
+        elif change.kind == PendingChange.Kind.REMOVE_COUNTY:
+            row = LicenseCounty.objects.filter(
+                license_id=payload.get("licenseId"), license__company_id=change.company_id,
+                county_code=payload.get("county"), kind=LicenseCounty.Kind.EXTRA,
+                active_to__gt=now,
+            ).order_by("-created_at").first()
+            if row is not None and not LicenseCounty.objects.filter(
+                license_id=row.license_id, county_code=row.county_code, active_to__isnull=True,
+            ).exists():
+                LicenseCounty.objects.filter(id=row.id).update(active_to=None)
+        elif change.kind == PendingChange.Kind.REDUCE_LICENSES:
+            License.objects.filter(
+                id__in=[str(x) for x in payload.get("licenseIds", [])],
+                company_id=change.company_id, status=License.Status.PENDING_CANCEL,
+            ).update(status=License.Status.ACTIVE, ends_at=None)
+        else:
+            raise LicensingError(
+                "use_undo_cancel", "En uppsägning ångras med \"Ångra uppsägning\" under Betalning.",
+            )
+        PendingChange.objects.filter(id=change.id).update(
+            status=PendingChange.Status.CANCELED, canceled_at=now,
+        )
+
+
 # ---------------------------------------------------------------------------
 # Bilbyten
 # ---------------------------------------------------------------------------

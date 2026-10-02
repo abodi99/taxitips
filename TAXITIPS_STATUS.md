@@ -6,6 +6,21 @@ Note on naming: the briefing refers to `/api`, `/app`, `/web`. The actual repo u
 
 ---
 
+## Update 2026-10-02 — Scoring rebuilt as "läge + omständigheter"
+
+Tip strength is now computed when a tip is written (`core/taxi_context.py`):
+the situation (how stranded are passengers) plus circumstances (time of day and
+weekday, compensation right, weather, station size; max +20). Stark requires a
+stranding; push requires Stark. Drivers see 2–4 plain-language reasons
+(`Opportunity.factors`, migration `core/0028`), never the score. Feed shows only
+active tips plus 15 min "Nyss slut"; weak tips are hidden by default in the app.
+Estimated against 7 days of prod: Stark ~4 150 → ~590 per week. Full method and
+numbers: [docs/betygsmetod.md](docs/betygsmetod.md). Prod needs migration 0028
+applied **before** the backend deploy, then `seed_compensation_rules` (the table
+was empty in prod, so no compensation was ever shown).
+
+---
+
 ## 0. Update 2026-09-08 — Spår B: the app now reads from Django
 
 Verified by running it, not by reading it: the Flutter app can now take its

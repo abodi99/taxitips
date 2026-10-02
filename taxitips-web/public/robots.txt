@@ -1,0 +1,14 @@
+# Taxi Tips — marknadssajt. Portal och admin ska inte indexeras.
+User-agent: *
+Allow: /
+Disallow: /portal
+Disallow: /portal.html
+Disallow: /admin
+Disallow: /admin.html
+Disallow: /forare
+Disallow: /forare.html
+Disallow: /bekraftad
+Disallow: /bekraftad.html
+Disallow: /api/
+
+Sitemap: https://taxitips.se/sitemap.xml

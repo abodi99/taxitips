@@ -23,10 +23,16 @@ void main() {
   testWidgets('hoppa över sparar att introduktionen är sedd', (tester) async {
     expect(await OnboardingScreen.seen(), isFalse);
     final done = await pump(tester);
-    expect(find.text('Hitta körningarna först'), findsOneWidget);
+    expect(find.text('Tips från trafiken'), findsOneWidget);
     await tester.tap(find.text('Hoppa över'));
     await tester.pumpAndSettle();
     expect(done, ['done']);
+    expect(await OnboardingScreen.seen(), isTrue);
+  });
+
+  testWidgets('sedd redan när den visas', (tester) async {
+    expect(await OnboardingScreen.seen(), isFalse);
+    await pump(tester);
     expect(await OnboardingScreen.seen(), isTrue);
   });
 

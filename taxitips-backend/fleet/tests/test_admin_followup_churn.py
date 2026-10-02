@@ -91,3 +91,57 @@ class FollowUpChurnTests(FleetTestCase):
         row = next(r for r in body["followUps"] if r["companyId"] == str(company.id))
         self.assertEqual(row["segment"], "past_due")
         self.assertEqual(row["stage"], "payment_failed")
+
+
+class FollowUpPaymentTests(FleetTestCase):
+    """Att betala: obetalda beställningar syns, med belopp och ålder."""
+
+    def setUp(self):
+        super().setUp()
+        self.client = Client()
+        self.staff_user = uuid.uuid4()
+        StaffRole.objects.create(user_id=self.staff_user, role=StaffRole.Role.SALES)
+
+    as_staff = FollowUpChurnTests.as_staff
+
+    def order(self, company, status, *, days_ago=0, total=29900, paid_days_ago=None):
+        from fleet.models import Order, PriceVersion
+
+        now = timezone.now()
+        price = PriceVersion.objects.first() or self.make_subscription(company).price_version
+        order = Order.objects.create(
+            company_id=company.id, kind=Order.Kind.ADD_LICENSE, status=status,
+            price_version=price, total_now_ore=total, stripe_payment_url="https://pay.example/x",
+        )
+        Order.objects.filter(id=order.id).update(
+            created_at=now - timedelta(days=days_ago),
+            paid_at=(now - timedelta(days=paid_days_ago)) if paid_days_ago is not None else None,
+        )
+        return order
+
+    def test_an_unpaid_order_puts_a_paying_customer_in_att_betala(self):
+        from fleet.models import Order
+
+        company = self.make_company(name="Skuld AB", org_number="5566004455")
+        self.make_subscription(company)
+        self.order(company, Order.Status.PENDING_PAYMENT, days_ago=20)
+        with self.as_staff():
+            body = self.client.get("/api/admin/followups").json()
+        row = next(r for r in body["followUps"] if r["companyId"] == str(company.id))
+        self.assertEqual((row["segment"], row["stage"]), ("unpaid", "unpaid"))
+        self.assertEqual(row["openOrders"][0]["totalOre"], 29900)
+        self.assertTrue(row["openOrders"][0]["overdue"])
+        summary = body["payments"]["summary"]
+        self.assertEqual((summary["openOre"], summary["openCount"], summary["overdueCount"]), (29900, 1, 1))
+
+    def test_a_failed_order_paid_later_is_not_chased(self):
+        from fleet.models import Order
+
+        company = self.make_company(name="Löst AB", org_number="5566005566")
+        self.make_subscription(company)
+        self.order(company, Order.Status.FAILED, days_ago=5)
+        self.order(company, Order.Status.PAID, days_ago=2, paid_days_ago=2)
+        with self.as_staff():
+            body = self.client.get("/api/admin/followups").json()
+        self.assertNotIn(str(company.id), [r["companyId"] for r in body["followUps"]])
+        self.assertGreaterEqual(body["payments"]["summary"]["paidThisMonthCount"], 0)

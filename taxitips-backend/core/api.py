@@ -298,6 +298,7 @@ def _serialize(o: Opportunity, distance_km: float | None, now) -> dict:
     # bara på "hur stark är signalen" -- avståndet är förarens beslut, inte
     # poängens. Se 20260905000006_drop_reachability_from_score.sql.
     worth_it = o.demand_score if is_active else 0
+    level = thresholds.effective_level(o, is_active)
     return {
         "id": str(o.id),
         "title": o.title,
@@ -321,22 +322,17 @@ def _serialize(o: Opportunity, distance_km: float | None, now) -> dict:
         "distance_km": distance_km,
         "is_active": is_active,
         "worth_it_score": worth_it,
-        # Bedömningen görs här nu, inte i Dart -- se core/thresholds.py.
-        # has_alternative måste med, annars blir planerade
-        # ersättningsbussar "high" i listfilter och badge.
-        "level": thresholds.customer_likelihood(
-            o.severity_tier, o.demand_score, worth_it, o.has_alternative
-        ),
-        # Den RIKTIGA push-grinden, inte bara poänggolvet. Fältet hette
-        # redan notify_worthy men svarade på en annan fråga än den push-
-        # steget ställer: golvet ensamt sa "ja" om en försening på 60 poäng,
-        # medan core/notify.py aldrig hade skickat den (fel tier), och om en
-        # inställd avgång med ersättningsbuss, som inte heller väcker någon.
+        # Styrkan räknades när tipset skrevs (core/taxi_context.py), med läge
+        # och omständigheter; här läses den bara. Svag när tipset tagit slut.
+        "level": level,
+        # Den RIKTIGA push-grinden: typ, inget alternativ, poäng OCH Stark.
         # Ett kort som lovar en notis föraren aldrig får är precis den sorts
-        # tyst särgång som thresholds.py finns för att förhindra.
+        # tysta särgång som thresholds.py finns för att förhindra.
         "notify_worthy": thresholds.is_notify_worthy(
-            o.severity_tier, o.demand_score, o.has_alternative
+            o.severity_tier, o.demand_score, o.has_alternative, level=level,
         ),
+        # Varför, i förarens ord: läget och omständigheterna som räknades.
+        "factors": list(o.factors or []) if is_active else [],
         # Appen speglar level lokalt när backend-fält saknas; behöver samma
         # signal så Dart-fallbacken inte "återuppväcker" ersättningstrafik.
         "has_alternative": o.has_alternative,
@@ -355,6 +351,9 @@ def _serialize(o: Opportunity, distance_km: float | None, now) -> dict:
             has_alternative=o.has_alternative,
             alternative_note=o.alternative_note,
             now=now,
+            departure_at=o.departure_at,
+            destination=o.destination,
+            delay_minutes=o.delay_minutes,
         ),
     }
 
@@ -442,8 +441,15 @@ def feed_for(
 
     rows = (
         Opportunity.objects.filter(
-            end_time__gt=now - timedelta(hours=thresholds.FEED_LOOKBACK_HOURS),
+            # Pågående tips, plus de som tagit slut den senaste kvarten (appen
+            # visar dem gråmarkerade som "Nyss slut"). Inget som börjar mer än
+            # två timmar fram: det är inte förarens affär än.
+            end_time__gt=now - timedelta(minutes=thresholds.FEED_ENDED_GRACE_MINUTES),
             demand_score__gt=0,
+        )
+        .filter(
+            Q(start_time__isnull=True)
+            | Q(start_time__lte=now + timedelta(hours=thresholds.FEED_HORIZON_HOURS))
         )
         .exclude(severity_tier="ignore")
         .filter(suppressed_at__isnull=True)
@@ -562,11 +568,10 @@ def _favorites_for(owner_key: str, lat, lon, now) -> list[dict]:
     """
     Förarens sparade tips, fullt serialiserade.
 
-    Rader vars tips gallrats (`purge_old`, sju dagar) faller tillbaka på
-    ögonblicksbilden som sparades när favoriten sattes. En favoritlista som
-    tömmer sig själv efter en vecka hade varit svårare att förstå än ingen
-    lista alls -- föraren minns att hen sparade något, inte att databasen
-    har en retention.
+    Rader vars tips gallrats (`purge_old`) faller tillbaka på ögonblicksbilden
+    som sparades när favoriten sattes -- tills favoriten själv gallras efter
+    sju dagar från `created_at`. Innan dess: föraren minns att hen sparade
+    något, och listan får inte bli tom bara för att tipset försvann.
     """
     out = []
     rows = (
@@ -814,17 +819,17 @@ def _grade_explanation(o: Opportunity, row: dict, rule: dict | None, sources: li
     "Varför Stark/Medel/Svag?" i ord: betygets beslutssteg, poängen och dess
     regel, säkerheten och notisregeln. Allt räknat här, så att appen bara visar.
     """
-    grade = thresholds.explain_grade(
-        o.severity_tier, o.demand_score, row["worth_it_score"], o.has_alternative,
-    )
+    grade = thresholds.explain_grade(row["level"], row.get("factors"))
     if o.has_alternative:
         notify_why = "Ingen notis: källan anger ersättningstrafik."
     elif o.severity_tier not in thresholds.NOTIFY_WORTHY_TIERS:
         notify_why = "Ingen notis: typen väcker aldrig någon (syns bara i listan)."
+    elif row["level"] != "high":
+        notify_why = "Ingen notis: bara Starka tips väcker någon."
     elif o.demand_score < thresholds.NOTIFY_SCORE_FLOOR:
         notify_why = f"Ingen notis: poängen {o.demand_score} är under {thresholds.NOTIFY_SCORE_FLOOR}."
     else:
-        notify_why = f"Kan ge notis: rätt typ och poäng {o.demand_score} ≥ {thresholds.NOTIFY_SCORE_FLOOR}."
+        notify_why = "Kan ge notis: Starkt tips av en typ som får väcka föraren."
     ai = [r for r in (o.reasons or []) if str(r).startswith("AI ")]
     return {
         **grade,
@@ -845,7 +850,11 @@ def _grade_explanation(o: Opportunity, row: dict, rule: dict | None, sources: li
 @require_POST
 def feedback(request):
     """
-    POST /api/feedback  {"opportunity_id": uuid, "verdict": heading|fare|empty}
+    POST /api/feedback  {"opportunity_id": uuid, "verdict": heading|fare|empty|none}
+
+    "Fick körning" och "Ingen kund" utesluter varandra: det senaste svaret
+    ersätter det andra. "none" tar bort förarens svar på tipset -- en
+    feltryckning ska gå att ångra, annars kalibreras poängen mot den.
 
     Tar även emot appens äldre form {"alert_id":..., "result": true/false}
     -- inte av bakåtkompatibilitetsnit, utan för att den formen är det enda
@@ -864,7 +873,7 @@ def feedback(request):
     verdict = body.get("verdict")
     if verdict is None and "result" in body:
         verdict = OpportunityFeedback.Verdict.FARE if body["result"] else OpportunityFeedback.Verdict.EMPTY
-    if not opportunity_id or verdict not in OpportunityFeedback.Verdict.values:
+    if not opportunity_id or (verdict != "none" and verdict not in OpportunityFeedback.Verdict.values):
         return _json(request, {"error": "invalid_feedback"}, status=400)
 
     if not Opportunity.objects.filter(id=opportunity_id).exists():
@@ -873,6 +882,17 @@ def feedback(request):
         return _json(request, {"error": "unknown_opportunity"}, status=404)
 
     token = request.headers.get("X-Device-Token") or ""
+    outcome = [OpportunityFeedback.Verdict.FARE, OpportunityFeedback.Verdict.EMPTY]
+    if verdict == "none":
+        OpportunityFeedback.objects.filter(
+            opportunity_id=opportunity_id, device_token=token, verdict__in=outcome
+        ).delete()
+        return _json(request, {"ok": True, "cleared": True})
+    if verdict in outcome:
+        # Båda samtidigt går inte att mena: den som fick körning hittade kund.
+        OpportunityFeedback.objects.filter(
+            opportunity_id=opportunity_id, device_token=token, verdict__in=outcome
+        ).exclude(verdict=verdict).delete()
     try:
         # atomic runt insert: en unik-krock markerar annars hela den
         # omgivande transaktionen som trasig, och nästa fråga i samma
@@ -1432,6 +1452,7 @@ def device_session(request):
         # godkänd telefon i en aktiv bil fick aldrig en enda notis.
         # Hittat på en riktig telefon 2026-09-21.
         from fleet.access import device_for_token
+        from fleet.device_swaps import DeviceSwapError, link_account_device
 
         device, credential, _how = device_for_token(device_header)
         if device is None:
@@ -1440,7 +1461,6 @@ def device_session(request):
         if push_token:
             updates["push_token"] = push_token
         if user_id:
-            updates["user_id"] = user_id
             member = (
                 CompanyMember.objects.filter(user_id=user_id, status="active")
                 .order_by("created_at")
@@ -1450,6 +1470,19 @@ def device_session(request):
                 updates["company_id"] = member.company_id
         Device.objects.filter(id=device.id).update(**updates)
         device.refresh_from_db()
+        if user_id:
+            try:
+                link_account_device(
+                    user_id=user_id, device=device, via="device_session", now=now,
+                )
+                device.refresh_from_db()
+            except DeviceSwapError as exc:
+                return _json(
+                    request,
+                    {"ok": False, "error": exc.reason, "reason": exc.reason,
+                     "message": exc.message},
+                    status=exc.status,
+                )
         return _json(
             request,
             {
@@ -1484,6 +1517,8 @@ def device_session(request):
     ent = entitlement_for_request(request)
     display_label = f"{label} ({platform})" if platform else label
 
+    from fleet.device_swaps import DeviceSwapError, link_account_device
+
     device = Device.objects.filter(token=installation_id).first()
     if device is None:
         # Samma FCM-token på en annan rad (kontobyte på samma telefon):
@@ -1501,7 +1536,7 @@ def device_session(request):
             push_token=push_token,
             notify_prefs={},
             created_at=now,
-            user_id=user_id,
+            user_id=None,  # sätts via link_account_device (bytegräns)
             last_seen_at=now,
         )
         linked = "created"
@@ -1512,13 +1547,26 @@ def device_session(request):
             ).update(push_token=None)
         Device.objects.filter(id=device.id).update(
             company_id=company_id,
-            user_id=user_id,
             push_token=push_token or device.push_token,
             last_seen_at=now,
             label=display_label,
             kind=device.kind or "owner_app",
         )
+        device.refresh_from_db()
         linked = "updated"
+
+    try:
+        link_account_device(
+            user_id=user_id, device=device, via="owner_app", now=now,
+        )
+        device.refresh_from_db()
+    except DeviceSwapError as exc:
+        return _json(
+            request,
+            {"ok": False, "error": exc.reason, "reason": exc.reason,
+             "message": exc.message},
+            status=exc.status,
+        )
 
     # auth.users.last_sign_in_at uppdateras av Supabase Auth vid login.
     # Här speglar vi sessionen på devices.last_seen_at för push/debug.

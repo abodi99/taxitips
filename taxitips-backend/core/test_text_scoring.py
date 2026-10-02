@@ -8,7 +8,14 @@ isolerat mot en känd ScoringRule-rad.
 from django.test import TestCase
 
 from core.models import Confidence, SeverityTier
-from core.text_scoring import classify_transit_alert
+from core.text_scoring import (
+    AMBIGUOUS_SCORE,
+    BUS_LINE_CANCELLED_SCORE,
+    SINGLE_DEPARTURE_SCORE,
+    STATED_ALTERNATIVE_SCORE,
+    WHOLE_LINE_STOP_SCORE,
+    classify_transit_alert,
+)
 
 
 def _taxi(**overrides) -> dict:
@@ -19,13 +26,50 @@ def _taxi(**overrides) -> dict:
 
 
 class WholeLineStop(TestCase):
-    def test_no_stated_alternative_reaches_the_floor_built_for_it(self):
+    def test_no_stated_alternative_is_a_stranding(self):
         alert = {"header": "Stopp i tågtrafiken", "description": "Inga tåg går just nu."}
         result = classify_transit_alert(alert, _taxi(score=40))
         self.assertEqual(result.tier, SeverityTier.LINE_PAUSED)
-        self.assertGreaterEqual(result.score, 85)
+        self.assertEqual(result.score, WHOLE_LINE_STOP_SCORE)
+        self.assertTrue(result.stranded)
         self.assertEqual(result.mode, "train")
         self.assertEqual(result.confidence, Confidence.HIGH)
+
+
+class SingleDeparture(TestCase):
+    """SL 2026-09-30/10-01: en inställd tur blev "Hela linjen stoppad" 85 och push."""
+
+    def test_one_cancelled_trip_is_not_a_stopped_line(self):
+        for text in (
+            "Hagsätra - Vällingby kl 16:59 är inställd 2026-09-30 på grund av tekniskt fel.",
+            "Inställd avgång kl 20:40 på linje 5 från hållplats Hälla. Resenärer hänvisas till nästa avgång.",
+            "Zinkensdamm - Ropsten kl 16:02 är inställd på grund av ordningsproblem.",
+        ):
+            result = classify_transit_alert({"header": "Inställd avgång", "description": text}, _taxi(score=85))
+            self.assertEqual(result.tier, SeverityTier.VEHICLE_CANCELLED, text)
+            self.assertEqual(result.score, SINGLE_DEPARTURE_SCORE, text)
+            self.assertFalse(result.stranded)
+
+    def test_a_stop_from_a_given_time_is_still_the_whole_line(self):
+        alert = {"header": "Trafikstopp", "description": "Ingen trafik mellan Lund och Malmö från kl 14.30."}
+        result = classify_transit_alert(alert, _taxi(score=85))
+        self.assertTrue(result.rule_id.endswith("whole_line_stop"), result.rule_id)
+
+    def test_a_known_next_departure_uses_the_gap(self):
+        alert = {"header": "Inställd avgång", "description": "Linje 4 kl 12:00 är inställd.",
+                 "next_departure_minutes": 45}
+        result = classify_transit_alert(alert, _taxi(score=85))
+        self.assertEqual(result.tier, SeverityTier.LINE_PAUSED)
+        self.assertTrue(result.stranded)
+        self.assertEqual(result.wait_minutes, 45)
+
+
+class ReducedSpeed(TestCase):
+    def test_slow_trains_are_a_delay_not_a_stop(self):
+        alert = {"header": "Tågen kör med reducerad hastighet",
+                 "description": "Tågen kör med reducerad hastighet vid Fridhemsplan, inställda avgångar kan förekomma."}
+        result = classify_transit_alert(alert, _taxi(score=85, mediumish=False))
+        self.assertEqual(result.tier, SeverityTier.LINE_DELAYED)
 
 
 class StatedAlternative(TestCase):
@@ -33,16 +77,18 @@ class StatedAlternative(TestCase):
         alert = {"header": "Tåg 501 inställt", "description": "Se övriga avgångar."}
         result = classify_transit_alert(alert, _taxi(score=50))
         self.assertEqual(result.tier, SeverityTier.VEHICLE_CANCELLED)
-        self.assertLessEqual(result.score, 55)
+        self.assertEqual(result.score, STATED_ALTERNATIVE_SCORE)
+        self.assertTrue(result.quick_alternative)
         self.assertEqual(result.confidence, Confidence.MEDIUM)
 
 
 class Ambiguous(TestCase):
-    def test_serious_but_neither_signal_explicit_gets_low_confidence_floor(self):
+    def test_serious_but_neither_signal_explicit_is_at_most_medium(self):
         alert = {"header": "Tåg 501 kraftigt försenat", "description": "Trafiken är påverkad."}
         result = classify_transit_alert(alert, _taxi(score=45))
         self.assertEqual(result.tier, SeverityTier.LINE_PAUSED)
-        self.assertGreaterEqual(result.score, 70)
+        self.assertEqual(result.score, AMBIGUOUS_SCORE)
+        self.assertFalse(result.stranded, "oklart läge får aldrig bli Stark")
         self.assertEqual(result.confidence, Confidence.LOW, "no sl/vt editorial signal -> low")
 
     def test_sl_importance_lifts_confidence_not_score(self):
@@ -52,7 +98,7 @@ class Ambiguous(TestCase):
         }
         result = classify_transit_alert(alert, _taxi(score=45))
         self.assertEqual(result.confidence, Confidence.MEDIUM)
-        self.assertGreaterEqual(result.score, 70)  # unchanged -- confidence only
+        self.assertEqual(result.score, AMBIGUOUS_SCORE)  # unchanged -- confidence only
 
     def test_vt_severity_lifts_confidence_the_same_way_sl_importance_does(self):
         alert = {
@@ -72,11 +118,12 @@ class RailLikeMediumish(TestCase):
 
 
 class BusSerious(TestCase):
-    def test_serious_bus_disruption_caps_at_60(self):
+    def test_serious_bus_disruption_is_medium_at_most(self):
         alert = {"header": "Buss 173 inställd", "description": "Ingen ersättare."}
         result = classify_transit_alert(alert, _taxi(score=55))
         self.assertEqual(result.tier, SeverityTier.VEHICLE_CANCELLED)
-        self.assertLessEqual(result.score, 60)
+        self.assertEqual(result.score, BUS_LINE_CANCELLED_SCORE)
+        self.assertFalse(result.stranded)
         self.assertEqual(result.mode, "bus")
 
     def test_explicit_cancellation_statement_stays_high_confidence(self):

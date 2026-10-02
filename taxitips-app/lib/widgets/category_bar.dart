@@ -4,14 +4,15 @@ import '../signal_kinds.dart';
 import '../theme.dart';
 
 /// Kategoriraden överst på kartan: Alla · Tåg & buss · Väg · Flyg · Färja ·
-/// Event · Följer.
+/// Event · Sparat.
 ///
 /// Ett val i taget. Det styr BÅDE kartan och listan, så att föraren aldrig
 /// behöver förstå två olika filter. Varje knapp har ikon, ett kort ord och
 /// antalet -- en knapp med 0 är nedtonad men går att trycka på, så att
 /// "inget just nu" syns i stället för att knappen försvinner.
 ///
-/// `null` = Alla, `'followed'` = Följer, annars en [SignalCategory.key].
+/// `null` = Alla, `'followed'` = Sparat (tips + följda event), annars en
+/// [SignalCategory.key].
 class CategoryBar extends StatelessWidget {
   const CategoryBar({
     super.key,
@@ -75,7 +76,7 @@ class CategoryBar extends StatelessWidget {
               ),
           _CategoryChip(
             icon: Icons.star_rounded,
-            label: 'Följer',
+            label: 'Sparat',
             count: followedCount,
             selected: selected == 'followed',
             onTap: () => onSelect('followed'),

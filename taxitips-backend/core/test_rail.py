@@ -9,9 +9,12 @@ from datetime import datetime, timedelta, timezone as dt_tz
 
 from django.test import TestCase
 
-from core.scoring import classify
+from zoneinfo import ZoneInfo
+
+from core import taxi_context
+from core.scoring import LAST_DEPARTURE_SCORE, classify, is_busy_station
 from core.sources.trafikverket_rail import (
-    RailAlert, Station, build_alerts, build_replacement_index, minutes_late, parse_point,
+    RailAlert, Station, build_alerts, build_replacement_index, minutes_late, parse_point, platform_end,
 )
 
 NOW = datetime(2026, 9, 6, 22, 0, tzinfo=dt_tz.utc)
@@ -47,17 +50,33 @@ class TheCaseThatWasBroken(TestCase):
         self.assertEqual(replaced.tier, "vehicle_cancelled")
 
     def test_replacement_soon_reaches_the_tier_built_for_it(self):
-        # vehicle_cancelled/tak 55 fanns redan i scoring.js men nåddes
-        # aldrig av tåg -- det är felet den här fasen rättar.
         result = classify(alert(next_departure_minutes=10))
         self.assertEqual(result.tier, "vehicle_cancelled")
-        self.assertLessEqual(result.score, 61)  # 55 + ev. stationsbonus
+        self.assertFalse(result.stranded)
+        self.assertTrue(result.quick_alternative)
         self.assertIn("nästa avgång 10 min efter den inställda avgången", result.reasons)
+
+    def test_next_train_soon_is_never_strong_or_pushed(self):
+        # Hyllie -> Helsingborg C 2026-10-02: inställt 07:55, nästa tåg 08:00,
+        # stor station. Gav 61 = Stark + push. Ingen står kvar för fem minuter
+        # -- inte ens i morgonrusning, i regn, med rätt till ersättning.
+        rush = datetime(2026, 10, 2, 7, 55, tzinfo=ZoneInfo("Europe/Stockholm"))
+        for gap in (5, 10, 25, 30):
+            a = alert(next_departure_minutes=gap, station_departures_in_window=188, departure_at=rush)
+            r = classify(a)
+            o = taxi_context.assess(
+                r.situation(), when=rush, busy_station=True, compensation={"cap_kr": 2960},
+                weather={"precipitation_mm_h": 5, "precipitation_probability_pct": 90},
+            )
+            self.assertNotEqual(o.level, "high", f"glapp {gap} min")
+        hyllie = classify(alert(next_departure_minutes=5, station_departures_in_window=188))
+        self.assertEqual(taxi_context.assess(hyllie.situation(), when=rush, busy_station=True).level, "low")
 
     def test_last_departure_is_the_strongest_signal(self):
         result = classify(alert(is_last_departure=True))
         self.assertEqual(result.tier, "line_paused")
-        self.assertGreaterEqual(result.score, 85)
+        self.assertEqual(result.score, LAST_DEPARTURE_SCORE)
+        self.assertTrue(result.stranded)
         self.assertEqual(result.confidence, "high")
         self.assertIn("sista avgången härifrån", result.reasons)
 
@@ -66,12 +85,22 @@ class TheCaseThatWasBroken(TestCase):
         gap = classify(alert(next_departure_minutes=120))
         self.assertGreater(last.score, gap.score)
 
+    def test_a_half_hour_gap_needs_circumstances_to_be_strong(self):
+        result = classify(alert(next_departure_minutes=40))
+        self.assertTrue(result.stranded)
+        saturday_noon = datetime(2026, 10, 3, 12, 0, tzinfo=ZoneInfo("Europe/Stockholm"))
+        weekday_morning = datetime(2026, 10, 1, 7, 30, tzinfo=ZoneInfo("Europe/Stockholm"))
+        self.assertEqual(taxi_context.assess(result.situation(), when=saturday_noon).level, "medium")
+        self.assertEqual(
+            taxi_context.assess(result.situation(), when=weekday_morning, busy_station=True).level, "high",
+        )
+
     def test_unknown_keeps_the_old_conservative_answer(self):
-        # Utan information behåller vi Nodes beteende, men nu som undantag
-        # i stället för regeln alla föll i.
         result = classify(alert())
         self.assertEqual(result.tier, "line_paused")
         self.assertEqual(result.confidence, "low")
+        night = datetime(2026, 10, 1, 1, 0, tzinfo=ZoneInfo("Europe/Stockholm"))
+        self.assertEqual(taxi_context.assess(result.situation(), when=night, busy_station=True).level, "medium")
 
     def test_scores_actually_spread(self):
         scores = {
@@ -82,6 +111,32 @@ class TheCaseThatWasBroken(TestCase):
         }
         self.assertGreaterEqual(
             len(scores), 4, f"poängen måste spridas, fick {sorted(scores)}"
+        )
+
+
+class LifetimeTests(TestCase):
+    WHEN = datetime(2026, 10, 2, 7, 55, tzinfo=ZoneInfo("Europe/Stockholm"))
+
+    def test_ends_when_the_next_departure_has_left(self):
+        self.assertEqual(
+            platform_end(self.WHEN, cancelled=True, next_gap_minutes=5),
+            self.WHEN + timedelta(minutes=15),
+        )
+
+    def test_never_longer_than_an_hour(self):
+        self.assertEqual(
+            platform_end(self.WHEN, cancelled=True, next_gap_minutes=120),
+            self.WHEN + timedelta(hours=1),
+        )
+
+    def test_replacement_and_delay(self):
+        self.assertEqual(
+            platform_end(self.WHEN, cancelled=True, has_replacement=True),
+            self.WHEN + timedelta(minutes=30),
+        )
+        self.assertEqual(
+            platform_end(self.WHEN, cancelled=False, delay_minutes=35),
+            self.WHEN + timedelta(minutes=45),
         )
 
 
@@ -118,16 +173,19 @@ class ReplacementTrafficTests(TestCase):
 
 class BusyStationTests(TestCase):
     def test_busy_station_ranks_above_quiet_one(self):
-        quiet = classify(alert(is_last_departure=True, station_departures_in_window=3))
-        busy = classify(alert(is_last_departure=True, station_departures_in_window=40))
-        self.assertGreater(busy.score, quiet.score)
+        quiet = alert(next_departure_minutes=45, station_departures_in_window=3)
+        busy = alert(next_departure_minutes=45, station_departures_in_window=40)
+        q = taxi_context.assess(classify(quiet).situation(), busy_station=is_busy_station(quiet))
+        b = taxi_context.assess(classify(busy).situation(), busy_station=is_busy_station(busy))
+        self.assertGreater(b.score, q.score)
 
 
 class DelayTests(TestCase):
     def test_delay_is_line_delayed_not_line_paused(self):
-        result = classify(alert(cancelled=False, delay_minutes=45))
+        result = classify(alert(cancelled=False, delay_minutes=65))
         self.assertEqual(result.tier, "line_delayed")
-        self.assertLessEqual(result.score, 45)
+        self.assertTrue(result.stranded, "en timme sent är som en inställd avgång")
+        self.assertEqual(classify(alert(cancelled=False, delay_minutes=35)).stranded, False)
 
 
 class ParsingTests(TestCase):
@@ -424,3 +482,67 @@ class CompleteFetchTests(TestCase):
         )
         (only,) = build_alerts(rows, {"Lle": Station("Lle", "Luleå")}, NOW)
         self.assertEqual((only.station, only.next_departure_minutes), ("Luleå", 22))
+
+
+class DirectionTests(TestCase):
+    """
+    Landskrona 2026-10-02: 20:39 mot Göteborg C inställt. "Nästa avgång 20:50"
+    var nästa tåg från stationen oavsett riktning -- glappet blev 11 min och
+    tipset Svagt, fast resenärerna mot Göteborg kunde stå kvar i en timme.
+    """
+
+    WHEN = datetime(2026, 10, 2, 18, 39, tzinfo=dt_tz.utc)
+
+    def dep(self, minutes_after: int, to: str, canceled: bool = False) -> dict:
+        t = self.WHEN + timedelta(minutes=minutes_after)
+        return {
+            "AdvertisedTimeAtLocation": t.isoformat(), "Canceled": canceled,
+            "ToLocation": [{"LocationName": to}],
+        }
+
+    def test_only_trains_to_the_same_destination_count(self):
+        from core.sources.trafikverket_rail import _next_departure
+
+        cancelled = self.dep(0, "G", canceled=True)
+        station = [cancelled, self.dep(11, "M"), self.dep(64, "G")]
+        gap, is_last, _at, _bus = _next_departure(cancelled, station, self.WHEN)
+        self.assertEqual(gap, 64)
+        self.assertFalse(is_last)
+
+    def test_no_train_to_the_destination_is_unknown_not_last(self):
+        from core.sources.trafikverket_rail import _next_departure
+
+        cancelled = self.dep(0, "G", canceled=True)
+        gap, is_last, at, _bus = _next_departure(cancelled, [cancelled, self.dep(11, "M")], self.WHEN)
+        self.assertEqual((gap, is_last, at), (None, False, None))
+
+
+class TravelOptionsDepartureTests(TestCase):
+    def test_the_wait_is_counted_from_the_cancelled_departure(self):
+        from core.alternatives import travel_options
+
+        dep = datetime(2026, 10, 2, 18, 39, tzinfo=dt_tz.utc)
+        out = travel_options(
+            next_departure_at=dep + timedelta(minutes=11), next_departure_minutes=11,
+            is_last_departure=False, has_alternative=False, alternative_note="",
+            now=datetime(2026, 10, 2, 17, 50, tzinfo=dt_tz.utc),
+            departure_at=dep, destination="Göteborg C",
+        )
+        self.assertEqual(out["departure"]["clock"], "20:39")
+        self.assertEqual(out["departure"]["destination"], "Göteborg C")
+        self.assertEqual(out["departure"]["status"], "cancelled")
+        self.assertEqual(out["gap_minutes"], 11)
+        self.assertEqual(out["next_clock"], "20:50")
+
+    def test_a_delay_carries_the_new_time(self):
+        from core.alternatives import travel_options
+
+        dep = datetime(2026, 10, 2, 18, 39, tzinfo=dt_tz.utc)
+        out = travel_options(
+            next_departure_at=None, next_departure_minutes=None, is_last_departure=False,
+            has_alternative=False, alternative_note="", now=dep - timedelta(minutes=30),
+            departure_at=dep, destination="Göteborg C", delay_minutes=35,
+        )
+        self.assertEqual(out["departure"]["status"], "delayed")
+        self.assertEqual(out["departure"]["new_clock"], "21:14")
+        self.assertIsNone(out["gap_minutes"])

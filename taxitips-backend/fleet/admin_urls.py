@@ -79,6 +79,9 @@ urlpatterns = [
     path("licenses/<uuid:license_id>/vehicle", admin_vehicles.change_vehicle),
     path("licenses/<uuid:license_id>/counties", admin_vehicles.set_trial_counties),
     path("licenses/<uuid:license_id>/remove", admin_vehicles.remove_license),
+    path("licenses/<uuid:license_id>/base-county", admin_vehicles.set_base_county_now),
+    path("companies/<uuid:company_id>/base-county", admin_vehicles.set_company_base_county),
+    path("pending-changes/<uuid:change_id>/undo", admin_vehicles.undo_pending_change),
     path("orders/<uuid:order_id>/payment-link", admin_sales.order_payment_link),
     path("orders/<uuid:order_id>/refresh", admin_sales.order_refresh),
     path("orders/<uuid:order_id>/cancel", admin_sales.order_cancel),
@@ -95,6 +98,11 @@ urlpatterns = [
     path("events/<int:event_id>/visibility", admin_api.event_visibility),
     path("events/<int:event_id>/delete", admin_api.event_delete),
     path("accounts", admin_accounts.search),
+    path("accounts/<uuid:user_id>", admin_accounts.detail),
+    path("accounts/<uuid:user_id>/recovery", admin_accounts.recovery_link),
+    path("accounts/<uuid:user_id>/test-push", admin_accounts.test_push),
+    path("accounts/<uuid:user_id>/allow-device-swap", admin_accounts.allow_device_swap),
+    path("accounts/<uuid:user_id>/delete", admin_accounts.delete_account),
     # Appar och fel: senaste inloggning, version och telefon per konto och
     # telefon, och appens/serverns fel. Se fleet/admin_activity.py.
     path("activity/clients", admin_activity.clients),

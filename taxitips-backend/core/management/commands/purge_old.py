@@ -30,7 +30,8 @@ class Command(BaseCommand):
         result = purge_old(days=days)
         self.stdout.write(self.style.SUCCESS(
             f"borttaget: {result['opportunities']} opportunities, "
-            f"{result['source_events']} source_events"
+            f"{result['source_events']} source_events, "
+            f"{result.get('favorites', 0)} favoriter"
         ))
         # Appens fel (30 dygn) och klientaktivitet som tystnat (180 dygn).
         # Egna fasta gränser, oberoende av --days: tipsens sju dygn är för

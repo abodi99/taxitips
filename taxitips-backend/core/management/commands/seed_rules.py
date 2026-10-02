@@ -10,32 +10,33 @@ from django.core.management.base import BaseCommand
 
 from core.models import Confidence, ScoringRule, SeverityTier, TransportMode
 
-# Exakt vad scoring.js gör idag, rad för rad. Porteras oförändrat så att
-# Fas 2 kan verifieras mot samma utfall innan tågfixen ändrar något.
+# Lägespoängen för fritext som tak (core/text_scoring.py), inte golv: sedan
+# 2026-10-02 räknar poängen läge + omständigheter (core/taxi_context.py), och
+# en regelrad får skärpa ett läge men aldrig lyfta det. De gamla golven från
+# scoring.js (85 för "hela linjen", 70 för "oklart") gjorde varje inställd
+# SL-avgång till en Stark notis.
 RULES = [
     dict(tier=SeverityTier.LINE_PAUSED, mode="", condition="whole_line_stop",
-         floor=85, confidence=Confidence.HIGH,
-         note="Stoppad linje utan nämnt alternativ. scoring.js:84"),
+         floor=None, cap=70, confidence=Confidence.HIGH,
+         note="Hela linjen står still, inget alternativ angivet. Strandsatt."),
     dict(tier=SeverityTier.LINE_PAUSED, mode="", condition="ambiguous",
-         floor=70, confidence=Confidence.LOW,
-         note="Allvarligt ordval men otydligt. Hit hamnar ALLA tågtips idag "
-              "-- därför får 27 av 27 identiska poäng. scoring.js:109"),
+         floor=None, cap=45, confidence=Confidence.LOW,
+         note="Allvarligt ordval men varken 'hela linjen' eller 'en avgång' i klartext. "
+              "Högst Medel tills det bekräftats."),
     dict(tier=SeverityTier.VEHICLE_CANCELLED, mode=TransportMode.TRAIN,
-         condition="stated_alternative", cap=55, confidence=Confidence.MEDIUM,
-         note="Inställd men alternativ finns. Tågen når aldrig hit idag: "
-              "hasStatedAlternative() letar efter fraser Trafikverket aldrig "
-              "skriver. scoring.js:90"),
+         condition="stated_alternative", floor=None, cap=25, confidence=Confidence.MEDIUM,
+         note="Inställd men källan anvisar ett alternativ."),
     dict(tier=SeverityTier.VEHICLE_CANCELLED, mode=TransportMode.BUS,
-         condition="serious", cap=60, confidence=Confidence.HIGH,
-         note="Allvarlig bussstörning. scoring.js:122"),
+         condition="serious", floor=None, cap=45, confidence=Confidence.HIGH,
+         note="Bussen inställd utan klockslag: linjen eller en tur, oklart."),
     dict(tier=SeverityTier.LINE_DELAYED, mode="", condition="mediumish",
-         cap=45, confidence=Confidence.HIGH,
-         note="Tåg, medelallvarligt. scoring.js:114"),
+         floor=None, cap=30, confidence=Confidence.HIGH,
+         note="Spårtrafik försenad."),
     dict(tier=SeverityTier.VEHICLE_DELAYED, mode=TransportMode.BUS,
-         condition="mediumish", cap=25, confidence=Confidence.HIGH,
-         note="Buss några minuter sen. scoring.js:127"),
+         condition="mediumish", floor=None, cap=15, confidence=Confidence.HIGH,
+         note="Buss några minuter sen."),
     dict(tier=SeverityTier.IGNORE, mode="", condition="",
-         cap=0, confidence=Confidence.MEDIUM,
+         floor=None, cap=0, confidence=Confidence.MEDIUM,
          note="Brus: hiss ur funktion, stängd toalett, cykelplatser."),
     # Flyg har ingen motsvarighet i scoring.js -- källan fanns inte då. Taket
     # håller ankomstvågen under en verkligt stoppad linje: att många landar
@@ -55,7 +56,7 @@ RULES = [
 
 
 class Command(BaseCommand):
-    help = "Seedar poängreglerna från scoring.js"
+    help = "Seedar poängreglerna (tak per läge, se core/text_scoring.py)"
 
     def handle(self, *args, **options):
         created = updated = 0

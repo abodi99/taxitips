@@ -1,5 +1,5 @@
 """
-Supabase Auths admin-API, för en enda sak: förarinbjudans länk.
+Supabase Auths admin-API: lösenordslänk och (för admin) borttagning av konto.
 
 **Varför här och inte i appen.** Länken skapar kontot (eller hittar det som
 redan finns) och bevisar, när föraren trycker på den, att hen kommer åt
@@ -16,7 +16,7 @@ bjudits in tidigare) ger ingen `invite`-länk -- Supabase svarar att adressen
 redan är registrerad. Då blir det en `recovery`-länk i stället, som landar på
 samma sida och låter föraren välja lösenord på samma sätt.
 
-Nyckeln används bara i det här anropet. Django skriver fortfarande via sin egen
+Nyckeln används bara i de här anropen. Django skriver fortfarande via sin egen
 databasanslutning, inte med service_role (CLAUDE.md, regel 4).
 """
 
@@ -34,7 +34,7 @@ HTTP_TIMEOUT = 10
 
 
 class AuthAdminError(Exception):
-    """Länken gick inte att få. Meddelandet är för loggen, inte för kunden."""
+    """Auth-adminanropet misslyckades. Meddelandet är för loggen, inte för kunden."""
 
 
 @dataclass(frozen=True)
@@ -51,16 +51,28 @@ def configured() -> bool:
     )
 
 
-def _post(path: str, payload: dict) -> requests.Response:
+def _headers() -> dict:
     key = settings.SUPABASE_SERVICE_ROLE_KEY.strip()
+    return {
+        "apikey": key,
+        "Authorization": f"Bearer {key}",
+        "Content-Type": "application/json",
+    }
+
+
+def _post(path: str, payload: dict) -> requests.Response:
     return requests.post(
         f"{settings.SUPABASE_URL.rstrip('/')}{path}",
         json=payload,
-        headers={
-            "apikey": key,
-            "Authorization": f"Bearer {key}",
-            "Content-Type": "application/json",
-        },
+        headers=_headers(),
+        timeout=HTTP_TIMEOUT,
+    )
+
+
+def _delete(path: str) -> requests.Response:
+    return requests.delete(
+        f"{settings.SUPABASE_URL.rstrip('/')}{path}",
+        headers=_headers(),
         timeout=HTTP_TIMEOUT,
     )
 
@@ -114,3 +126,18 @@ def invite_link(email: str, redirect_to: str) -> AuthLink:
         raise AuthAdminError(f"generate_link recovery: {res.status_code} {res.text[:200]}")
     except requests.RequestException as exc:
         raise AuthAdminError(f"generate_link: {exc.__class__.__name__}") from exc
+
+
+def delete_user(user_id: str) -> None:
+    """
+    Tar bort kontot i Supabase Auth. 404 räknas som OK (redan borta).
+    """
+    if not configured():
+        raise AuthAdminError("SUPABASE_SERVICE_ROLE_KEY saknas")
+    try:
+        res = _delete(f"/auth/v1/admin/users/{user_id}")
+    except requests.RequestException as exc:
+        raise AuthAdminError(f"delete_user: {exc.__class__.__name__}") from exc
+    if res.status_code in (200, 204, 404):
+        return
+    raise AuthAdminError(f"delete_user: {res.status_code} {res.text[:200]}")

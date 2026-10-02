@@ -13,10 +13,8 @@ import '../theme.dart';
 /// notisinställningarna. Det här är historik: vad som faktiskt skickades,
 /// när, och till den här telefonen.
 ///
-/// Varje rad bär också tipset som det såg ut när notisen gick
-/// (`opportunity`-ögonblicksbilden). Därför fungerar listan även efter att
-/// tipset gallrats ur databasen efter sju dagar -- den visar då `purged`
-/// i stället för ett tomt kort.
+/// Sparade tips (favoriter) hör hit INTE -- de ligger under ⭐ Sparat i
+/// tipslistan/kartan. En stjärna här blandade ihop historik med "spara".
 class NotificationLogSheet extends StatefulWidget {
   const NotificationLogSheet({
     super.key,
@@ -71,28 +69,6 @@ class _NotificationLogSheetState extends State<NotificationLogSheet> {
     }
   }
 
-  Future<void> _toggleFavorite(Map<String, dynamic> row) async {
-    final id = row['opportunity_id']?.toString();
-    if (id == null || id.isEmpty) return;
-    final next = row['is_favorite'] != true;
-    setState(() => row['is_favorite'] = next);
-    try {
-      await widget.api.setFavorite(opportunityId: id, favorite: next);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => row['is_favorite'] = !next);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            isNetworkError(e)
-                ? 'Kräver internet. Försök igen när du har nät.'
-                : 'Kunde inte spara tipset',
-          ),
-        ),
-      );
-    }
-  }
-
   String _when(String? iso) {
     if (iso == null) return '';
     final dt = DateTime.tryParse(iso)?.toLocal();
@@ -143,9 +119,9 @@ class _NotificationLogSheetState extends State<NotificationLogSheet> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Notiser som skickats till den här telefonen. Stjärnmarkera '
-              'en för att spara den — sparade tips ligger kvar överst i '
-              'listan även när filtren gömmer resten.',
+              'Notiser som skickats till den här telefonen. '
+              'Vill du spara ett tips? Gör det med stjärnan i tipslistan '
+              '— då ligger det under Sparat i sju dagar.',
               style: TextStyle(
                 fontSize: 14,
                 height: 1.4,
@@ -191,11 +167,7 @@ class _NotificationLogSheetState extends State<NotificationLogSheet> {
                   title: row['title']?.toString() ?? '',
                   body: row['body']?.toString() ?? '',
                   when: _when(row['sentAt']?.toString()),
-                  isFavorite: row['is_favorite'] == true,
                   purged: row['purged'] == true,
-                  onToggleFavorite: row['purged'] == true
-                      ? null
-                      : () => _toggleFavorite(row),
                   onTap:
                       row['purged'] == true || widget.onOpenOpportunity == null
                       ? null
@@ -220,18 +192,14 @@ class _NotificationTile extends StatelessWidget {
     required this.title,
     required this.body,
     required this.when,
-    required this.isFavorite,
     required this.purged,
-    this.onToggleFavorite,
     this.onTap,
   });
 
   final String title;
   final String body;
   final String when;
-  final bool isFavorite;
   final bool purged;
-  final VoidCallback? onToggleFavorite;
   final VoidCallback? onTap;
 
   @override
@@ -243,72 +211,56 @@ class _NotificationTile extends StatelessWidget {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 12, 8, 12),
-          child: Row(
+          padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: const TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                        color: TbColors.ink,
-                      ),
-                    ),
-                    if (body.isNotEmpty) ...[
-                      const SizedBox(height: 3),
-                      Text(
-                        body,
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 13,
-                          height: 1.35,
-                          color: Colors.grey.shade700,
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 5),
-                    Row(
-                      children: [
-                        Text(
-                          when,
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-                        // Tipset finns inte kvar i databasen, men notisen
-                        // gör det. Ärligare än ett kort som öppnar tomt.
-                        if (purged) ...[
-                          const SizedBox(width: 8),
-                          Text(
-                            '· arkiverad',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade500,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: TbColors.ink,
                 ),
               ),
-              if (onToggleFavorite != null)
-                IconButton(
-                  onPressed: onToggleFavorite,
-                  icon: Icon(
-                    isFavorite ? Icons.star : Icons.star_border,
-                    color: isFavorite ? TbColors.taxi : TbColors.muted,
+              if (body.isNotEmpty) ...[
+                const SizedBox(height: 3),
+                Text(
+                  body,
+                  maxLines: 3,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.35,
+                    color: Colors.grey.shade700,
                   ),
-                  tooltip: isFavorite ? 'Ta bort från sparade' : 'Spara tipset',
                 ),
+              ],
+              const SizedBox(height: 5),
+              Row(
+                children: [
+                  Text(
+                    when,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade600,
+                    ),
+                  ),
+                  // Tipset finns inte kvar i databasen, men notisen
+                  // gör det. Ärligare än ett kort som öppnar tomt.
+                  if (purged) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      '· arkiverad',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade500,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
             ],
           ),
         ),

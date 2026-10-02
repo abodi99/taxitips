@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-/// Svar (🚕 / 👍 / 👎) som gavs utan nät och väntar på att skickas.
+/// Svar (👍 / 👎) som gavs utan nät och väntar på att skickas.
 ///
 /// Svaret är det som kalibrerar poängsättningen, och det ges ofta just när
 /// föraren står i en dålig täckning. Att kasta det vore att kasta data;
@@ -41,6 +41,10 @@ class PendingFeedback {
     }
   }
 
+  /// "Fick körning", "Ingen kund" och ångra (`none`) är samma fråga om
+  /// samma tips: bara det senaste svaret ska skickas.
+  static const _outcome = {'fare', 'empty', 'none'};
+
   /// Lägger till ett svar. Samma tips + omdöme ersätter det gamla.
   static Future<void> add(
     String opportunityId,
@@ -50,7 +54,10 @@ class PendingFeedback {
     final t = now ?? DateTime.now();
     final items = await load(now: t);
     items.removeWhere(
-      (i) => i['id'] == opportunityId && i['verdict'] == verdict,
+      (i) =>
+          i['id'] == opportunityId &&
+          (i['verdict'] == verdict ||
+              (_outcome.contains(verdict) && _outcome.contains(i['verdict']))),
     );
     items.add({
       'id': opportunityId,

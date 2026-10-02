@@ -1,16 +1,25 @@
 """
-Tester för core/ingest.py:s skrivsteg -- särskilt väderbonusen, som är den
-enda platsen i pipelinen där något ANNAT än klassificeraren rör poängen.
+Tester för core/ingest.py:s skrivsteg -- särskilt omständigheterna (väder,
+tid), den enda platsen i fritextens pipeline där något ANNAT än
+klassificeraren rör poängen.
 
-Bonusen går inte att verifiera mot riktig data på beställning (den kräver att
-dåligt väder råkar sammanfalla med en störning på samma ort), så den bevisas
+Väder går inte att verifiera mot riktig data på beställning (det kräver att
+dåligt väder råkar sammanfalla med en störning på samma ort), så det bevisas
 här i stället.
 """
 
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
 from django.test import TestCase
 
-from core.ingest import WEATHER_BONUS, assess, write
+from core import taxi_context
+from core.ingest import assess, write
 from core.models import Opportunity, ScoringRule, SeverityTier
+from core.taxi_context import SEVERE_WEATHER_BONUS, WEATHER_BONUS
+
+# En lördag mitt på dagen: ingen tidsomständighet, så att bara vädret syns.
+SATURDAY_NOON = datetime(2027, 1, 2, 12, 0, tzinfo=ZoneInfo("Europe/Stockholm"))
 
 
 def _alert(**overrides) -> dict:
@@ -21,7 +30,7 @@ def _alert(**overrides) -> dict:
         "cause": None, "effect": None,
         "areas": [], "routes": [], "stops": [], "url": None,
         "region": "skane",
-        "active_from": None, "active_to": None,
+        "active_from": SATURDAY_NOON, "active_to": None,
     }
     base.update(overrides)
     return base
@@ -54,14 +63,19 @@ class WeatherBonus(TestCase):
         before = assess([_alert()])[0][2].score
         o = self._write_one([_weather(wind_gust_ms=15.0)])
         self.assertEqual(o.demand_score, min(100, before + WEATHER_BONUS))
-        self.assertIn("väder: hård vind", o.reasons)
+        self.assertIn(f"väder: Hård vind (+{WEATHER_BONUS})", o.reasons)
+        self.assertIn({"text": "Hård vind", "sign": "+"}, o.factors)
+
+    def test_severe_weather_weighs_more(self):
+        before = assess([_alert()])[0][2].score
+        o = self._write_one([_weather(wind_gust_ms=21.0)])
+        self.assertEqual(o.demand_score, min(100, before + SEVERE_WEATHER_BONUS))
+        self.assertIn({"text": "Hård blåst", "sign": "+"}, o.factors)
 
     def test_bonus_never_pushes_past_100(self):
-        # Golvet för whole_line_stop är 85; med bonus hade det blivit 97,
-        # men ett larm som redan ligger högt får aldrig gå över 100.
         ScoringRule.objects.update_or_create(
             tier=SeverityTier.LINE_PAUSED, mode="", condition="whole_line_stop",
-            defaults={"floor": 95, "confidence": "high"},
+            defaults={"floor": 99, "cap": None, "confidence": "high"},
         )
         o = self._write_one([_weather(wind_gust_ms=15.0)])
         self.assertEqual(o.demand_score, 100)
@@ -110,12 +124,28 @@ class RoadIsNeverLiftedByWeather(TestCase):
 
 
 class StoredLevelFollowsTheFeedRule(TestCase):
-    def test_written_level_is_the_feed_level(self):
-        from core import thresholds
-
+    def test_written_level_is_the_final_level(self):
         assessed = assess([_alert()])
         write("trafiklab", assessed, [])
         o = Opportunity.objects.get(external_id="test:1")
+        # "Stopp i tågtrafiken": hela linjen, strandsatt.
         self.assertEqual(
-            o.level, thresholds.stored_level(o.severity_tier, o.demand_score, o.has_alternative),
+            o.level, taxi_context.final_level(o.demand_score, True, o.has_alternative, o.confidence),
+        )
+        self.assertEqual(o.level, "high")
+        self.assertEqual(o.factors[0], {"text": "Hela linjen står still", "sign": "+"})
+
+    def test_a_single_departure_is_weak_and_short_lived(self):
+        """SL 2026-09-30: en inställd tunnelbaneavgång blev "Hela linjen stoppad" 85 och push."""
+        assessed = assess([_alert(
+            header="Inställd avgång",
+            description="Hagsätra - Vällingby kl 16:59 är inställd 2026-09-30 på grund av tekniskt fel.",
+            region="sl", active_from=datetime(2026, 9, 30, 16, 30, tzinfo=ZoneInfo("Europe/Stockholm")),
+        )])
+        write("sl", assessed, [])
+        o = Opportunity.objects.get(external_id="test:1")
+        self.assertTrue(o.rule_id.endswith(".single_departure"), o.rule_id)
+        self.assertEqual(o.level, "low")
+        self.assertEqual(
+            o.end_time, datetime(2026, 9, 30, 17, 44, tzinfo=ZoneInfo("Europe/Stockholm")),
         )

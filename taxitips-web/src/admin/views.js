@@ -403,8 +403,67 @@ function stepBetalning(d, config) {
   `;
 }
 
+const PENDING_KIND = {
+  change_base_county: "Byt baslän",
+  remove_county: "Ta bort extra län",
+  reduce_licenses: "Avsluta bilar",
+  cancel_subscription: "Uppsägning",
+};
+
+/**
+ * Manuella åtgärder åt kunden: baslän för hela företaget direkt och de
+ * ändringar som väntar på förnyelsen. Allt loggas med skäl i händelseloggen.
+ */
+function manualCard(d, config) {
+  if (!config?.canSell) return "";
+  const open = (d.licenses ?? []).filter((l) => LICENSE_OPEN.includes(l.status));
+  const anyPaid = open.some((l) => l.status !== "trial");
+  const canBase = open.length && (!anyPaid || config.canManage);
+  const bases = [...new Set(open.map((l) => l.baseCounty))];
+  const counties = config?.counties ?? [];
+  const pending = d.pendingChanges ?? [];
+  const plate = (id) => open.find((l) => l.id === id)?.vehicle ?? "";
+  const describe = (p) => {
+    const pl = p.payload ?? {};
+    if (p.kind === "change_base_county") return `${plate(pl.licenseId)} → ${countyName(pl.county)}`;
+    if (p.kind === "remove_county") return `${countyName(pl.county)} på ${plate(pl.licenseId)}`;
+    if (p.kind === "reduce_licenses") return (pl.licenseIds ?? []).map(plate).filter(Boolean).join(", ");
+    return pl.reason ? `Orsak: ${pl.reason}` : "";
+  };
+  return `
+    <div class="card">
+      <h2>Manuella åtgärder</h2>
+      <p class="muted">Gör ändringar åt kunden när det behövs. Varje åtgärd kräver ett skäl och
+        hamnar i händelseloggen nedan.</p>
+      <h3>Baslän för hela företaget</h3>
+      <p class="muted">Nu: ${bases.length ? esc(bases.map((b) => countyName(b)).join(", ")) : "inga bilar"}.
+        Byter baslän på alla ${esc(open.length)} bilar direkt, i stället för vid förnyelsen. Påverkar inte
+        priset; ett extra län som blir baslän tas bort.</p>
+      ${canBase ? `
+      <div class="county-add">
+        <select id="companyBase" aria-label="Nytt baslän för alla bilar">
+          <option value="">Välj län …</option>
+          ${counties.map((c) => `<option value="${esc(c.code)}">${esc(c.name)}</option>`).join("")}
+        </select>
+        <button class="btn btn-quiet btn-small" data-action="company-base-now">Byt för alla bilar</button>
+      </div>` : `<p class="muted">${open.length ? "Betalda bilar byts bara av en plattformsadministratör." : ""}</p>`}
+      <h3>Väntar på förnyelsen</h3>
+      ${pending.length ? `<table><thead><tr><th>Ändring</th><th>Gäller från</th><th></th></tr></thead>
+        <tbody>${pending.map((p) => `
+          <tr><td data-label="Ändring"><b>${esc(PENDING_KIND[p.kind] ?? p.kind)}</b>
+              <div class="muted">${esc(describe(p))}</div></td>
+            <td data-label="Gäller från">${esc(date(p.effectiveAt))}</td>
+            <td>${config.canManage && p.kind !== "cancel_subscription"
+              ? `<button class="btn btn-quiet btn-small" data-action="pending-undo" data-change="${esc(p.id)}"
+                  data-label="${esc(PENDING_KIND[p.kind] ?? p.kind)}">Ångra</button>`
+              : p.kind === "cancel_subscription" ? '<span class="muted">Ångras under Betalning</span>' : ""}</td></tr>`).join("")}
+        </tbody></table>` : '<p class="muted">Inget väntar.</p>'}
+    </div>`;
+}
+
 function stepMer(d, config, crm) {
   return `
+    ${manualCard(d, config)}
     ${crmNotesCard(crm, config)}
     ${config?.canManage ? `
     <div class="card">
@@ -566,6 +625,8 @@ function carsCard(d, config, pending = null) {
               ${counties.filter((c) => c.code !== l.baseCounty).map((c) => `<option value="${esc(c.code)}">${esc(c.name)}</option>`).join("")}
             </select>
             <button class="btn btn-quiet btn-small" data-action="base-change" ${data}>Byt</button>
+            ${!trial && manage ? `<button class="btn btn-quiet btn-small" data-action="base-change-now" ${data}
+              title="Byter direkt i stället för vid förnyelsen. Påverkar inte priset.">Byt nu (admin)</button>` : ""}
           </div>` : ""}
 
           ${l.status === "pending_cancel" ? `<p class="muted">Bilen avslutas vid nästa förnyelse${l.endsAt ? ` (${esc(date(l.endsAt))})` : ""}.</p>` : ""}

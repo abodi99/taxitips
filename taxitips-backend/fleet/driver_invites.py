@@ -275,6 +275,14 @@ def claim_invite(
         raise DriverInviteError("no_invite", "Inbjudan är redan använd.", status=404)
 
     name = invite.label or label or "Förare"
+    from billing.models import Device
+    from fleet import device_swaps
+
+    prev = Device.objects.filter(user_id=user_id).order_by("-last_seen_at").first()
+    existing = Device.objects.filter(token=installation_id).first()
+    if prev is not None and (existing is None or str(existing.id) != str(prev.id)):
+        device_swaps.assert_can_swap(user_id, now=now)
+
     paired = pairing.approve_device(
         company_id=invite.company_id,
         license=license,
@@ -288,6 +296,12 @@ def claim_invite(
         via="email_invite",
         now=now,
     )
+    device = Device.objects.filter(id=paired.device_id).first()
+    if device is not None:
+        device_swaps.link_account_device(
+            user_id=user_id, device=device, via="email_invite",
+            previous_device_id=prev.id if prev else None, now=now,
+        )
     DriverInvite.objects.filter(id=invite.id).update(consumed_by_device=paired.device_id)
     audit.record(
         "driver_invite_claimed", company_id=invite.company_id, actor_user_id=user_id,
@@ -346,6 +360,14 @@ def _relogin(
     pairing.check_pairable(license, vehicle)
 
     name = invite.label or label or "Förare"
+    from billing.models import Device
+    from fleet import device_swaps
+
+    old_device = str(invite.consumed_by_device)
+    existing = Device.objects.filter(token=installation_id).first()
+    if existing is None or str(existing.id) != old_device:
+        device_swaps.assert_can_swap(user_id, now=now)
+
     paired = pairing.approve_device(
         company_id=invite.company_id,
         license=license,
@@ -359,7 +381,12 @@ def _relogin(
         via="email_relogin",
         now=now,
     )
-    old_device = str(invite.consumed_by_device)
+    device = Device.objects.filter(id=paired.device_id).first()
+    if device is not None:
+        device_swaps.link_account_device(
+            user_id=user_id, device=device, via="email_relogin",
+            previous_device_id=old_device, now=now,
+        )
     if old_device != str(paired.device_id):
         # Den förra telefonen släpper bilen: godkännande, hemlighet och pass.
         old = list(DeviceApproval.objects.filter(

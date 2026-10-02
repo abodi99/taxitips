@@ -12,22 +12,60 @@ likadant tre gånger.
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta
 
-from core import thresholds
+from django.utils import timezone
+
+from core import taxi_context
 from core.alternatives import alternative_from_text
 from core.compensation import compensation_signal
 from core.geo import REGION_ANCHOR, resolve_coords
 from core.models import SeverityTier
 from core.repository import upsert_opportunities, upsert_source_events
-from core.sources.smhi import describe_weather, is_adverse_weather, nearest_weather
+from core.sources.smhi import nearest_weather
 from core.taxi_relevance import enrich_alert
-from core.text_scoring import Assessment, classify_transit_alert
+from core.text_scoring import Assessment, classify_transit_alert, departure_clock
 
 Assessed = tuple[dict, dict, Assessment, float | None, float | None, str]
 
-# Väder skapar aldrig en signal av sig självt -- det skärper en som redan är
-# relevant. Samma tal som worker/src/poller.js:s WEATHER_BONUS.
-WEATHER_BONUS = 12
+# En enstaka inställd avgång är över för resenären när nästa har gått. Utan
+# tidtabell vet vi inte när, men tre kvart efter den inställda avgången står
+# ingen kvar och väntar på just den.
+SINGLE_DEPARTURE_LIFETIME = timedelta(minutes=45)
+
+
+def single_departure_time(alert: dict, result: Assessment, now: datetime) -> datetime | None:
+    """Klockslaget för en enstaka inställd avgång ("kl 16:59"), eller None."""
+    if not result.rule_id.endswith(".single_departure"):
+        return None
+    clock = departure_clock(f"{alert.get('header') or ''} {alert.get('description') or ''}")
+    if not clock:
+        return None
+    day = timezone.localtime(alert.get("active_from") or now)
+    return day.replace(hour=clock[0], minute=clock[1], second=0, microsecond=0)
+
+
+def affected_time(alert: dict, result: Assessment, now: datetime) -> datetime:
+    """
+    När störningen drabbar resenären -- tiden omständigheterna räknas mot.
+
+    En enstaka avgång har sitt klockslag i texten ("kl 16:59"). Annars gäller
+    nu för en pågående störning, och starttiden för en som ligger framåt.
+    """
+    departure = single_departure_time(alert, result, now)
+    if departure:
+        return departure
+    start = alert.get("active_from")
+    return max(start, now) if start else now
+
+
+def end_time_for(alert: dict, result: Assessment, when: datetime) -> datetime | None:
+    """Källans sluttid, men aldrig längre än störningen faktiskt håller kvar folk."""
+    end = alert.get("active_to")
+    if result.rule_id.endswith(".single_departure"):
+        cap = when + SINGLE_DEPARTURE_LIFETIME
+        return min(end, cap) if end else cap
+    return end
 
 
 def assess(alerts: list[dict]) -> list[Assessed]:
@@ -152,33 +190,40 @@ def write(
                 f"ersättning: rätt till taxi upp till {comp['cap_kr']} kr{per} (Lag 2015:953)",
             ]
 
-        # Väderbonusen, EFTER klassificeringen: den ska höja den tak-begränsade
-        # poängen, inte råpoängen (en inställd avgång med tak 55 blir 67, inte
-        # rå+12). Aldrig på "ignore" -- väder får skärpa en signal, aldrig
-        # skapa en. Samma ordning och gräns som poller.js:s mapOpportunity.
-        score = result.score
+        # Läge + omständigheter (core/taxi_context.py): tid på dygnet för den
+        # drabbade avgången, ersättningsrätt, väder. Aldrig på väg -- vägpoängen
+        # är kapad lågt med avsikt (thresholds.ROAD_SCORE_CAP) -- och aldrig på
+        # "ignore": omständigheter får förstärka ett läge, aldrig skapa ett.
         source_event_ids = [source_ids[alert["id"]]] if alert["id"] in source_ids else []
-        # Inte på väg: vägpoängen är kapad lågt med avsikt (thresholds.ROAD_SCORE_CAP),
-        # och +12 lyfte en olycka från 15 till 27 -- över taket.
-        weather = (
-            nearest_weather(lat, lon, region_weather)
-            if result.tier != SeverityTier.IGNORE and kind != "road"
-            else None
-        )
-        if is_adverse_weather(weather):
-            score = min(100, score + WEATHER_BONUS)
-            reasons = [*reasons, f"väder: {describe_weather(weather)}"]
-            weather_id = weather_ids.get(f"smhi:{weather['point']}")
-            if weather_id:
-                source_event_ids.append(weather_id)
+        now = timezone.now()
+        when = affected_time(alert, result, now)
+        end_time = end_time_for(alert, result, when)
+        if result.tier == SeverityTier.IGNORE or kind == "road":
+            score, level, factors = result.score, None, []
+        else:
+            weather = nearest_weather(lat, lon, region_weather)
+            outcome = taxi_context.assess(
+                result.situation(), when=when, weather=weather,
+                compensation=comp, has_alternative=has_alt,
+            )
+            score, level, factors = outcome.score, outcome.level, outcome.factors
+            reasons = [*reasons, *outcome.reasons]
+            if taxi_context.weather_factor(weather) is not None:
+                weather_id = weather_ids.get(f"smhi:{weather['point']}")
+                if weather_id:
+                    source_event_ids.append(weather_id)
+        if level is None:
+            level = taxi_context.final_level(score, False, has_alt, result.confidence)
 
         return {
             "external_id": alert["id"],
             "kind": kind,
             "mode": result.mode,
             "severity_tier": result.tier,
-            # Räknas från poängen EFTER väderbonusen, med samma regel som flödet.
-            "level": thresholds.stored_level(result.tier, score, has_alt),
+            # Styrkan räknas här, med full kännedom om läge och
+            # omständigheter. Flödet och notiserna läser den härifrån.
+            "level": level,
+            "factors": json.dumps(factors, ensure_ascii=False),
             "title": alert["header"],
             "summary": alert["description"],
             "lat": lat,
@@ -190,7 +235,7 @@ def write(
             # matchat ingen marknad alls. Se Opportunity.region.
             "region": alert.get("region") or None,
             "start_time": alert.get("active_from"),
-            "end_time": alert.get("active_to"),
+            "end_time": end_time,
             "demand_score": score,
             "confidence": result.confidence,
             "reasons": json.dumps(reasons, ensure_ascii=False),
@@ -208,6 +253,9 @@ def write(
             # kommer hit (se sl.enrich_next_departures). Därför läses fältet
             # från larmet i stället för att nollas.
             "next_departure_minutes": alert.get("next_departure_minutes"),
+            # En enstaka avgång har sitt klockslag i texten; för en hel linje
+            # finns ingen avgång att peka på.
+            "departure_at": single_departure_time(alert, result, now),
             "next_departure_at": alert.get("next_departure_at"),
             # Sätts aldrig av en textkälla: departures-endpointen svarar
             # bara för ett fönster framåt, så "inga fler avgångar" betyder

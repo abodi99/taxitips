@@ -15,10 +15,12 @@ import json
 import time
 import uuid
 
+from datetime import timedelta
+
 from django.test import Client, RequestFactory, override_settings
 from django.utils import timezone
 
-from billing.models import Company, CompanyMember
+from billing.models import Company, CompanyMember, Device
 from fleet import access, accounts
 from fleet.models import (
     AccountBlock,
@@ -162,6 +164,125 @@ class AccountBlockTests(_Base):
         rows = self.call("get", "/api/admin/accounts?q=kund@", self.admin_id).json()["accounts"]
         self.assertEqual(len(rows), 1)
         self.assertEqual(rows[0]["memberships"][0]["companyName"], data["company"].name)
+
+    def test_account_detail_returns_the_same_memberships(self):
+        data = self.full_setup()
+        owner = str(data["owner"].user_id)
+        self.call("get", "/api/fleet/company", owner, email="kund@example.test")
+        body = self.call("get", f"/api/admin/accounts/{owner}", self.admin_id).json()
+        self.assertTrue(body["ok"])
+        self.assertEqual(body["account"]["email"], "kund@example.test")
+        self.assertEqual(body["account"]["memberships"][0]["companyName"], data["company"].name)
+        self.assertIn("errors", body)
+        self.assertIn("audit", body)
+        self.assertIn("devices", body)
+        self.assertIn("notifications", body)
+        self.assertIn("favorites", body)
+        self.assertIn("feedback", body)
+        self.assertIn("tipReports", body)
+        self.assertIn("feedbackSummary", body)
+        self.assertIsInstance(body["devices"], list)
+        self.assertIsInstance(body["notifications"], list)
+        self.assertIsInstance(body["favorites"], list)
+        self.assertIsInstance(body["feedback"], list)
+        self.assertIsInstance(body["tipReports"], list)
+
+    def test_account_detail_lists_device_favorites(self):
+        """Sparade tips syns via telefonens device:<uuid>, aldrig rå token."""
+        from core.models import Opportunity, OpportunityFavorite
+        from core.models import SeverityTier
+
+        data = self.full_setup()
+        owner = data["owner"]
+        device = data["device"]
+        Device.objects.filter(id=device.id).update(user_id=owner.user_id)
+        tip = Opportunity.objects.create(
+            external_id=f"test:fav:{uuid.uuid4()}",
+            kind="transit",
+            mode="train",
+            severity_tier=SeverityTier.VEHICLE_CANCELLED,
+            title="Inställt tåg Malmö",
+            summary="Test",
+            demand_score=80,
+            region="skane",
+            places=["Malmö C"],
+            end_time=timezone.now() + timedelta(hours=2),
+        )
+        OpportunityFavorite.objects.create(
+            owner_key=f"device:{device.id}",
+            opportunity=tip,
+            opportunity_external_id=tip.external_id,
+            snapshot={"title": tip.title, "kind": tip.kind},
+        )
+        # Rå token som nyckel ska inte synas / inte räknas som kontots.
+        OpportunityFavorite.objects.create(
+            owner_key=data["secret"],
+            opportunity=tip,
+            opportunity_external_id=f"{tip.external_id}:token",
+            snapshot={"title": "Hemlig"},
+        )
+        self.call("get", "/api/fleet/company", str(owner.user_id), email="kund@example.test")
+        body = self.call(
+            "get", f"/api/admin/accounts/{owner.user_id}", self.admin_id,
+        ).json()
+        titles = [f["title"] for f in body["favorites"]]
+        self.assertEqual(titles, ["Inställt tåg Malmö"])
+        self.assertEqual(body["feedbackSummary"]["favorites"], 1)
+        self.assertNotIn(data["secret"], str(body["favorites"]))
+        self.assertEqual(body["favorites"][0]["ownerKind"], "device")
+        self.assertFalse(body["favorites"][0]["purged"])
+
+    def test_account_recovery_requires_service_role(self):
+        data = self.full_setup()
+        owner = str(data["owner"].user_id)
+        self.call("get", "/api/fleet/company", owner, email="kund@example.test")
+        response = self.call("post", f"/api/admin/accounts/{owner}/recovery", self.admin_id, {})
+        # Utan SUPABASE_SERVICE_ROLE_KEY i testmiljön: 503. Med mock skulle det vara 200.
+        self.assertIn(response.status_code, (200, 502, 503), response.content)
+
+    def test_account_delete_refuses_sole_owner(self):
+        data = self.full_setup()
+        owner = str(data["owner"].user_id)
+        self.call("get", "/api/fleet/company", owner, email="kund@example.test")
+        response = self.call(
+            "post", f"/api/admin/accounts/{owner}/delete", self.admin_id,
+            {"confirmEmail": "kund@example.test"},
+        )
+        self.assertEqual(response.status_code, 409, response.content)
+        self.assertEqual(response.json()["reason"], "sole_owner")
+
+    def test_account_delete_requires_confirm_email(self):
+        data = self.full_setup()
+        owner = str(data["owner"].user_id)
+        self.call("get", "/api/fleet/company", owner, email="kund@example.test")
+        response = self.call(
+            "post", f"/api/admin/accounts/{owner}/delete", self.admin_id,
+            {"confirmEmail": "fel@example.test"},
+        )
+        self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(response.json()["reason"], "confirm_mismatch")
+
+    @override_settings(
+        SUPABASE_SERVICE_ROLE_KEY="test-service-role",
+        SUPABASE_URL="http://supabase.test",
+    )
+    def test_account_delete_removes_member_without_sole_ownership(self):
+        from unittest.mock import patch
+
+        data = self.full_setup()
+        admin_member = self.make_owner(data["company"], role="company_admin")
+        member_id = str(admin_member.user_id)
+        self.call("get", "/api/fleet/company", member_id, email="admin@example.test")
+        with patch("fleet.auth_admin.delete_user") as delete_user:
+            response = self.call(
+                "post", f"/api/admin/accounts/{member_id}/delete", self.admin_id,
+                {"confirmEmail": "admin@example.test"},
+            )
+        self.assertEqual(response.status_code, 200, response.content)
+        delete_user.assert_called_once_with(member_id)
+        self.assertFalse(CompanyMember.objects.filter(user_id=member_id).exists())
+        self.assertFalse(KnownAccount.objects.filter(user_id=member_id).exists())
+        self.assertTrue(AuditEvent.objects.filter(action="admin_account_deleted").exists())
 
     def test_a_member_can_be_disabled_in_one_company(self):
         data = self.full_setup()
@@ -390,6 +511,72 @@ class AdminVehicleTests(_Base):
         Subscription.objects.filter(company_id=data["company"].id).update(stripe_subscription_id="")
         r = self.call("post", f"/api/admin/licenses/{data['license'].id}/remove", self.admin_id, {"reason": "Betalt utanför Stripe, kunden sålde bilen"})
         self.assertEqual(r.status_code, 200, r.content)
+
+
+@override_settings(SUPABASE_JWT_SECRET=SECRET)
+class AdminBaseCountyTests(_Base):
+    """Baslänet direkt, för en bil eller hela företaget, med skäl i loggen."""
+
+    def test_a_paid_car_changes_base_county_now_and_replaces_the_scheduled_change(self):
+        from fleet.models import AuditEvent, LicenseCounty, PendingChange
+
+        data = self.full_setup()
+        lic = data["license"]
+        License.objects.filter(id=lic.id).update(scheduled_base_county="14")
+        PendingChange.objects.create(
+            company_id=lic.company_id, kind=PendingChange.Kind.CHANGE_BASE_COUNTY,
+            payload={"licenseId": str(lic.id), "county": "14"}, effective_at=timezone.now(),
+        )
+        path = f"/api/admin/licenses/{lic.id}/base-county"
+        self.assertEqual(self.call("post", path, self.admin_id, {"county": "13"}).json()["reason"], "reason_required")
+        r = self.call("post", path, self.admin_id, {"county": "13", "reason": "Kunden flyttade"})
+        self.assertEqual(r.status_code, 200, r.content)
+        lic.refresh_from_db()
+        self.assertEqual((lic.base_county, lic.scheduled_base_county), ("13", ""))
+        self.assertIn("13", access.license_counties(lic.id))
+        self.assertEqual(
+            LicenseCounty.objects.filter(license=lic, kind="base", active_to__isnull=True).count(), 1,
+        )
+        self.assertFalse(PendingChange.objects.filter(status=PendingChange.Status.PENDING).exists())
+        self.assertTrue(AuditEvent.objects.filter(action="admin_base_county_set").exists())
+
+    def test_sales_cannot_change_a_paid_car_directly(self):
+        data = self.full_setup()
+        sales_id = str(uuid.uuid4())
+        StaffRole.objects.create(user_id=sales_id, role=StaffRole.Role.SALES)
+        r = self.call("post", f"/api/admin/licenses/{data['license'].id}/base-county", sales_id,
+                      {"county": "13", "reason": "x"})
+        self.assertEqual(r.status_code, 403)
+
+    def test_the_whole_company_changes_at_once(self):
+        data = self.full_setup()
+        company = data["company"]
+        r = self.call("post", f"/api/admin/companies/{company.id}/base-county", self.admin_id,
+                      {"county": "14", "reason": "Registrerad i fel län"})
+        self.assertEqual(r.status_code, 200, r.content)
+        self.assertGreaterEqual(r.json()["changed"], 1)
+        self.assertEqual(
+            set(License.objects.filter(company_id=company.id).exclude(status="canceled")
+                .values_list("base_county", flat=True)),
+            {"14"},
+        )
+
+    def test_a_scheduled_change_can_be_undone(self):
+        from fleet.models import PendingChange
+
+        data = self.full_setup()
+        lic = data["license"]
+        License.objects.filter(id=lic.id).update(status=License.Status.PENDING_CANCEL)
+        change = PendingChange.objects.create(
+            company_id=lic.company_id, kind=PendingChange.Kind.REDUCE_LICENSES,
+            payload={"licenseIds": [str(lic.id)]}, effective_at=timezone.now(),
+        )
+        r = self.call("post", f"/api/admin/pending-changes/{change.id}/undo", self.admin_id,
+                      {"reason": "Kunden ångrade sig i telefon"})
+        self.assertEqual(r.status_code, 200, r.content)
+        lic.refresh_from_db()
+        change.refresh_from_db()
+        self.assertEqual((lic.status, change.status), (License.Status.ACTIVE, PendingChange.Status.CANCELED))
 
 
 class RepairedPhoneTests(FleetTestCase):

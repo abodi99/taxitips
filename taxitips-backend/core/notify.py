@@ -183,12 +183,8 @@ def category_enabled(categories: dict | None, category: str) -> bool:
 
 
 def level_of(opportunity) -> str:
-    """Samma bedömning som listan visar (core/api.py:_serialize)."""
-    demand = getattr(opportunity, "demand_score", 0) or 0
-    return thresholds.customer_likelihood(
-        getattr(opportunity, "severity_tier", None), demand, demand,
-        getattr(opportunity, "has_alternative", False),
-    )
+    """Samma styrka som listan visar (core/api.py:_serialize): den sparade."""
+    return thresholds.effective_level(opportunity)
 
 
 def level_allows(min_level: str | None, level: str) -> bool:
@@ -450,6 +446,7 @@ def decide(prefs: dict | None, opportunity, presence=None) -> Match:
         getattr(opportunity, "severity_tier", None),
         getattr(opportunity, "demand_score", 0),
         getattr(opportunity, "has_alternative", False),
+        level=level_of(opportunity),
     ):
         return Match(False, "not_notify_worthy")
     if getattr(opportunity, "ai_adjusted_at", None) is not None:
@@ -582,12 +579,9 @@ def snapshot_of(opportunity) -> dict:
         "kind": opportunity.kind,
         "mode": opportunity.mode,
         "severity_tier": opportunity.severity_tier,
-        # Räknat som i flödet, inte det sparade fältet: äldre rader bär den
-        # gamla tumregeln (>= 60 = high) och skulle annars visa ett annat
-        # betyg i notislistan än samma tips har i flödet.
-        "level": thresholds.stored_level(
-            opportunity.severity_tier, opportunity.demand_score, opportunity.has_alternative,
-        ),
+        # Samma styrka som flödet visar för tipset.
+        "level": level_of(opportunity),
+        "factors": list(getattr(opportunity, "factors", None) or []),
         "demand_score": opportunity.demand_score,
         "confidence": opportunity.confidence,
         "region": opportunity.region,
@@ -629,6 +623,9 @@ def candidates(now=None, limit: int = 200) -> list[Opportunity]:
             end_time__gt=now,
             demand_score__gte=thresholds.NOTIFY_SCORE_FLOOR,
             severity_tier__in=sorted(thresholds.NOTIFY_WORTHY_TIERS),
+            # Bara Starka: styrkan räknades med läge och omständigheter när
+            # tipset skrevs (core/taxi_context.py).
+            level="high",
             # Samma grind som thresholds.is_notify_worthy, i SQL: källan har
             # skrivit ut att ersättningstrafik går, och då står ingen kvar.
             # match_device kontrollerar den igen per enhet -- den här raden

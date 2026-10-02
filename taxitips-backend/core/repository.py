@@ -56,6 +56,10 @@ _OPPORTUNITY_COLUMNS: Sequence[str] = (
     "is_last_departure",
     "has_alternative",
     "alternative_note",
+    "factors",
+    "departure_at",
+    "destination",
+    "delay_minutes",
     "county_code",
     "municipality_code",
     "area_codes",
@@ -87,6 +91,12 @@ def upsert_opportunities(rows: Iterable[dict]) -> int:
         row.setdefault("is_last_departure", False)
         row.setdefault("has_alternative", False)
         row.setdefault("alternative_note", "")
+        row.setdefault("factors", [])
+        row.setdefault("departure_at", None)
+        row.setdefault("destination", "")
+        row.setdefault("delay_minutes", None)
+        if not isinstance(row["factors"], str):
+            row["factors"] = json.dumps(row["factors"], ensure_ascii=False)
         # Länet räknas här, inte hos varje källa: alla vägar in i tabellen
         # (ingest, rail, flyg, färjor) går genom den här funktionen.
         if "county_code" not in row or "area_codes" not in row:
@@ -221,6 +231,10 @@ def purge_old(days: int = 7, batch_size: int = PURGE_BATCH_SIZE) -> dict[str, in
     slippa gammal data, det räcker med en delete på schema. Schemat är
     `purge-old` i CELERY_BEAT_SCHEDULE; före P0-A5 fanns funktionen men kördes
     aldrig, och tabellerna växte obegränsat.
+
+    Favoriter gallras också: ett sparat tips lever i högst sju dagar från
+    sparögonblicket (samma horisont som tipsgallringen). Innan dess överlever
+    favoriten tipset via snapshot.
     """
     cutoff = timezone.now() - timezone.timedelta(days=days)
     opportunities = _delete_in_batches(
@@ -251,7 +265,20 @@ def purge_old(days: int = 7, batch_size: int = PURGE_BATCH_SIZE) -> dict[str, in
         [cutoff],
         batch_size,
     )
-    return {"opportunities": opportunities, "source_events": source_events}
+    favorites = _delete_in_batches(
+        """
+        delete from opportunity_favorite where id in (
+            select id from opportunity_favorite where created_at < %s limit %s
+        )
+        """,
+        [cutoff],
+        batch_size,
+    )
+    return {
+        "opportunities": opportunities,
+        "source_events": source_events,
+        "favorites": favorites,
+    }
 
 
 def _delete_in_batches(sql: str, params: list, batch_size: int) -> int:

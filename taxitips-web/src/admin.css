@@ -529,6 +529,12 @@ details.card > summary::-webkit-details-marker {
   padding: 0.35rem 0.8rem;
   font-size: 0.9rem;
 }
+tr.clickable {
+  cursor: pointer;
+}
+tr.clickable:hover td {
+  background: color-mix(in srgb, var(--surface, #fff) 88%, var(--ink, #14213d));
+}
 .sr {
   position: absolute;
   left: -9999px;
@@ -2270,3 +2276,7 @@ ul.st-detail li {
   margin: 0.6rem 0 0;
   font-size: 0.75rem;
 }
+
+/* Uppföljning: obetalda beställningar i den utfällda raden. */
+.fu-orders ul { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 8px; }
+.fu-orders li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }

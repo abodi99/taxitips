@@ -1719,6 +1719,55 @@ class ClientActivity(models.Model):
         ]
 
 
+class DeviceLinkEvent(models.Model):
+    """
+    Bokför när ett inloggat konto binds till en Device-rad.
+
+    `is_swap` är sant när kontot flyttar från en annan telefon — det är det
+    som räknas mot månadskvoten (fleet/device_swaps.py). Första kopplingen
+    och samma telefon igen sparas också (historik) men `is_swap=False`.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.UUIDField()
+    device_id = models.UUIDField()
+    previous_device_id = models.UUIDField(null=True, blank=True)
+    via = models.CharField(max_length=40, blank=True, default="")
+    is_swap = models.BooleanField(default=False)
+    admin_override = models.BooleanField(default=False)
+    actor_user_id = models.UUIDField(null=True, blank=True)
+    note = models.CharField(max_length=300, blank=True, default="")
+    created_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "fleet_device_link_event"
+        indexes = [
+            models.Index(fields=["user_id", "-created_at"]),
+            models.Index(fields=["user_id", "is_swap", "-created_at"]),
+        ]
+
+
+class DeviceSwapGrant(models.Model):
+    """
+    Extra bytestillfälle som personal gett för en kalendermånad (YYYY-MM).
+
+    Effektiv gräns = 2 + antal grants för månaden (fleet/device_swaps.py).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.UUIDField()
+    month_key = models.CharField(max_length=7)  # YYYY-MM, Europe/Stockholm
+    granted_by = models.UUIDField(null=True, blank=True)
+    note = models.CharField(max_length=300, blank=True, default="")
+    created_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "fleet_device_swap_grant"
+        indexes = [
+            models.Index(fields=["user_id", "month_key"]),
+        ]
+
+
 class ClientError(models.Model):
     """
     Ett fel som appen rapporterat (krasch eller ett misslyckat kritiskt flöde)

@@ -142,3 +142,98 @@ def remove_license(request, license_id):
         detail={"was": license.status, "reason": reason, "sessions_ended": ended},
     )
     return _json(request, {"ok": True})
+
+
+def _reason(request) -> str:
+    reason = str(_body(request).get("reason") or "").strip()[:300]
+    if not reason:
+        raise licensing.LicensingError("reason_required", "Skriv varför ändringen görs. Det loggas.")
+    return reason
+
+
+def _base_county_permission(principal, licenses) -> None:
+    """Provbilar: säljare. Betalda bilar: bara plattformsadministratören."""
+    if any(lic.status != License.Status.TRIAL for lic in licenses) and not principal.can(Perm.ADMIN_MANAGE):
+        raise licensing.LicensingError(
+            "admin_only", "Bara en plattformsadministratör byter baslän direkt på en betald bil.",
+            status=403,
+        )
+
+
+@csrf_exempt
+@require_POST
+@handle
+def set_base_county_now(request, license_id):
+    """
+    POST /api/admin/licenses/<id>/base-county {"county": "12", "reason": "..."}
+
+    Byter baslän på EN bil direkt, i stället för vid förnyelsen. Prisneutralt
+    (baslänet ingår i priset); ett schemalagt byte på bilen ersätts.
+    """
+    principal = _staff(request, Perm.ADMIN_SELL)
+    license = _license_or_404(license_id)
+    _base_county_permission(principal, [license])
+    reason = _reason(request)
+    result = licensing.change_base_county_now(
+        license=license, county=str(_body(request).get("county") or ""),
+    )
+    _record(
+        principal, "admin_base_county_set", company_id=license.company_id,
+        subject_type="license", subject_id=license.id, detail={**result, "reason": reason},
+    )
+    return _json(request, {"ok": True, **result})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def set_company_base_county(request, company_id):
+    """
+    POST /api/admin/companies/<id>/base-county {"county": "12", "reason": "..."}
+
+    Byter baslän på ALLA företagets bilar direkt -- t.ex. när ett bolag
+    registrerats i fel län eller flyttar verksamheten. Samma regler som för en
+    bil, i en transaktion: antingen byts alla eller ingen.
+    """
+    principal = _staff(request, Perm.ADMIN_SELL)
+    licenses = list(License.objects.filter(company_id=company_id, status__in=_OPEN).order_by("created_at"))
+    if not licenses:
+        raise licensing.LicensingError("no_licenses", "Företaget har inga bilar att byta baslän på.")
+    _base_county_permission(principal, licenses)
+    reason = _reason(request)
+    county = str(_body(request).get("county") or "")
+    with transaction.atomic():
+        results = [licensing.change_base_county_now(license=lic, county=county) for lic in licenses]
+    _record(
+        principal, "admin_company_base_county_set", company_id=company_id,
+        subject_type="company", subject_id=company_id,
+        detail={"to": county, "reason": reason, "licenses": results},
+    )
+    return _json(request, {"ok": True, "county": county, "changed": len(results), "licenses": results})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def undo_pending_change(request, change_id):
+    """
+    POST /api/admin/pending-changes/<id>/undo {"reason": "..."}
+
+    Ångrar en ändring som väntar på nästa förnyelse: baslänsbyte, borttaget
+    län eller avslutade bilar. Påverkar vad som förnyas -- därför bara
+    plattformsadministratören, med skäl.
+    """
+    from fleet.models import PendingChange
+
+    principal = _staff(request, Perm.ADMIN_MANAGE)
+    change = PendingChange.objects.filter(id=change_id).first()
+    if change is None:
+        raise licensing.LicensingError("unknown_change", "Ändringen finns inte.", status=404)
+    reason = _reason(request)
+    licensing.undo_pending_change(change)
+    _record(
+        principal, "admin_pending_change_undone", company_id=change.company_id,
+        subject_type="pending_change", subject_id=change.id,
+        detail={"kind": change.kind, "payload": change.payload, "reason": reason},
+    )
+    return _json(request, {"ok": True})

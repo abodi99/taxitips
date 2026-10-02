@@ -1859,6 +1859,9 @@ class ApiClient {
       // (core/alternatives.py) så att kort, detaljvy och push säger samma
       // sak. Saknas den (Supabase-vägen) visas ingen rad alls.
       'travel_options': m['travel_options'],
+      // Varför, i förarens ord: läget och omständigheterna som räknades
+      // (core/taxi_context.py). Saknas på äldre svar -- då visas inget.
+      'factors': m['factors'] ?? const [],
       // Sätts av backend (core/api.py) utifrån förarens sparade favoriter,
       // inte av appen: ett sparat tips ska se likadant ut oavsett vilken
       // enhet det öppnas på.

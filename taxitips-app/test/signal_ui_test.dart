@@ -270,7 +270,7 @@ void main() {
         expect(find.text('Göteborg C'), findsOneWidget);
         expect(find.text('Stark'), findsOneWidget);
         expect(find.text('3,2 km'), findsOneWidget);
-        await tester.tap(find.byTooltip('Följ'));
+        await tester.tap(find.byTooltip('Spara tipset'));
         expect(followed, isTrue);
       },
     );

@@ -137,15 +137,30 @@ class Command(BaseCommand):
                 continue
             name = str(row.get("name") or "")
             domain = ""
-            dom = row.get("domainName") or row.get("domain_name") or {}
+            dom = (
+                row.get("domainUrl")
+                or row.get("domainName")
+                or row.get("domain_name")
+                or {}
+            )
             if isinstance(dom, dict):
-                domain = str(dom.get("primaryLinkUrl") or dom.get("url") or "")
+                domain = str(
+                    dom.get("primaryLinkUrl") or dom.get("url") or dom.get("link") or "",
+                )
             elif isinstance(dom, str):
                 domain = dom
+            # idealCustomerProfile är boolean i Twenty — inte org.nr.
+            org = str(row.get("orgNumber") or row.get("organizationNumber") or "")[:32]
+            county = str(
+                row.get("addressState")
+                or row.get("addressCity")
+                or "",
+            )[:32]
             acc = crm.upsert_from_twenty_account(
                 twenty_id=tid,
                 name=name,
-                org_number=str(row.get("idealCustomerProfile") or row.get("orgNumber") or "")[:32],
+                org_number=org,
+                county=county,
                 domain=domain[:255],
                 source="twenty",
             )

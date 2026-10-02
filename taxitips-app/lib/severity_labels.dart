@@ -277,6 +277,79 @@ String compensationLabel(num? amountKr, {bool? perPerson}) {
 /// appen väljer bara hur den ska se ut. Att formulera om den här hade
 /// betytt att kortet och detaljvyn förr eller senare sa olika saker om
 /// samma tips.
+/// En rad i "Därför": något som talar för (`supports`) eller emot ett tips.
+/// Formulerad av backend (core/taxi_context.py) -- appen visar den rakt av.
+class TipFactor {
+  const TipFactor(this.text, {required this.supports});
+
+  final String text;
+  final bool supports;
+
+  /// Högst fyra rader ur `factors`. Okända eller trasiga rader hoppas över.
+  static List<TipFactor> of(Map alert) {
+    final raw = alert['factors'];
+    if (raw is! List) return const [];
+    return [
+      for (final f in raw)
+        if (f is Map && (f['text']?.toString().trim() ?? '').isNotEmpty)
+          TipFactor(f['text'].toString().trim(), supports: f['sign'] != '-'),
+    ].take(4).toList();
+  }
+}
+
+/// Den drabbade avgången: "20:39 mot Göteborg C, inställd" eller "försenad
+/// 35 min, ny tid 21:14". Det föraren ska se först i ett tågtips.
+class TipDeparture {
+  const TipDeparture({
+    required this.at,
+    required this.clock,
+    required this.cancelled,
+    this.destination,
+    this.delayMinutes,
+    this.newClock,
+  });
+
+  final DateTime at;
+  final String clock;
+  final bool cancelled;
+  final String? destination;
+  final int? delayMinutes;
+  final String? newClock;
+
+  static TipDeparture? of(Object? raw) {
+    if (raw is! Map) return null;
+    final at = DateTime.tryParse(raw['at']?.toString() ?? '');
+    final clock = raw['clock']?.toString();
+    if (at == null || clock == null || clock.isEmpty) return null;
+    final dest = raw['destination']?.toString().trim();
+    return TipDeparture(
+      at: at,
+      clock: clock,
+      cancelled: raw['status'] != 'delayed',
+      destination: (dest == null || dest.isEmpty) ? null : dest,
+      delayMinutes: (raw['delay_minutes'] as num?)?.toInt(),
+      newClock: raw['new_clock']?.toString(),
+    );
+  }
+
+  /// "Inställd 20:39 mot Göteborg C" / "Försenad 35 min · 20:39 → 21:14".
+  String get headline {
+    final dest = destination == null ? '' : ' mot $destination';
+    if (cancelled) return 'Inställd $clock$dest';
+    final delay = delayMinutes == null ? '' : ' ${humanMinutes(delayMinutes!)}';
+    final change = newClock == null ? clock : '$clock → $newClock';
+    return 'Försenad$delay · $change$dest';
+  }
+}
+
+/// "45 min", "1 tim 6 min" -- samma som backendens human_gap.
+String humanMinutes(int minutes) {
+  if (minutes < 60) return '$minutes min';
+  final h = minutes ~/ 60;
+  final m = minutes % 60;
+  return m == 0 ? '$h tim' : '$h tim $m min';
+}
+
 class TravelOptions {
   const TravelOptions({
     required this.summary,
@@ -288,7 +361,23 @@ class TravelOptions {
     this.headUpcoming,
     this.headDeparted,
     this.tail,
+    this.departure,
+    this.gapMinutes,
+    this.nextClock,
+    this.alternative,
   });
+
+  /// Den drabbade avgången, när källan anger en (tåg, enstaka avgång).
+  final TipDeparture? departure;
+
+  /// Hur länge resenären blir stående: från den inställda avgången till
+  /// nästa resa dit. Åldras inte -- till skillnad från [minutes], som är
+  /// räknat från när tipset hämtades.
+  final int? gapMinutes;
+  final String? nextClock;
+
+  /// Ersättningstrafik eller annat alternativ, i källans ord.
+  final String? alternative;
 
   /// Den absoluta avgångstiden (ISO från backend). "om X" räknas av den mot
   /// klockan när raden ritas -- aldrig mot när tipset skrevs eller hämtades.
@@ -310,9 +399,14 @@ class TravelOptions {
     final raw = alert['travel_options'];
     if (raw is! Map) return null;
     final summary = raw['summary']?.toString();
-    if (summary == null || summary.isEmpty) return null;
+    final departure = TipDeparture.of(raw['departure']);
+    if ((summary == null || summary.isEmpty) && departure == null) return null;
     return TravelOptions(
-      summary: summary,
+      summary: (summary == null || summary.isEmpty) ? null : summary,
+      departure: departure,
+      gapMinutes: (raw['gap_minutes'] as num?)?.toInt(),
+      nextClock: raw['next_clock']?.toString(),
+      alternative: raw['alternative']?.toString(),
       isLastDeparture: raw['is_last_departure'] == true,
       hasAlternative: raw['has_alternative'] == true,
       minutes: (raw['next_departure_minutes'] as num?)?.toInt(),
@@ -329,11 +423,12 @@ class TravelOptions {
   /// Raden som den ska läsas just nu. Utan absolut tid (eller vid "sista
   /// avgången") gäller backends färdiga mening oförändrad.
   String text({DateTime? now}) {
+    if (departure case final dep?) return departureLine(dep, now: now);
     final at = nextDepartureAt;
-    if (at == null || isLastDeparture) return summary!;
+    if (at == null || isLastDeparture) return summary ?? '';
     final departed = at.difference(now ?? DateTime.now()).inSeconds <= 0;
     final head = departed ? headDeparted : headUpcoming;
-    if (head == null || head.isEmpty) return summary!;
+    if (head == null || head.isEmpty) return summary ?? '';
     final rel = departed ? '' : ' (${relativeDeparture(at, now: now)})';
     final t = (tail == null || tail!.isEmpty) ? '' : ' · $tail';
     return '$head$rel$t';
@@ -343,7 +438,38 @@ class TravelOptions {
   /// starkaste signalen ett tips kan bära. En angiven ersättningsbuss
   /// betyder tvärtom att resenären sannolikt inte behöver taxi. Samma rad,
   /// motsatt innebörd, så de får inte se likadana ut.
-  bool get isStrong => isLastDeparture || (minutes != null && minutes! >= 60);
+  bool get isStrong =>
+      isLastDeparture ||
+      (!hasAlternative && ((gapMinutes ?? minutes) ?? 0) >= 60);
+
+  /// Väntan efter den drabbade avgången, som föraren läser den:
+  /// "nästa dit 20:50, 11 min senare" / "nästa dit först 21:45, 1 tim 6 min
+  /// senare" / "sista avgången". Null när vi inte vet.
+  String? get waitText {
+    if (isLastDeparture) return 'Sista avgången härifrån';
+    final dep = departure;
+    if (dep == null || !dep.cancelled) return null;
+    final gap = gapMinutes;
+    if (gap == null) return null;
+    final where = dep.destination == null ? 'Nästa resa' : 'Nästa dit';
+    final at = nextClock == null ? '' : ' $nextClock';
+    return gap > 30
+        ? '$where först$at, ${humanMinutes(gap)} senare'
+        : '$where$at, ${humanMinutes(gap)} senare';
+  }
+
+  /// Kortets rad för ett tips med avgång: avgången först, med "om X"
+  /// räknat mot den -- inte mot nästa resa.
+  String departureLine(TipDeparture dep, {DateTime? now}) {
+    final rel = relativeDeparture(dep.at, now: now);
+    final parts = <String>['${dep.headline} ($rel)'];
+    final wait = waitText;
+    if (wait != null) parts.add(wait[0].toLowerCase() + wait.substring(1));
+    if (hasAlternative && (alternative ?? '').isNotEmpty) {
+      parts.add(alternative!);
+    }
+    return parts.join(' · ');
+  }
   bool get isWeak => hasAlternative && !isLastDeparture;
 }
 

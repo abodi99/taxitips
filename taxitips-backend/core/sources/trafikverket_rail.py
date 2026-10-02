@@ -76,8 +76,41 @@ DEPARTURE_INCLUDES = "".join(
     )
 )
 
-# Hur länge en strandsatt perrong räknas som en möjlighet.
+# Hur länge en strandsatt perrong räknas som en möjlighet -- längst.
 PLATFORM_LIFETIME = timedelta(hours=1)
+# När nästa resa har gått har resenärerna åkt med den. Lite marginal för den
+# som missade den också.
+AFTER_NEXT_DEPARTURE = timedelta(minutes=10)
+# Ersättningstrafik tar folk vidare; perrongen töms snabbt.
+REPLACEMENT_LIFETIME = timedelta(minutes=30)
+# Ett försenat tåg: när det väl gått står ingen kvar.
+AFTER_DELAYED_DEPARTURE = timedelta(minutes=10)
+
+
+def platform_end(
+    when: datetime,
+    *,
+    cancelled: bool,
+    delay_minutes: int = 0,
+    next_gap_minutes: int | None = None,
+    has_replacement: bool = False,
+) -> datetime:
+    """
+    När tipset slutar gälla: när resenärerna rimligen har åkt vidare, inte
+    en fast timme efter avgången. Ett tips om ett tåg vars ersättare gick för
+    40 minuter sedan är inte relevant -- det är bara brus i förarens lista.
+    """
+    latest = when + PLATFORM_LIFETIME
+    if not cancelled:
+        return min(latest, when + timedelta(minutes=delay_minutes) + AFTER_DELAYED_DEPARTURE)
+    if has_replacement:
+        return when + REPLACEMENT_LIFETIME
+    # Glappet mäts från den inställda avgången och ändras inte medan tipset
+    # lever (next_at flyttas däremot fram när nästa resa gått, så att föraren
+    # ser den som går härnäst -- den får inte förlänga tipset).
+    if next_gap_minutes is not None and next_gap_minutes > 0:
+        return min(latest, when + timedelta(minutes=next_gap_minutes) + AFTER_NEXT_DEPARTURE)
+    return latest
 
 # En ersättande avgång inom det här fönstret betyder att ingen är
 # strandsatt -- de väntar en kvart, de tar inte taxi. Tröskeln tillämpas i
@@ -597,7 +630,12 @@ def _normalize(
         elif next_minutes is not None:
             # Klockslag, inte "om 20 min": texten sparas och läses senare, och
             # ett avstånd räknat vid pollning är fel så fort klockan går.
-            what = "Nästa avgång är en buss och går" if next_is_bus else "Nästa avgång går"
+            if next_is_bus:
+                what = "Nästa avgång är en buss och går"
+            elif to:
+                what = f"Nästa tåg mot {to} går"
+            else:
+                what = "Nästa avgång går"
             at_text = next_at.astimezone(LOCAL_TZ).strftime("%H:%M") if next_at else None
             description += f" {what} {at_text}." if at_text else f" {what} senare."
         elif is_last:
@@ -641,7 +679,10 @@ def _normalize(
         # Inte avgångstiden själv: tipset blir relevant strax innan, när
         # folk faktiskt kommer till perrongen. Aldrig tidigare än nu.
         active_from=max(now, when - VISIBLE_BEFORE),
-        active_to=when + PLATFORM_LIFETIME,
+        active_to=platform_end(
+            when, cancelled=cancelled, delay_minutes=delay,
+            next_gap_minutes=next_minutes, has_replacement=replacement,
+        ),
         lat=lat,
         lon=lon,
         next_departure_minutes=next_minutes,
@@ -818,6 +859,11 @@ def _human_gap(minutes: int) -> str:
     return f"{hours} tim {rest} min"
 
 
+def _destination_of(dep: dict) -> str:
+    """Slutstationens signatur ur ToLocation, eller tom sträng."""
+    return str(((dep.get("ToLocation") or [{}])[0] or {}).get("LocationName") or "")
+
+
 def _next_departure(
     dep: dict, station_departures: list[dict], when: datetime
 ) -> tuple[int | None, bool, datetime | None, bool]:
@@ -839,6 +885,21 @@ def _next_departure(
         t = _parse_time(other.get("AdvertisedTimeAtLocation"))
         if t and t > when:
             later.append((t, other))
+
+    # Samma riktning. Förut räknades nästa avgång från stationen oavsett vart
+    # den gick: Landskrona 2026-10-02, 20:39 mot Göteborg C inställt, "nästa
+    # avgång 20:50" -- som kunde vara ett tåg mot Malmö. Glappet blev 11 min
+    # och tipset Svagt, fast resenärerna mot Göteborg kunde stå kvar i en
+    # timme. Nu räknas bara tåg med samma slutstation.
+    destination = _destination_of(dep)
+    if destination:
+        same = [(t, other) for t, other in later if _destination_of(other) == destination]
+        if not same and later:
+            # Andra tåg går, men inget med samma slutstation i fönstret. Det
+            # betyder inte att ingen kommer vidare -- ett tåg med en annan
+            # slutstation kan stanna där resenären ska. Ärligt svar: okänt.
+            return None, False, None, False
+        later = same
 
     if not later:
         # Inget senare tåg i fönstret. Med 8h framförhållning är det ett

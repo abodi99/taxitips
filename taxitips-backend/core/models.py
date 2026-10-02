@@ -335,6 +335,22 @@ class Opportunity(models.Model):
             "en bomresa."
         ),
     )
+    # Den drabbade avgången, som föraren ska kunna se först: "20:39 mot
+    # Göteborg C, inställd" eller "försenad 35 min". NULL/tomt när källan inte
+    # anger någon avgång (en hel linje, en fritext utan klockslag).
+    departure_at = models.DateTimeField(null=True, blank=True)
+    destination = models.TextField(blank=True, default="")
+    delay_minutes = models.IntegerField(null=True, blank=True)
+    factors = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "Det föraren läser om varför: högst fyra korta rader "
+            '{"text", "sign": "+"|"-"} från core/taxi_context.py -- läget och '
+            "de omständigheter som räknades (tid, ersättning, väder). Inga "
+            "poäng, inga källnamn."
+        ),
+    )
 
     computed_at = models.DateTimeField(db_default=models.functions.Now())
     updated_at = models.DateTimeField(db_default=models.functions.Now())
@@ -726,9 +742,9 @@ class OpportunityFavorite(models.Model):
     varit tyst tom för varje sådan inloggning -- inklusive i webbläsaren,
     som är där det här först provas. Se `owner_key_for()` i core/api.py.
 
-    `snapshot` av samma skäl som i PushDelivery: `purge_old` tar bort tipset
-    efter sju dagar, och en favoritlista som tömmer sig själv är värre än
-    ingen favoritlista.
+    `snapshot` behåller tipset om det gallras innan favoriten: favoriten själv
+    raderas efter sju dagar (`purge_old` på `created_at`), samma horisont som
+    tipsgallringen.
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

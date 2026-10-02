@@ -28,7 +28,7 @@ from django.http import JsonResponse
 from django.utils import timezone
 
 from core import thresholds
-from core.ingest import WEATHER_BONUS
+from core.taxi_context import CONTEXT_CAP, SEVERE_WEATHER_BONUS, WEATHER_BONUS
 from core.models import Opportunity, RailAssessment, ScoringRule, SourceEvent, SourceStatus
 
 CARDS_MAX = 200
@@ -122,10 +122,10 @@ SERVICES: dict[str, dict] = {
             ("Tolkning", "Sorten ur händelsetypen: olycka eller avstängning, vägarbete, vägarbete eller kö.",
              "core/sources/trafikverket_road.py"),
             ("Poäng", f"Grundpoängen kapas lågt (högst 15): en olycka försenar dem som redan sitter i bil, ingen "
-             f"lämnar bilen i en kö och tar taxi. Hårt väder lägger till {WEATHER_BONUS}, så högst {15 + WEATHER_BONUS}.",
+             f"lämnar bilen i en kö och tar taxi. Väder och tid räknas inte på väg.",
              "core/taxi_relevance.py, core/ingest.py"),
-            ("Notis", f"Olycka eller avstängning är en notisvärd sort, men även med väder ({15 + WEATHER_BONUS}) ligger "
-             f"poängen under {thresholds.NOTIFY_SCORE_FLOOR}: det blir aldrig en notis, bara en rad i listan.",
+            ("Notis", f"Olycka eller avstängning är en notisvärd sort, men poängen (högst 15) ligger "
+             f"under {thresholds.NOTIFY_SCORE_FLOOR}: det blir aldrig en notis, bara en rad i listan.",
              "core/thresholds.py"),
         ],
     },
@@ -160,8 +160,10 @@ SERVICES: dict[str, dict] = {
              "30 minuter.", "core/sources/smhi.py"),
             ("Trösklar", "Nederbörd minst 1 mm/h med minst 40 % sannolikhet, vind minst 12 m/s, åska minst 30 %, "
              "minusgrader med minst 40 % fruset.", "core/sources/smhi.py"),
-            ("Påverkan", f"Vädret skapar aldrig ett tips själv. Det höjer en störning som redan är relevant med "
-             f"{WEATHER_BONUS} poäng (högst 100), efter klassificeringen, och skrivs ut som skäl.", "core/ingest.py"),
+            ("Påverkan", f"Vädret skapar aldrig ett tips själv. Det är en omständighet som höjer en störning där "
+             f"folk står strandsatta: dåligt väder +{WEATHER_BONUS}, kraftigt (≥ 3 mm/h, byar ≥ 18 m/s, snöfall, "
+             f"åska ≥ 50 %) +{SEVERE_WEATHER_BONUS}, alla omständigheter tillsammans högst +{CONTEXT_CAP}. "
+             f"Gäller tåg och fritext, aldrig väg.", "core/taxi_context.py"),
         ],
     },
 }
@@ -176,13 +178,15 @@ def _notify(o: Opportunity) -> tuple[str, str]:
         return "hidden", "Poäng 0: visas inte för föraren"
     if o.kind == "road" and not thresholds.road_shown(o.rule_id):
         return "hidden", "Väg: föraren ser bara trafikolyckor -- visas inte"
-    if thresholds.is_notify_worthy(o.severity_tier, o.demand_score, o.has_alternative):
-        return "notify", (f"Notis: {tier_label.lower()} är notisvärd, poäng {o.demand_score} ≥ "
+    if thresholds.is_notify_worthy(o.severity_tier, o.demand_score, o.has_alternative, level=o.level):
+        return "notify", (f"Notis: Starkt tips, {tier_label.lower()} är notisvärd, poäng {o.demand_score} ≥ "
                           f"{thresholds.NOTIFY_SCORE_FLOOR} och inget alternativ. Går till förare i körområdet.")
     if o.severity_tier not in thresholds.NOTIFY_WORTHY_TIERS:
         return "list", f"Bara i listan: sorten {tier_label.lower()} ger aldrig notis"
     if o.has_alternative:
         return "list", "Bara i listan: källan skriver ut ett alternativ, så ingen väcks för det"
+    if o.level != "high":
+        return "list", "Bara i listan: inte Starkt (ingen strandsatt eller för svagt läge)"
     return "list", f"Bara i listan: poäng {o.demand_score} är under notisgränsen {thresholds.NOTIFY_SCORE_FLOOR}"
 
 
@@ -284,7 +288,7 @@ def build(key: str, now=None, q: str = "") -> dict:
         {"label": "I förarens lista", "n": grouped["notify"] + grouped["list"],
          "note": "Poäng över 0. Föraren ser dem som ligger i hens körområde."},
         {"label": "Ger notis", "n": grouped["notify"],
-         "note": f"Notisvärd sort, poäng minst {thresholds.NOTIFY_SCORE_FLOOR}, inget alternativ."},
+         "note": f"Starkt tips av notisvärd sort, poäng minst {thresholds.NOTIFY_SCORE_FLOOR}, inget alternativ."},
     ]
 
     tier_counts = Counter(o.severity_tier for o in rows)

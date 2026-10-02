@@ -1,142 +1,107 @@
-# Så bedöms ett tips — metod, kriterier och kvalitetskontroll
+# Så bedöms ett tips — läge, omständigheter och styrka
 
-*Skriven 2026-10-01 ur koden (inte ur minnet). Varje siffra har en fil och rad i
-`taxitips-backend/`. Ändras en regel ska den här filen ändras i samma commit.*
-
----
-
-## 1. Två mått, två frågor
-
-Varje tips har **två** mått, och de svarar på olika frågor:
-
-| | Vad | Avgör | Var |
-|---|---|---|---|
-| **Poäng** 0–100 (`demand_score`) | Hur stor störningen är enligt källans regelverk | **Ordningen** i listan och om en notis *kan* gå | `core/scoring.py`, `core/text_scoring.py`, `core/flight_scoring.py`, `maritime/tips.py` |
-| **Betyg** Stark / Medel / Svag (`level`) | Hur troligt det är att det står folk kvar som behöver taxi | **Färgen** på kortet och filtret "Bara starka" | `core/thresholds.py` `customer_likelihood` |
-
-Poängen räknas olika per källa, så **en 70 från tåget och en 70 från en bussfritext
-betyder inte samma sak**. Betyget är därför det föraren ska läsa. Det räknas med
-samma regel för alla källor och väger in sådant som poängen inte gör, t.ex. att
-källan själv anger ersättningstrafik.
+*Omskriven 2026-10-02 ur koden. Varje siffra har en fil i `taxitips-backend/`.
+Ändras en regel ska den här filen ändras i samma commit.*
 
 ---
 
-## 2. Kedjan från källa till kort
+## 1. Frågan
 
-```
-källhändelse ──▶ källans regel ──▶ poäng, typ, säkerhet, motivering
-                                         │
-                 påslag (väder +12 för fritext; natt för flyg/färja)
-                                         │
-                 AI-granskning (bara säkerhet = låg; får sänka, och omklassa)
-                                         │
-                 betyg (thresholds.customer_likelihood) ──▶ färg
-                 notisregel (thresholds.is_notify_worthy) ──▶ får väcka någon?
-                                         │
-                 appen: kort + "Varför visas detta?" (backend förklarar, appen visar)
-```
+Föraren undrar en sak: **står det folk som behöver taxi, och hur troligt är det att
+de tar en?** Bedömningen svarar i två delar:
 
-Allt räknas på servern. Appen räknar inte om betyget (utom en dokumenterad reserv
-när fältet saknas, `severity_labels.dart`).
-
----
-
-## 3. Betyget — beslutslistan
-
-Kriterierna prövas i ordning. Det **första** som avgör vinner
-(`core/thresholds.py` `customer_likelihood`, i ord: `explain_grade`).
-
-| # | Kriterium | Utfall |
+| Del | Frågan | Var |
 |---|---|---|
-| 1 | Tipset har avslutats | **Svag** |
-| 2 | Källan anger ersättningstrafik (`has_alternative`) | **Svag** — resenärerna har redan ett alternativ |
-| 3 | Typ *hela linjen stoppad / sista avgången* (`line_paused`) | **Stark**, oavsett poäng |
-| 4 | Typ *en avgång inställd* (`vehicle_cancelled`) och poäng ≥ 50 | **Stark** |
-| 5 | Typ inställd (< 50), försenad linje, ankomstvåg, sista ankomst | **Medel** |
-| 6 | Allt annat (enstaka buss sen, väg, oklassad fritext) | **Svag** |
+| **Läge** | Hur strandsatta är resenärerna? (nästa resa, sista avgången, hela linjen, ersättningstrafik) | `core/scoring.py` (tåg), `core/text_scoring.py` (fritext), `core/flight_scoring.py`, `maritime/tips.py` |
+| **Omständigheter** | Gör tid, ersättningsrätt, väder och stationens storlek att de tar taxi? | `core/taxi_context.py` |
 
-**Konsekvens att känna till:** flyg och färja kan aldrig bli Stark (steg 5), hur många
-som än landar. Det är medvetet: en ankomst är ingen strandsättning, de som landar
-har oftast en plan.
+**Poäng = läge + omständigheter (högst +20).** Poängen avgör ordningen i listan.
+**Styrkan** (Stark / Medel / Svag) avgör färgen, filtret och notisen. Den räknas
+**när tipset skrivs**, sparas i `Opportunity.level` och läses därifrån av flödet,
+notiserna och favoriterna.
 
----
-
-## 4. Notisregeln — får tipset väcka en förare?
-
-Strängare än betyget, med avsikt: en notis avbryter någon som kör
-(`thresholds.is_notify_worthy`).
-
-1. Typen måste vara *hela linjen stoppad*, *avgång inställd* eller *olycka/avstängd väg*.
-2. Ingen angiven ersättningstrafik.
-3. Poäng ≥ 50.
-
-Sedan förarens egna val (kategorier, lägsta betyg, område) och att AI:n inte nyss
-har ändrat tipset (`core/notify.py`). Flygvågor väcker ingen förrän tröskeln per
-flygplats är kalibrerad.
+Föraren ser aldrig poängen, bara styrkan och **skälen** (`Opportunity.factors`):
+högst fyra korta rader på enkel svenska, både det som talar för och det som talar emot.
+Vi visar fakta. Föraren avgör.
 
 ---
 
-## 5. Poängen per källa
+## 2. Styrkan — en regel för alla källor
 
-### 5.1 Tåg — Trafikverket (strukturerad data, säkrast)
+`taxi_context.final_level`:
 
-Ett tips skapas bara för inställt tåg eller ≥ 30 min försening, ett per station
-(`core/sources/trafikverket_rail.py`). Regler i `core/scoring.py` `classify`:
-
-| Regel (`rule_id`) | Villkor | Typ | Poäng | Säkerhet |
-|---|---|---|---|---|
-| `train.line_delayed` | Försenat ≥ 30 min | Försenad linje | 45 (försening + 20, tak 45) | Hög |
-| `train.vehicle_cancelled.replacement` | Inställt, ersättningstrafik insatt | Avgång inställd | 40 | Hög |
-| `train.vehicle_cancelled.alternative_soon` | Inställt, nästa resa ≤ 30 min efter | Avgång inställd | 55 | Hög |
-| `train.line_paused.last_departure` | Inställt, sista avgången | Linjen stoppad | 85 | Hög |
-| `train.line_paused.long_gap` | Inställt, nästa resa > 30 min efter | Linjen stoppad | 78 | Hög |
-| `train.line_paused.unknown` | Inställt, okänt när nästa går | Linjen stoppad | 70 | **Låg** |
-
-Påslag: **+6** på station med ≥ 20 avgångar i fönstret (tas bort av taket på försening).
-
-**Nästa resa.** I första hand frågas reseplaneraren ResRobot (Trafiklab) om nästa
-resa *mot samma slutstation*, annars nästa tåg från stationen (oavsett riktning).
-Två tider, med avsikt:
-
-* **Glappet** som poängen bygger på mäts från den *inställda* avgången och ändras
-  inte medan tipset lever — annars skulle ett gammalt tips stiga i prioritet.
-* **Avgången som visas** är den som går *efter nu*. Efter den inställda avgången
-  frågas reseplaneraren om från nu, och en resa som redan gått visas aldrig som
-  "nästa" (rättat 2026-10-01; förut föll tipset tillbaka till stationens nästa tåg
-  åt fel håll fem minuter efter avgången).
-
-### 5.2 Buss, spårvagn, tunnelbana — SL, Västtrafik, Trafiklab (fritext)
-
-Två steg. Först grovpoäng ur texten (`core/taxi_relevance.py` `score_alert`):
-
-| Text säger | Poäng |
+| Styrka | Villkor |
 |---|---|
-| Allvarlig störning | 70 |
-| … och "inställd / inga avgångar / ingen trafik" | 85 |
-| … och ersättningsbuss | +5 |
-| Försening / påverkan | 35 |
-| Vid en känd knutpunkt (bara Skåne/Kastrup i dag) | +4 till +7 |
-| Hiss, toalett, enstaka hållplats, omledning, allmän info | 0 (visas inte) |
+| **Stark** | poäng ≥ 60 **och** strandsatt (inget alternativ inom 30 min) **och** inte låg säkerhet |
+| **Medel** | poäng ≥ 35 (eller ≥ 60 utan strandsättning) |
+| **Svag** | poäng < 35, ersättningstrafik angiven, eller tipset har tagit slut |
 
-Sedan typ och tak (`core/text_scoring.py`):
+Två hårda regler:
 
-| Regel | Villkor | Typ | Poäng | Säkerhet |
-|---|---|---|---|---|
-| `{spår}.line_paused.whole_line_stop` | Hela linjen stoppad, inget alternativ | Linjen stoppad | ≥ 85 | Hög |
-| `{spår}.vehicle_cancelled.stated_alternative` | Allvarlig, alternativ angivet | Avgång inställd | ≤ 55 | Medel |
-| `{spår}.line_paused.ambiguous` | Allvarlig, i övrigt oklart | Linjen stoppad | ≥ 70 | **Låg** (Medel om SL/VT själva anger högsta allvar) |
-| `{spår}.line_delayed.mediumish` | Försening | Försenad linje | ≤ 45 | Hög |
-| `bus.vehicle_cancelled.serious` | Buss, allvarlig | Avgång inställd | ≤ 60 | Hög om "inställd", annars **Låg** |
-| `bus.vehicle_delayed.mediumish` | Buss försenad | Enstaka försening | ≤ 25 | Hög |
-| `{färdsätt}.unclassified` | Färdsätt okänt | Oklassad | grovpoängen | **Låg** |
+1. **Stark kräver strandsättning.** Omständigheter kan aldrig ensamma göra ett tips
+   Starkt. En enstaka inställd buss i rusningen är fortfarande en enstaka buss.
+2. **Omständigheter räknas inte** när resenären har ett alternativ inom 10 min,
+   ersättningstrafik är insatt, eller läget är under 25 (inget att förstärka).
 
-*{spår} = tåg, tunnelbana eller spårvagn.*
+Flyg och färja är aldrig strandsatta i den här meningen (de som landar har ofta en
+plan) och blir därför högst Medel.
 
-Vid skrivning (`core/ingest.py`): **väder +12** vid nederbörd ≥ 1 mm/h, vind ≥ 12 m/s,
-åska ≥ 30 % eller frysrisk (SMHI); aldrig på väg. Ersättningsrätt (Lag 2015:953)
-skrivs som motivering men ändrar aldrig poängen.
+---
 
-### 5.3 Flyg — Swedavia
+## 3. Notisen
+
+`thresholds.is_notify_worthy` + `notify.candidates`: **Stark**, poäng ≥ 60
+(`NOTIFY_SCORE_FLOOR`), typen `line_paused` / `vehicle_cancelled` / olycka, inget
+angivet alternativ och ingen AI-ändring. Sedan förarens egna val (kategorier, lägsta
+styrka, område, paus).
+
+I praktiken: hela linjen står still, sista avgången, eller ett glapp där
+omständigheterna gör läget Starkt.
+
+---
+
+## 4. Läget per källa
+
+### 4.1 Tåg — Trafikverket (strukturerat, säkrast)
+
+`core/scoring.py` `classify`. Glappet mäts från den inställda avgången och ändras inte
+medan tipset lever.
+
+| Läge | Poäng | Strandsatt | `rule_id` |
+|---|---|---|---|
+| Ersättningstrafik insatt | 30 | nej | `train.vehicle_cancelled.replacement` |
+| Inställt, nästa resa ≤ 10 min | 15 | nej (omständigheter räknas inte) | `train.vehicle_cancelled.alternative_soon` |
+| Inställt, nästa resa 11–20 / 21–30 min | 28 / 40 | nej | `train.vehicle_cancelled.alternative_soon` |
+| Inställt, nästa resa 31–59 min | 50 | ja — Stark först med omständigheter | `train.line_paused.long_gap` |
+| Inställt, nästa resa ≥ 60 min | 68 | ja | `train.line_paused.long_gap` |
+| Sista avgången | 80 | ja | `train.line_paused.last_departure` |
+| Inställt, okänt när nästa går | 50, låg säkerhet → högst Medel | ja | `train.line_paused.unknown` |
+| Försenat 30–59 / ≥ 60 min | 40 / 55 | nej / ja | `train.line_delayed` |
+
+Nästa resa frågas i första hand från reseplaneraren (mot samma slutstation), annars
+stationens nästa tåg. Föraren ser bara resan, aldrig vilken tjänst som svarade.
+
+### 4.2 Buss, spårvagn, tunnelbana — SL, Västtrafik, Trafiklab (fritext)
+
+`core/text_scoring.py` `classify_transit_alert`, prövas i ordning:
+
+| Läge | Poäng | Strandsatt |
+|---|---|---|
+| Alternativ angivet ("ersättningsbuss", "övriga avgångar") | 25 | nej |
+| Känd nästa avgång (SL slår upp den) | tågens glappskala | över 30 min |
+| Hela linjen står still ("ingen trafik", "trafikstopp") och inte en enstaka tur | 70 | ja |
+| **En enstaka avgång** ("Inställd avgång", "kl 16:59 är inställd", "delsträcka", "hänvisas till nästa avgång") | 20 | nej |
+| "Reducerad hastighet" | räknas som försening | nej |
+| Allvarligt men oklart (spårtrafik) | 45, högst Medel | nej |
+| Buss inställd utan klockslag | 45 | nej |
+| Försening: spårtrafik / buss | 30 / 15 | nej |
+| Oklassad | högst 30 | nej |
+
+En enstaka avgång slutar gälla 45 min efter sitt klockslag (`core/ingest.py`).
+`ScoringRule` i databasen innehåller bara **tak** för de här lägena
+(`seed_rules`), aldrig golv. En regelrad får skärpa men aldrig lyfta.
+
+### 4.3 Flyg — Swedavia
 
 Räknar **plan, aldrig resenärer** (invariant 15). Bara 21:00–06:00.
 
@@ -161,36 +126,106 @@ tak 85. Säkerhet medel när fartyget saktat in i hamn, låg när bara AIS-ETA f
 som redan sitter i bil, den strandsätter ingen. Bara olyckor visas för föraren.
 Olycka 15, avstängd väg 15, kö 10, vägarbete 5–8.
 
+### 4.4 Färja — AIS
+
+`maritime/tips.py`: fartyg ≥ 170 m 55 p, ≥ 130 m 45 p, ≥ 100 m 35 p; +15 kl. 21–06;
+tak 85. Högst Medel. Hur många som reser framgår inte av AIS och står så i motiveringen.
+
+### 4.5 Väg — Trafikverket
+
+**Tak 15 poäng** (`thresholds.ROAD_SCORE_CAP`): en olycka försenar dem som redan sitter
+i bil, den strandsätter ingen. Inga omständigheter. Bara olyckor visas.
+
 ---
 
-## 6. Efter källans regel
+## 5. Omständigheterna
+
+`core/taxi_context.py`. Räknas mot **den drabbade avgångens tid** (tåg: avgången,
+fritext: klockslaget i texten eller nu), i svensk tid. Sammanlagt högst **+20**.
+
+| Omständighet | Påslag | Föraren läser |
+|---|---|---|
+| Vardag 06–09 | +8 | Morgon en vardag – folk ska till jobbet |
+| Vardag 15–18 | +5 | Eftermiddag en vardag – folk ska hem |
+| Alla dagar 21–24 | +6 | Sent på kvällen – färre alternativ |
+| Alla dagar 00–05 | +10 | Natt – nästan inga andra sätt att ta sig hem |
+| Rätt till ersättning för taxi | +8 | Resenären kan få taxin betald (upp till 2 960 kr) |
+| Kraftigt väder: ≥ 3 mm/h, byar ≥ 18 m/s, snöfall, åska ≥ 50 % | +10 | Kraftigt regn / Snöfall / Hård blåst / Åska |
+| Dåligt väder (SMHI-gränserna i `core/sources/smhi.py`) | +4 | Regn / Hård vind / … |
+| Stor station (≥ 20 avgångar i fönstret) | +5 | Stor station – många resenärer |
+
+**Ersättning** (lag 2015:953, `core/compensation.py`) påstås bara när väntan säkert når
+huvudmannens gräns (20 min): känt glapp eller försening över gränsen, eller sista
+avgången. För tåg bara regional trafik vi kan knyta till en huvudman: Pågatågen,
+Västtågen, SL Pendeltåg, VTAB, samt Öresundståg/Krösatågen efter stationens län. SJ och
+andra fjärrtåg lyder under EU-regler och får ingen rad. Reglerna ligger i
+`region_compensation_rule` (`manage.py seed_compensation_rules`).
+
+**Inte med än:** röda dagar räknas som vardag om de infaller mån–fre, och ett
+evenemang som slutar räknas inte som omständighet.
+
+---
+
+## 6. Hur länge ett tips syns
+
+| Vad | Slutar |
+|---|---|
+| Inställt tåg, känt glapp | 10 min efter att nästa resa gått, högst avgången + 1 h |
+| Ersättningstrafik | avgången + 30 min |
+| Försenat tåg | 10 min efter den nya avgången, högst + 1 h |
+| Enstaka avgång i fritext | klockslaget + 45 min |
+
+Flödet (`api.feed_for`) visar pågående tips plus de som tagit slut **de senaste 15
+min**, som appen visar gråmarkerade under **"Nyss slut"**. Tips som börjar mer än
+**2 h** fram visas inte. Sparade tips och notisloggen påverkas inte.
+
+I appen är **Svaga dolda som standard**. Raden "N svaga tips dolda · Visa" och
+brytaren "Visa svaga tips" i filtret tar fram dem.
+
+---
+
+## 7. Efter läget
 
 | Steg | Vad det gör | Får det höja? |
 |---|---|---|
-| **AI-granskning** (Genkit, var 5:e min) | Granskar tips med låg säkerhet: ny poäng, typ, finns alternativ | Ja, bara för låg säkerhet; annars bara sänka. Motiveringen får raden "AI sänkte/höjde: …". Ett AI-ändrat tips väcker ingen. |
-| **Kombination** (var 60:e s) | Samma störning från två källor slås ihop; flera störningar vid samma knutpunkt +5; ankomst vid inställd kollektivtrafik +10 | Bara listordningen — inte betyg, poäng eller notis |
-| **Utgång** | När tipset avslutas blir betyget Svag och det sjunker i listan | — |
-| **Personal döljer** | Poäng 0, avslutas, skrivs aldrig över av pipelinen | — |
+| **AI-granskning** (Genkit) | Granskar tips med låg säkerhet | Styrkan räknas om från AI:ns poäng men aldrig uppåt förbi pipelinens egen (`thresholds.effective_level`). Ett AI-ändrat tips väcker ingen. |
+| **Kombination** (var 60:e s) | Dubbletter slås ihop; knutpunkt +5; ankomst vid inställd kollektivtrafik +10 | Bara listordningen |
+| **Personal döljer** | Tipset försvinner och skrivs aldrig över | — |
 
 ---
 
-## 7. Hur föraren ser varför
+## 8. Hur föraren ser varför
 
-I appen: kortet → **"Varför visas detta?"**
+I tipsets detaljvy, direkt under nästa avgång: **2–4 rader** med grön bock (talar för)
+eller grått streck (talar emot), t.ex.
 
-* **Bedömning** — typen i klartext.
-* **Betyg** — t.ex. "Stark — Typ: hela linjen står still … → Stark oavsett poäng".
-* **Så räknas betyget** (hopfällt) — kriterierna i ordning med bock/streck, poäng
-  och regel (`rule_id`, golv/tak), säkerhet i ord och om tipset kan ge notis.
-* **Därför** — källregelns motiveringar ("inställd avgång", "nästa resa mot
-  Göteborg C 11 min efter den inställda avgången", "väder: hård vind").
+> ✓ Nästa tåg går först 45 min senare
+> ✓ Resenären kan få taxin betald (upp till 2 960 kr)
+> ✓ Morgon en vardag – folk ska till jobbet
+> – Ersättningstrafik är insatt
 
-Allt kommer från `GET /api/opportunities/<id>` fältet `grade`
-(`core/api.py` `_grade_explanation`), så appen och förklaringen kan inte säga olika saker.
+Raderna kommer från `factors` i flödet. `GET /api/opportunities/<id>` fältet `grade`
+bär samma rader plus regel, säkerhet och notisregel, för felsökning.
+Den tekniska motiveringen (`reasons`) med påslagen i siffror finns för pipelinevyn,
+inte för föraren.
 
 ---
 
-## 8. Kvalitetskontroll — tre frågor, tre verktyg
+## 9. Effekt, uppskattad mot prod 2026-09-25 – 10-02
+
+Omräknat med SQL från sparade fält (glapp, sista avgången, alternativ, station,
+avgångstid). Vädret är inte med, så uppskattningen är något försiktig.
+
+| | Före | Efter |
+|---|---|---|
+| Tåg, Stark | 2 281 | ~514 |
+| — nästa tåg inom 30 min | 1 412 Starka | 0 (446 Medel, 1 340 Svaga) |
+| Fritext, Stark | 1 867 | ~73 (hela linjen, långa kända glapp) |
+| — enstaka avgång (SL m.fl.) | 1 364 Starka | 0 (Svaga) |
+
+---
+
+## 10. Kvalitetskontroll — tre frågor, tre verktyg
 
 | Fråga | Verktyg | När |
 |---|---|---|
@@ -208,7 +243,7 @@ Allt kommer från `GET /api/opportunities/<id>` fältet `grade`
 | Fryst "om X min" i sparad text | fel |
 | Notis trots angiven ersättningstrafik | fel |
 | Källhändelse som inte finns | varning |
-| Sparat betyg följer inte regeln | varning |
+| Sparad styrka följer inte gränserna (Stark < 60, Medel < 35) | varning |
 | Notis på tips som inte klarar notisregeln i dag | varning |
 | Starttid efter sluttid | varning |
 | Visar en avgång som redan gått | varning |
@@ -226,26 +261,15 @@ verkligheten förrän den finns.
 
 ---
 
-## 9. Kända svagheter — kräver beslut
+---
 
-Inget av detta är ändrat; varje punkt ändrar vad förarna ser.
+## 11. Kända svagheter
 
-1. **Inställt tåg med nästa tåg om 10 min kan bli Stark.** Regeln sätter 55 (61 på
-   stor station) och kommentaren säger "tak 55", men inget tak finns, och 55 ≥ 50 ger
-   Stark och notis. Kommentaren säger att de resenärerna "tar inte taxi". Förslag:
-   tak 45 för `alternative_soon`.
-2. **Väderbonusen går förbi taken**: buss sen 25→37, spårförsening 45→57, angivet
-   alternativ 55→67 (Stark). Förslag: lägg bonusen före taket, eller låt den bara
-   gälla typer utan tak.
-3. **Listan sorteras på poäng, färgen kommer från betyget.** En "Medel" färja på 85
-   och en "Svag" oklassad fritext på 97 hamnar före en "Stark" linjestopp på 70.
-   Förslag: sortera på betyg först, poäng sedan.
-4. **AI-justeringar fladdrar.** Pollen var 90:e s skriver över AI:ns värden; nästa
-   granskning lägger tillbaka bara poängen ur cachen, inte typ/alternativ.
-   Förslag: spara AI-utfallet per regel-hash och applicera det i skrivsteget.
-5. **Försening på tåg är alltid 45** oavsett om den är 30 eller 120 min.
-6. **Kombinationernas motivering når aldrig föraren** (den läggs bara på listraden,
-   inte i förklaringen). Förslag: lägg den i `grade` i detaljen.
-7. **Knutpunktsbonusen finns bara för Skåne/Kastrup**, och försvinner under taken.
-8. **Poängreglerna i databasen (`ScoringRule`) påverkar inte tåg** — inga villkor
-   matchar tågreglerna, så tågets siffror är ren kod.
+1. **Inget facit.** Förarnas 🚕/👍/👎 är i princip noll. Siffrorna ovan är
+   principbaserade, inte kalibrerade. `calibration_report` visar när det finns nog.
+2. **Röda dagar** räknas som vardagar.
+3. **Flyg och färja** har inga "Därför"-rader än. De passerar bara styrkeregeln.
+4. **Listan sorteras på poäng**, färgen kommer från styrkan: ett Medel på 65 utan
+   strandsättning hamnar före ett Starkt på 62.
+5. **AI-justeringar fladdrar** mellan pollning (var 90:e s) och granskning.
+6. **Knutpunktsbonusen** i kombinationslagret finns bara för Skåne/Kastrup.

@@ -40,7 +40,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _email = TextEditingController();
 
   // Driver
-  final _label = TextEditingController();
   String? _companyName;
   String? _currentPlate;
   bool _hasCars = false;
@@ -57,7 +56,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
   @override
   void dispose() {
     _email.dispose();
-    _label.dispose();
     super.dispose();
   }
 
@@ -92,13 +90,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         // (ägare som också kört bilen själv ska fortfarande se företaget).
         try {
           final status = await widget.api.fleetStatus();
-          final device = status['device'] is Map
-              ? Map<String, dynamic>.from(status['device'] as Map)
-              : <String, dynamic>{};
           final company = status['company'] is Map
               ? Map<String, dynamic>.from(status['company'] as Map)
               : <String, dynamic>{};
-          _label.text = device['label']?.toString() ?? '';
           _companyName = company['name']?.toString();
           final vehicles = ((status['vehicles'] as List?) ?? const [])
               .whereType<Map>()
@@ -152,32 +146,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
           _PasswordChangeDialog(api: widget.api, email: _email.text),
     );
     if (ok == true) _showSnack('Lösenord bytt');
-  }
-
-  Future<void> _editLabel() async {
-    final controller = TextEditingController(text: _label.text);
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) => _EditDialog(
-        title: 'Enhetens namn',
-        fields: [
-          TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: const InputDecoration(
-              labelText: 'Namn på enheten',
-              helperText: 'Syns för bolagsadmin under Team',
-            ),
-          ),
-        ],
-        onSubmit: () async {
-          await widget.api.updateDeviceLabel(controller.text.trim());
-          if (mounted) setState(() => _label.text = controller.text.trim());
-        },
-        controllers: [controller],
-      ),
-    );
-    if (ok == true) _showSnack('Telefonnamn sparat');
   }
 
   Future<void> _openLegal(String path) async {
@@ -308,7 +276,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 24),
                   ],
 
-                  // Telefonen man håller i: bilen, notiserna, namnet.
+                  // Telefonen man håller i: bilen och notiserna. Inget
+                  // telefonnamn -- det är kontot man loggar in med som syns.
                   if (_isDevice) ...[
                     SettingsGroupLabel(
                       _isOffice || _companyName == null
@@ -338,12 +307,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           icon: Icons.history,
                           title: 'Notishistorik',
                           onTap: _openNotificationLog,
-                        ),
-                        SettingsEditRow(
-                          icon: Icons.smartphone_outlined,
-                          title: 'Telefonens namn',
-                          value: _label.text.isEmpty ? '—' : _label.text,
-                          onTap: _editLabel,
                         ),
                       ],
                     ),
@@ -786,99 +749,6 @@ class _PasswordChangeDialogState extends State<_PasswordChangeDialog> {
             onPressed: _busy ? null : _submit,
             child: Text(_busy ? 'Byter…' : 'Byt lösenord'),
           ),
-      ],
-    );
-  }
-}
-
-/// Reusable dialog for single-field or multi-field edits opened from a row.
-class _EditDialog extends StatefulWidget {
-  const _EditDialog({
-    required this.title,
-    required this.fields,
-    required this.onSubmit,
-    this.controllers = const [],
-  });
-
-  final String title;
-  final List<Widget> fields;
-  final Future<void> Function() onSubmit;
-  final List<TextEditingController> controllers;
-
-  @override
-  State<_EditDialog> createState() => _EditDialogState();
-}
-
-class _EditDialogState extends State<_EditDialog> {
-  bool _busy = false;
-  String? _error;
-
-  @override
-  void dispose() {
-    for (final c in widget.controllers) {
-      c.dispose();
-    }
-    super.dispose();
-  }
-
-  Future<void> _submit() async {
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await widget.onSubmit();
-      if (mounted) Navigator.of(context).pop(true);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _error = netAwareText(e);
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(
-        widget.title,
-        style: const TextStyle(fontWeight: FontWeight.w700),
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            ...widget.fields,
-            if (_error != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                _error!,
-                style: const TextStyle(
-                  color: TbColors.danger,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Avbryt'),
-        ),
-        FilledButton(
-          onPressed: _busy ? null : _submit,
-          child: _busy
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                )
-              : const Text('Spara'),
-        ),
       ],
     );
   }

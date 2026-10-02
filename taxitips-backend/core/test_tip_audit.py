@@ -12,16 +12,14 @@ from core.models import Opportunity, SourceEvent
 
 
 class StoredLevelTests(SimpleTestCase):
-    def test_same_rule_as_the_feed(self):
-        for tier, score, alt in [
-            ("line_paused", 85, False), ("vehicle_cancelled", 55, False),
-            ("vehicle_cancelled", 45, False), ("vehicle_cancelled", 60, True),
-            ("disruption_unclassified", 85, False), ("arrival_wave", 70, False),
-        ]:
-            self.assertEqual(
-                thresholds.stored_level(tier, score, alt),
-                thresholds.customer_likelihood(tier, score, score, alt),
-            )
+    def test_reserve_rule_only_lets_a_stranding_tier_be_strong(self):
+        cases = [
+            ("line_paused", 85, False, "high"), ("vehicle_cancelled", 61, False, "medium"),
+            ("vehicle_cancelled", 34, False, "low"), ("vehicle_cancelled", 60, True, "low"),
+            ("disruption_unclassified", 85, False, "medium"), ("arrival_wave", 80, False, "medium"),
+        ]
+        for tier, score, alt, expected in cases:
+            self.assertEqual(thresholds.stored_level(tier, score, alt), expected, (tier, score, alt))
 
     def test_replacement_traffic_is_never_high(self):
         self.assertEqual(thresholds.stored_level("vehicle_cancelled", 90, True), "low")
@@ -86,26 +84,20 @@ class AuditTests(TestCase):
 
 
 class ExplainGradeTests(SimpleTestCase):
-    TIERS = ["line_paused", "vehicle_cancelled", "line_delayed", "vehicle_delayed", "arrival_wave",
-             "last_arrival", "road_accident_or_closure", "disruption_unclassified", "ignore", None]
+    def test_the_first_reason_for_is_the_because(self):
+        g = thresholds.explain_grade("high", [
+            {"text": "Sista avgången härifrån", "sign": "+"},
+            {"text": "Natt – nästan inga andra sätt att ta sig hem", "sign": "+"},
+        ])
+        self.assertEqual((g["level"], g["label"]), ("high", "Stark"))
+        self.assertEqual(g["because"], "Sista avgången härifrån")
+        self.assertEqual(len(g["steps"]), 2)
 
-    def test_never_disagrees_with_customer_likelihood(self):
-        for tier in self.TIERS:
-            for score in (0, 10, 49, 50, 51, 85, 100):
-                for worth in (0, score):
-                    for alt in (False, True):
-                        g = thresholds.explain_grade(tier, score, worth, alt)
-                        self.assertEqual(
-                            g["level"], thresholds.customer_likelihood(tier, score, worth, alt),
-                            (tier, score, worth, alt),
-                        )
-                        self.assertEqual(sum(s["decided"] for s in g["steps"]), 1)
-                        self.assertEqual(g["label"], thresholds.LEVEL_LABELS[g["level"]])
-
-    def test_reads_like_a_reason(self):
-        g = thresholds.explain_grade("vehicle_cancelled", 61, 61, False)
-        self.assertEqual(g["label"], "Stark")
-        self.assertIn("61 ≥ 50", g["because"])
-        g = thresholds.explain_grade("line_paused", 85, 85, True)
+    def test_only_reasons_against_still_explains(self):
+        g = thresholds.explain_grade("low", [{"text": "Nästa tåg går 5 min senare", "sign": "-"}])
         self.assertEqual(g["label"], "Svag")
-        self.assertIn("ersättningstrafik", g["because"])
+        self.assertEqual(g["because"], "Nästa tåg går 5 min senare")
+        self.assertFalse(g["steps"][0]["ok"])
+
+    def test_no_reasons_is_not_an_error(self):
+        self.assertEqual(thresholds.explain_grade("medium", None)["because"], "")

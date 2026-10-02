@@ -164,6 +164,10 @@ Future<String?> _registerForPushOnce(ApiClient api) async {
     }
     // Ingen FCM (web/simulator/nekad permission) — koppla ändå enhet↔konto.
     await api.linkDeviceSession(platform: platform);
+  } on ApiException catch (e) {
+    // Telefonbytesgränsen måste synas; övriga fel får inte stoppa boot.
+    if (e.reason == 'device_swap_limit') rethrow;
+    debugPrint('Device/push registration failed: $e');
   } catch (e) {
     debugPrint('Device/push registration failed: $e');
   }

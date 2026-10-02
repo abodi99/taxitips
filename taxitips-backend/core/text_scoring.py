@@ -19,8 +19,9 @@ inte lita blint på en tabell som kan vara tom.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
+from core import taxi_context as tc
 from core import thresholds
 from core.mode import classify_mode
 from core.models import Confidence, SeverityTier
@@ -96,6 +97,33 @@ _STATED_ALTERNATIVE_RE = re.compile(
 _WHOLE_LINE_STOP_RE = re.compile(
     r"(stopp i tågtrafiken|ingen trafik|inga avgångar|trafikstopp)", re.IGNORECASE
 )
+# En ENSTAKA avgång, inte linjen: "Inställd avgång kl 20:40", "Hagsätra -
+# Vällingby kl 16:59 är inställd", "Inställd delsträcka", "Resenärer hänvisas
+# till nästa avgång". Mätt 2026-10-02: SL:s tunnelbane- och spårvagnslarm av
+# den här sorten blev "Hela linjen stoppad" 85 och väckte förare, fast nästa
+# tåg gick om några minuter.
+_SINGLE_DEPARTURE_RE = re.compile(
+    r"(inställd avgång|avgången (kl\.? ?)?\d{1,2}[:.]\d{2}|"
+    r"(?<!från )kl\.? ?\d{1,2}[:.]\d{2}[^.]{0,60}inställ|\b\d{1,2}[:.]\d{2} (är )?inställ|"
+    r"delsträcka|del av avgång|enstaka avgång|hänvisas till nästa avgång|nästa ordinarie avgång)",
+    re.IGNORECASE,
+)
+# Tåget går, bara långsammare -- en försening, inget stopp.
+_REDUCED_SPEED_RE = re.compile(
+    r"(reducerad hastighet|nedsatt hastighet|hastighetsnedsättning|kör långsamt)", re.IGNORECASE
+)
+_CLOCK_RE = re.compile(r"(?:kl\.? ?)?\b(\d{1,2})[:.](\d{2})\b", re.IGNORECASE)
+
+# Lägespoängen för fritext. Se core/taxi_context.py för hur omständigheterna
+# läggs på, och docs/betygsmetod.md för varför.
+WHOLE_LINE_STOP_SCORE = 70
+SINGLE_DEPARTURE_SCORE = 20
+STATED_ALTERNATIVE_SCORE = 25
+AMBIGUOUS_SCORE = 45
+BUS_LINE_CANCELLED_SCORE = 45
+RAIL_DELAY_SCORE = 30
+BUS_DELAY_SCORE = 15
+UNCLASSIFIED_CAP = 30
 
 
 @dataclass
@@ -106,6 +134,17 @@ class Assessment:
     reasons: list[str]
     rule_id: str
     mode: str
+    stranded: bool = False
+    quick_alternative: bool = False
+    wait_minutes: int | None = None
+    factors: list = field(default_factory=list)
+
+    def situation(self) -> tc.Situation:
+        return tc.Situation(
+            base=self.score, stranded=self.stranded, confidence=self.confidence,
+            quick_alternative=self.quick_alternative, wait_minutes=self.wait_minutes,
+            factors=list(self.factors),
+        )
 
 
 def _has_stated_alternative(text: str) -> bool:
@@ -114,6 +153,19 @@ def _has_stated_alternative(text: str) -> bool:
 
 def _is_whole_line_stop(text: str) -> bool:
     return bool(_WHOLE_LINE_STOP_RE.search(text))
+
+
+def is_single_departure(text: str) -> bool:
+    return bool(_SINGLE_DEPARTURE_RE.search(text))
+
+
+def departure_clock(text: str) -> tuple[int, int] | None:
+    """Första klockslaget i texten ("kl 20:40" -> (20, 40)), eller None."""
+    for match in _CLOCK_RE.finditer(text or ""):
+        hour, minute = int(match.group(1)), int(match.group(2))
+        if 0 <= hour <= 23 and 0 <= minute <= 59:
+            return hour, minute
+    return None
 
 
 def _reasons_from(taxi: dict) -> list[str]:
@@ -142,7 +194,11 @@ def _editorial_confidence(alert: dict, low: str, high: str) -> str:
 
 
 
-def _rated(tier: str, score: int, confidence: str, mode: str, condition: str, reasons: list[str]) -> Assessment:
+def _rated(
+    tier: str, score: int, confidence: str, mode: str, condition: str, reasons: list[str],
+    *, stranded: bool = False, quick: bool = False, wait: int | None = None,
+    factors: list | None = None,
+) -> Assessment:
     # rule_for's own mode__in=[mode, ""] lookup already falls back to a
     # blanket (mode="") rule when no mode-specific one exists -- so passing
     # the REAL detected mode here (not "") still finds e.g. seed_rules'
@@ -153,15 +209,31 @@ def _rated(tier: str, score: int, confidence: str, mode: str, condition: str, re
     rule = rule_for(tier, mode, condition)
     score = rule.apply(score) if rule else max(0, min(100, score))
     rule_id = f"{mode}.{tier}.{condition}" if condition else f"{mode}.{tier}"
-    return Assessment(tier, score, confidence, reasons, rule_id, mode)
+    return Assessment(
+        tier, score, confidence, reasons, rule_id, mode,
+        stranded=stranded, quick_alternative=quick, wait_minutes=wait,
+        factors=factors or [],
+    )
 
 
 def classify_transit_alert(alert: dict, taxi: dict | None) -> Assessment:
     """
-    RailAlert-motsvarighet för textbaserade transitlarm: alert + taxi
-    (score_alert()'s resultat, EFTER alert_in_market()-grinden) -> tier,
-    poäng, konfidens, motivering, färdsätt.
+    Fritextlarm -> LÄGET: tier, lägespoäng, säkerhet, strandsättning och skäl.
+
+    Ordningen är frågan "står någon strandsatt?":
+
+      1. Alternativ angivet i texten             -> 25, inte strandsatt
+      2. Känd nästa avgång (SL)                  -> tågens glappskala
+      3. Hela linjen stoppad (och inte enstaka)  -> 70, strandsatt
+      4. Enstaka avgång inställd                 -> 20, inte strandsatt
+      5. Långsam trafik                          -> försening
+      6. Allvarligt men oklart                   -> 45, inte strandsatt
+      7. Försening                               -> 30 spårtrafik / 15 buss
+
+    Omständigheterna (tid, väder, ersättning) läggs på i core/ingest.py.
     """
+    from core.scoring import ALTERNATIVE_SOON_MIN, QUICK_ALTERNATIVE_MIN, gap_score
+
     mode = classify_mode(alert)
 
     if not taxi or taxi.get("level") == "ignore":
@@ -183,60 +255,85 @@ def classify_transit_alert(alert: dict, taxi: dict | None) -> Assessment:
     mediumish = taxi.get("mediumish") is True
     text = f"{alert.get('header') or ''} {alert.get('description') or ''}"
     reasons = _reasons_from(taxi)
+    rail_like = mode in RAIL_LIKE_MODES
+    single = is_single_departure(text)
+    gap = alert.get("next_departure_minutes")
 
-    if mode in RAIL_LIKE_MODES:
-        if serious:
-            if _is_whole_line_stop(text) and not _has_stated_alternative(text):
-                return _rated(
-                    SeverityTier.LINE_PAUSED, max(score, 85), Confidence.HIGH,
-                    mode=mode, condition="whole_line_stop", reasons=reasons,
-                )
-            if _has_stated_alternative(text):
-                return _rated(
-                    SeverityTier.VEHICLE_CANCELLED, min(score, 55), Confidence.MEDIUM,
-                    mode=mode, condition="stated_alternative", reasons=reasons,
-                )
-            # Allvarligt ordval, men inget av signalerna är entydigt i
-            # texten -- kan inte säkert avgöra helt stopp vs enstaka
-            # inställd. Källans egen redaktionella allvarlighet (SL:s
-            # importance_level, Västtrafiks severity) höjer konfidens men
-            # lämnar poängen orörd -- se _editorial_confidence().
+    if serious and _has_stated_alternative(text):
+        return _rated(
+            SeverityTier.VEHICLE_CANCELLED, STATED_ALTERNATIVE_SCORE, Confidence.MEDIUM,
+            mode=mode, condition="stated_alternative", reasons=reasons,
+            quick=True, factors=[tc.STATED_ALTERNATIVE],
+        )
+
+    if serious and gap is not None:
+        # SL har svarat på när nästa avgång på samma linje går härifrån
+        # (sl.enrich_next_departures) -- samma signal som tågen har.
+        reasons = [*reasons, f"nästa avgång {gap} min senare"]
+        long_gap = gap > ALTERNATIVE_SOON_MIN
+        return _rated(
+            SeverityTier.LINE_PAUSED if long_gap else SeverityTier.VEHICLE_CANCELLED,
+            gap_score(gap), Confidence.HIGH, mode=mode, condition="known_gap",
+            reasons=reasons, stranded=long_gap, quick=gap <= QUICK_ALTERNATIVE_MIN,
+            wait=gap, factors=[tc.wait_factor(gap, "Nästa avgång")],
+        )
+
+    if serious and _is_whole_line_stop(text) and not single:
+        return _rated(
+            SeverityTier.LINE_PAUSED, WHOLE_LINE_STOP_SCORE, Confidence.HIGH,
+            mode=mode, condition="whole_line_stop", reasons=reasons,
+            stranded=True, factors=[tc.WHOLE_LINE_STOPPED],
+        )
+
+    if serious and single:
+        confidence = Confidence.HIGH if _INSTALLD_STOPP_RE.search(text) else Confidence.LOW
+        return _rated(
+            SeverityTier.VEHICLE_CANCELLED, SINGLE_DEPARTURE_SCORE, confidence,
+            mode=mode, condition="single_departure", reasons=reasons,
+            factors=[tc.SINGLE_DEPARTURE],
+        )
+
+    if _REDUCED_SPEED_RE.search(text) and not _is_whole_line_stop(text):
+        serious, mediumish = False, True
+
+    if serious:
+        if rail_like:
+            # Allvarligt ordval, men varken "hela linjen" eller "en avgång"
+            # står i klartext. Kan vara ett stopp, kan vara en enstaka tur.
+            # Högst Medel tills AI-granskningen eller en förare bekräftat det.
             return _rated(
-                SeverityTier.LINE_PAUSED, max(score, 70),
+                SeverityTier.LINE_PAUSED, AMBIGUOUS_SCORE,
                 _editorial_confidence(alert, Confidence.LOW, Confidence.MEDIUM),
                 mode=mode, condition="ambiguous", reasons=reasons,
+                factors=[tc.UNCERTAIN],
             )
-        if mediumish:
-            return _rated(
-                SeverityTier.LINE_DELAYED, min(score, 45), Confidence.HIGH,
-                mode=mode, condition="mediumish", reasons=reasons,
-            )
-
-    if mode == "bus":
-        if serious:
-            # Högst insats av alla textbaserade grenar (tak 60) men, innan
-            # den här ändringen, alltid Confidence.HIGH oavsett VILKET ord
-            # som gjorde den "serious" -- exakt den blinda tilliten till
-            # nyckelord den här ändringen finns för att rätta till. Ett
-            # uttryckligt "inställd/ställs in/inga avgångar/ingen trafik"
-            # är en entydig utsago -- håll HIGH. "Serious" bara via den
-            # bredare SERIOUS_RE-vokabulären (strejk, nedrivning,
-            # signalproblem, stora störningar, m.fl., utan att någonstans
-            # säga att något är inställt) är en svagare grund -- LOW, så
-            # den faktiskt granskas i stället för att tystlåtet lita på.
+        if mode == "bus":
+            # "Buss linje 39 är inställd" utan klockslag: linjen eller en tur?
+            # Uttryckligt "inställd" = hög säkerhet om att något är inställt,
+            # men inte att någon står strandsatt.
             confidence = Confidence.HIGH if _INSTALLD_STOPP_RE.search(text) else Confidence.LOW
             return _rated(
-                SeverityTier.VEHICLE_CANCELLED, min(score, 60), confidence,
+                SeverityTier.VEHICLE_CANCELLED, BUS_LINE_CANCELLED_SCORE, confidence,
                 mode=mode, condition="serious", reasons=reasons,
-            )
-        if mediumish:
-            return _rated(
-                SeverityTier.VEHICLE_DELAYED, min(score, 25), Confidence.HIGH,
-                mode=mode, condition="mediumish", reasons=reasons,
+                factors=[tc.UNCERTAIN],
             )
 
+    if mediumish and rail_like:
+        return _rated(
+            SeverityTier.LINE_DELAYED, RAIL_DELAY_SCORE, Confidence.HIGH,
+            mode=mode, condition="mediumish", reasons=reasons,
+            factors=[tc.Factor("Förseningar i trafiken", "-", 10)],
+        )
+    if mediumish and mode == "bus":
+        return _rated(
+            SeverityTier.VEHICLE_DELAYED, BUS_DELAY_SCORE, Confidence.HIGH,
+            mode=mode, condition="mediumish", reasons=reasons,
+            factors=[tc.Factor("Bussen är försenad", "-", 10)],
+        )
+
     # mode == "unknown", eller en form som matchade varken serious eller
-    # mediumish (ska normalt inte nås eftersom score_alert redan skulle ha
-    # returnerat "ignore" -- men faller ärligt tillbaka hellre än att
-    # feltolka).
-    return Assessment(SeverityTier.DISRUPTION_UNCLASSIFIED, score, Confidence.LOW, reasons, f"{mode}.unclassified", mode)
+    # mediumish. Ärligt: vi vet inte vad det är, så det får inte se starkt ut.
+    return Assessment(
+        SeverityTier.DISRUPTION_UNCLASSIFIED, min(score, UNCLASSIFIED_CAP), Confidence.LOW,
+        reasons, f"{mode}.unclassified", mode, factors=[tc.UNCERTAIN],
+    )

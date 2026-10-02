@@ -1079,6 +1079,7 @@ class ActionRow extends StatefulWidget {
     this.driveLabel = 'Kör dit',
     this.followed = false,
     this.onToggleFollow,
+    this.compact = false,
   });
 
   final double? lat;
@@ -1086,6 +1087,10 @@ class ActionRow extends StatefulWidget {
   final String driveLabel;
   final bool followed;
   final ValueChanged<bool>? onToggleFollow;
+
+  /// Lägre knappar och mindre text -- tipsets detaljvy, där beslutsfakta
+  /// står ovanför och knapparna inte ska dominera.
+  final bool compact;
 
   @override
   State<ActionRow> createState() => _ActionRowState();
@@ -1099,18 +1104,21 @@ class _ActionRowState extends State<ActionRow> {
     final canDrive = widget.lat != null && widget.lon != null;
     final canFollow = widget.onToggleFollow != null;
     if (!canDrive && !canFollow) return const SizedBox.shrink();
+    final height = widget.compact ? 46.0 : 56.0;
+    final fontSize = widget.compact ? 15.0 : 17.0;
+    final iconSize = widget.compact ? 20.0 : 24.0;
     return Row(
       children: [
         if (canDrive)
           Expanded(
             flex: 3,
             child: FilledButton.icon(
-              style: FilledButton.styleFrom(minimumSize: const Size(64, 56)),
-              icon: const Icon(Icons.navigation_rounded),
+              style: FilledButton.styleFrom(minimumSize: Size(64, height)),
+              icon: Icon(Icons.navigation_rounded, size: iconSize),
               label: Text(
                 widget.driveLabel,
-                style: const TextStyle(
-                  fontSize: 17,
+                style: TextStyle(
+                  fontSize: fontSize,
                   fontWeight: FontWeight.w700,
                 ),
               ),
@@ -1132,7 +1140,7 @@ class _ActionRowState extends State<ActionRow> {
             flex: 2,
             child: OutlinedButton.icon(
               style: OutlinedButton.styleFrom(
-                minimumSize: const Size(64, 56),
+                minimumSize: Size(64, height),
                 backgroundColor: _followed
                     ? TbColors.guld.withValues(alpha: 0.18)
                     : null,
@@ -1143,11 +1151,12 @@ class _ActionRowState extends State<ActionRow> {
               ),
               icon: Icon(
                 _followed ? Icons.star_rounded : Icons.star_outline_rounded,
+                size: iconSize,
                 color: _followed ? TbColors.guldDjup : TbColors.midnatt,
               ),
               label: Text(
                 _followed ? 'Följer' : 'Följ',
-                style: const TextStyle(fontSize: 17),
+                style: TextStyle(fontSize: fontSize),
               ),
               onPressed: () {
                 setState(() => _followed = !_followed);

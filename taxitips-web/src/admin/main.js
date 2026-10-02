@@ -75,6 +75,8 @@ const state = {
   events: { q: "", hidden: false, days: 14, source: "", open: "" },
   eventImport: null,
   accountQuery: "",
+  accountUserId: null,
+  accountRecovery: null,
   // Kundens cykel: vilket steg som är öppet, och listans filter.
   companyTab: "",
   kundFilter: "alla",
@@ -268,8 +270,23 @@ async function renderView(seq) {
         ));
         break;
       case "konton": {
+        if (state.accountUserId) {
+          const body = await admin.account(state.accountUserId);
+          paint(acc.konto(body.account, state.config, state.accountRecovery, {
+            devices: body.devices,
+            deviceSwaps: body.deviceSwaps,
+            notifications: body.notifications,
+            favorites: body.favorites,
+            feedback: body.feedback,
+            tipReports: body.tipReports,
+            feedbackSummary: body.feedbackSummary,
+            errors: body.errors,
+            audit: body.audit,
+          }));
+          break;
+        }
         const q = state.accountQuery;
-        const [found, blocks] = await Promise.all([q ? admin.accounts(q) : null, admin.blocks()]);
+        const [found, blocks] = await Promise.all([admin.accounts(q), admin.blocks()]);
         paint(acc.konton(found, blocks, q, state.config));
         break;
       }
@@ -588,6 +605,10 @@ for (const tab of el.tabs) {
     state.view = tab.dataset.view;
     state.companyId = null;
     state.companyTab = "";
+    if (state.view === "konton") {
+      state.accountUserId = null;
+      state.accountRecovery = null;
+    }
     setTab(state.view);
     render();
   });
@@ -1099,6 +1120,72 @@ async function act(action, ds) {
 
     /* --- Konton och spärrar --- */
 
+    case "open-account":
+      state.accountUserId = ds.user;
+      state.accountRecovery = null;
+      state.view = "konton";
+      setTab("konton");
+      return render();
+
+    case "back-accounts":
+      state.accountUserId = null;
+      state.accountRecovery = null;
+      return render();
+
+    case "account-recovery": {
+      const result = await admin.accountRecovery(ds.user);
+      state.accountRecovery = result;
+      flash("Lösenordslänk skapad — kopiera och skicka den till personen.");
+      return render();
+    }
+
+    case "copy-recovery": {
+      const url = document.getElementById("recoveryUrl")?.textContent?.trim();
+      if (!url) return;
+      await navigator.clipboard.writeText(url);
+      flash("Länken är kopierad.");
+      return;
+    }
+
+    case "account-delete": {
+      const email = ds.email || "";
+      const typed = prompt(
+        `Radera kontot ${email}?\n\nTar bort inloggningen och medlemskapen. Supporttrådar och felrader behålls.\n\nSkriv e-postadressen för att bekräfta:`,
+      );
+      if (typed === null) return;
+      await admin.deleteAccount(ds.user, typed.trim());
+      state.accountUserId = null;
+      state.accountRecovery = null;
+      flash("Kontot är raderat.");
+      return render();
+    }
+
+    case "account-test-push": {
+      const body = await admin.accountTestPush(ds.user);
+      const sent = (body.results || []).filter((r) => r.sent).length;
+      const failed = (body.results || []).filter((r) => !r.sent);
+      const why = failed.slice(0, 3).map((r) => `${r.device}: ${r.reason || "nej"}`).join("; ");
+      flash(sent
+        ? `Testnotis skickad till ${sent} telefon${sent === 1 ? "" : "er"}.${why ? ` Övriga: ${why}` : ""}`
+        : `Ingen notis skickades.${why ? ` ${why}` : ""}`);
+      return render();
+    }
+
+    case "account-allow-device-swap": {
+      const note = prompt(
+        "Tillåt ett extra telefonbyte den här månaden?\n\nAnteckning (valfritt, syns i revisionen):",
+      );
+      if (note === null) return;
+      const body = await admin.allowDeviceSwap(ds.user, note.trim());
+      flash(`Extra byte beviljat. Kvar den här månaden: ${body.remaining ?? "?"}.`);
+      return render();
+    }
+
+    case "account-member-status":
+      await admin.setMember(ds.company, ds.user, { status: ds.status });
+      flash(ds.status === "active" ? "Kontot är aktivt i företaget igen." : "Kontot är avstängt i företaget.");
+      return render();
+
     case "block-user": {
       const reason = prompt(
         `Spärra kontot ${ds.email || ""}? Det får ingen data i något företag och inga adminrättigheter.\n\nSkäl (obligatoriskt):`,
@@ -1479,6 +1566,40 @@ async function salesAction(action, ds) {
       }
       return prepareChange(ds.license, { baseCountyChanges: [{ licenseId: ds.license, county }] },
         `Byt baslän på ${ds.plate} till ${countyLabel(county)} vid nästa förnyelse`);
+    }
+
+    case "base-change-now": {
+      const county = document.querySelector(`[data-base-for="${ds.license}"]`)?.value;
+      if (!county) throw new ApiError(400, "Välj det nya baslänet i listan först.", "county_required");
+      const reason = prompt(
+        `Byt baslän på ${ds.plate} till ${countyLabel(county)} DIREKT, i stället för vid förnyelsen.\n\n` +
+          "Påverkar inte priset. Ange ett skäl (sparas i loggen):",
+      );
+      if (!reason) return;
+      await admin.setBaseCountyNow(ds.license, county, reason);
+      flash(`${ds.plate} har nu ${countyLabel(county)} som baslän.`);
+      return render();
+    }
+
+    case "company-base-now": {
+      const county = document.getElementById("companyBase")?.value;
+      if (!county) throw new ApiError(400, "Välj det nya baslänet i listan först.", "county_required");
+      const reason = prompt(
+        `Byt baslän till ${countyLabel(county)} på ALLA företagets bilar, direkt.\n\n` +
+          "Påverkar inte priset. Ange ett skäl (sparas i loggen):",
+      );
+      if (!reason) return;
+      const result = await admin.setCompanyBaseCounty(state.companyId, county, reason);
+      flash(`${result.changed} bil(ar) har nu ${countyLabel(county)} som baslän.`);
+      return render();
+    }
+
+    case "pending-undo": {
+      const reason = prompt(`Ångra "${ds.label}"? Det som skulle ändras vid förnyelsen ligger kvar som idag.\n\nAnge ett skäl (sparas i loggen):`);
+      if (!reason) return;
+      await admin.undoPendingChange(ds.change, reason);
+      flash(`"${ds.label}" är ångrad.`);
+      return render();
     }
 
     case "car-plate-ask": {

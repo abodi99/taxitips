@@ -12,13 +12,15 @@ from django.test import TestCase, override_settings
 from django.utils import timezone
 
 from core import service_view
+from core import thresholds
 from core.models import Opportunity, SourceEvent
 
 
 def tip(external_id, kind="transit", mode="bus", tier="vehicle_cancelled", score=60, **extra):
     now = timezone.now()
+    extra.setdefault("level", thresholds.stored_level(tier, score, extra.get("has_alternative", False)))
     return Opportunity.objects.create(
-        external_id=external_id, kind=kind, mode=mode, severity_tier=tier, level="medium", title=external_id,
+        external_id=external_id, kind=kind, mode=mode, severity_tier=tier, title=external_id,
         start_time=now - timedelta(minutes=5), end_time=now + timedelta(hours=1), demand_score=score,
         confidence="medium", rule_id=f"{mode}.{tier}", **extra,
     )
@@ -33,7 +35,8 @@ class ServiceTests(TestCase):
         self.assertEqual(titles, {"tag": ["tvr:Cst:1"], "kollektivtrafik": ["sl:1"], "vag": ["tv:1"]})
 
     def test_the_driver_group_says_notification_list_or_hidden(self):
-        tip("sl:notis", mode="bus", tier="vehicle_cancelled", score=60)
+        # Bara ett Starkt tips (strandsatt: hela linjen) väcker någon.
+        tip("sl:notis", mode="bus", tier="line_paused", score=70)
         tip("sl:alternativ", mode="bus", tier="vehicle_cancelled", score=60, has_alternative=True)
         tip("sl:lag", mode="bus", tier="vehicle_delayed", score=25)
         tip("sl:brus", mode="bus", tier="ignore", score=0)

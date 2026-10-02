@@ -91,12 +91,21 @@ class _TipReportButtonState extends State<TipReportButton> {
     if (_sent) {
       return Text(
         'Rapport mottagen — tack.',
-        style: TextStyle(color: TbColors.muted, fontSize: 14),
+        style: TextStyle(color: TbColors.muted, fontSize: 13.5),
       );
     }
     return Align(
       alignment: Alignment.centerLeft,
       child: TextButton.icon(
+        style: TextButton.styleFrom(
+          foregroundColor: TbColors.muted,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          minimumSize: const Size(0, 40),
+          textStyle: const TextStyle(
+            fontSize: 13.5,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
         onPressed: _busy ? null : _openDialog,
         icon: _busy
             ? const SizedBox(
@@ -104,7 +113,7 @@ class _TipReportButtonState extends State<TipReportButton> {
                 height: 16,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            : const Icon(Icons.flag_outlined, size: 18),
+            : const Icon(Icons.flag_outlined, size: 16),
         label: const Text('Rapportera felaktigt tips'),
       ),
     );

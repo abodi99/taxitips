@@ -10,6 +10,10 @@ uppsägningsorsak (PendingChange) och säljarens strukturerade avhoppsorsak.
 
 Friska betalande abonnemang utan uppsägning syns inte här.
 
+**Att betala:** beställningar som väntar på betalning eller misslyckats (utan
+att en senare betalats), med belopp, ålder och betallänk. Plus en
+betalningsöversikt: öppet belopp, förfallna och inbetalt den här månaden.
+
 **Ordningen är arbetsordningen.** Utlovade samtal först, sedan det brådskande
 (förfallen, avgår snart, prov tar slut), sedan prov som slutat och churn.
 
@@ -34,6 +38,7 @@ from fleet.admin_api import _body, _company_or_404, _iso, _record, _staff, handl
 from fleet.models import (
     CompanyProfile,
     DeviceApproval,
+    Order,
     OutboxMessage,
     PendingChange,
     SalesFollowUp,
@@ -127,6 +132,94 @@ def _subscription_risk_ids(now, hidden: set) -> dict:
     return out
 
 
+# En obetald beställning äldre än så räknas som förfallen i översikten. Stripe
+# sparar förfallodagen på fakturan, inte vi; 14 dagar är standardvalet när
+# säljaren skapar en faktura (admin_sales.create_order).
+OVERDUE_AFTER_DAYS = 14
+
+
+def _open_orders(now, hidden: set) -> dict:
+    """
+    company_id -> beställningar som ska betalas: väntar på betalning, eller
+    misslyckades utan att en senare beställning betalats.
+    """
+    window_start = now - timedelta(days=ENDED_WINDOW_DAYS)
+    last_paid = {}
+    for company_id, paid_at in Order.objects.filter(
+        status__in=[Order.Status.PAID, Order.Status.APPLIED], paid_at__gte=window_start,
+    ).values_list("company_id", "paid_at"):
+        if paid_at and (company_id not in last_paid or paid_at > last_paid[company_id]):
+            last_paid[company_id] = paid_at
+    out: dict = {}
+    for order in Order.objects.filter(
+        status__in=[Order.Status.PENDING_PAYMENT, Order.Status.FAILED],
+        created_at__gte=window_start, total_now_ore__gt=0,
+    ).exclude(company_id__in=hidden).order_by("created_at"):
+        if order.status == Order.Status.FAILED and last_paid.get(order.company_id) and (
+            last_paid[order.company_id] > order.created_at
+        ):
+            continue
+        out.setdefault(order.company_id, []).append(order)
+    return out
+
+
+def _payment_order_row(order: Order, now, names: dict | None = None) -> dict:
+    age = (now - order.created_at).days if order.created_at else 0
+    row = {
+        "id": str(order.id),
+        "kind": order.kind,
+        "kindLabel": Order.Kind(order.kind).label if order.kind in Order.Kind.values else order.kind,
+        "status": order.status,
+        "totalOre": order.total_now_ore,
+        "createdAt": _iso(order.created_at),
+        "paidAt": _iso(order.paid_at),
+        "failedAt": _iso(order.failed_at),
+        "failureReason": order.failure_reason,
+        "ageDays": age,
+        "overdue": order.status == Order.Status.FAILED or age >= OVERDUE_AFTER_DAYS,
+        "paymentUrl": order.stripe_payment_url or None,
+    }
+    if names is not None:
+        row["companyId"] = str(order.company_id)
+        row["companyName"] = names.get(order.company_id, "")
+    return row
+
+
+def _payments_overview(now, hidden: set, open_orders: dict) -> dict:
+    """Betalningsöversikten överst i fliken Betalningar."""
+    local = now.astimezone(STOCKHOLM)
+    month_start = local.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    recent = list(
+        Order.objects.filter(created_at__gte=now - timedelta(days=ENDED_WINDOW_DAYS), total_now_ore__gt=0)
+        .exclude(company_id__in=hidden).order_by("-created_at")[:200]
+    )
+    names = {
+        c.id: c.name for c in Company.objects.filter(id__in={o.company_id for o in recent})
+    }
+    open_list = [o for orders_ in open_orders.values() for o in orders_]
+    paid_month = Order.objects.filter(
+        status__in=[Order.Status.PAID, Order.Status.APPLIED], paid_at__gte=month_start,
+    ).exclude(company_id__in=hidden)
+    return {
+        "summary": {
+            "openOre": sum(o.total_now_ore for o in open_list),
+            "openCount": len(open_list),
+            "overdueCount": sum(
+                1 for o in open_list
+                if o.status == Order.Status.FAILED
+                or (now - o.created_at).days >= OVERDUE_AFTER_DAYS
+            ),
+            "paidThisMonthOre": sum(paid_month.values_list("total_now_ore", flat=True)),
+            "paidThisMonthCount": paid_month.count(),
+            "pastDueSubscriptions": Subscription.objects.filter(
+                status=SubscriptionStatus.PAST_DUE,
+            ).exclude(company_id__in=hidden).count(),
+        },
+        "recent": [_payment_order_row(o, now, names) for o in recent],
+        "overdueAfterDays": OVERDUE_AFTER_DAYS,
+    }
+
+
 def _priority(row: dict, now) -> tuple:
     follow = row["followUp"]
     due = follow["nextContactAt"]
@@ -136,9 +229,9 @@ def _priority(row: dict, now) -> tuple:
         return (0, due)
 
     seg = row.get("segment", "trial")
-    seg_order = {"past_due": 1, "pending_cancel": 2, "trial": 3, "churn": 4}
+    seg_order = {"past_due": 1, "unpaid": 1, "pending_cancel": 2, "trial": 3, "churn": 4}
     stage_order = {
-        "payment_failed": 0, "ending": 0, "leaving": 1, "ended": 2, "churned": 2,
+        "payment_failed": 0, "unpaid": 0, "ending": 0, "leaving": 1, "ended": 2, "churned": 2,
         "not_started": 3, "active": 5,
     }
     return (
@@ -175,7 +268,9 @@ def _enrich_rows(
     mails: dict,
     duplicates: dict,
     now,
+    open_orders: dict | None = None,
 ) -> list[dict]:
+    open_orders = open_orders or {}
     rows = []
     for company_id in company_ids:
         company = companies.get(company_id)
@@ -188,11 +283,19 @@ def _enrich_rows(
             segment, sub = subs_by_company[company_id]
         elif trial is not None:
             segment, sub = "trial", None
+        elif company_id in open_orders:
+            segment, sub = "unpaid", None
         else:
             continue
+        # En obetald beställning är det som ska göras nu -- utom när hela
+        # abonnemanget redan är förfallet, som är akutare och har egen rad.
+        if company_id in open_orders and segment != "past_due":
+            segment = "unpaid"
 
         if segment == "trial" and trial is None:
             continue
+        if segment == "unpaid" and sub is None:
+            sub = Subscription.objects.filter(company_id=company_id).first()
 
         commit = commerce.trial_commit_status(company_id)
         registry = (profile.registry if profile else {}) or {}
@@ -228,6 +331,8 @@ def _enrich_rows(
                 stage = "leaving"
             elif segment == "churn":
                 stage = "churned"
+        if segment == "unpaid":
+            stage = "unpaid"
 
         rows.append({
             "companyId": str(company_id),
@@ -268,6 +373,7 @@ def _enrich_rows(
             "verificationStatus": profile.verification_status if profile else "",
             "createdAt": _iso(company.created_at),
             "followUp": _follow_up_payload(note),
+            "openOrders": [_payment_order_row(o, now) for o in open_orders.get(company_id, [])],
         })
     return rows
 
@@ -284,10 +390,14 @@ def followups(request):
     latest_trials = _trial_company_ids(now, hidden)
     risk = _subscription_risk_ids(now, hidden)
 
+    open_orders = _open_orders(now, hidden)
+
     trials_by_company = dict(latest_trials)
     subs_by_company = dict(risk)
 
-    company_ids = list(dict.fromkeys(list(risk.keys()) + list(latest_trials.keys())))
+    company_ids = list(dict.fromkeys(
+        list(risk.keys()) + list(open_orders.keys()) + list(latest_trials.keys())
+    ))
 
     companies = {c.id: c for c in Company.objects.filter(id__in=company_ids)}
     profiles = {p.company_id: p for p in CompanyProfile.objects.filter(company_id__in=company_ids)}
@@ -324,11 +434,13 @@ def followups(request):
         mails=mails,
         duplicates=duplicates,
         now=now,
+        open_orders=open_orders,
     )
     rows.sort(key=lambda r: _priority(r, now))
     return _json(request, {
         "ok": True,
         "followUps": rows,
+        "payments": _payments_overview(now, hidden, open_orders),
         "outcomes": [{"id": v, "label": label} for v, label in SalesFollowUp.Outcome.choices],
         "churnReasons": [
             {"id": v, "label": label} for v, label in SalesFollowUp.ChurnReason.choices

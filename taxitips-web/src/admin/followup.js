@@ -1,7 +1,8 @@
-import { date, dateTime } from "../portal/api.js";
+import { date, dateTime, money } from "../portal/api.js";
 
 /**
- * Uppföljning: prov, uppsägning och churn (fleet/admin_followup.py).
+ * Uppföljning: att betala, prov, uppsägning och churn, plus en
+ * betalningsöversikt (fleet/admin_followup.py).
  */
 
 const esc = (value) =>
@@ -13,10 +14,12 @@ const esc = (value) =>
 
 const FILTERS = [
   ["ring", "Att ringa"],
+  ["betala", "Att betala"],
   ["prov", "Prov"],
-  ["risk", "Avgår / betalning"],
+  ["risk", "Uppsagda"],
   ["churn", "Avslutade"],
   ["alla", "Alla"],
+  ["betalningar", "Betalningar"],
 ];
 
 const CLOSED = ["not_interested", "customer", "wrong_details"];
@@ -36,7 +39,7 @@ function matches(row, filter) {
   switch (filter) {
     case "ring":
       if (closed) return false;
-      if (seg === "past_due" || seg === "pending_cancel") return true;
+      if (seg === "past_due" || seg === "pending_cancel" || seg === "unpaid") return true;
       if (seg === "churn") {
         // Orsak saknas, eller uppföljning fortfarande öppen (ring igen / vill tillbaka).
         return (
@@ -55,8 +58,12 @@ function matches(row, filter) {
       );
     case "prov":
       return seg === "trial";
+    case "betala":
+      return seg === "unpaid" || seg === "past_due";
     case "risk":
-      return seg === "pending_cancel" || seg === "past_due";
+      return seg === "pending_cancel";
+    case "betalningar":
+      return false;
     case "churn":
       return seg === "churn";
     default:
@@ -68,6 +75,13 @@ function matches(row, filter) {
 function stagePill(row) {
   const seg = row.segment || "trial";
   if (seg === "past_due") return ["pill-danger", "Förfallen betalning", "Kunden har slutat betala."];
+  if (seg === "unpaid") {
+    const open = row.openOrders ?? [];
+    const total = open.reduce((sum, o) => sum + (o.totalOre ?? 0), 0);
+    const overdue = open.some((o) => o.overdue);
+    return [overdue ? "pill-danger" : "pill-warn", `Ska betala ${money(total)}`,
+      open.map((o) => `${o.kindLabel}: ${money(o.totalOre)}, ${o.status === "failed" ? "misslyckades" : `väntat ${o.ageDays} d`}`).join("\n")];
+  }
   if (seg === "pending_cancel") {
     return ["pill-warn", "Uppsagt", row.accessUntil
       ? `Uppsagt – åtkomst till ${date(row.accessUntil)}`
@@ -184,6 +198,7 @@ function row(r, outcomes, churnReasons) {
           <div class="fu-info-col">
             <p>${facts}</p>
             ${r.statedCancelReason ? `<p>Kundens orsak vid uppsägning: <em>${esc(r.statedCancelReason)}</em></p>` : ""}
+            ${openOrdersBlock(r.openOrders)}
             ${flagList(r.flags)}
             ${mails}
             ${hint ? `<p class="muted fu-hint">${esc(hint)}</p>` : ""}
@@ -218,6 +233,62 @@ function row(r, outcomes, churnReasons) {
     </tr>`;
 }
 
+function orderStatus(o) {
+  if (o.status === "failed") return ["pill-danger", "Misslyckades"];
+  if (o.status === "pending_payment") {
+    return o.overdue ? ["pill-danger", `Obetald ${o.ageDays} d`] : ["pill-warn", `Väntar ${o.ageDays} d`];
+  }
+  if (o.status === "paid" || o.status === "applied") return ["pill-ok", "Betald"];
+  return ["", o.status];
+}
+
+function linkButton(o) {
+  return o.paymentUrl
+    ? `<button class="btn btn-quiet btn-small" type="button" data-action="copy-link" data-url="${esc(o.paymentUrl)}">Kopiera betallänk</button>`
+    : "";
+}
+
+/** Obetalda beställningar i den utfällda raden. */
+function openOrdersBlock(orders) {
+  if (!orders?.length) return "";
+  return `<div class="fu-orders"><p><b>Att betala</b></p><ul>${orders.map((o) => {
+    const [tone, label] = orderStatus(o);
+    return `<li>${esc(o.kindLabel)} · <b>${esc(money(o.totalOre))}</b> inkl. moms
+      <span class="pill ${tone}">${esc(label)}</span> <span class="muted">skapad ${esc(date(o.createdAt))}</span>
+      ${o.failureReason ? `<div class="muted">${esc(o.failureReason)}</div>` : ""} ${linkButton(o)}</li>`;
+  }).join("")}</ul></div>`;
+}
+
+/** Betalningsöversikten: siffrorna överst och de senaste beställningarna. */
+function paymentsView(payments) {
+  const sum = payments?.summary ?? {};
+  const rows = payments?.recent ?? [];
+  const kpi = (label, value, note = "", alert = false) => `
+    <div class="kpi${alert ? " kpi-alert" : ""}" title="${esc(note)}"><span>${esc(label)}</span><b>${esc(value)}</b></div>`;
+  return `
+    <div class="kpis">
+      ${kpi("Att få in", money(sum.openOre ?? 0), `${sum.openCount ?? 0} obetalda`, (sum.openCount ?? 0) > 0)}
+      ${kpi("Förfallna", String(sum.overdueCount ?? 0), `äldre än ${payments?.overdueAfterDays ?? 14} d eller misslyckade`, (sum.overdueCount ?? 0) > 0)}
+      ${kpi("Förfallna abonnemang", String(sum.pastDueSubscriptions ?? 0), "förnyelsen gick inte igenom", (sum.pastDueSubscriptions ?? 0) > 0)}
+      ${kpi("Inbetalt denna månad", money(sum.paidThisMonthOre ?? 0), `${sum.paidThisMonthCount ?? 0} betalningar`)}
+    </div>
+    ${rows.length ? `<div class="table-scroll"><table>
+      <thead><tr><th>Kund</th><th>Vad</th><th>Belopp</th><th>Status</th><th>Datum</th><th></th></tr></thead>
+      <tbody>${rows.map((o) => {
+        const [tone, label] = orderStatus(o);
+        return `<tr>
+          <td data-label="Kund"><button class="linklike" type="button" data-action="open-company"
+            data-id="${esc(o.companyId)}" data-tab="betalning">${esc(o.companyName || "—")}</button></td>
+          <td data-label="Vad">${esc(o.kindLabel)}</td>
+          <td data-label="Belopp">${esc(money(o.totalOre))}</td>
+          <td data-label="Status"><span class="pill ${tone}">${esc(label)}</span></td>
+          <td data-label="Datum">${esc(date(o.paidAt || o.failedAt || o.createdAt))}</td>
+          <td>${["pending_payment", "failed"].includes(o.status) ? linkButton(o) : ""}</td>
+        </tr>`;
+      }).join("")}</tbody></table></div>`
+      : '<div class="crm-empty"><p>Inga beställningar de senaste 60 dagarna.</p></div>'}`;
+}
+
 export function uppfoljning(data, filter = "ring") {
   const all = data.followUps ?? [];
   const rows = all.filter((r) => matches(r, filter));
@@ -225,8 +296,8 @@ export function uppfoljning(data, filter = "ring") {
   const churnReasons = data.churnReasons ?? [];
   const tabs = FILTERS.map(([id, label]) => `
     <button type="button" role="tab" class="crm-tab" data-action="fu-filter" data-filter="${id}"
-      aria-selected="${id === filter}">${esc(label)}<span class="crm-tab-n">${esc(all.filter((r) => matches(r, id)).length)}</span></button>`).join("");
-  const table = rows.length
+      aria-selected="${id === filter}">${esc(label)}${id === "betalningar" ? "" : `<span class="crm-tab-n">${esc(all.filter((r) => matches(r, id)).length)}</span>`}</button>`).join("");
+  const table = filter === "betalningar" ? paymentsView(data.payments) : rows.length
     ? `<div class="table-scroll">
         <table class="fu-table" data-outcomes="${esc(JSON.stringify(outcomes.map((o) => [o.id, o.label])))}">
           <thead><tr>
@@ -239,7 +310,7 @@ export function uppfoljning(data, filter = "ring") {
   return `
     <div class="page-head">
       <div><h1>Uppföljning</h1>
-        <p class="muted">Prov som tar slut, uppsägningar, missade betalningar och avslutade kunder.</p></div>
+        <p class="muted">Obetalda beställningar, prov som tar slut, uppsägningar och avslutade kunder.</p></div>
     </div>
     <div class="crm-tabs-row">
       <div class="crm-tabs" role="tablist" aria-label="Filter">${tabs}</div>

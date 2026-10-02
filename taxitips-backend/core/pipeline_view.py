@@ -432,7 +432,7 @@ def pipeline(request):
         r["total"] += 1
         if o.severity_tier != "ignore" and o.demand_score > 0:
             r["scorable"] += 1
-        if o.demand_score >= thresholds.NOTIFY_SCORE_FLOOR:
+        if thresholds.is_notify_worthy(o.severity_tier, o.demand_score, o.has_alternative, level=o.level):
             r["pushWorthy"] += 1
         if o.lat is not None:
             r["withCoords"] += 1

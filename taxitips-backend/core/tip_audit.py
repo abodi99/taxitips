@@ -24,8 +24,9 @@ from datetime import timedelta
 from django.db.models import Q
 from django.utils import timezone
 
-from core import thresholds
+from core import taxi_context, thresholds
 from core.models import Opportunity, SourceEvent
+from core.taxi_context import MEDIUM_SCORE, STRONG_SCORE
 
 ERROR, WARN, INFO = "fel", "varning", "info"
 EXAMPLES = 5
@@ -78,8 +79,9 @@ def _checks() -> dict[str, Check]:
               "Tipset pekar på en källhändelse som inte finns -- förklaringen går inte att följa."),
         Check("frozen_relative_time", ERROR, "Fryst \"om X min\" i sparad text",
               "Sparad text läses senare; avstånd i tid ska vara klockslag eller räknas i appen."),
-        Check("level_mismatch", WARN, "Sparat betyg följer inte regeln",
-              "Betyget i notiser/favoriter ska vara samma som i flödet (thresholds.stored_level)."),
+        Check("level_mismatch", WARN, "Sparad styrka följer inte regeln",
+              "Stark kräver poäng ≥ 60, ingen ersättningstrafik och strandsättning "
+              "(taxi_context.final_level); Svag kräver poäng under 35 eller ett alternativ."),
         Check("notified_with_alternative", ERROR, "Notis trots ersättningstrafik",
               "Med angivet alternativ står ingen strandsatt; sådant tips får inte väcka någon."),
         Check("notified_not_worthy", WARN, "Notis på tips under notisregeln",
@@ -141,14 +143,22 @@ def audit(*, now=None, hours: int = 0, limit: int = 20000) -> dict:
         if frozen:
             checks["frozen_relative_time"].hit(o, found=frozen)
 
-        expected = thresholds.stored_level(o.severity_tier, score, o.has_alternative)
-        if o.level != expected:
+        # Styrkan räknas med omständigheter som inte sparas som egna fält
+        # (tid, väder), så den går inte att räkna om exakt här. Det som går att
+        # pröva är gränserna: ingen Stark under 60 eller med alternativ, ingen
+        # Medel under 35.
+        expected = None
+        if o.level == "high" and (score < STRONG_SCORE or o.has_alternative):
+            expected = taxi_context.final_level(score, True, o.has_alternative)
+        elif o.level == "medium" and (score < MEDIUM_SCORE or o.has_alternative):
+            expected = "low"
+        if expected:
             checks["level_mismatch"].hit(o, stored=o.level, expected=expected)
 
         if o.notified_at:
             if o.has_alternative:
                 checks["notified_with_alternative"].hit(o, notifiedAt=o.notified_at.isoformat())
-            elif not thresholds.is_notify_worthy(o.severity_tier, score, o.has_alternative):
+            elif not thresholds.is_notify_worthy(o.severity_tier, score, o.has_alternative, level=o.level):
                 checks["notified_not_worthy"].hit(o, notifiedAt=o.notified_at.isoformat())
 
         if o.start_time and o.end_time and o.start_time > o.end_time:
@@ -162,7 +172,7 @@ def audit(*, now=None, hours: int = 0, limit: int = 20000) -> dict:
             and o.end_time and o.end_time > now
         ):
             checks["shows_departed"].hit(o, nextDepartureAt=o.next_departure_at.isoformat())
-        if o.confidence == "low" and expected == "high" and o.ai_adjusted_at is None:
+        if o.confidence == "low" and o.level == "high" and o.ai_adjusted_at is None:
             checks["low_confidence_high"].hit(o)
         if o.end_time and o.end_time > now + timedelta(hours=48):
             checks["long_lived"].hit(o, end=o.end_time.isoformat())
