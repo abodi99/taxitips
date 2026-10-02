@@ -518,10 +518,16 @@ class AdminBaseCountyTests(_Base):
     """Baslänet direkt, för en bil eller hela företaget, med skäl i loggen."""
 
     def test_a_paid_car_changes_base_county_now_and_replaces_the_scheduled_change(self):
+        from billing.models import Device
         from fleet.models import AuditEvent, LicenseCounty, PendingChange
 
         data = self.full_setup()
         lic = data["license"]
+        # Telefonen har det gamla länet sparat — det var felet som gjorde att
+        # föraren fortfarande såg Skåne efter admin-byte till Stockholm.
+        Device.objects.filter(id=data["device"].id).update(
+            notify_prefs={"counties": [lic.base_county], "municipalities": []},
+        )
         License.objects.filter(id=lic.id).update(scheduled_base_county="14")
         PendingChange.objects.create(
             company_id=lic.company_id, kind=PendingChange.Kind.CHANGE_BASE_COUNTY,
@@ -539,6 +545,9 @@ class AdminBaseCountyTests(_Base):
         )
         self.assertFalse(PendingChange.objects.filter(status=PendingChange.Status.PENDING).exists())
         self.assertTrue(AuditEvent.objects.filter(action="admin_base_county_set").exists())
+        device = Device.objects.get(id=data["device"].id)
+        self.assertEqual(device.notify_prefs.get("counties"), ["13"])
+        self.assertEqual(r.json().get("devicesSynced"), 1)
 
     def test_sales_cannot_change_a_paid_car_directly(self):
         data = self.full_setup()

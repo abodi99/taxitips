@@ -283,6 +283,9 @@ def apply_base_county_change(*, license: License, now=None) -> License:
     )
     License.objects.filter(id=license.id).update(base_county=target, scheduled_base_county="")
     license.refresh_from_db()
+    from fleet import device_prefs
+
+    device_prefs.sync_devices_for_license(license, now=now)
     audit.record(
         "base_county_changed", company_id=license.company_id, actor_kind="system",
         subject_type="license", subject_id=license.id,
@@ -324,9 +327,15 @@ def change_base_county_now(*, license: License, county: str, now=None) -> dict:
             status=PendingChange.Status.PENDING, payload__licenseId=str(license.id),
         ).update(status=PendingChange.Status.SUPERSEDED, canceled_at=now)
     license.refresh_from_db()
+    # Telefonernas sparade körområde följer med — annars blir snittet tomt
+    # (gammalt län ∩ ny rättighet) och föraren ser inga tips.
+    from fleet import device_prefs
+
+    synced = device_prefs.sync_devices_for_license(license, now=now)
     return {
         "licenseId": str(license.id), "from": old, "to": county,
         "removedRedundantExtra": bool(removed_extra), "supersededScheduled": superseded,
+        "devicesSynced": synced,
     }
 
 
@@ -610,6 +619,10 @@ def set_trial_counties(license: License, *, base: str, extras: list[str] | None 
                 license=license, county_code=county, kind=LicenseCounty.Kind.EXTRA, active_from=now,
             )
         License.objects.filter(id=license.id).update(base_county=base, scheduled_base_county="")
+    license.refresh_from_db()
+    from fleet import device_prefs
+
+    device_prefs.sync_devices_for_license(license, now=now)
     return base, extra_codes
 
 

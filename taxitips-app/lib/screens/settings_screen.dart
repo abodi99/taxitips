@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../api_client.dart';
 import '../net_status.dart';
+import '../signal_kinds.dart' show countyShort;
 import '../theme.dart';
 import '../widgets/brand_icons.dart';
 import '../widgets/company_settings_panel.dart';
@@ -43,6 +44,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _companyName;
   String? _currentPlate;
   bool _hasCars = false;
+  /// Licensens län (rättighet), visningsnamn i kort form.
+  List<String> _licenseCountyLabels = const [];
+  /// Valda län i notiserna/filtret, om de smalnar av rättigheten.
+  List<String> _activeCountyLabels = const [];
 
   bool get _isOffice => widget.api.sessionToken != null;
   bool get _isDevice => widget.api.deviceToken != null;
@@ -103,6 +108,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         } catch (e) {
           debugPrint('SettingsScreen device load: $e');
         }
+        try {
+          await _loadCounties();
+        } catch (e) {
+          debugPrint('SettingsScreen counties: $e');
+        }
       }
       if (mounted) setState(() => _loading = false);
     } catch (e) {
@@ -154,6 +164,43 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
+  Future<void> _loadCounties() async {
+    final data = await widget.api.getNotifyPrefs();
+    final names = <String, String>{
+      for (final c in (data['countyCatalog'] as List?) ?? const [])
+        if (c is Map && c['code'] != null)
+          c['code'].toString(): countyShort(c['name']?.toString() ?? ''),
+    };
+    String label(String code) => names[code] ?? code;
+    final licensed = [
+      for (final c in (data['licensedCounties'] as List?) ?? const [])
+        label(c.toString()),
+    ]..sort();
+    final prefs = data['prefs'] is Map
+        ? Map<String, dynamic>.from(data['prefs'] as Map)
+        : <String, dynamic>{};
+    final chosenCodes = [
+      for (final c in (prefs['counties'] as List?) ?? const []) c.toString(),
+    ];
+    final licensedCodes = {
+      for (final c in (data['licensedCounties'] as List?) ?? const [])
+        c.toString(),
+    };
+    // Visa aktivt filter bara om det smalnar av — annars räcker licensraden.
+    final narrowed =
+        chosenCodes.isNotEmpty &&
+        !(chosenCodes.length == licensedCodes.length &&
+            chosenCodes.every(licensedCodes.contains));
+    final active = narrowed
+        ? ([for (final c in chosenCodes) label(c)]..sort())
+        : <String>[];
+    if (!mounted) return;
+    setState(() {
+      _licenseCountyLabels = licensed;
+      _activeCountyLabels = active;
+    });
+  }
+
   Future<void> _openNotify() async {
     await showModalBottomSheet<void>(
       context: context,
@@ -164,6 +211,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ),
       builder: (ctx) => NotifyPrefsSheet(api: widget.api),
     );
+    if (mounted) {
+      try {
+        await _loadCounties();
+      } catch (_) {}
+    }
   }
 
   Future<void> _openNotificationLog() async {
@@ -284,6 +336,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           ? 'Den här telefonen'
                           : 'Den här telefonen · $_companyName',
                     ),
+                    if (_licenseCountyLabels.isNotEmpty) ...[
+                      _CountiesOverview(
+                        licenseLabels: _licenseCountyLabels,
+                        activeLabels: _activeCountyLabels,
+                        onOpenFilter: _openNotify,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
                     SettingsGroup(
                       children: [
                         if (_hasCars || _currentPlate != null)
@@ -301,6 +361,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             color: TbColors.muted,
                           ),
                           title: 'Notiser',
+                          subtitle: _activeCountyLabels.isNotEmpty
+                              ? 'Filter: ${_activeCountyLabels.join(', ')}'
+                              : (_licenseCountyLabels.isEmpty
+                                    ? null
+                                    : 'Alla dina län'),
                           onTap: _openNotify,
                         ),
                         SettingsNavRow(
@@ -750,6 +815,105 @@ class _PasswordChangeDialogState extends State<_PasswordChangeDialog> {
             child: Text(_busy ? 'Byter…' : 'Byt lösenord'),
           ),
       ],
+    );
+  }
+}
+
+/// Översikt över bilens län — det man har rätt till, och om filtret smalnar av.
+class _CountiesOverview extends StatelessWidget {
+  const _CountiesOverview({
+    required this.licenseLabels,
+    required this.activeLabels,
+    required this.onOpenFilter,
+  });
+
+  final List<String> licenseLabels;
+  final List<String> activeLabels;
+  final VoidCallback onOpenFilter;
+
+  @override
+  Widget build(BuildContext context) {
+    final narrowed = activeLabels.isNotEmpty;
+    return Material(
+      color: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(14),
+        side: const BorderSide(color: TbColors.line),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onOpenFilter,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.map_outlined, size: 22, color: TbColors.muted),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      narrowed ? 'Körområde' : 'Dina län',
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                  const Icon(Icons.chevron_right, size: 20, color: TbColors.muted),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final name in licenseLabels)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 7,
+                      ),
+                      decoration: BoxDecoration(
+                        color: TbColors.ljusgra,
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: narrowed && !activeLabels.contains(name)
+                              ? TbColors.line
+                              : TbColors.guld.withValues(alpha: 0.55),
+                        ),
+                      ),
+                      child: Text(
+                        name,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: narrowed && !activeLabels.contains(name)
+                              ? TbColors.muted
+                              : TbColors.ink,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                narrowed
+                    ? 'Filtret visar ${activeLabels.join(', ')}. Tryck för att ändra.'
+                    : licenseLabels.length == 1
+                        ? 'Tips och notiser i det här länet.'
+                        : 'Tips och notiser i alla dina län. Tryck för att begränsa.',
+                style: const TextStyle(
+                  fontSize: 13,
+                  color: TbColors.muted,
+                  height: 1.35,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

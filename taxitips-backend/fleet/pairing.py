@@ -379,23 +379,13 @@ def approve_device(
     )
 
     # Körområdet: en nyparkopplad telefon får licensens län -- alltid, inte
-    # bara när inget var valt.
-    #
-    # Utan län faller varje notiskandidat på `no_area` i core/notify.py:
-    # telefonen är parkopplad, betald och godkänd, och får ändå ingenting.
-    # Och ett gammalt val från en tidigare bil (Skåne) låg förut kvar när
-    # telefonen kopplades till en Stockholmsbil; licensen släppte inte igenom
-    # Skåne, så föraren fick varken rätt län eller något alls. Föraren kan
-    # smalna av i inställningarna efteråt; rättigheten är ändå licensens.
+    # bara när inget var valt. Se fleet/device_prefs.py (samma regel vid
+    # admin-byte av baslän).
+    from fleet import device_prefs
+
     counties = list(license_counties_for(license, now))
-    prefs = dict(device.notify_prefs or {})
-    prefs["counties"] = counties
-    prefs["municipalities"] = [
-        m for m in (prefs.get("municipalities") or []) if str(m)[:2] in counties
-    ]
-    prefs["regions"] = []
-    prefs["cities"] = []
-    Device.objects.filter(id=device.id).update(notify_prefs=prefs)
+    prefs = device_prefs.apply_counties_to_prefs(device.notify_prefs, counties)
+    device_prefs.write_device_prefs(device.id, prefs)
 
     RiskSignal.objects.create(
         company_id=company_id, kind=RiskSignal.Kind.PAIRING,

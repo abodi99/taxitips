@@ -676,7 +676,14 @@ def alerts(request):
         # gäller, så att en äldre app utan länsval inte får en tom lista.
         device = _device_for(request)
         if device is not None:
-            counties = areas.device_counties(device.notify_prefs)
+            if not getattr(ent, "unrestricted", True):
+                from fleet import device_prefs
+
+                counties = device_prefs.heal_device_prefs(
+                    device, getattr(ent, "counties", ()) or (),
+                )
+            else:
+                counties = areas.device_counties(device.notify_prefs)
             municipalities = areas.device_municipalities(device.notify_prefs)
 
     if not getattr(ent, "unrestricted", True):
@@ -686,6 +693,16 @@ def alerts(request):
         if regions and not counties:
             counties = areas.device_counties({"regions": regions})
         regions = []
+        # Om klienten skickar ett gammalt länsval (före admin-byte) läker vi
+        # telefonens sparade prefs och kör om grinden mot rättigheten.
+        device = _device_for(request)
+        if device is not None and counties:
+            entitled = set(getattr(ent, "counties", ()) or ())
+            if entitled and not (set(counties) & entitled):
+                from fleet import device_prefs
+
+                counties = device_prefs.heal_device_prefs(device, entitled)
+                municipalities = areas.device_municipalities(device.notify_prefs)
         counties, municipalities = county_gate(ent, counties, municipalities)
         if not counties and not municipalities:
             return _json(request, {
@@ -1187,7 +1204,15 @@ def request_area(request, lat, lon, ent=None) -> tuple[list[str], list[str]]:
     if not counties and not municipalities and (lat is None or lon is None):
         device = _device_for(request)
         if device is not None:
-            counties = areas.device_counties(device.notify_prefs)
+            # Laga gammalt körområde efter admin-byte av län innan grinden.
+            if ent is not None and not getattr(ent, "unrestricted", True):
+                from fleet import device_prefs
+
+                counties = device_prefs.heal_device_prefs(
+                    device, getattr(ent, "counties", ()) or (),
+                )
+            else:
+                counties = areas.device_counties(device.notify_prefs)
             municipalities = areas.device_municipalities(device.notify_prefs)
     if ent is not None and not getattr(ent, "unrestricted", True):
         counties, municipalities = county_gate(ent, counties, municipalities)
@@ -1276,6 +1301,10 @@ def notify_prefs(request):
         )
 
     if request.method == "GET":
+        if not getattr(ent, "unrestricted", True):
+            from fleet import device_prefs
+
+            device_prefs.heal_device_prefs(device, getattr(ent, "counties", ()) or ())
         stored = device.notify_prefs if isinstance(device.notify_prefs, dict) else {}
         return _json(request, {
             "prefs": stored, "readOnly": False,
