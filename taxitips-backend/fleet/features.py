@@ -37,8 +37,10 @@ ALL_CATEGORIES = ("transit", "road", "flight", "ferry", "events")
 TRIAL_CATEGORIES = ("transit",)
 
 LOCKED_REASON = "feature_locked"
+# Visas i appen: neutral, utan pris eller väg till köp (App Store 3.1.1,
+# Google Play Payments). Samma ord som appens lib/membership_copy.dart.
 LOCKED_MESSAGE = (
-    "Ingår när företaget har ett abonnemang. Under provet visas tåg och buss."
+    "Ingår inte i provet. Ditt företags administratör hanterar medlemskapet på webben."
 )
 
 

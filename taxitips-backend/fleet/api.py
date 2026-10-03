@@ -43,6 +43,7 @@ from fleet import (
     device_swaps,
     discounts,
     driver_invites,
+    features,
     licensing,
     ownership,
     notifications,
@@ -626,6 +627,9 @@ def company_overview(request):
             "renewalStopped": bool(subscription.renewal_stopped_at),
         },
         "trial": _trial_payload(trial, company_id) if trial else None,
+        # Vad som ingår just nu (provet visar färre kategorier). Appens välkomst
+        # och låsta kategorier läser det härifrån (fleet/features.py).
+        "features": features.for_company(company_id, now).as_dict(),
         "licenses": rows,
         # "Fortsätt med provbilarna" -- dit mejlen före och efter provslut länkar.
         "continueVehicles": trials.continue_vehicles(company_id),
@@ -661,6 +665,8 @@ def _trial_payload(trial, company_id) -> dict:
     commit = commerce.trial_commit_status(company_id)
     return {
         "status": trial.status,
+        # Provets längd i dagar, för välkomsten i appen innan klockan startat.
+        "plannedDays": trial.planned_days,
         "startedAt": trial.started_at.isoformat() if trial.started_at else None,
         "endsAt": trial.ends_at.isoformat() if trial.ends_at else None,
         "vehicleLimit": trial.vehicle_limit,

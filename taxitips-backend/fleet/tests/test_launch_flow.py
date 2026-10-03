@@ -68,6 +68,11 @@ class LaunchFlowTests(FleetTestCase):
         overview = self.ok(self.call("get", "/api/fleet/company", user=owner, email="agare@nyataxi.test"))
         car = next(row for row in overview["licenses"] if row["vehicle"] == "ABC123")
         self.assertTrue(overview["driverInvites"]["enabled"])
+        # Appens välkomst till provet: längden och vad som ingår, före första telefonen.
+        self.assertGreater(overview["trial"]["plannedDays"], 0)
+        self.assertEqual(overview["features"]["plan"], "trial")
+        self.assertNotIn("betal", overview["features"]["lockedMessage"].lower())
+        self.assertEqual(car["countyChanges"]["remaining"], 2)
 
         # 2. Ägaren bjuder in föraren med e-post till bilen. Mejlet har ingen länk.
         self.ok(self.call("post", "/api/fleet/driver-invites", {

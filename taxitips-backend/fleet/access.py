@@ -627,15 +627,17 @@ def _member_access(payload: dict, now, *, device_id=None) -> Access:
 
 def _window_message(reason: str) -> str:
     return {
-        "trial_ended": "Provperioden är slut. Kontakta TaxiTips för att fortsätta.",
+        # Texterna visas i appen: inga betalinstruktioner, inga länkar till köp
+        # (App Store 3.1.1, Google Play Payments) och inga koder att läsa upp.
+        "trial_ended": "Provperioden är slut. Ditt företags administratör hanterar medlemskapet på webben.",
         "trial_not_started": (
-            "Provperioden startar när den första telefonen kopplas. Lägg till en bil "
-            "och ge föraren en kod under Inställningar."
+            "Provperioden startar när den första telefonen kopplas. Lägg till en bil och "
+            "bjud in en förare med e-post, eller kör själv med den här telefonen."
         ),
-        "period_expired": "Abonnemanget har gått ut.",
-        "past_due": "Betalningen har inte gått igenom. Uppdatera betalmetoden.",
-        "canceled": "Abonnemanget är avslutat.",
-        "no_subscription": "Företaget har inget abonnemang.",
+        "period_expired": "Medlemskapet har gått ut. Ditt företags administratör hanterar det på webben.",
+        "past_due": "Medlemskapet är inte betalt. Ditt företags administratör hanterar det på webben.",
+        "canceled": "Medlemskapet är avslutat.",
+        "no_subscription": "Företaget har inget medlemskap.",
         "unknown_company": "Företaget finns inte.",
         "company_suspended": "Företagets konto är avstängt. Kontakta TaxiTips support.",
         "account_blocked": "Kontot är spärrat. Kontakta TaxiTips support.",
