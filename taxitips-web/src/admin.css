@@ -2413,3 +2413,496 @@ ul.st-detail li {
 /* Uppföljning: obetalda beställningar i den utfällda raden. */
 .fu-orders ul { list-style: none; padding: 0; margin: 0 0 12px; display: grid; gap: 8px; }
 .fu-orders li { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+
+/* --- Dashboard (src/admin/dashboard.js) -------------------------------------
+   Diagramfärgerna är validerade med dataviz-skillens validator mot vit yta
+   (se dashboard.js). Bara ljust läge, som resten av adminwebben. Siffror i
+   Inter, inte Montserrat: ett stort tal i en rubrikfont läses som dekor. */
+
+.dash,
+.dv-tip {
+  --dv-1: #3a5a9a;
+  --dv-2: #e08f00;
+  --dv-o1: #9fb3dd;
+  --dv-o2: #6a86c4;
+  --dv-o3: #3a5a9a;
+  --dv-grid: var(--ljusgra-djup);
+  --dv-axis: #c3cad6;
+}
+/* Fanns bara i marknadssajtens style.css; adminwebben använder den också. */
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.dash-jump {
+  align-items: center;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  padding: 0.5rem 0;
+  background: var(--ljusgra);
+}
+.dash-jump .chip {
+  text-decoration: none;
+  color: var(--ink);
+}
+.dash-stamp {
+  margin-left: auto;
+  font-size: 0.85rem;
+}
+.dash-sec {
+  scroll-margin-top: 4rem;
+}
+.dash-sec-head {
+  margin-bottom: 1rem;
+}
+.dash-sec-head h2 {
+  margin: 0;
+}
+.dash-sec-head p {
+  margin: 0.15rem 0 0;
+}
+.dash-sec h3 {
+  font-size: 0.95rem;
+  margin: 0 0 0.4rem;
+}
+
+/* Nyckeltal */
+.dash-stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+}
+.dash-stat {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  min-width: 0;
+  padding: 0.75rem 0.9rem;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--vit);
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+}
+button.dash-stat {
+  cursor: pointer;
+  width: 100%;
+}
+button.dash-stat:hover {
+  border-color: var(--line-strong);
+  background: var(--ljusgra);
+}
+.dash-stat-label {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+  padding-right: 1rem;
+}
+.dash-stat-value {
+  font-family: var(--font-body);
+  font-size: 1.65rem;
+  font-weight: 600;
+  line-height: 1.15;
+}
+.dash-stat-note {
+  font-size: 0.8rem;
+  color: var(--ink-soft);
+}
+.dash-stat.is-hero {
+  grid-column: span 2;
+  background: var(--midnatt);
+  border-color: var(--midnatt);
+  color: var(--vit);
+}
+.dash-stat.is-hero .dash-stat-label,
+.dash-stat.is-hero .dash-stat-note {
+  color: rgba(255, 255, 255, 0.78);
+}
+.dash-stat.is-hero .dash-stat-value {
+  font-size: 2.6rem;
+}
+/* Ledningens rad: MRR stort till vänster, sex nyckeltal i två rader bredvid. */
+@media (min-width: 1000px) {
+  .dash-stats-lead {
+    grid-template-columns: minmax(0, 1.5fr) repeat(3, minmax(0, 1fr));
+  }
+  .dash-stats-lead .dash-stat.is-hero {
+    grid-column: auto;
+    grid-row: span 2;
+    justify-content: center;
+  }
+}
+.dash-stats-2 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-content: start;
+}
+.dash-stat.is-alert {
+  border-color: var(--danger);
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+.dash-stat.is-alert .dash-stat-value {
+  color: var(--danger);
+}
+.dash-go {
+  position: absolute;
+  top: 0.65rem;
+  right: 0.8rem;
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+.dash-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem 1.25rem;
+  margin-bottom: 1rem;
+}
+.dash-cols-2 {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+}
+.dash-cols > div > .dash-stat {
+  margin-bottom: 0.5rem;
+}
+.dash-subhead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+.dash-empty {
+  font-size: 0.9rem;
+  margin: 0.3rem 0;
+}
+
+/* Listor bakom siffrorna */
+.dash-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.dash-row {
+  all: unset;
+  box-sizing: border-box;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  padding: 0.45rem 1.6rem 0.45rem 0.2rem;
+  border-bottom: 1px solid var(--line);
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+.dash-row:hover {
+  background: var(--ljusgra);
+}
+.dash-row:focus-visible {
+  outline: 3px solid var(--guld);
+}
+.dash-row .dash-go {
+  top: 50%;
+  right: 0.3rem;
+  transform: translateY(-50%);
+}
+.dash-mini {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.9rem;
+}
+.dash-mini li {
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.35rem 0.2rem;
+  border-bottom: 1px solid var(--line);
+}
+.dash-mini b {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Datakällor och utkorg */
+.dash-counts {
+  margin: 0 0 0.4rem;
+  font-size: 0.88rem;
+}
+.dash-sources {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  font-size: 0.88rem;
+}
+.dash-sources li {
+  display: flex;
+  gap: 0.55rem;
+  align-items: baseline;
+  padding: 0.3rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.dash-sources .muted {
+  display: block;
+}
+.dash-outbox td.num,
+.dash-outbox th.num,
+.dv-table td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.dash-outbox th[scope="row"],
+.dv-table th[scope="row"] {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.92rem;
+  color: var(--ink);
+  font-weight: 500;
+}
+.dash-outbox {
+  max-width: 820px;
+}
+.dash-outbox .is-bad {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+/* Tratten: vågräta staplar, rundade i dataänden */
+.funnel {
+  list-style: none;
+  margin: 0.6rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+.funnel li {
+  display: grid;
+  grid-template-columns: minmax(110px, 180px) minmax(0, 1fr) 3.5rem;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+}
+.funnel-label {
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+.funnel-label small {
+  display: block;
+  font-weight: 400;
+}
+.funnel-track {
+  height: 22px;
+}
+.funnel-track i {
+  display: block;
+  height: 100%;
+  border-radius: 0 4px 4px 0;
+}
+.funnel-n {
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.funnel-conv {
+  grid-column: 2 / 4;
+  font-size: 0.82rem;
+  padding: 0.1rem 0 0.35rem;
+}
+.dash-funnel {
+  margin-bottom: 1.25rem;
+}
+
+/* Diagrammen */
+.dash-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 1rem 1.5rem;
+}
+.dv-fig {
+  margin: 0 0 1rem;
+  min-width: 0;
+}
+.dv-fig figcaption {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0.35rem;
+}
+.dv-fig figcaption .muted {
+  font-size: 0.82rem;
+}
+.dv {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  font-family: var(--font-body);
+}
+.dv-grid {
+  stroke: var(--dv-grid);
+  stroke-width: 1;
+}
+.dv-base {
+  stroke: var(--dv-axis);
+  stroke-width: 1;
+}
+.dv-tick {
+  fill: var(--ink-soft);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.dv-label {
+  fill: var(--ink);
+  font-size: 11.5px;
+  font-weight: 600;
+}
+.dv-line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.dv-area {
+  opacity: 0.1;
+}
+.dv-dot {
+  stroke: var(--vit);
+  stroke-width: 2;
+}
+.dv-dot-hover,
+.dv-cross {
+  opacity: 0;
+}
+.dv-cross {
+  stroke: var(--ink-soft);
+  stroke-width: 1;
+}
+.dv-hit {
+  outline: none;
+}
+.dv-hit-area {
+  fill: transparent;
+}
+.dv-hit:hover .dv-cross,
+.dv-hit:focus-visible .dv-cross,
+.dv-hit:hover .dv-dot-hover,
+.dv-hit:focus-visible .dv-dot-hover {
+  opacity: 1;
+}
+.dv-hit:hover .dv-hit-area,
+.dv-hit:focus-visible .dv-hit-area {
+  fill: rgba(20, 33, 61, 0.04);
+}
+.dv-hit:focus-visible .dv-hit-area {
+  stroke: var(--guld);
+  stroke-width: 2;
+}
+.dv-hit:hover .dv-bar {
+  opacity: 0.82;
+}
+.dv-legend {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.2rem 1rem;
+  margin: 0 0 0.3rem;
+  padding: 0;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+.dv-legend li {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.dv-key {
+  display: inline-block;
+  background: var(--c);
+}
+.dv-key-rect {
+  width: 10px;
+  height: 10px;
+  border-radius: 2px;
+}
+.dv-table {
+  margin-top: 0.3rem;
+  font-size: 0.85rem;
+}
+.dv-table summary {
+  cursor: pointer;
+  color: var(--ink-soft);
+  font-weight: 600;
+  width: max-content;
+}
+.dv-table table {
+  margin-top: 0.4rem;
+  font-size: 0.88rem;
+}
+.dv-tip {
+  position: fixed;
+  z-index: 50;
+  pointer-events: none;
+  min-width: 140px;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--vit);
+  box-shadow: 0 6px 20px rgba(20, 33, 61, 0.14);
+  font-size: 0.85rem;
+  color: var(--ink);
+}
+.dv-tip[hidden] {
+  display: none;
+}
+.dv-tip-head {
+  color: var(--ink-soft);
+  margin-bottom: 0.2rem;
+}
+.dv-tip-row {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+.dv-tip-row i {
+  width: 12px;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--c);
+}
+.dv-tip-row b {
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 560px) {
+  .dash-stat.is-hero {
+    grid-column: 1 / -1;
+  }
+  .dash-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .dash-stat-value {
+    font-size: 1.4rem;
+  }
+  .funnel li {
+    grid-template-columns: minmax(0, 1fr) 3rem;
+  }
+  .funnel-track {
+    grid-column: 1 / 3;
+    grid-row: 2;
+  }
+  .funnel-conv {
+    grid-column: 1 / 3;
+  }
+  .dash-stamp {
+    margin-left: 0;
+    width: 100%;
+  }
+  /* portal.css gör tabeller till kort på mobilen; här räcker en rad per sort. */
+  .dash-outbox td,
+  .dv-table td {
+    display: inline-block;
+    margin-right: 0.9rem;
+    text-align: left;
+  }
+}

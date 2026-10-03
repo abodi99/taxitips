@@ -4,6 +4,7 @@ import { setupPasswordToggles } from "../password_toggle.js";
 import { ApiError, supabase } from "../portal/api.js";
 import * as acc from "./accounts.js";
 import * as activity from "./activity.js";
+import { bindTooltips, dashboard } from "./dashboard.js";
 import { callsCell, followUpBody, nextCell, uppfoljning } from "./followup.js";
 import { admin } from "./api.js";
 import * as sales from "./sales.js";
@@ -181,6 +182,9 @@ async function renderView(seq) {
       return;
     }
     switch (state.view) {
+      case "dashboard":
+        paint(dashboard(await admin.dashboard()));
+        break;
       case "oversikt": {
         const [overview, list, sup, tipRep] = await Promise.all([
           admin.overview(), admin.companies(),
@@ -647,6 +651,7 @@ for (const tab of el.tabs) {
 }
 
 bindAppVersionForm(el.view);
+bindTooltips(el.view);
 
 el.view.addEventListener("submit", async (event) => {
   event.preventDefault();
@@ -924,6 +929,18 @@ function toggleFollowUp(companyId, open) {
 
 /* --- Åtgärder --------------------------------------------------------- */
 
+/** Dashboardens siffror öppnar listan bakom sig med samma urval (dashboard.js). */
+function gotoFilter(view, filter) {
+  if (view === "kunder") state.kundFilter = filter;
+  else if (view === "uppfoljning") state.fuFilter = filter;
+  else if (view === "notiser") state.pushStatus = filter;
+  else if (view === "pipeline" && filter === "tasks") {
+    state.crmDealId = null;
+    state.crmTab = "tasks";
+    state.taskFilters = { assignee: "all", status: "open" };
+  }
+}
+
 async function act(action, ds) {
   switch (action) {
     case "back":
@@ -1116,6 +1133,7 @@ async function act(action, ds) {
       state.view = ds.view;
       state.companyId = null;
       state.companyTab = "";
+      if (ds.filter) gotoFilter(ds.view, ds.filter);
       setTab(ds.view === "nykund" ? "kunder" : ds.view);
       return render();
 
