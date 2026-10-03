@@ -752,10 +752,10 @@ class _DriverScreenState extends State<DriverScreen>
     if (net != null) return netMessage(net);
     final s = e.toString();
     if (s.contains('Ogiltig')) {
-      return 'Koden funkar inte — be kontoret om rätt bolags-/byteskod.';
+      return 'Koden fungerar inte. Be din chef om en ny kod.';
     }
     if (s.contains('401') || s.contains('licens')) {
-      return 'Ingen access. Registrera telefonen med bolagskod eller logga in.';
+      return 'Telefonen har ingen åtkomst. Logga in igen, eller be din chef om en kod.';
     }
     return s.replaceFirst(RegExp(r'^(ApiException|Exception):\s*'), '');
   }

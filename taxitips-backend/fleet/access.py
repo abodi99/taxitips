@@ -364,9 +364,19 @@ def resolve(request, now=None) -> Access:
     now = now or timezone.now()
 
     device_result = None
+    auth = request.headers.get("Authorization", "")
+    payload = verify_supabase_jwt(auth[7:].strip()) if auth.lower().startswith("bearer ") else None
     token = request.headers.get("X-Device-Token") or request.GET.get("device_token")
     if token:
         device_result = _driver_access(token, now)
+        # En telefon som inte är godkänd för någon bil (ägarappen) har ingen
+        # egen rättighet: den inloggades bolag gäller. Förut vann telefonradens
+        # bolag, och en ägare som loggat in med ett annat konto på samma telefon
+        # fick det gamla bolagets status, län och tips medan inställningarna
+        # visade det nya (2026-10-03, Malmö Taxi på en telefon som stod på
+        # Demo AB). En förartelefon med godkänd bil går som förut.
+        if payload and device_result.kind != "driver":
+            return _member_access(payload, now, device_id=device_result.device_id)
         # En token som är okänd får ändå prövas mot JWT-vägen: en ägare kan ha
         # en gammal token liggande OCH vara inloggad. Men skälet sparas, så att
         # svaret blir "unknown_device_token" och inte "no_credentials" när det
@@ -376,9 +386,7 @@ def resolve(request, now=None) -> Access:
         ):
             return device_result
 
-    auth = request.headers.get("Authorization", "")
     if auth.lower().startswith("bearer "):
-        payload = verify_supabase_jwt(auth[7:].strip())
         if payload:
             return _member_access(payload, now)
         # `is not None`, inte `or`: Access.__bool__ är False för ett nekat
@@ -575,7 +583,12 @@ def _legacy_access(device: Device, window: Window, now) -> Access | None:
     )
 
 
-def _member_access(payload: dict, now) -> Access:
+def _member_access(payload: dict, now, *, device_id=None) -> Access:
+    """
+    Den inloggades rättighet, via medlemskapet. `device_id` är ägarappens
+    telefon när en sådan skickades: den flyttas till medlemmens bolag, så att
+    notiser och notisinställningar följer samma bolag som allt annat.
+    """
     from fleet import accounts
 
     user_id = payload.get("sub")
@@ -587,6 +600,14 @@ def _member_access(payload: dict, now) -> Access:
     member = CompanyMember.objects.filter(user_id=user_id, status="active").first()
     if member is None:
         return Access(False, "no_active_membership")
+    if device_id:
+        # Bara en telefon utan godkänd bil -- en förartelefons bolag följer
+        # dess godkännande, aldrig vem som råkar vara inloggad.
+        Device.objects.filter(id=device_id).exclude(company_id=member.company_id).exclude(
+            id__in=DeviceApproval.objects.filter(
+                device_id=device_id, status=DeviceApproval.Status.ACTIVE
+            ).values("device_id")
+        ).update(company_id=member.company_id)
     window = company_window(member.company_id, now)
     if not window.ok:
         return Access(

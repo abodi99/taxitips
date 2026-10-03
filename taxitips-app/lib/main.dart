@@ -204,11 +204,14 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
               ),
               AppRoute.shell => _AppShell(
                 api: widget.api,
+                // Utloggning lämnar telefonen helt: kontot OCH telefonens
+                // koppling. Annars startade appen nästa gång direkt i
+                // förarläget med det förra kontots bolag. Installations-id:t
+                // ligger kvar, så samma telefon känns igen vid nästa inloggning
+                // (räknas inte som ett telefonbyte).
                 onLogout: () async {
-                  await widget.api.logout();
-                  setState(() {
-                    _route = AppRoute.welcome;
-                  });
+                  await widget.api.leaveAll();
+                  if (mounted) setState(() => _route = AppRoute.login);
                 },
                 onLeftDevice: () {
                   setState(() {
@@ -286,7 +289,12 @@ class _AppShellState extends State<_AppShell> {
       MaterialPageRoute<void>(
         builder: (_) => SettingsScreen(
           api: widget.api,
-          onLogout: widget.onLogout,
+          // Stäng inställningarna först: de låg annars kvar ovanpå
+          // inloggningen, halvt utloggade.
+          onLogout: () {
+            Navigator.of(context).popUntil((route) => route.isFirst);
+            widget.onLogout();
+          },
           onLeftDevice: () {
             Navigator.of(context).pop();
             widget.onLeftDevice();

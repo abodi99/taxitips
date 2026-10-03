@@ -236,7 +236,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Lämna denna telefon?'),
         content: const Text(
-          'Telefonen avregistreras lokalt. Anslut igen med bolagskod.',
+          'Telefonen kopplas från bilen. För att köra igen loggar du in, '
+          'eller skriver in en ny kod från din chef.',
         ),
         actions: [
           TextButton(

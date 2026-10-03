@@ -13,10 +13,10 @@ from __future__ import annotations
 import uuid
 from datetime import timedelta
 
-from django.test import Client
+from django.test import Client, override_settings
 from django.utils import timezone
 
-from billing.models import Company
+from billing.models import Company, Device
 from core.models import Opportunity, SeverityTier
 from fleet import access, licensing, pairing, roles, sessions
 from fleet.models import (
@@ -29,6 +29,7 @@ from fleet.models import (
 )
 from fleet.roles import Perm, PermissionDenied
 from fleet.tests.base import FleetTestCase
+from fleet.tests.test_support import SECRET, jwt
 
 MALMO = {"lat": 55.6050, "lon": 13.0038}
 STOCKHOLM = {"lat": 59.3300, "lon": 18.0600}
@@ -371,3 +372,48 @@ class PushRegistrationTests(FleetTestCase):
         )
         # Svaret skickar inte tillbaka installations-id:t i stället för hemligheten.
         self.assertEqual(response.json()["device_token"], paired.secret)
+
+
+@override_settings(SUPABASE_JWT_SECRET=SECRET)
+class OwnerPhoneFollowsAccountTests(FleetTestCase):
+    """
+    Ägarappens telefon har ingen egen rättighet: den inloggades bolag gäller.
+    Förut vann telefonradens bolag när samma telefon bytt konto
+    (2026-10-03: Malmö Taxi på en telefon som stod på Demo AB).
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.old = self.full_setup(plate="OLD111", county="01")
+        self.new = self.full_setup(plate="NEW222", county="12", company=self.make_company(
+            name="Nytt AB", org_number="5599887766"))
+        Subscription.objects.filter(company_id=self.old["company"].id).update(
+            status=SubscriptionStatus.PAST_DUE, current_period_end=timezone.now() - timedelta(days=30),
+            grace_until=timezone.now() - timedelta(days=20),
+        )
+        # Telefonen loggade först in med det gamla kontot; nu är det nya inloggat.
+        self.phone = self.make_device(self.old["company"])
+        self.phone.kind = "owner_app"
+        Device.objects.filter(id=self.phone.id).update(kind="owner_app")
+
+    def resolve(self, token):
+        from django.test import RequestFactory
+
+        request = RequestFactory().get(
+            "/api/alerts",
+            headers={"x-device-token": token, "authorization": f"Bearer {jwt(str(self.new['owner'].user_id))}"},
+        )
+        return access.resolve(request)
+
+    def test_the_logged_in_company_decides_and_the_phone_moves_with_it(self):
+        result = self.resolve(self.phone.token)
+        self.assertTrue(result.ok, result.reason)
+        self.assertEqual(result.company_id, str(self.new["company"].id))
+        self.assertEqual(result.counties, ("12",))
+        self.assertEqual(Device.objects.get(id=self.phone.id).company_id, self.new["company"].id)
+
+    def test_a_drivers_approved_phone_keeps_its_own_company(self):
+        result = self.resolve(self.old["secret"])
+        self.assertEqual(result.kind, "driver")
+        self.assertEqual(result.company_id, str(self.old["company"].id))
+        self.assertEqual(Device.objects.get(id=self.old["device"].id).company_id, self.old["company"].id)
