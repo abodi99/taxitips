@@ -36,6 +36,10 @@ class AlertFeedbackBar extends StatefulWidget {
   final ApiClient api;
   final String opportunityId;
 
+  /// Tester bygger utan API_BASE_URL och skulle aldrig se knapparna.
+  @visibleForTesting
+  static bool debugAlwaysShow = false;
+
   @override
   State<AlertFeedbackBar> createState() => _AlertFeedbackBarState();
 }
@@ -94,7 +98,7 @@ class _AlertFeedbackBarState extends State<AlertFeedbackBar> {
 
   @override
   Widget build(BuildContext context) {
-    if (!TaxiTipsConfig.usesDjangoApi) {
+    if (!TaxiTipsConfig.usesDjangoApi && !AlertFeedbackBar.debugAlwaysShow) {
       return const SizedBox.shrink();
     }
 
@@ -115,8 +119,8 @@ class _AlertFeedbackBarState extends State<AlertFeedbackBar> {
             const Text(
               'Hur gick det?',
               style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w800,
+                fontSize: 16,
+                fontWeight: FontWeight.w700,
                 color: TbColors.ink,
               ),
             ),
@@ -190,12 +194,13 @@ class _ChoiceButton extends StatelessWidget {
         onPressed: onTap,
         icon: Icon(
           selected ? Icons.check_circle_rounded : icon,
-          size: 16,
+          size: 20,
           color: selected ? TbColors.vit : color,
         ),
         label: Text(label),
         style: OutlinedButton.styleFrom(
-          minimumSize: const Size.fromHeight(40),
+          // 52 hög: svaret ska gå att träffa med tummen i en bil.
+          minimumSize: const Size.fromHeight(52),
           padding: const EdgeInsets.symmetric(horizontal: 8),
           backgroundColor: selected ? color : null,
           foregroundColor: selected ? TbColors.vit : TbColors.ink,
@@ -204,8 +209,8 @@ class _ChoiceButton extends StatelessWidget {
             borderRadius: BorderRadius.circular(12),
           ),
           textStyle: const TextStyle(
-            fontSize: 13.5,
-            fontWeight: FontWeight.w800,
+            fontSize: 15.5,
+            fontWeight: FontWeight.w700,
           ),
         ),
       ),

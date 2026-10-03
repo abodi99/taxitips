@@ -198,6 +198,13 @@ Förarkartan i appen (ombyggd 2026-09-21, för förare med begränsad svenska):
   `core/0025`).
 * **Kör dit** (`navigation.dart`) öppnar telefonens navigering (`google.navigation:` på
   Android, Apple Kartor på iPhone). Appen har ingen egen ruttplanering.
+* **Tipsbladet** (`widgets/tip_sheet.dart`, `TipSheetBody`) följer förarens frågor i ordning:
+  vad och var, hur bråttom, värt att köra dit, vad gör jag nu, mer om tipset. "Kör dit" och
+  "Spara" ligger fast i nederkanten; "Hur gick det?" och "Rapportera" direkt efter beslutet.
+  Övrigt (`minor`/`severity_tier: ignore`), avslutade tips och väghändelser får ingen styrka och
+  ingen "värt att köra"-del; ett avslutat tips har ingen "Kör dit"-huvudknapp. Ersättningen
+  skrivs "kan få taxin betald" (`compensationSentence`), aldrig "har rätt till".
+  `test/tip_sheet_test.dart` vaktar ordningen och särfallen.
 * **Följ**: tips på servern (`OpportunityFavorite`), evenemang på telefonen
   (`followed_events.dart`, en kopia per evenemang, rensas dagen efter).
 * **Google-kartan med trafiklager** (`google_signal_map.dart`) är förvald på Android:

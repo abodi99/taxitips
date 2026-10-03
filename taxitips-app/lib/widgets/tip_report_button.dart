@@ -91,7 +91,7 @@ class _TipReportButtonState extends State<TipReportButton> {
     if (_sent) {
       return Text(
         'Rapport mottagen — tack.',
-        style: TextStyle(color: TbColors.muted, fontSize: 13.5),
+        style: TextStyle(color: TbColors.muted, fontSize: 14.5),
       );
     }
     return Align(
@@ -100,9 +100,9 @@ class _TipReportButtonState extends State<TipReportButton> {
         style: TextButton.styleFrom(
           foregroundColor: TbColors.muted,
           padding: const EdgeInsets.symmetric(horizontal: 4),
-          minimumSize: const Size(0, 40),
+          minimumSize: const Size(0, 48),
           textStyle: const TextStyle(
-            fontSize: 13.5,
+            fontSize: 14.5,
             fontWeight: FontWeight.w600,
           ),
         ),

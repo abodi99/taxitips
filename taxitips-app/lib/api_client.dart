@@ -1866,6 +1866,10 @@ class ApiClient {
       'countyName': m['countyName'],
       'municipality': m['municipality'],
       'severity_tier': m['severity_tier'],
+      // "Övrigt -- trafikbolagets meddelande": inget tips, bara sammanhang.
+      // Listan sorterar det sist och tipsbladet visar ingen styrka för det.
+      // Backend skickar `minor`; saknas fältet (äldre svar) avgör tiern.
+      'minor': m['minor'] == true || m['severity_tier'] == 'ignore',
       // Varför backend bedömde som den gjorde (färdsätt.nivå.villkor). För
       // väg bär villkoret orsaken -- olycka, avstängd, kö -- se
       // signal_kinds.roadCondition.
