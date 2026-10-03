@@ -51,9 +51,13 @@ CountyChanges? countyChangesOf(Map<String, dynamic> license) {
 }
 
 class CompanySettingsPanel extends StatefulWidget {
-  const CompanySettingsPanel({super.key, required this.api});
+  const CompanySettingsPanel({super.key, required this.api, this.onChanged});
 
   final ApiClient api;
+
+  /// Bilarna eller länen ändrades: Inställningarnas länöversikt och
+  /// förarskärmen läser om direkt, i stället för vid nästa uppdatering.
+  final VoidCallback? onChanged;
 
   @override
   State<CompanySettingsPanel> createState() => _CompanySettingsPanelState();
@@ -431,6 +435,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       await widget.api.addTrialVehicle(plate: result.$1, baseCounty: result.$2);
       if (!mounted) return;
       await _reload();
+      widget.onChanged?.call();
       _snack('${result.$1} är tillagd');
     } catch (e) {
       _snack(_cleanError(e), isError: true);
@@ -490,6 +495,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       await widget.api.setTrialCounty(license['licenseId'].toString(), picked);
       if (!mounted) return;
       await _reload();
+      widget.onChanged?.call();
       _snack(
         '${license['vehicle']} kör nu i ${_countyNames[picked] ?? picked}',
       );
@@ -566,6 +572,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       await widget.api.removeTrialVehicle(license['licenseId'].toString());
       if (!mounted) return;
       await _reload();
+      widget.onChanged?.call();
       _snack('$plate är borttagen');
     } catch (e) {
       _snack(_cleanError(e), isError: true);

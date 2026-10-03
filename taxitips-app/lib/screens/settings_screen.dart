@@ -330,6 +330,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     CompanySettingsPanel(
                       key: ValueKey(_companyPanelEpoch),
                       api: widget.api,
+                      // Nytt län: översikten "Den här telefonen" visar det direkt.
+                      onChanged: () => unawaited(_loadCounties()),
                     ),
                     const SizedBox(height: 24),
                   ],

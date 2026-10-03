@@ -342,6 +342,15 @@ class _AppShellState extends State<_AppShell> {
   /// län och pass -- annars låg den gamla vyn kvar tills appen startades om.
   int _driverEpoch = 0;
 
+  /// Förarskärmen läser om när Inställningarna stängs (nytt län, ny bil).
+  final _driverRefresh = ValueNotifier<int>(0);
+
+  @override
+  void dispose() {
+    _driverRefresh.dispose();
+    super.dispose();
+  }
+
   Future<void> _openSettings(BuildContext context) async {
     final tokenBefore = widget.api.deviceToken;
     await Navigator.of(context).push(
@@ -363,6 +372,8 @@ class _AppShellState extends State<_AppShell> {
     );
     if (mounted && widget.api.deviceToken != tokenBefore) {
       setState(() => _driverEpoch++);
+    } else if (mounted) {
+      _driverRefresh.value++;
     }
   }
 
@@ -374,6 +385,7 @@ class _AppShellState extends State<_AppShell> {
         api: widget.api,
         onLeftDevice: widget.onLeftDevice,
         onOpenSettings: () => _openSettings(context),
+        refresh: _driverRefresh,
       ),
     );
   }

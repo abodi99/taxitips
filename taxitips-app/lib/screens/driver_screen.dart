@@ -42,6 +42,7 @@ class DriverScreen extends StatefulWidget {
     this.onBack,
     this.onLeftDevice,
     this.onOpenSettings,
+    this.refresh,
   });
 
   final ApiClient api;
@@ -49,6 +50,11 @@ class DriverScreen extends StatefulWidget {
   final VoidCallback? onBack;
   final VoidCallback? onLeftDevice;
   final VoidCallback? onOpenSettings;
+
+  /// Signal utifrån att läsa om allt nu (tips, rättighet och län) -- t.ex.
+  /// när Inställningarna stängs efter ett länbyte. Annars syntes det nya
+  /// länet först vid nästa uppdatering, upp till en minut senare.
+  final Listenable? refresh;
 
   @override
   State<DriverScreen> createState() => _DriverScreenState();
@@ -494,6 +500,7 @@ class _DriverScreenState extends State<DriverScreen>
     WidgetsBinding.instance.addObserver(this);
     _pushSub = foregroundMessages.listen(_onForegroundPush);
     _openedSub = openedMessageSignals.listen((_) => _openFromNotification());
+    widget.refresh?.addListener(_onRefreshRequested);
     _bootstrap();
     // Kallstart från en notis: meddelandet kom innan skärmen fanns.
     WidgetsBinding.instance.addPostFrameCallback(
@@ -613,6 +620,10 @@ class _DriverScreenState extends State<DriverScreen>
     }
   }
 
+  void _onRefreshRequested() {
+    if (mounted) unawaited(_load());
+  }
+
   void _schedulePoll() {
     _timer?.cancel();
     final jitter =
@@ -626,6 +637,7 @@ class _DriverScreenState extends State<DriverScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
+    widget.refresh?.removeListener(_onRefreshRequested);
     _pushSub?.cancel();
     _openedSub?.cancel();
     _timer?.cancel();
