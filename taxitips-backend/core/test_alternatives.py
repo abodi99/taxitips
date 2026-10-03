@@ -137,6 +137,15 @@ class RouteTests(TestCase):
                              has_alternative=True, alternative_note="Buss ersätter", now=now)
         self.assertEqual((out["summary"], out["planner"]), ("Buss ersätter", None))
 
+    def test_null_alternative_note_does_not_crash(self):
+        # Produktionen hade NULL i kolumnen; startswith på None gav 500 på
+        # hela flödet för inloggade ägare.
+        out = travel_options(
+            next_departure_at=None, next_departure_minutes=45, is_last_departure=False,
+            has_alternative=False, alternative_note=None, now=NOW,
+        )
+        self.assertIn("Nästa avgång", out["summary"])
+
     def test_the_route_says_how_many_changes(self):
         self.assertEqual(route_note("Nässjö C", "Länstrafik tåg 3493", "22:58", 1),
                          "Nästa resa mot Nässjö C: Länstrafik tåg 3493 22:58, 1 byte")
