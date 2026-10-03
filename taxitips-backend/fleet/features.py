@@ -90,7 +90,10 @@ def for_company(company_id, now=None) -> Features:
 
     now = now or timezone.now()
     window = company_window(company_id, now)
-    if window.reason != "trial":
+    # Även ett prov som väntar på första telefonen: välkomsten i appen visar
+    # då vad provet kommer att omfatta. Åtkomsten ger ändå inga tips förrän
+    # provet startat (fleet/access.py), så det öppnar inget.
+    if window.reason not in ("trial", "trial_not_started"):
         return FULL
     if commerce.has_active_trial_commit(company_id):
         return FULL
@@ -99,7 +102,9 @@ def for_company(company_id, now=None) -> Features:
     # En kupong är ett beslut av plattformsadministratören att ge gratisdagar
     # (fleet/sales.py), inte ett prov: den öppnar allt.
     source = (
-        Trial.objects.filter(company_id=company_id, status=Trial.Status.ACTIVE)
+        Trial.objects.filter(
+            company_id=company_id, status__in=[Trial.Status.ACTIVE, Trial.Status.PENDING]
+        )
         .order_by("-created_at").values_list("source", flat=True).first()
     )
     if source == Trial.Source.COUPON:

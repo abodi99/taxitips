@@ -666,7 +666,9 @@ def _trial_payload(trial, company_id) -> dict:
     return {
         "status": trial.status,
         # Provets längd i dagar, för välkomsten i appen innan klockan startat.
-        "plannedDays": trial.planned_days,
+        # Tomt betyder standardlängden -- samma regel som när provet startar
+        # (fleet/trials.py: `trial.planned_days or TRIAL_DAYS`).
+        "plannedDays": trial.planned_days or trials.TRIAL_DAYS,
         "startedAt": trial.started_at.isoformat() if trial.started_at else None,
         "endsAt": trial.ends_at.isoformat() if trial.ends_at else None,
         "vehicleLimit": trial.vehicle_limit,
