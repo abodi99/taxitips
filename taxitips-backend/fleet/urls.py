@@ -19,6 +19,8 @@ urlpatterns = [
     path("join-request", api.join_request),
     # Förarens inloggning löser in en e-postinbjudan (Bearer, inte enhetstoken).
     path("driver-invites/claim", api.claim_driver_invite),
+    path("driver-login/start", api.driver_login_start),
+    path("driver-login/verify", api.driver_login_verify),
     # Registreringen: bolagets namn från Bolagsverket, före inloggning.
     path("registry", api.registry_lookup),
     # Administratören

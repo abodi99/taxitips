@@ -1,31 +1,26 @@
 """
-Förarinbjudan med e-post: administratören skriver förarens e-post i stället
-för att läsa upp en kod.
+Förarinbjudan med e-post: chefen bjuder in förarens e-post till en bil, och
+föraren loggar in med bara sin e-post. Ingen kod att läsa upp, inget lösenord.
 
-Flödet:
+Flödet (sedan 2026-10-03):
 
-1. **Administratören** (MANAGE_DEVICES) bjuder in en adress för en bestämd
-   bil. Supabase Auth skapar förarens konto och en engångslänk
-   (fleet/auth_admin.py); mejlet går genom vår utkorg.
-2. **Föraren** trycker på länken, väljer lösenord på taxitips.se/forare och
-   loggar in i appen under "Jag är förare".
-3. **Appen** anropar `POST /api/fleet/driver-invites/claim` med inloggningen
-   och telefonens installations-id. Servern läser adressen ur den VERIFIERADE
-   inloggningen -- aldrig ur anropet -- förbrukar inbjudan atomiskt och
-   godkänner telefonen genom exakt samma väg som engångskoden
-   (`pairing.approve_device`): en telefon per företag, ominstallation
-   ersätter, licensens län, risksignal, revision och provets start.
+1. **Chefen** (MANAGE_DEVICES, eller personal i admin) bjuder in en adress
+   för en bestämd bil. Bilen och dess län bestäms här, inte av föraren.
+   Mejlet säger: hämta appen, tryck "Jag är förare", skriv din e-post.
+2. **Föraren** skriver sin e-post i appen och får en sexsiffrig kod i ett
+   eget mejl (fleet/driver_login.py). Koden bevisar att personen kommer åt
+   inkorgen; utan den kunde vem som helst ta förarens bil.
+3. **Servern** löser in inbjudan med `claim_invite` -- samma väg som förut:
+   en telefon per företag, ominstallation ersätter, licensens län, risksignal,
+   revision och provets start (`pairing.approve_device`).
 
-Efteråt bär telefonen samma enhetshemlighet som efter en kod. Kontot behövs
-inte längre i appen; appen loggar ut det, så att föraren inte ser ägarens vy.
+Förarens konto i Supabase Auth skapas av servern vid första inloggningen och
+är förarens identitet (telefonbyten räknas per konto). Föraren loggar aldrig
+in där själv.
 
-**Varför kontot och inte bara adressen.** Inlösen kräver att inloggningens
-konto är det som Supabase Auth skapade (eller hittade) när länken togs fram.
-Utan det hade vem som helst som kunde skapa ett konto med förarens adress --
-t.ex. när e-postbekräftelse är avslagen -- kunnat lösa in inbjudan först.
-
-Engångskoden finns kvar som reserv ("Har du en kod?"). Den här modulen
-ersätter den inte, den är en andra väg in till samma godkännande.
+**Äldre klienter.** `POST /api/fleet/driver-invites/claim` med en
+Supabase-inloggning (lösenordsvägen) finns kvar tills de gamla apparna är
+borta; det är samma `claim_invite`.
 """
 
 from __future__ import annotations
@@ -39,7 +34,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from billing.models import Company
-from fleet import accounts, audit, auth_admin, notifications, pairing, ratelimit
+from fleet import accounts, audit, notifications, pairing, ratelimit
 from fleet.models import DriverInvite, License, Vehicle
 
 log = logging.getLogger(__name__)
@@ -66,8 +61,12 @@ def normalize_email(value) -> str:
 
 
 def enabled() -> bool:
-    """Utan service_role-nyckeln finns ingen länk att skicka: då visas bara koden."""
-    return auth_admin.configured()
+    """
+    Inbjudan med e-post fungerar alltid: mejlet har ingen länk, och föraren
+    loggar in med en kod i mejlet (fleet/driver_login.py). Finns kvar för
+    klienterna som frågar.
+    """
+    return True
 
 
 def _redirect_url() -> str:
@@ -75,31 +74,13 @@ def _redirect_url() -> str:
 
 
 def _send(invite: DriverInvite, now) -> DriverInvite:
-    """
-    Ny länk och nytt mejl. Kastar DriverInviteError om länken inte går att få;
-    anroparen ligger i en transaktion och rullar då tillbaka.
-    """
-    try:
-        link = auth_admin.invite_link(invite.email, _redirect_url())
-    except auth_admin.AuthAdminError as exc:
-        log.warning("driver_invites: kunde inte skapa länk: %s", exc)
-        raise DriverInviteError(
-            "invite_unavailable",
-            "Det gick inte att skicka inbjudan just nu. Försök igen om en stund, "
-            "eller visa en kod i stället.",
-            status=503,
-        ) from exc
-
+    """Nytt mejl till föraren: hämta appen och skriv din e-post. Ingen länk."""
     send_count = invite.send_count + 1
-    DriverInvite.objects.filter(id=invite.id).update(
-        send_count=send_count, last_sent_at=now,
-        auth_user_id=link.user_id or invite.auth_user_id,
-    )
+    DriverInvite.objects.filter(id=invite.id).update(send_count=send_count, last_sent_at=now)
     invite.refresh_from_db()
     company = Company.objects.filter(id=invite.company_id).first()
     notifications.driver_invite(
-        invite, link=link.url, company_name=company.name if company else "",
-        plate=invite.vehicle.plate,
+        invite, company_name=company.name if company else "", plate=invite.vehicle.plate,
     )
     return invite
 
@@ -116,12 +97,6 @@ def create_invite(
 ) -> DriverInvite:
     now = now or timezone.now()
     email = normalize_email(email)
-    if not enabled():
-        raise DriverInviteError(
-            "invites_disabled",
-            "Inbjudan med e-post är inte påslagen. Visa en kod i stället.",
-            status=503,
-        )
     pairing.check_pairable(license, vehicle)
     accounts.assert_email_allowed(email)
     ratelimit.enforce(ratelimit.DRIVER_INVITE_SEND, str(license.company_id))
@@ -156,12 +131,6 @@ def resend_invite(invite: DriverInvite, *, actor_user_id=None, now=None) -> Driv
     invite = DriverInvite.objects.select_for_update().get(id=invite.id)
     if invite.status != DriverInvite.Status.PENDING:
         raise DriverInviteError("invite_closed", "Inbjudan är redan använd eller borttagen.", status=409)
-    if not enabled():
-        raise DriverInviteError(
-            "invites_disabled",
-            "Inbjudan med e-post är inte påslagen. Visa en kod i stället.",
-            status=503,
-        )
     pairing.check_pairable(invite.license, invite.vehicle)
     accounts.assert_email_allowed(invite.email)
     ratelimit.enforce(ratelimit.DRIVER_INVITE_RESEND, str(invite.id))
@@ -238,13 +207,12 @@ def claim_invite(
         if DriverInvite.objects.filter(email=email, status=DriverInvite.Status.CONSUMED).exists():
             raise DriverInviteError(
                 "invite_used",
-                "Inbjudan är redan använd. Be din chef skicka en ny, eller använd en kod.",
+                "Inbjudan är redan använd. Be din chef skicka en ny.",
                 status=404,
             )
         raise DriverInviteError(
             "no_invite",
-            "Vi hittar ingen inbjudan för den här e-posten. Be din chef bjuda in dig, "
-            "eller använd en kod.",
+            "Vi hittar ingen inbjudan för den här e-posten. Be din chef bjuda in dig.",
             status=404,
         )
     if invite.auth_user_id and str(invite.auth_user_id) != str(user_id):

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:taxitips_app/api_client.dart';
+import 'package:taxitips_app/screens/driver_login_screen.dart';
 import 'package:taxitips_app/screens/login_screen.dart';
 import 'package:taxitips_app/screens/welcome_screen.dart';
 
@@ -73,19 +74,41 @@ void main() {
     expect(r.taps, ['signup', 'back']);
   });
 
-  testWidgets('välkomstskärmen: logga in eller registrera', (tester) async {
+  testWidgets('välkomstskärmen: förare, ägare eller registrera', (tester) async {
     final taps = <String>[];
     await tester.pumpWidget(
       MaterialApp(
         home: WelcomeScreen(
           onLogin: () => taps.add('login'),
           onSignup: () => taps.add('signup'),
+          onDriver: () => taps.add('driver'),
         ),
       ),
     );
-    await tester.tap(find.text('Logga in'));
+    await tester.tap(find.text('Jag är förare'));
+    await tester.tap(find.text('Logga in som ägare eller kontor'));
     await tester.tap(find.text('Registrera företag'));
-    expect(taps, ['login', 'signup']);
+    expect(taps, ['driver', 'login', 'signup']);
     expect(find.textContaining('kod'), findsNothing);
+  });
+
+  testWidgets('föraren: bara e-post, inget lösenord', (tester) async {
+    await tester.pumpWidget(
+      MaterialApp(
+        home: DriverLoginScreen(
+          api: ApiClient(supabaseUrl: 'http://localhost', supabaseAnonKey: 'x'),
+          onDone: () {},
+          onBack: () {},
+        ),
+      ),
+    );
+    expect(find.text('Jag är förare'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'E-post'), findsOneWidget);
+    expect(find.textContaining('Lösenord'), findsNothing);
+    // Utan giltig e-post skickas ingen kod.
+    await tester.tap(find.text('Skicka kod'));
+    await tester.pump();
+    expect(find.textContaining('Skriv din e-post'), findsOneWidget);
+    expect(find.widgetWithText(TextField, 'Kod (6 siffror)'), findsNothing);
   });
 }

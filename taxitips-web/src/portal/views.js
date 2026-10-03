@@ -266,25 +266,18 @@ function pendingInvites(row, canManage) {
 }
 
 /**
- * Huvudvägen för en ny förare: e-post. Koden finns kvar som reserv ("Visa kod
- * i stället"), och är den enda vägen när servern inte har e-postinbjudan
- * påslagen -- då visas inget formulär som inte fungerar.
+ * En ny förare bjuds in med e-post till den här bilen. Föraren skriver bara
+ * sin e-post i appen och får en kod i mejlet (fleet/driver_login.py). Ingen
+ * kod att läsa upp: bilen och länen bestäms här.
  */
-function connectDriver(row, invitesOn) {
+function connectDriver(row) {
   const ids = `data-license="${esc(row.licenseId)}" data-vehicle="${esc(row.vehicleId)}"
     data-plate="${esc(row.vehicle)}"`;
-  if (!invitesOn) {
-    return `<div class="btn-row">
-        <button class="btn btn-primary" data-action="pair" ${ids}>Anslut en telefon</button>
-        <button class="btn btn-quiet" data-action="change-vehicle"
-          data-license="${esc(row.licenseId)}">Byt bil</button>
-      </div>`;
-  }
   const key = esc(row.licenseId);
   return `<form class="invite-form" ${ids}>
       <h3>Bjud in förare med e-post</h3>
-      <p class="muted">Föraren får ett mejl, väljer lösenord och loggar in i appen.
-      Då kopplas telefonen till bilen.</p>
+      <p class="muted">Föraren får ett mejl, öppnar appen, trycker <b>Jag är förare</b> och skriver
+      sin e-post. Då kopplas telefonen till den här bilen, med bilens län. Inget lösenord behövs.</p>
       <label for="invite-email-${key}">Förarens e-post</label>
       <input id="invite-email-${key}" name="email" type="email" required
         autocomplete="off" inputmode="email" placeholder="namn@exempel.se" />
@@ -292,7 +285,6 @@ function connectDriver(row, invitesOn) {
       <input id="invite-name-${key}" name="label" autocomplete="off" placeholder="Anna" />
       <div class="btn-row">
         <button class="btn btn-primary" type="submit">Skicka inbjudan</button>
-        <button class="btn btn-quiet" type="button" data-action="pair" ${ids}>Visa kod i stället</button>
         <button class="btn btn-quiet" type="button" data-action="change-vehicle"
           data-license="${esc(row.licenseId)}">Byt bil</button>
       </div>
@@ -301,7 +293,6 @@ function connectDriver(row, invitesOn) {
 
 export function bilar(data) {
   const canManage = (data.permissions ?? []).includes("manage_devices");
-  const invitesOn = Boolean(data.driverInvites?.enabled);
   const rows = data.licenses ?? [];
 
   return `
@@ -356,7 +347,7 @@ export function bilar(data) {
         ${pendingInvites(row, canManage)}
         ${
           canManage
-            ? `${connectDriver(row, invitesOn)}
+            ? `${connectDriver(row)}
                <p class="muted">En spärr gäller direkt, även om telefonen är
                borta. Byten mellan godkända skifttelefoner är avgiftsfria och
                har ingen kvot.</p>`

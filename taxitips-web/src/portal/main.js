@@ -472,13 +472,6 @@ el.view.addEventListener("click", async (event) => {
 
 async function handle(action, ctx) {
   switch (action) {
-    case "pair": {
-      const result = await api.pairingCode(ctx.license, ctx.vehicle, "");
-      el.codeFor.textContent = `För ${ctx.plate || "bilen"}.`;
-      el.codeValue.textContent = result.code;
-      el.codeDialog.showModal();
-      return;
-    }
     case "member-invite-revoke": {
       if (!confirm(`Återkalla inbjudan till ${ctx.email}?`)) return;
       await api.revokeMemberInvite(ctx.invite);

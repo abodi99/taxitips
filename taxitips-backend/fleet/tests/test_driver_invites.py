@@ -91,17 +91,19 @@ class DriverInviteTests(FleetTestCase):
 
         invite = DriverInvite.objects.get()
         self.assertEqual(invite.status, DriverInvite.Status.PENDING)
-        self.assertEqual(str(invite.auth_user_id), self.driver_user)
         self.assertEqual(invite.send_count, 1)
         self.assertAlmostEqual(
             (invite.expires_at - timezone.now()).total_seconds(), 7 * 86400, delta=60
         )
-        self.link.assert_called_once_with(DRIVER_EMAIL, "https://taxitips.se/forare")
+        # Ingen länk och inget konto förrän föraren loggar in (fleet/driver_login.py).
+        self.link.assert_not_called()
+        self.assertIsNone(invite.auth_user_id)
 
         mail = OutboxMessage.objects.get(category="driver_invite")
         self.assertEqual(mail.to_address, DRIVER_EMAIL)
-        self.assertIn("https://auth.test/verify", mail.body)
+        self.assertNotIn("https://", mail.body.split("Frågor?")[0])
         self.assertIn("Jag är förare", mail.body)
+        self.assertIn("inget lösenord", mail.body)
         self.assertIn("EPO123", mail.body)
         # Utan avsändare skickas inget -- raden väntar.
         self.assertEqual(mail.status, OutboxMessage.Status.PENDING)
@@ -128,28 +130,16 @@ class DriverInviteTests(FleetTestCase):
         self.assertEqual(response.json()["reason"], "invalid_email")
         self.assertFalse(DriverInvite.objects.exists())
 
-    def test_without_the_service_key_email_invites_are_off(self):
+    def test_invites_work_without_the_supabase_service_key(self):
+        """Mejlet har ingen länk längre, så inbjudan beror inte på Supabase Auth."""
         with override_settings(SUPABASE_SERVICE_ROLE_KEY=""):
             response = self.invite()
-            self.assertEqual(response.status_code, 503)
-            self.assertEqual(response.json()["reason"], "invites_disabled")
+            self.assertEqual(response.status_code, 200, response.content)
             overview = self.client.get(
                 "/api/fleet/company",
                 headers={"authorization": f"Bearer {jwt(str(self.owner.user_id))}"},
             ).json()
-            self.assertFalse(overview["driverInvites"]["enabled"])
-        self.assertFalse(DriverInvite.objects.exists())
-
-    def test_when_supabase_auth_fails_no_invite_is_left_behind(self):
-        self.invite()
-        self.link.side_effect = auth_admin.AuthAdminError("nere")
-        response = self.invite()
-        self.assertEqual(response.status_code, 503)
-        self.assertEqual(response.json()["reason"], "invite_unavailable")
-        # Ingen ny rad, och den tidigare väntande inbjudan är kvar orörd.
-        self.assertEqual(
-            list(DriverInvite.objects.values_list("status", flat=True)), ["pending"]
-        )
+            self.assertTrue(overview["driverInvites"]["enabled"])
         self.assertEqual(OutboxMessage.objects.filter(category="driver_invite").count(), 1)
 
     # --- behörighet ----------------------------------------------------------
@@ -306,8 +296,13 @@ class DriverInviteTests(FleetTestCase):
         self.assertFalse(DeviceApproval.objects.exists())
 
     def test_the_same_address_on_another_account_gets_nothing(self):
-        """Någon som skapat ett eget konto med förarens adress löser inte in inbjudan."""
+        """
+        Någon som skapat ett eget konto med förarens adress löser inte in en
+        inbjudan som redan är knuten till förarens konto (den gamla länkvägen,
+        och e-postinloggningen när den väl skapat kontot).
+        """
         self.invite()
+        DriverInvite.objects.update(auth_user_id=self.driver_user)
         response = self.claim(user=str(uuid.uuid4()))
         self.assertEqual(response.status_code, 404)
         self.assertFalse(DeviceApproval.objects.exists())

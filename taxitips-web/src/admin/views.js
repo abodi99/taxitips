@@ -306,8 +306,8 @@ function issues(d) {
 
 /** Vad kunden brukar ringa om, och var det löses. */
 const CALLS = [
-  ["bilar", "Föraren kommer inte in", "Ny kod, frigör bilen, spärra gammal telefon"],
-  ["bilar", "Ny förare eller ny telefon", "Kod direkt eller inbjudan med e-post"],
+  ["bilar", "Föraren kommer inte in", "Skicka inbjudan igen, frigör bilen, spärra gammal telefon"],
+  ["bilar", "Ny förare eller ny telefon", "Inbjudan med e-post – föraren skriver bara sin e-post"],
   ["konton", "Kommer inte in i portalen", "Inloggningslänk eller ny inbjudan"],
   ["bilar", "Får inga notiser", "Se telefonernas notisläge, skicka testnotis"],
   ["bilar", "Byta bil, regnr eller län", "Ändras per bil"],
@@ -768,8 +768,8 @@ function membersCard(d, config) {
   return `
     <div class="card">
       <h2>Vem kan logga in</h2>
-      <p class="muted">Ägare och administratörer i kundportalen och appens adminläge. Förarna loggar in med
-        kod eller inbjudan under <button class="linklike" data-action="kund-tab" data-tab="bilar">Bilar och förare</button>.</p>
+      <p class="muted">Ägare och administratörer i kundportalen och appens adminläge. Förarna bjuds in med
+        e-post under <button class="linklike" data-action="kund-tab" data-tab="bilar">Bilar och förare</button>.</p>
       ${members.length ? `<div class="table-scroll"><table>
         <thead><tr><th>Konto</th><th>Roll</th><th>Status</th><th></th></tr></thead>
         <tbody>${members.map((m) => `
@@ -821,13 +821,12 @@ function carsCard(d, config, pending = null) {
   const counties = config?.counties ?? [];
   const extraPrice = money(config?.price?.extraCountyOre);
   const name = (code) => countyName(code);
-  const inviteOn = sell && !!d.driverInvites?.enabled;
   const invites = d.driverInvites?.invites ?? [];
   return `
     <div class="card">
       <h2>Bilar <span class="muted">(${esc(open.length)})</span></h2>
-      <p class="muted">Föraren får en kod (gäller 5 minuter, läs upp den) eller en inbjudan med e-post (gäller 7 dagar).
-        I appen: <b>Jag är förare</b>.</p>
+      <p class="muted">Bjud in föraren med e-post till en bil. Föraren trycker <b>Jag är förare</b> i appen,
+        skriver sin e-post och får en kod i mejlet. Bilen och länen bestäms här – föraren väljer inget.</p>
       ${open.length ? open.map((l) => {
         const trial = l.status === "trial";
         const extras = l.extraCounties ?? [];
@@ -875,8 +874,7 @@ function carsCard(d, config, pending = null) {
 
           ${sell && l.status !== "pending_cancel" ? `
           <div class="btn-row">
-            <button class="btn btn-primary btn-small" data-action="code" ${data}>+ Förare med kod</button>
-            ${inviteOn ? `<button class="btn btn-quiet btn-small" data-action="driver-invite" ${data}>+ Förare med e-post</button>` : ""}
+            <button class="btn btn-primary btn-small" data-action="driver-invite" ${data}>+ Bjud in förare</button>
           </div>` : ""}
 
           ${sell ? `

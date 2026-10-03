@@ -148,7 +148,8 @@ def from_text(subject: str, body: str, payload: dict | None = None) -> str:
     blocks = []
     placed = False
     for raw in re.split(r"\n\s*\n", text):
-        lines = [ln for ln in raw.split("\n") if ln.strip()]
+        # Koden står i en egen ruta; samma siffror som en rad hade blivit dubbelt.
+        lines = [ln for ln in raw.split("\n") if ln.strip() and not (code and ln.strip() == code)]
         if btn_url and any(ln.strip() == btn_url for ln in lines):
             # Länken blir en knapp; texten före den på samma stycke behålls.
             rest = [ln for ln in lines if ln.strip() != btn_url]

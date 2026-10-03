@@ -941,7 +941,7 @@ async function act(action, ds) {
 
     case "block": {
       if (!confirm(`Spärra ${ds.label || "telefonen"}? Den slutar visa tips direkt och lämnar bilen.\n\n` +
-        "Föraren behöver en ny kod för att köra igen.")) return;
+        "Föraren behöver en ny inbjudan för att köra igen.")) return;
       await admin.blockPhone(ds.approval, "admin_block");
       flash(`${ds.label || "Telefonen"} är spärrad.`);
       return render();
@@ -970,7 +970,7 @@ async function act(action, ds) {
     }
 
     case "driver-invite": {
-      const email = prompt(`Förarens e-post för ${ds.plate}?\n\nFöraren får en länk, väljer lösenord och loggar in i appen. Gäller i 7 dagar.`);
+      const email = prompt(`Förarens e-post för ${ds.plate}?\n\nFöraren trycker "Jag är förare" i appen, skriver sin e-post och får en kod i mejlet. Inbjudan gäller i 7 dagar.`);
       if (!email?.trim()) return;
       const label = prompt("Förarens namn (visas som telefonens namn):", "") ?? "";
       await admin.inviteDriver(state.companyId, ds.license, email.trim(), label.trim());
@@ -1684,10 +1684,10 @@ async function salesAction(action, ds) {
     }
 
     case "car-plate-ask": {
-      const plate = prompt(`Nytt registreringsnummer för ${ds.plate}?\n\nLänen och perioden följer med. Förarna behöver en ny kod.`);
+      const plate = prompt(`Nytt registreringsnummer för ${ds.plate}?\n\nLänen och perioden följer med. Förarna behöver en ny inbjudan.`);
       if (!plate) return;
       const result = await admin.changeVehicle(ds.license, plate.trim(), "permanent");
-      flash(`Bilen är nu ${result.plate}. Förarna behöver en ny kod.`);
+      flash(`Bilen är nu ${result.plate}. Förarna behöver en ny inbjudan.`);
       return render();
     }
 
@@ -1748,10 +1748,10 @@ async function salesAction(action, ds) {
       if (!plate) throw new ApiError(400, "Skriv det nya registreringsnumret.", "plate_required");
       const temporary = ds.mode === "temporary";
       if (!confirm(temporary
-        ? `Ersättningsbil ${plate}? Länen följer med. Förarna behöver en ny kod för ersättningsbilen.`
-        : `Byt till ${plate}? Länen och perioden följer med. Förarna behöver en ny kod.`)) return;
+        ? `Ersättningsbil ${plate}? Länen följer med. Förarna behöver en ny inbjudan till ersättningsbilen.`
+        : `Byt till ${plate}? Länen och perioden följer med. Förarna behöver en ny inbjudan.`)) return;
       const result = await admin.changeVehicle(ds.license, plate, ds.mode);
-      flash(`Bilen är nu ${result.plate}. Ge förarna en ny kod.`);
+      flash(`Bilen är nu ${result.plate}. Bjud in förarna igen.`);
       return render();
     }
 

@@ -43,6 +43,7 @@ SERVICE_CATEGORIES = frozenset({
     "order_confirmed", "payment_failed", "grace_started", "renewal_reminder",
     "price_step", "cancellation_confirmed", "cancellation_applied",
     "device_blocked", "review_opened", "driver_invite", "member_invite",
+    "driver_login_code",
 })
 
 
@@ -362,13 +363,14 @@ def device_blocked(company_id, approval) -> OutboxMessage | None:
     )
 
 
-def driver_invite(invite, *, link: str, company_name: str, plate: str) -> OutboxMessage | None:
+def driver_invite(invite, *, company_name: str, plate: str) -> OutboxMessage | None:
     """
     Förarens inbjudan (fleet/driver_invites.py). Enkel svenska, tre steg:
     föraren kan vara ny i Sverige och har aldrig sett appen.
 
-    Länken är en engångslänk från Supabase Auth. Varje utskick får en egen
-    rad (`send_count` i nyckeln): "Skicka igen" ger en ny länk, inte samma rad.
+    Ingen länk och inget lösenord: föraren skriver sin e-post i appen och får
+    en kod i ett eget mejl (fleet/driver_login.py). Varje utskick får en egen
+    rad (`send_count` i nyckeln): "Skicka igen" ger ett nytt mejl.
     """
     who = company_name or "Ditt taxibolag"
     car = f" för bilen {plate}" if plate else ""
@@ -380,22 +382,58 @@ def driver_invite(invite, *, link: str, company_name: str, plate: str) -> Outbox
             f"{who} har bjudit in dig till Taxi Tips{car}. "
             "Taxi Tips visar var det finns folk som behöver taxi just nu.\n\n"
             "Så kommer du igång:\n"
-            f"1. Tryck på länken och välj ett lösenord:\n{link}\n\n"
-            "2. Hämta appen Taxi Tips i App Store eller Google Play.\n\n"
-            "3. Öppna appen. Tryck \"Jag är förare\". Logga in med "
-            f"{invite.email} och ditt lösenord.\n\n"
-            "Länken fungerar en gång. Fungerar den inte: tryck \"Glömt lösenord?\" "
-            f"i appen och skriv {invite.email}. Eller be {who} skicka inbjudan igen.\n\n"
+            "1. Hämta appen Taxi Tips i App Store eller Google Play.\n"
+            "2. Öppna appen och tryck \"Jag är förare\".\n"
+            f"3. Skriv {invite.email}. Du får en kod i ett nytt mejl – skriv in den i appen.\n\n"
+            "Bilen och länen har din chef redan valt. Du behöver inget lösenord.\n\n"
             "Inbjudan gäller i sju dagar. Väntade du dig inte det här mejlet kan du "
             "strunta i det.\n"
             + _SIGNATURE
         ),
-        payload={
-            "inviteId": str(invite.id), "kind": "driver_invite",
-            "button": {"url": link, "label": "Välj lösenord"},
-        },
+        payload={"inviteId": str(invite.id), "kind": "driver_invite"},
         key_parts=(invite.id, invite.send_count),
     )
+
+
+def driver_login_code(*, email: str, code: str, row_id, company_name: str = "", plate: str = "") -> OutboxMessage | None:
+    """Förarens inloggningskod (fleet/driver_login.py). Kort: föraren väntar i appen."""
+    car = f" för {plate}" if plate else ""
+    who = f" hos {company_name}" if company_name else ""
+    return queue(
+        category="driver_login_code", to_address=email,
+        subject=f"Din kod till Taxi Tips: {code}",
+        body=(
+            f"Skriv den här koden i appen för att logga in som förare{who}{car}:\n\n"
+            f"{code}\n\n"
+            "Koden gäller i tio minuter och fungerar en gång. Bad du inte om en kod? "
+            "Då kan du strunta i mejlet – ingen kan logga in utan den.\n"
+            + _SIGNATURE
+        ),
+        payload={"kind": "driver_login_code", "code": code, "preheader": f"Din kod: {code}"},
+        key_parts=(row_id,),
+    )
+
+
+def send_now(row: OutboxMessage | None) -> bool:
+    """
+    Skickar en rad direkt i stället för vid nästa körning. Misslyckas det
+    ligger raden kvar som `pending` och tas av den vanliga körningen.
+    """
+    if row is None or row.status != OutboxMessage.Status.PENDING:
+        return False
+    sender = _configured_sender()
+    if sender is None:
+        return False
+    try:
+        sender(row)
+    except Exception as exc:  # noqa: BLE001 -- den vanliga körningen tar om den
+        log.warning("send_now %s: %s", row.category, exc)
+        OutboxMessage.objects.filter(id=row.id).update(error=str(exc)[:500])
+        return False
+    OutboxMessage.objects.filter(id=row.id).update(
+        status=OutboxMessage.Status.SENT, sent_at=timezone.now(), error=""
+    )
+    return True
 
 
 MEMBER_ROLE_TEXT = {

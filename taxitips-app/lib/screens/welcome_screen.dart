@@ -14,10 +14,14 @@ class WelcomeScreen extends StatelessWidget {
     super.key,
     required this.onLogin,
     required this.onSignup,
+    required this.onDriver,
   });
 
   final VoidCallback onLogin;
   final VoidCallback onSignup;
+
+  /// Föraren: bara e-post, chefen har redan bjudit in (DriverLoginScreen).
+  final VoidCallback onDriver;
 
   /// Demon finns på webben (taxitips.se/demo): samma slags tips på en
   /// Sverigekarta, utan konto.
@@ -57,7 +61,9 @@ class WelcomeScreen extends StatelessWidget {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        const SizedBox(height: 56),
+                        // Tre knappar sedan förarvägen: på en låg skärm
+                        // mindre luft upptill, så att allt får plats.
+                        SizedBox(height: constraints.maxHeight < 700 ? 20 : 56),
                         Column(
                           children: [
                             SvgPicture.asset(
@@ -66,7 +72,9 @@ class WelcomeScreen extends StatelessWidget {
                               height: 76,
                               fit: BoxFit.contain,
                             ),
-                            const SizedBox(height: 40),
+                            SizedBox(
+                              height: constraints.maxHeight < 700 ? 24 : 40,
+                            ),
                             const Text(
                               'Se var folk behöver taxi',
                               textAlign: TextAlign.center,
@@ -91,12 +99,15 @@ class WelcomeScreen extends StatelessWidget {
                           ],
                         ),
                         Padding(
-                          padding: const EdgeInsets.only(top: 40, bottom: 16),
+                          padding: EdgeInsets.only(
+                            top: constraints.maxHeight < 700 ? 24 : 40,
+                            bottom: 16,
+                          ),
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               FilledButton(
-                                onPressed: onLogin,
+                                onPressed: onDriver,
                                 style: FilledButton.styleFrom(
                                   backgroundColor: TbColors.taxi,
                                   foregroundColor: TbColors.ink,
@@ -106,7 +117,7 @@ class WelcomeScreen extends StatelessWidget {
                                   ),
                                 ),
                                 child: const Text(
-                                  'Logga in',
+                                  'Jag är förare',
                                   style: TextStyle(
                                     fontSize: 17,
                                     fontWeight: FontWeight.w800,
@@ -115,7 +126,7 @@ class WelcomeScreen extends StatelessWidget {
                               ),
                               const SizedBox(height: 12),
                               OutlinedButton(
-                                onPressed: onSignup,
+                                onPressed: onLogin,
                                 style: OutlinedButton.styleFrom(
                                   foregroundColor: TbColors.foam,
                                   side: const BorderSide(
@@ -128,14 +139,30 @@ class WelcomeScreen extends StatelessWidget {
                                   ),
                                 ),
                                 child: const Text(
-                                  'Registrera företag',
+                                  'Logga in som ägare eller kontor',
                                   style: TextStyle(
-                                    fontSize: 17,
+                                    fontSize: 16,
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 10),
+                              const SizedBox(height: 12),
+                              TextButton(
+                                onPressed: onSignup,
+                                style: TextButton.styleFrom(
+                                  foregroundColor: TbColors.foam,
+                                  minimumSize: const Size.fromHeight(52),
+                                ),
+                                child: const Text(
+                                  'Registrera företag',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.w700,
+                                    decoration: TextDecoration.underline,
+                                    decorationColor: TbColors.foam,
+                                  ),
+                                ),
+                              ),
                               const Text(
                                 'Gratis i 7 dagar. Inget kort.',
                                 textAlign: TextAlign.center,

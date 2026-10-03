@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import '../api_client.dart';
 import '../push_service.dart';
@@ -137,10 +136,6 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
 
   bool get _suspended => _data?['company']?['suspended'] == true;
 
-  /// Förarinbjudan med e-post är påslagen på servern. Annars visas bara
-  /// koden -- ingen knapp som inte fungerar.
-  bool get _invitesOn => _data?['driverInvites']?['enabled'] == true;
-
   Map<String, dynamic>? get _trial => _data?['trial'] is Map
       ? Map<String, dynamic>.from(_data!['trial'] as Map)
       : null;
@@ -231,9 +226,9 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
 
   // ── Förare: inbjudan med e-post ────────────────────────────────────────
 
-  /// Huvudvägen för en ny förare: chefen skriver förarens e-post. Föraren får
-  /// ett mejl, väljer lösenord och loggar in i appen under "Jag är förare" --
-  /// då kopplas telefonen till bilen (fleet/driver_invites.py).
+  /// En ny förare: chefen skriver förarens e-post. Föraren trycker "Jag är
+  /// förare" i appen, skriver e-posten och får en kod i mejlet -- då kopplas
+  /// telefonen till bilen med bilens län (fleet/driver_login.py).
   Future<void> _inviteDriver(Map<String, dynamic> license) async {
     final plate = license['vehicle']?.toString() ?? 'bilen';
     final vehicleId = license['vehicleId']?.toString();
@@ -300,65 +295,6 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       if (!mounted) return;
       await _reload();
       _snack('Inbjudan är borttagen');
-    } catch (e) {
-      _snack(_cleanError(e), isError: true);
-    }
-  }
-
-  // ── Förare: engångskod ─────────────────────────────────────────────────
-
-  Future<void> _connectDriver(Map<String, dynamic> license) async {
-    final plate = license['vehicle']?.toString() ?? 'bilen';
-    final vehicleId = license['vehicleId']?.toString();
-    if (vehicleId == null) {
-      _snack('Bilen saknas på licensen. Kontakta support.', isError: true);
-      return;
-    }
-    final nameCtrl = TextEditingController();
-    final name = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Ny förare i $plate'),
-        content: TextField(
-          controller: nameCtrl,
-          autofocus: true,
-          textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(
-            labelText: 'Förarens namn',
-            hintText: 'Visas som telefonens namn',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Avbryt'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, nameCtrl.text.trim()),
-            child: const Text('Skapa kod'),
-          ),
-        ],
-      ),
-    );
-    nameCtrl.dispose();
-    if (name == null) return;
-    try {
-      final issued = await widget.api.issuePairingCode(
-        licenseId: license['licenseId'].toString(),
-        vehicleId: vehicleId,
-        label: name.isEmpty ? 'Förare' : name,
-      );
-      if (!mounted) return;
-      await showDialog<void>(
-        context: context,
-        builder: (_) => _PairingCodeDialog(
-          code: issued['code']?.toString() ?? '',
-          expiresAt: DateTime.tryParse(issued['expiresAt']?.toString() ?? ''),
-          subtitle: '${name.isEmpty ? 'Förare' : name} · $plate',
-        ),
-      );
-      if (!mounted) return;
-      await _reload();
     } catch (e) {
       _snack(_cleanError(e), isError: true);
     }
@@ -744,41 +680,21 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
               ),
               if (canManage) ...[
                 const SizedBox(height: 20),
-                if (_invitesOn) ...[
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: TbColors.taxi,
-                      foregroundColor: TbColors.ink,
-                      minimumSize: const Size.fromHeight(52),
-                    ),
-                    onPressed: () => act(ctx, () => _inviteDriver(license)),
-                    icon: const Icon(Icons.forward_to_inbox_outlined),
-                    label: const Text(
-                      'Bjud in förare med e-post',
-                      style: TextStyle(fontWeight: FontWeight.w800),
-                    ),
+                // Föraren bjuds in med e-post och loggar in med bara den
+                // (fleet/driver_login.py). Ingen kod att läsa upp.
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: TbColors.taxi,
+                    foregroundColor: TbColors.ink,
+                    minimumSize: const Size.fromHeight(52),
                   ),
-                  TextButton(
-                    style: TextButton.styleFrom(
-                      minimumSize: const Size.fromHeight(44),
-                    ),
-                    onPressed: () => act(ctx, () => _connectDriver(license)),
-                    child: const Text('Visa kod i stället'),
+                  onPressed: () => act(ctx, () => _inviteDriver(license)),
+                  icon: const Icon(Icons.forward_to_inbox_outlined),
+                  label: const Text(
+                    'Bjud in förare med e-post',
+                    style: TextStyle(fontWeight: FontWeight.w800),
                   ),
-                ] else
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: TbColors.taxi,
-                      foregroundColor: TbColors.ink,
-                      minimumSize: const Size.fromHeight(52),
-                    ),
-                    onPressed: () => act(ctx, () => _connectDriver(license)),
-                    icon: const Icon(Icons.person_add_alt_1),
-                    label: const Text(
-                      'Koppla en förare',
-                      style: TextStyle(fontWeight: FontWeight.w800),
-                    ),
-                  ),
+                ),
                 if (!_thisPhoneOn(license)) ...[
                   const SizedBox(height: 10),
                   OutlinedButton.icon(
@@ -979,100 +895,6 @@ class _CompanyHeader extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-/// Koden visas stort, med nedräkning: den gäller i fem minuter och bara en
-/// gång. Kopiera-knappen finns för den som skickar koden i ett sms.
-class _PairingCodeDialog extends StatefulWidget {
-  const _PairingCodeDialog({
-    required this.code,
-    required this.expiresAt,
-    required this.subtitle,
-  });
-
-  final String code;
-  final DateTime? expiresAt;
-  final String subtitle;
-
-  @override
-  State<_PairingCodeDialog> createState() => _PairingCodeDialogState();
-}
-
-class _PairingCodeDialogState extends State<_PairingCodeDialog> {
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (mounted) setState(() {});
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final left = widget.expiresAt == null
-        ? 0
-        : widget.expiresAt!.difference(DateTime.now()).inSeconds.clamp(0, 3600);
-    final expired = widget.expiresAt != null && left == 0;
-    return AlertDialog(
-      title: const Text('Anslutningskod'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(widget.subtitle, style: const TextStyle(color: TbColors.muted)),
-          const SizedBox(height: 16),
-          SelectableText(
-            widget.code,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: 'monospace',
-              fontSize: 34,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 4,
-              color: expired ? TbColors.muted : TbColors.ink,
-              decoration: expired ? TextDecoration.lineThrough : null,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            expired
-                ? 'Koden har gått ut. Skapa en ny.'
-                : 'Gäller i ${left ~/ 60}:${(left % 60).toString().padLeft(2, '0')}',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              color: expired ? TbColors.danger : TbColors.ink,
-            ),
-          ),
-          const SizedBox(height: 12),
-          const Text(
-            'Föraren öppnar Taxi Tips, trycker "Jag är förare" och sedan '
-            '"Har du en kod?" och skriver in koden. Koden visas bara en gång.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: TbColors.muted, height: 1.35),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: expired
-              ? null
-              : () => Clipboard.setData(ClipboardData(text: widget.code)),
-          child: const Text('Kopiera'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Klar'),
-        ),
-      ],
     );
   }
 }

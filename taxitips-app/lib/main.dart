@@ -12,6 +12,7 @@ import 'crashlytics.dart';
 import 'performance_monitoring.dart';
 import 'push_service.dart';
 import 'remote_config_service.dart';
+import 'screens/driver_login_screen.dart';
 import 'screens/driver_screen.dart';
 import 'screens/login_screen.dart';
 import 'screens/onboarding_screen.dart';
@@ -55,7 +56,15 @@ class TaxiPrognosApp extends StatefulWidget {
 /// Första start: onboarding → välkomst (Logga in / Registrera). Inloggningen
 /// är en för förare, ägare och kontor, bara e-post och lösenord; rollen
 /// avgörs av servern (ApiClient.signIn). Ingen bolagskod.
-enum AppRoute { onboarding, welcome, login, signup, shell, driverInvite }
+enum AppRoute {
+  onboarding,
+  welcome,
+  login,
+  driverLogin,
+  signup,
+  shell,
+  driverInvite,
+}
 
 class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
   late AppRoute _route;
@@ -169,6 +178,21 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
               AppRoute.welcome => WelcomeScreen(
                 onLogin: () => setState(() => _route = AppRoute.login),
                 onSignup: () => setState(() => _route = AppRoute.signup),
+                onDriver: () => setState(() => _route = AppRoute.driverLogin),
+              ),
+              // Föraren: bara e-post och koden i mejlet. Ingen session i
+              // Supabase -- telefonen bär sin enhetsnyckel.
+              AppRoute.driverLogin => DriverLoginScreen(
+                api: widget.api,
+                onDone: () async {
+                  await logAnalyticsEvent(
+                    'login',
+                    params: {'method': 'email_code', 'role': 'driver'},
+                  );
+                  await registerForPush(widget.api);
+                  _goShell();
+                },
+                onBack: () => setState(() => _route = AppRoute.welcome),
               ),
               AppRoute.login => LoginScreen(
                 api: widget.api,
@@ -192,6 +216,8 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
                 },
                 onSignup: () => setState(() => _route = AppRoute.signup),
                 onBack: () => setState(() => _route = AppRoute.welcome),
+                onDriverLogin: () =>
+                    setState(() => _route = AppRoute.driverLogin),
               ),
               AppRoute.signup => SignupScreen(
                 api: widget.api,

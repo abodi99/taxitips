@@ -1033,6 +1033,34 @@ class ApiClient {
     return data;
   }
 
+  /// "Jag är förare", steg 1: föraren skriver sin e-post. Finns en inbjudan
+  /// kommer en sexsiffrig kod i mejlet.
+  Future<void> driverLoginStart(String email) => _reported(
+    'driver_login_start',
+    () => _fleet.driverLoginStart(email.trim().toLowerCase()),
+  );
+
+  /// Steg 2: koden från mejlet. Telefonen kopplas till bilen chefen valde.
+  Future<Map<String, dynamic>> driverLoginVerify({
+    required String email,
+    required String code,
+  }) => _reported('driver_login_verify', () async {
+    final installation = await ensureInstallationId();
+    final data = await _fleet.driverLoginVerify(
+      email: email.trim().toLowerCase(),
+      code: code.replaceAll(RegExp(r'\s'), ''),
+      installationId: installation,
+      platform: kIsWeb ? 'web' : defaultTargetPlatform.name,
+    );
+    final secret = data['deviceToken']?.toString();
+    if (secret == null || secret.isEmpty) {
+      throw ApiException(500, 'Servern gav ingen enhetsnyckel.');
+    }
+    await saveDevice(secret);
+    await clearLocalAreaFilter();
+    return data;
+  });
+
   /// Bolagsverkets uppgifter för registreringen, eller null när de inte går
   /// att få (ingen backend, nätfel, registret nere). Då skriver användaren
   /// företagsnamnet själv -- ett uppslag får aldrig stoppa en registrering.

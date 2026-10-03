@@ -234,6 +234,50 @@ def claim_driver_invite(request):
     return _json(request, {"ok": True, **result.as_dict()})
 
 
+@csrf_exempt
+@require_POST
+@handle
+def driver_login_start(request):
+    """
+    POST /api/fleet/driver-login/start {"email": "..."}
+
+    Föraren skriver sin e-post. Finns en inbjudan mejlas en kod
+    (fleet/driver_login.py). Svaret är detsamma oavsett, så att ingen kan
+    pröva fram vilka adresser som är inbjudna.
+    """
+    from fleet import bolagsverket, driver_login
+
+    driver_login.start(_body(request).get("email", ""), client_ip=bolagsverket.client_ip(request) or "")
+    return _json(request, {
+        "ok": True,
+        "message": "Om din chef har bjudit in dig kommer en kod till din e-post strax.",
+    })
+
+
+@csrf_exempt
+@require_POST
+@handle
+def driver_login_verify(request):
+    """
+    POST /api/fleet/driver-login/verify {email, code, installation_id, platform?, push_token?}
+
+    Rätt kod kopplar telefonen till bilen i förarens inbjudan. Svaret har samma
+    form som `pair` och `driver-invites/claim`: hemligheten lämnar servern EN gång.
+    """
+    from fleet import bolagsverket, driver_login
+
+    body = _body(request)
+    result = driver_login.verify(
+        body.get("email", ""), body.get("code", ""),
+        installation_id=body.get("installation_id", ""),
+        label=body.get("label", ""), platform=body.get("platform", ""),
+        push_token=(body.get("push_token") or "").strip() or None,
+        client_ip=bolagsverket.client_ip(request) or "",
+    )
+    _start_trial_on_first_phone(result.company_id)
+    return _json(request, {"ok": True, **result.as_dict()})
+
+
 @require_GET
 @handle
 def registry_lookup(request):

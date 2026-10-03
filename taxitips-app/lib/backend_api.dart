@@ -472,6 +472,46 @@ class BackendApi {
     return _decode(res, 'pair');
   }
 
+  /// Förarens inloggning med bara e-post (fleet/driver_login.py). Ingen
+  /// inloggning behövs: servern svarar likadant oavsett om adressen är
+  /// inbjuden, och mejlar en kod bara om den är det.
+  Future<Map<String, dynamic>> driverLoginStart(String email) async {
+    final res = await _client
+        .post(
+          Uri.parse('$baseUrl/api/fleet/driver-login/start'),
+          headers: _headers(),
+          body: jsonEncode({'email': email}),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'driverLoginStart');
+  }
+
+  /// Rätt kod kopplar telefonen till bilen i förarens inbjudan. Svaret har
+  /// samma form som `pair`: `deviceToken` lämnar servern en gång.
+  Future<Map<String, dynamic>> driverLoginVerify({
+    required String email,
+    required String code,
+    required String installationId,
+    String? platform,
+    String? pushToken,
+  }) async {
+    final res = await _client
+        .post(
+          Uri.parse('$baseUrl/api/fleet/driver-login/verify'),
+          headers: _headers(),
+          body: jsonEncode({
+            'email': email,
+            'code': code,
+            'installation_id': installationId,
+            'label': 'Förare',
+            'platform': ?platform,
+            'push_token': ?pushToken,
+          }),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'driverLoginVerify');
+  }
+
   /// Vad den här telefonen får: godkända bilar, vem som har dem just nu, och
   /// vilken bil telefonen själv kör.
   Future<Map<String, dynamic>> fleetStatus({String? deviceToken}) async {

@@ -23,9 +23,13 @@ class LoginScreen extends StatefulWidget {
     required this.onDriver,
     required this.onSignup,
     required this.onBack,
+    this.onDriverLogin,
   });
 
   final ApiClient api;
+
+  /// Förare loggar in med bara e-post (DriverLoginScreen).
+  final VoidCallback? onDriverLogin;
 
   /// Kontot hör till ett företag (eller registrerar ett).
   final VoidCallback onOwner;
@@ -263,7 +267,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'Samma inloggning för förare och kontor.',
+                  'För ägare och kontor.',
                   style: TextStyle(color: TbColors.muted, fontSize: 15),
                 ),
                 const SizedBox(height: 22),
@@ -362,12 +366,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   action: 'Registrera ditt företag',
                   onTap: _busy ? null : widget.onSignup,
                 ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Förare får sin inloggning via e-post från chefen.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(color: TbColors.muted, fontSize: 13.5),
-                ),
+                if (widget.onDriverLogin != null)
+                  _LinkRow(
+                    lead: 'Förare?',
+                    action: 'Logga in med bara e-post',
+                    onTap: _busy ? null : widget.onDriverLogin,
+                  ),
               ],
             ),
           ),

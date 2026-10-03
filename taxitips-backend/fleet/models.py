@@ -873,6 +873,30 @@ class JoinRequest(models.Model):
 # ---------------------------------------------------------------------------
 
 
+class DriverLoginCode(models.Model):
+    """
+    Förarens inloggning med bara e-post: en sexsiffrig engångskod i mejlet
+    (fleet/driver_login.py).
+
+    Bara hashen sparas. Koden gäller i tio minuter och högst fem försök; en
+    ny begäran ersätter den förra. I databasen och inte i cachen: produktionen
+    har ingen delad cache, och koden måste gå att kontrollera i en annan
+    serverprocess än den som skickade den.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    email = models.TextField()
+    code_hash = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+    expires_at = models.DateTimeField()
+    attempts = models.IntegerField(default=0)
+    used_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "fleet_driver_login_code"
+        indexes = [models.Index(fields=["email", "-created_at"])]
+
+
 class VehicleSession(models.Model):
     """
     Den aktiva bilsessionen. Exakt en telefon per billicens, exakt en bil per
