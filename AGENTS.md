@@ -308,9 +308,14 @@ betalning går genom Stripe** (kort eller Stripe-faktura); "betalas senare" och
 företag, konton och e-postadresser, personalroller och egna evenemang
 (manuellt eller CSV/JSON): §9d. Adminwebben är byggd som en cykel: **Hem** är en
 att-göra-lista (en rad per kund som behöver något), **Kunder** en lista med filter,
-och en kund är fem steg -- Företag, Bilar, Förare, Kundkonto, Betalning -- ett i taget
-med "Nästa". Reglerna för vad som är klart och nästa steg bor på ett ställe
-(`src/admin/views.js`, `STEPS`/`attention`). Grundaren
+och kundsidan (2026-10-03) är byggd för ett supportsamtal: **Översikt** först (om
+förarna får tips, "Att åtgärda", nyckeltal, "Kunden ringer om …"-genvägar, CRM),
+sedan en flik per ämne -- Bilar och förare, Inloggningar, Betalning, Företag,
+Historik (läsbar händelselogg + appar och fel). Supportåtgärder per bil: förarkod,
+förarinbjudan med e-post (skicka igen/återkalla), frigör bilen, byt namn på
+telefon, spärra; per telefon extra telefonbyte; per inloggning inloggningslänk och
+roll. Reglerna för vad som är klart bor på ett ställe (`src/admin/views.js`,
+`STEPS`/`attention`/`issues`); Hem och Kunder länkar stegen till rätt flik (`kundTab`). Grundaren
 (`bbf6ca6c-…`) är platform_admin. Konton skapade med Google har inget lösenord
 och Google-inloggning är inte konfigurerad i produktionens Supabase Auth, så
 adminwebben loggar in med en e-postlänk.

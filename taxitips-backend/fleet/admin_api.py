@@ -35,7 +35,10 @@ from django.views.decorators.http import require_GET, require_POST
 from billing.models import Company, CompanyMember, Device
 from core.api import _json
 from core.models import OpportunityReport, PushDelivery
-from fleet import access, archive, audit, discounts, licensing, pairing, pricing, risk, roles, sessions, trials
+from fleet import (
+    access, archive, audit, discounts, driver_invites, licensing, pairing, pricing, risk, roles,
+    sessions, trials,
+)
 from fleet.api import _DOMAIN_ERRORS, _error
 from fleet.models import (
     AccountBlock,
@@ -368,6 +371,8 @@ def company_detail(request, company_id):
     # Telefonerna utan token och utan push-token i klartext: bara om de HAR en.
     devices = [
         {"id": str(d.id), "label": d.label, "kind": d.kind,
+         # Inloggat konto på telefonen: för extra telefonbyte och kontosidan.
+         "userId": str(d.user_id) if d.user_id else None,
          "hasPush": bool(d.push_token), "lastSeenAt": _iso(d.last_seen_at),
          "counties": (d.notify_prefs or {}).get("counties", [])}
         for d in Device.objects.filter(company_id=company.id).order_by("-last_seen_at")[:50]
@@ -444,6 +449,14 @@ def company_detail(request, company_id):
         ],
         "licenses": licenses,
         "devices": devices,
+        # Förarinbjudningar med e-post som inte lösts in, per bil i vyn.
+        "driverInvites": {
+            "enabled": driver_invites.enabled(),
+            "invites": [
+                {**driver_invites.view(i, now), "plate": i.vehicle.plate}
+                for i in driver_invites.pending_for_company(company.id, now)
+            ],
+        },
         "members": members,
         "orders": [
             admin_sales_rows._order_row(o)
@@ -574,6 +587,135 @@ def block_approval(request, approval_id):
     _record(
         principal, "admin_device_blocked", company_id=approval.company_id,
         subject_type="approval", subject_id=approval.id, detail={"reason": reason},
+    )
+    return _json(request, {"ok": True})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def rename_approval(request, approval_id):
+    """
+    POST /api/admin/approvals/<id>/label {"label": "Anna"} -- samma som
+    kundens egen väg (fleet/api.py:rename_approval): namnet skrivs på både
+    godkännandet och telefonen.
+    """
+    principal = _staff(request, Perm.ADMIN_SELL)
+    approval = DeviceApproval.objects.filter(id=approval_id).first()
+    if approval is None:
+        raise licensing.LicensingError("unknown_approval", "Telefonen finns inte.", status=404)
+    label = " ".join(str(_body(request).get("label") or "").split())[:80]
+    if not label:
+        raise licensing.LicensingError("label_required", "Skriv ett namn.")
+    DeviceApproval.objects.filter(id=approval.id).update(label=label)
+    Device.objects.filter(id=approval.device_id, company_id=approval.company_id).update(label=label)
+    _record(
+        principal, "device_renamed", company_id=approval.company_id,
+        subject_type="device", subject_id=approval.device_id,
+        detail={"before": approval.label, "label": label},
+    )
+    return _json(request, {"ok": True, "label": label})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def release_license(request, license_id):
+    """
+    POST /api/admin/licenses/<id>/release {"reason": "…"} -- frigör bilen.
+
+    Avslutar det öppna passet, så att en annan godkänd telefon kan ta bilen
+    utan övertagandet. Telefonen behåller sitt godkännande och kan ta bilen
+    igen; det är spärren (block_approval) som tar bort det. Till för "föraren
+    glömde lämna bilen och kollegan kommer inte in".
+
+    Skälet blir DRIVER_END: support gör det föraren hade gjort i appen.
+    Händelseloggen visar att det var personalen.
+    """
+    principal = _staff(request, Perm.ADMIN_SELL)
+    license = License.objects.filter(id=license_id).first()
+    if license is None:
+        raise licensing.LicensingError("unknown_license", "Licensen finns inte.", status=404)
+    session = sessions.active_session_for_license(license.id)
+    if session is None:
+        return _json(request, {"ok": True, "released": False})
+    holder = sessions.holder_label(session)
+    sessions.end_session(
+        session, reason=VehicleSession.EndReason.DRIVER_END, actor_user_id=principal.user_id,
+    )
+    _record(
+        principal, "admin_vehicle_released", company_id=license.company_id,
+        subject_type="license", subject_id=license.id,
+        detail={"holder": holder, "reason": str(_body(request).get("reason") or "")[:200]},
+    )
+    return _json(request, {"ok": True, "released": True, "holder": holder})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def driver_invite_create(request, company_id):
+    """
+    POST /api/admin/companies/<id>/driver-invites {email, licenseId, label?}
+
+    Förarinbjudan med e-post åt kunden -- när föraren inte är med i samtalet
+    och en kod (fem minuter) inte hinner fram. Samma regler som kundens väg.
+    """
+    principal = _staff(request, Perm.ADMIN_SELL)
+    company = _company_or_404(company_id)
+    body = _body(request)
+    license = License.objects.filter(id=body.get("licenseId"), company_id=company.id).first()
+    if license is None:
+        raise licensing.LicensingError("unknown_license", "Licensen finns inte.", status=404)
+    vehicle = sessions.current_vehicle(license)
+    if vehicle is None:
+        raise licensing.LicensingError("no_vehicle", "Licensen har ingen bil.")
+    invite = driver_invites.create_invite(
+        license=license, vehicle=vehicle, email=body.get("email", ""),
+        label=body.get("label", ""), created_by=principal.user_id,
+    )
+    _record(
+        principal, "admin_driver_invited", company_id=company.id,
+        subject_type="driver_invite", subject_id=invite.id,
+        detail={"email": invite.email, "plate": vehicle.plate},
+    )
+    return _json(request, {"ok": True, "invite": driver_invites.view(invite)})
+
+
+def _invite_or_404(invite_id):
+    from fleet.models import DriverInvite
+
+    invite = DriverInvite.objects.filter(id=invite_id).select_related("license", "vehicle").first()
+    if invite is None:
+        raise driver_invites.DriverInviteError("unknown_invite", "Inbjudan finns inte.", status=404)
+    return invite
+
+
+@csrf_exempt
+@require_POST
+@handle
+def driver_invite_resend(request, invite_id):
+    """POST /api/admin/driver-invites/<id>/resend -- ny länk och sju nya dagar."""
+    principal = _staff(request, Perm.ADMIN_SELL)
+    invite = driver_invites.resend_invite(_invite_or_404(invite_id), actor_user_id=principal.user_id)
+    _record(
+        principal, "admin_driver_invite_resent", company_id=invite.company_id,
+        subject_type="driver_invite", subject_id=invite.id, detail={"email": invite.email},
+    )
+    return _json(request, {"ok": True, "invite": driver_invites.view(invite)})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def driver_invite_revoke(request, invite_id):
+    """POST /api/admin/driver-invites/<id>/revoke -- inbjudan kan inte längre lösas in."""
+    principal = _staff(request, Perm.ADMIN_SELL)
+    invite = _invite_or_404(invite_id)
+    driver_invites.revoke_invite(invite, actor_user_id=principal.user_id)
+    _record(
+        principal, "admin_driver_invite_revoked", company_id=invite.company_id,
+        subject_type="driver_invite", subject_id=invite.id, detail={"email": invite.email},
     )
     return _json(request, {"ok": True})
 

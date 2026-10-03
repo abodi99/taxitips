@@ -246,7 +246,7 @@ export function quoteBox(q) {
  * av dem -- tidigare låg alla på samma sida och det gick att gå vilse.
  */
 
-/** Steg Bilar: lägg till bilar som prov, med kupong eller som beställning. */
+/** Bilar och förare: lägg till bilar som prov, med kupong eller som beställning. Kortet runt läggs av vyn. */
 export function addCarsBlock(d, config) {
   if (!config?.canSell) return "";
   const counties = config.counties ?? [];
@@ -256,8 +256,7 @@ export function addCarsBlock(d, config) {
   const payOption = (value) =>
     `<option value="${value}" ${value === "stripe_card" ? "selected" : ""}>${esc(PAYMENT_LABEL[value])}</option>`;
   return `
-    <div class="card" id="salesPanel">
-      <h2>Lägg till bilar</h2>
+    <div id="salesPanel">
       <p class="muted">Pris per bil ${esc(money(config.price?.baseOre))}
         (${esc(money(config.price?.volumeOre))} från ${esc(config.price?.volumeThreshold)} bilar),
         extra län ${esc(money(config.price?.extraCountyOre))} per bil och månad, exkl. moms.</p>

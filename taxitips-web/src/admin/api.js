@@ -98,6 +98,19 @@ export const admin = {
       method: "POST",
       body: { reason },
     }),
+  renamePhone: (approvalId, label) =>
+    request(`/api/admin/approvals/${approvalId}/label`, { method: "POST", body: { label } }),
+  releaseCar: (licenseId, reason) =>
+    request(`/api/admin/licenses/${licenseId}/release`, { method: "POST", body: { reason } }),
+  inviteDriver: (id, licenseId, email, label) =>
+    request(`/api/admin/companies/${id}/driver-invites`, {
+      method: "POST",
+      body: { licenseId, email, label },
+    }),
+  resendDriverInvite: (inviteId) =>
+    request(`/api/admin/driver-invites/${inviteId}/resend`, { method: "POST", body: {} }),
+  revokeDriverInvite: (inviteId) =>
+    request(`/api/admin/driver-invites/${inviteId}/revoke`, { method: "POST", body: {} }),
   notifications: (status = "") =>
     request(`/api/admin/notifications${status ? `?status=${status}` : ""}`),
   events: ({ q = "", hidden = false, days = 14, source = "" } = {}) => {

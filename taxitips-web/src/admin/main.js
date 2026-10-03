@@ -90,6 +90,8 @@ const state = {
   lookupOrg: "",
   // Den senaste offerten, så att beställningen skickar exakt det kunden hörde.
   quotedChange: null,
+  // Inloggningslänk som personalen just skapat åt en av kundens inloggningar.
+  companyLoginLink: null,
   // Supportchatten: en konversation att öppna direkt (från kundsidan).
   supportThread: null,
   // Senaste statusrapporten (menyns prick och Hems varning), och om nästa
@@ -168,10 +170,12 @@ async function renderView(seq) {
       ]);
       state.companyCrm = crm;
       paint(views.kund(
-        detail, state.config, state.companyTab, state.pending, crm,
+        detail, state.config, state.companyTab, state.pending, crm, state.companyLoginLink,
       ));
-      // Hopfälld ruta sist: företagets appar och fel (activity.js).
-      activity.companyPanel(el.view, state.companyId, { isCurrent: current });
+      // Under Historik: företagets appar och fel (activity.js), hämtas när rutan öppnas.
+      if (views.kundTab(state.companyTab) === "historik") {
+        activity.companyPanel(el.view, state.companyId, { isCurrent: current });
+      }
       return;
     }
     switch (state.view) {
@@ -898,11 +902,13 @@ async function act(action, ds) {
       state.companyId = null;
       state.companyTab = "";
       state.pending = null;
+      state.companyLoginLink = null;
       return render();
 
     case "kund-tab":
       state.companyTab = ds.tab;
       state.pending = null;
+      state.companyLoginLink = null;
       await render();
       window.scrollTo({ top: 0 });
       return;
@@ -934,8 +940,77 @@ async function act(action, ds) {
       return driverCode(ds.license, ds.plate);
 
     case "block": {
-      if (!confirm("Spärra telefonen? Den slutar visa tips direkt och lämnar bilen.")) return;
+      if (!confirm(`Spärra ${ds.label || "telefonen"}? Den slutar visa tips direkt och lämnar bilen.\n\n` +
+        "Föraren behöver en ny kod för att köra igen.")) return;
       await admin.blockPhone(ds.approval, "admin_block");
+      flash(`${ds.label || "Telefonen"} är spärrad.`);
+      return render();
+    }
+
+    /* --- Supportåtgärder på kundsidan --- */
+
+    case "car-release": {
+      const reason = prompt(
+        `Frigör ${ds.plate}? ${ds.holder} lämnar bilen, så att en annan förare kan ta den.\n\n` +
+          "Telefonen får fortfarande köra bilen igen. Skäl (sparas i loggen):",
+        "Föraren glömde lämna bilen",
+      );
+      if (reason === null) return;
+      const result = await admin.releaseCar(ds.license, reason.trim());
+      flash(result.released ? `${ds.plate} är frigjord.` : `Ingen körde ${ds.plate}.`);
+      return render();
+    }
+
+    case "phone-rename": {
+      const label = prompt("Nytt namn på telefonen (syns under bilen och i appen):", ds.label || "");
+      if (!label?.trim()) return;
+      await admin.renamePhone(ds.approval, label.trim());
+      flash(`Telefonen heter nu ${label.trim()}.`);
+      return render();
+    }
+
+    case "driver-invite": {
+      const email = prompt(`Förarens e-post för ${ds.plate}?\n\nFöraren får en länk, väljer lösenord och loggar in i appen. Gäller i 7 dagar.`);
+      if (!email?.trim()) return;
+      const label = prompt("Förarens namn (visas som telefonens namn):", "") ?? "";
+      await admin.inviteDriver(state.companyId, ds.license, email.trim(), label.trim());
+      flash(`Inbjudan är skickad till ${email.trim()}.`);
+      return render();
+    }
+
+    case "driver-invite-resend":
+      await admin.resendDriverInvite(ds.invite);
+      flash("Inbjudan är skickad igen och gäller sju nya dagar.");
+      return render();
+
+    case "driver-invite-revoke":
+      if (!confirm(`Återkalla inbjudan till ${ds.email}?`)) return;
+      await admin.revokeDriverInvite(ds.invite);
+      flash("Inbjudan är återkallad.");
+      return render();
+
+    case "member-login-link": {
+      const result = await admin.accountRecovery(ds.user, portalUrl());
+      state.companyLoginLink = result;
+      flash("Inloggningslänken är skapad. Kopiera och skicka den till personen.");
+      return render();
+    }
+
+    case "copy-login-link": {
+      const url = document.getElementById("loginLinkUrl")?.textContent?.trim();
+      if (!url) return;
+      await navigator.clipboard.writeText(url);
+      flash("Länken är kopierad.");
+      return;
+    }
+
+    case "member-role": {
+      const owner = ds.role === "company_owner";
+      if (!confirm(owner
+        ? "Gör personen till ägare? Ägaren kan beställa, säga upp och hantera inloggningar."
+        : "Gör personen till administratör? Hen kan hantera bilar och förare men inte betalning.")) return;
+      await admin.setMember(state.companyId, ds.user, { role: ds.role });
+      flash(owner ? "Personen är nu ägare." : "Personen är nu administratör.");
       return render();
     }
 
@@ -1121,6 +1196,9 @@ async function act(action, ds) {
     /* --- Konton och spärrar --- */
 
     case "open-account":
+      // Från kundsidan: annars ritas kunden igen i stället för kontot.
+      state.companyId = null;
+      state.companyLoginLink = null;
       state.accountUserId = ds.user;
       state.accountRecovery = null;
       state.view = "konton";
@@ -1423,6 +1501,7 @@ async function salesAction(action, ds) {
     case "open-company":
       state.companyId = ds.id;
       state.companyTab = ds.tab || "";
+      state.companyLoginLink = null;
       state.view = "kunder";
       setTab("kunder");
       return render();
@@ -1606,7 +1685,7 @@ async function salesAction(action, ds) {
       const plate = prompt(`Nytt registreringsnummer för ${ds.plate}?\n\nLänen och perioden följer med. Förarna behöver en ny kod.`);
       if (!plate) return;
       const result = await admin.changeVehicle(ds.license, plate.trim(), "permanent");
-      flash(`Bilen är nu ${result.plate}. Ge förarna en ny kod under Förare.`);
+      flash(`Bilen är nu ${result.plate}. Förarna behöver en ny kod.`);
       return render();
     }
 

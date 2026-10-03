@@ -213,3 +213,101 @@ class AdminActionTests(FleetTestCase):
         # En aktiv licens i grundnivån: 799 kr exklusive moms.
         self.assertEqual(body["mrrOre"], 79900)
         self.assertEqual(body["licensesActive"], 1)
+
+
+@override_settings(SUPABASE_JWT_SECRET=SECRET)
+class AdminSupportActionTests(FleetTestCase):
+    """Det personalen gör åt en kund som ringer: frigöra bil, döpa om, bjuda in."""
+
+    def setUp(self):
+        super().setUp()
+        self.client = Client()
+        self.data = self.full_setup()
+        self.admin_id = str(uuid.uuid4())
+        StaffRole.objects.create(user_id=self.admin_id, role=StaffRole.Role.PLATFORM_ADMIN)
+
+    def post(self, path, body, user_id=None):
+        return self.client.post(
+            path, data=json.dumps(body), content_type="application/json",
+            headers={"authorization": f"Bearer {jwt(user_id or self.admin_id)}"},
+        )
+
+    def test_releasing_a_car_ends_the_session_but_keeps_the_phone_approved(self):
+        from fleet import sessions
+        from fleet.models import DeviceApproval, VehicleSession
+
+        sessions.start_session(device_id=self.data["device"].id, license_id=self.data["license"].id)
+        response = self.post(f"/api/admin/licenses/{self.data['license'].id}/release", {"reason": "glömde lämna"})
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(response.json()["released"])
+        self.assertFalse(VehicleSession.objects.filter(ended_at__isnull=True).exists())
+        self.assertEqual(
+            DeviceApproval.objects.get(id=self.data["approval"].id).status, DeviceApproval.Status.ACTIVE
+        )
+        event = AuditEvent.objects.get(action="admin_vehicle_released")
+        self.assertEqual(event.actor_kind, "platform_admin")
+
+    def test_releasing_a_free_car_is_a_no_op(self):
+        response = self.post(f"/api/admin/licenses/{self.data['license'].id}/release", {})
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["released"])
+
+    def test_support_role_cannot_release_or_rename(self):
+        support = str(uuid.uuid4())
+        StaffRole.objects.create(user_id=support, role=StaffRole.Role.SUPPORT)
+        self.assertEqual(
+            self.post(f"/api/admin/licenses/{self.data['license'].id}/release", {}, support).status_code, 403
+        )
+        self.assertEqual(
+            self.post(f"/api/admin/approvals/{self.data['approval'].id}/label", {"label": "X"}, support).status_code,
+            403,
+        )
+
+    def test_renaming_a_phone_changes_approval_and_device(self):
+        from billing.models import Device
+        from fleet.models import DeviceApproval
+
+        response = self.post(f"/api/admin/approvals/{self.data['approval'].id}/label", {"label": "  Anna  K "})
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(DeviceApproval.objects.get(id=self.data["approval"].id).label, "Anna K")
+        self.assertEqual(Device.objects.get(id=self.data["device"].id).label, "Anna K")
+        self.assertEqual(self.post(
+            f"/api/admin/approvals/{self.data['approval'].id}/label", {"label": " "}
+        ).status_code, 400)
+
+    @override_settings(SUPABASE_SERVICE_ROLE_KEY="test-service-role")
+    def test_an_admin_invites_resends_and_revokes_a_driver_by_email(self):
+        from unittest import mock
+
+        from fleet import auth_admin
+        from fleet.models import DriverInvite
+
+        link = auth_admin.AuthLink(url="https://auth.test/verify?token=t", user_id=str(uuid.uuid4()), kind="invite")
+        company = self.data["company"]
+        with mock.patch("fleet.auth_admin.invite_link", return_value=link):
+            response = self.post(f"/api/admin/companies/{company.id}/driver-invites", {
+                "email": "Anna@Forare.TEST", "licenseId": str(self.data["license"].id), "label": "Anna",
+            })
+            self.assertEqual(response.status_code, 200, response.content)
+            invite_id = response.json()["invite"]["inviteId"]
+
+            detail = self.client.get(
+                f"/api/admin/companies/{company.id}", headers={"authorization": f"Bearer {jwt(self.admin_id)}"},
+            ).json()
+            self.assertTrue(detail["driverInvites"]["enabled"])
+            self.assertEqual(detail["driverInvites"]["invites"][0]["plate"], "ABC123")
+
+            self.assertEqual(self.post(f"/api/admin/driver-invites/{invite_id}/resend", {}).status_code, 200)
+            self.assertEqual(DriverInvite.objects.get(id=invite_id).send_count, 2)
+
+        self.assertEqual(self.post(f"/api/admin/driver-invites/{invite_id}/revoke", {}).status_code, 200)
+        self.assertEqual(DriverInvite.objects.get(id=invite_id).status, DriverInvite.Status.REVOKED)
+        self.assertTrue(AuditEvent.objects.filter(action="admin_driver_invited").exists())
+        self.assertTrue(AuditEvent.objects.filter(action="admin_driver_invite_revoked").exists())
+
+    def test_an_invite_for_another_companys_licence_is_not_found(self):
+        other = self.full_setup(plate="XYZ999")
+        response = self.post(f"/api/admin/companies/{self.data['company'].id}/driver-invites", {
+            "email": "a@b.se", "licenseId": str(other["license"].id),
+        })
+        self.assertEqual(response.status_code, 404)

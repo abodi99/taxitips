@@ -500,8 +500,9 @@ details.card > summary::-webkit-details-marker {
 }
 .driver-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 0.75rem;
+  gap: 0.4rem 0.75rem;
 }
 .car-edit {
   margin-top: 0.5rem;
@@ -540,67 +541,203 @@ tr.clickable:hover td {
   left: -9999px;
 }
 
-/* --- Cykeln: steg, filter, att göra ------------------------------------
-   En kund är fem steg. Bara ett steg visas åt gången; stegraden visar vad
-   som är klart och var man är, och varje steg slutar med "Nästa". */
+/* --- Kundsidan: flikar, läge och genvägar --------------------------------
+   Byggd för ett supportsamtal: en rad om förarna får tips, sex flikar per
+   ämne och en översikt som börjar med det som är fel. */
 
 .admin-side .tab-main {
   font-size: 1.02rem;
 }
 
-.steps {
-  display: flex;
-  gap: 0.35rem;
-  margin: 0 0 1rem;
-  overflow-x: auto;
-  padding-bottom: 2px;
+.page-head a {
+  color: inherit;
+  text-decoration-color: var(--line-strong);
 }
-.step {
-  all: unset;
-  box-sizing: border-box;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.5rem;
+.access-line {
+  margin: -0.4rem 0 1rem;
   padding: 0.55rem 0.9rem;
-  border-radius: var(--radius-pill);
-  background: var(--vit);
-  border: 1px solid var(--line);
-  cursor: pointer;
-  white-space: nowrap;
+  border-radius: 10px;
   font-weight: 600;
 }
-.step:hover {
+.access-line.ok {
+  background: color-mix(in srgb, var(--ok) 9%, var(--vit));
+  color: var(--ok);
+}
+.access-line.bad {
+  background: color-mix(in srgb, var(--danger) 9%, var(--vit));
+  color: var(--danger);
+}
+
+.ktabs {
+  display: flex;
+  gap: 0.25rem;
+  margin: 0 0 1.1rem;
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.ktab {
+  all: unset;
+  box-sizing: border-box;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.65rem 0.9rem;
+  border-bottom: 3px solid transparent;
+  margin-bottom: -1px;
+  color: var(--ink-soft);
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.ktab:hover {
+  color: var(--ink);
+}
+.ktab:focus-visible {
+  outline: 3px solid var(--guld);
+  outline-offset: -3px;
+}
+.ktab[aria-current="page"] {
+  color: var(--ink);
+  border-bottom-color: var(--guld);
+}
+.ktab-n {
+  font-size: 0.78rem;
+  padding: 0.05rem 0.45rem;
+  border-radius: var(--radius-pill);
+  background: var(--ljusgra-djup);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.ktab-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--danger);
+}
+
+.ktiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+.ktile {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.9rem 1rem;
+  background: var(--vit);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.ktile:hover {
   border-color: var(--line-strong);
 }
-.step:focus-visible {
+.ktile:focus-visible {
   outline: 3px solid var(--guld);
 }
-.step-num {
-  display: inline-grid;
-  place-items: center;
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 50%;
-  background: var(--ljusgra-djup);
-  font-size: 0.8rem;
-}
-.step.done .step-num {
-  background: var(--ok);
-  color: var(--vit);
-}
-.step.current {
-  background: var(--midnatt);
-  color: var(--vit);
-  border-color: var(--midnatt);
-}
-.step.current .step-num {
-  background: var(--guld);
-  color: var(--midnatt);
-}
-.step-more {
-  margin-left: auto;
+.ktile-label {
   color: var(--ink-soft);
+  font-size: 0.82rem;
+  font-weight: 600;
 }
+.ktile b {
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+}
+.ktile .muted {
+  font-size: 0.86rem;
+}
+
+.calls {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 0.5rem;
+}
+.call {
+  all: unset;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  cursor: pointer;
+}
+.call:hover {
+  background: var(--ljusgra);
+  border-color: var(--line-strong);
+}
+.call:focus-visible {
+  outline: 3px solid var(--guld);
+}
+.call .muted {
+  font-size: 0.85rem;
+}
+
+.driving {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0.5rem 0 0.25rem;
+  padding: 0.45rem 0.7rem;
+  border-radius: 8px;
+  background: var(--ljusgra);
+}
+.driving.on {
+  background: color-mix(in srgb, var(--ok) 9%, var(--vit));
+}
+.car .btn-row {
+  margin-top: 0.5rem;
+}
+
+details.card > summary h2 {
+  display: inline;
+}
+details.danger-zone > summary h2 {
+  color: var(--danger);
+}
+details.danger-zone h3:first-of-type {
+  margin-top: 1rem;
+}
+
+.more-menu {
+  position: relative;
+}
+.more-menu > summary {
+  list-style: none;
+}
+.more-menu > summary::-webkit-details-marker {
+  display: none;
+}
+.more-items {
+  position: absolute;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+  min-width: 200px;
+  margin-top: 0.3rem;
+  padding: 0.5rem;
+  background: var(--vit);
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(20, 33, 61, 0.12);
+}
+code.break {
+  word-break: break-all;
+}
+
 .step-panel {
   animation: panel-in 160ms ease-out;
 }
@@ -610,11 +747,6 @@ tr.clickable:hover td {
 }
 @media (prefers-reduced-motion: reduce) {
   .step-panel { animation: none; }
-}
-.step-next {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 0.25rem;
 }
 .linklike {
   all: unset;
