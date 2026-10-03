@@ -145,6 +145,11 @@ FEED_CACHE_SECONDS = 20
 _ROAD_TIER_RANK = {"road_accident_or_closure": 0, "road_work_or_queue": 1}
 # SQL-sidan av thresholds.road_shown: road.<nivå>.<ett visat villkor>.
 _ROAD_SHOWN_RE = r"^road\.[a-z_]+\.(" + "|".join(sorted(thresholds.ROAD_SHOWN_CONDITIONS)) + r")$"
+# Ett "Övrigt"-meddelande som bara säger att störningen är över.
+_RESOLVED_RE = (
+    r"(kör åter|går åter|åter i trafik|uppklarat|är åtgärdat|har upphört|"
+    r"trafiken går som vanligt|normal trafik|enligt tidtabell igen|är öppen igen|återupptag)"
+)
 
 
 def _one_per_road_situation(rows: list[dict]) -> list[dict]:
@@ -306,6 +311,8 @@ def _serialize(o: Opportunity, distance_km: float | None, now) -> dict:
         "kind": o.kind,
         "mode": o.mode,
         "severity_tier": o.severity_tier,
+        # "Övrigt": visas längst ner, aldrig som notis (se feed-filtret ovan).
+        "minor": o.severity_tier == "ignore",
         "confidence": o.confidence,
         "rule_id": o.rule_id,
         "lat": o.lat,
@@ -445,16 +452,29 @@ def feed_for(
             # visar dem gråmarkerade som "Nyss slut"). Inget som börjar mer än
             # två timmar fram: det är inte förarens affär än.
             end_time__gt=now - timedelta(minutes=thresholds.FEED_ENDED_GRACE_MINUTES),
-            demand_score__gt=0,
+        )
+        # "Övrigt" (severity_tier ignore, poäng 0) följer med längst ner i
+        # listan i stället för att döljas: ägaren såg giltiga störningar i
+        # Göteborg -- indragna spårvagnslinjer, hinder på E6, bärgning -- som
+        # aldrig syntes, och när de starka tipsen är få är de det enda som
+        # finns (2026-10-03). De ger aldrig notiser (core/notify.py kräver
+        # poäng och en notisvärd tier). Meddelanden om att störningen redan
+        # är över är däremot inget att visa.
+        .filter(Q(demand_score__gt=0) | Q(severity_tier="ignore"))
+        .exclude(
+            Q(severity_tier="ignore")
+            & (Q(title__iregex=_RESOLVED_RE) | Q(summary__iregex=_RESOLVED_RE))
         )
         .filter(
             Q(start_time__isnull=True)
             | Q(start_time__lte=now + timedelta(hours=thresholds.FEED_HORIZON_HOURS))
         )
-        .exclude(severity_tier="ignore")
         .filter(suppressed_at__isnull=True)
         # Bara de väghändelser föraren ska se, se thresholds.ROAD_SHOWN_CONDITIONS.
-        .exclude(Q(kind="road") & ~Q(rule_id__regex=_ROAD_SHOWN_RE))
+        # Vägens "Övrigt" (hinder, djur, bärgning) följer med som sammanhang.
+        .exclude(
+            Q(kind="road") & ~Q(rule_id__regex=_ROAD_SHOWN_RE) & ~Q(severity_tier="ignore")
+        )
     )
 
     # Förfilter i SQL: läs bara tips som kan hamna i svaret. Slingan nedan fäller

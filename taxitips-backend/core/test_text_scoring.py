@@ -15,6 +15,7 @@ from core.text_scoring import (
     STATED_ALTERNATIVE_SCORE,
     WHOLE_LINE_STOP_SCORE,
     classify_transit_alert,
+    departure_date,
 )
 
 
@@ -191,3 +192,26 @@ class RoadTier(TestCase):
         )
         self.assertEqual(accident.tier, SeverityTier.ROAD_ACCIDENT_OR_CLOSURE)
         self.assertEqual(queue.tier, SeverityTier.ROAD_WORK_OR_QUEUE)
+
+
+class NamedTrainCancelled(TestCase):
+    """Vy Tågs strejkinställda tåg Göteborg–Halden blev "Hela linjen stoppad" 53 och 97 (2026-10-02)."""
+
+    def test_a_named_train_is_one_departure(self):
+        for header in (
+            "Vy Tåg 382, 7 oktober klockan 06:14, är inställt från Göteborg Central till Halden stasjon",
+            "Vy Tåg 397 klockan 19:är inställt från Halden statjon till Göteborg Central.",
+            "VY Tåg 393 klockan 17:18 är inställt från Halden stasjon till Göteborg Central.",
+        ):
+            alert = {"header": header, "description": "För mer information, kontakta Vy Tåg. Orsaken är strejk."}
+            result = classify_transit_alert(alert, _taxi(score=85))
+            self.assertEqual(result.tier, SeverityTier.VEHICLE_CANCELLED, header)
+            self.assertEqual(result.score, SINGLE_DEPARTURE_SCORE, header)
+            self.assertFalse(result.stranded, header)
+
+    def test_the_date_in_the_text(self):
+        import datetime as dt
+
+        self.assertEqual(departure_date("7 oktober klockan 06:14", dt.date(2026, 10, 2)), dt.date(2026, 10, 7))
+        self.assertEqual(departure_date("tåget 3 januari", dt.date(2026, 12, 20)), dt.date(2027, 1, 3))
+        self.assertIsNone(departure_date("klockan 06:14", dt.date(2026, 10, 2)))

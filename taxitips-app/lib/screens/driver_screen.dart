@@ -107,10 +107,10 @@ class _DriverScreenState extends State<DriverScreen>
   bool _nearMe = false;
   String _sortMode = 'score'; // 'score', 'distance', 'newest'
 
-  /// Svaga tips (en enstaka inställd buss, nästa tåg om fem minuter) är
-  /// dolda tills föraren ber om dem -- de är sällan värda en körning, och
-  /// de var flest i listan. Väghinder och "Nyss slut" påverkas inte.
-  bool _showWeak = false;
+  /// Svaga tips (en enstaka inställd buss, nästa tåg om fem minuter) och
+  /// "Övrigt" visas längre ner i listan, inte dolda: när de starka tipsen är
+  /// få är de det som finns (ägarens beslut 2026-10-03). Föraren kan dölja dem.
+  bool _showWeak = true;
   int _hiddenWeak = 0;
 
   /// Event types the driver has explicitly switched off. Stored as an
@@ -264,7 +264,9 @@ class _DriverScreenState extends State<DriverScreen>
   static const _prefsScoreMinKey = 'tb_filter_score_min';
   static const _prefsScoreMaxKey = 'tb_filter_score_max';
   static const _prefsNearMeKey = 'tb_filter_near_me';
-  static const _prefsShowWeakKey = 'tb_filter_show_weak';
+  // v2: standarden blev "visa". Den gamla nyckeln bar många förares sparade
+  // "dölj" från när det var standard -- de hade aldrig sett ändringen.
+  static const _prefsShowWeakKey = 'tb_filter_show_weak_v2';
   static const _prefsSourceKey = 'tb_filter_source'; // legacy exclusive
   static const _prefsHiddenModesKey = 'tb_filter_hidden_modes';
   static const _prefsHiddenTiersKey = 'tb_filter_hidden_tiers';
@@ -1593,6 +1595,12 @@ class _DriverScreenState extends State<DriverScreen>
       final bActive = b['is_active'] != false;
       if (aActive != bActive) return aActive ? -1 : 1;
 
+      // "Övrigt" alltid sist, oavsett sortering: det är trafikbolagets
+      // meddelande, inte en bedömning av att det är värt att köra dit.
+      final aMinor = a['minor'] == true;
+      final bMinor = b['minor'] == true;
+      if (aMinor != bMinor) return aMinor ? 1 : -1;
+
       final da = (a['distance_km'] as num?) ?? double.infinity;
       final db = (b['distance_km'] as num?) ?? double.infinity;
       final ta = (a['start_time'] as String?) ?? '';
@@ -2026,7 +2034,7 @@ class _DriverScreenState extends State<DriverScreen>
       _scoreMin = 0;
       _scoreMax = 100;
       _nearMe = false;
-      _showWeak = false;
+      _showWeak = true;
       _hiddenModes = {};
       _hiddenTiers = {};
       _status = null;

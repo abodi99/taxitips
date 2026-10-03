@@ -102,12 +102,24 @@ _WHOLE_LINE_STOP_RE = re.compile(
 # till nästa avgång". Mätt 2026-10-02: SL:s tunnelbane- och spårvagnslarm av
 # den här sorten blev "Hela linjen stoppad" 85 och väckte förare, fast nästa
 # tåg gick om några minuter.
+#
+# Ett namngivet tåg ("Vy Tåg 382 ... är inställt") är också en enstaka avgång,
+# även när klockslaget saknar minuter ("klockan 19:är") eller följs av ett
+# komma ("06:14, är inställt"). Mätt 2026-10-02: Vy Tågs strejkinställda tåg
+# Göteborg–Halden blev "Hela linjen stoppad" 53 och 97.
 _SINGLE_DEPARTURE_RE = re.compile(
     r"(inställd avgång|avgången (kl\.? ?)?\d{1,2}[:.]\d{2}|"
-    r"(?<!från )kl\.? ?\d{1,2}[:.]\d{2}[^.]{0,60}inställ|\b\d{1,2}[:.]\d{2} (är )?inställ|"
+    r"(?<!från )kl\.? ?\d{1,2}[:.]\d{2}[^.]{0,60}inställ|\b\d{1,2}[:.]\d{2},? (är )?inställ|"
+    r"\btåg(?: nr\.?)? ?\d{3,5}\b[^.]{0,90}inställ|"
     r"delsträcka|del av avgång|enstaka avgång|hänvisas till nästa avgång|nästa ordinarie avgång)",
     re.IGNORECASE,
 )
+# "7 oktober klockan 06:14": avgångens datum när det inte är i dag.
+_MONTHS = (
+    "januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti",
+    "september", "oktober", "november", "december",
+)
+_DATE_RE = re.compile(r"\b(\d{1,2})\s+(" + "|".join(_MONTHS) + r")\b", re.IGNORECASE)
 # Tåget går, bara långsammare -- en försening, inget stopp.
 _REDUCED_SPEED_RE = re.compile(
     r"(reducerad hastighet|nedsatt hastighet|hastighetsnedsättning|kör långsamt)", re.IGNORECASE
@@ -165,6 +177,28 @@ def departure_clock(text: str) -> tuple[int, int] | None:
         hour, minute = int(match.group(1)), int(match.group(2))
         if 0 <= hour <= 23 and 0 <= minute <= 59:
             return hour, minute
+    return None
+
+
+def departure_date(text: str, today):
+    """
+    Datumet i texten ("7 oktober" -> date), eller None. Året är i år, eller
+    nästa år när datumet redan passerat med mer än ett halvår -- ett larm i
+    december om "3 januari" gäller januari som kommer.
+    """
+    import datetime as _dt
+
+    match = _DATE_RE.search(text or "")
+    if not match:
+        return None
+    day, month = int(match.group(1)), _MONTHS.index(match.group(2).lower()) + 1
+    for year in (today.year, today.year + 1):
+        try:
+            candidate = _dt.date(year, month, day)
+        except ValueError:
+            return None
+        if (candidate - today).days > -183:
+            return candidate
     return None
 
 

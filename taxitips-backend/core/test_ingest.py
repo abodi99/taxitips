@@ -149,3 +149,22 @@ class StoredLevelFollowsTheFeedRule(TestCase):
         self.assertEqual(
             o.end_time, datetime(2026, 9, 30, 17, 44, tzinfo=ZoneInfo("Europe/Stockholm")),
         )
+
+
+class FutureSingleDeparture(TestCase):
+    """Vy Tåg 382 den 7 oktober syntes som aktivt tips från den 2 oktober (2026-10-02)."""
+
+    def test_it_starts_an_hour_before_the_departure_on_the_given_date(self):
+        published = datetime(2026, 10, 2, 15, 34, tzinfo=ZoneInfo("Europe/Stockholm"))
+        alert = _alert(
+            region="vt", active_from=published,
+            header="Vy Tåg 382, 7 oktober klockan 06:14, är inställt från Göteborg Central till Halden stasjon",
+            description="För mer information, kontakta Vy Tåg. Orsaken är strejk.",
+        )
+        write("vasttrafik", assess([alert]), [])
+        o = Opportunity.objects.get(external_id="test:1")
+        departure = datetime(2026, 10, 7, 6, 14, tzinfo=ZoneInfo("Europe/Stockholm"))
+        self.assertEqual(o.severity_tier, SeverityTier.VEHICLE_CANCELLED)
+        self.assertEqual(o.departure_at, departure)
+        self.assertEqual(o.start_time, datetime(2026, 10, 7, 5, 14, tzinfo=ZoneInfo("Europe/Stockholm")))
+        self.assertLessEqual(o.end_time, datetime(2026, 10, 7, 7, 0, tzinfo=ZoneInfo("Europe/Stockholm")))

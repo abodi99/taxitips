@@ -62,7 +62,7 @@ class GazetteerTier(ResetGazetteerCache):
 
     def test_a_real_place_match_is_preferred_over_the_gazetteer(self):
         StopArea.objects.create(gid="1", operator="sl", name="Some Local Stop", lat=99.0, lon=99.0)
-        alert = {"header": "Some Local Stop", "description": "", "region": "sl"}
+        alert = {"header": "Some Local Stop", "description": "", "region": "skane"}
         taxi = {"places": ["Malmö"]}
         lat, lon, precision = resolve_coords(alert, taxi)
         self.assertEqual(precision, "place")
@@ -80,3 +80,37 @@ class RegionCentroidTier(ResetGazetteerCache):
         alert = {"header": "Inställd avgång", "description": "", "region": "made-up-region"}
         lat, lon, precision = resolve_coords(alert, {})
         self.assertEqual((lat, lon, precision), (None, None, "none"))
+
+
+class OperatorCounty(ResetGazetteerCache):
+    """
+    Ett regionalt trafikbolags ort ligger i bolagets eget län. Östgötatrafikens
+    "linje 10 mot Ekängen" placerades vid Ekängen utanför Trollhättan och
+    hamnade hos förare i Västra Götaland (2026-10-03).
+    """
+
+    def setUp(self):
+        super().setUp()
+        StopArea.objects.create(gid="1", operator="vt", name="Ekängen", lat=58.477, lon=12.267)
+        StopArea.objects.create(gid="2", operator="ot", name="Ekängen", lat=58.385, lon=15.660)
+
+    def test_the_stop_in_the_operators_county_wins(self):
+        alert = {"header": "Försening på linje 10 mot Ekängen", "description": "", "region": "otraf"}
+        lat, lon, precision = resolve_coords(alert, {})
+        self.assertEqual((lat, lon, precision), (58.385, 15.660, "gazetteer"))
+
+        alert["region"] = "vt"
+        lat, lon, _precision = resolve_coords(alert, {})
+        self.assertEqual((lat, lon), (58.477, 12.267))
+
+    def test_only_a_wrong_county_match_falls_back_to_the_operators_city(self):
+        StopArea.objects.create(gid="3", operator="vt", name="Runnvägen", lat=58.887, lon=11.169)
+        alert = {"header": "Buss linje 13 från Runnvägen", "description": "", "region": "dt"}
+        lat, lon, precision = resolve_coords(alert, {})
+        self.assertEqual(precision, "region")
+        self.assertNotEqual((lat, lon), (58.887, 11.169))
+
+    def test_national_sources_are_not_constrained(self):
+        alert = {"header": "Försening vid Ekängen", "description": "", "region": "rail"}
+        _lat, _lon, precision = resolve_coords(alert, {})
+        self.assertEqual(precision, "gazetteer")

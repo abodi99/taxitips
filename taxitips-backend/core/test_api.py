@@ -329,10 +329,24 @@ class MarketHorizonTests(ApiTestCase):
         self.assertEqual(body["homeRegion"], "dt")
         self.assertEqual([a["title"] for a in body["alerts"]], ["Dalatips"])
 
-    def test_ignored_and_zero_score_rows_never_reach_a_driver(self):
-        opportunity(severity_tier=SeverityTier.IGNORE)
+    def test_other_rows_are_shown_last_and_marked_minor(self):
+        """
+        "Övrigt" (ignore) döljs inte längre: en indragen spårvagnslinje eller
+        ett hinder på E6 är värt att se när de starka tipsen är få
+        (2026-10-03). Det hamnar sist och är märkt, och en nolla utan tier
+        eller ett "kör åter" syns fortfarande inte.
+        """
+        opportunity(severity_tier=SeverityTier.IGNORE, demand_score=0,
+                    title="Linje 2 är indragen vid Vasaplatsen")
+        opportunity(severity_tier=SeverityTier.IGNORE, demand_score=0,
+                    title="Linje 4 kör åter från Berzeliigatan", summary="Stoppet är uppklarat.")
         opportunity(demand_score=0)
-        self.assertEqual(self.get_alerts()["alerts"], [])
+        opportunity(demand_score=40, title="Riktigt tips")
+        alerts = self.get_alerts()["alerts"]
+        self.assertEqual([a["title"] for a in alerts], ["Riktigt tips", "Linje 2 är indragen vid Vasaplatsen"])
+        self.assertFalse(alerts[0]["minor"])
+        self.assertTrue(alerts[1]["minor"])
+        self.assertEqual(alerts[1]["worth_it_score"], 0)
 
     def test_just_ended_is_shown_but_scored_zero(self):
         """"Nyss slut": en kvart gråmarkerat, sedan borta."""

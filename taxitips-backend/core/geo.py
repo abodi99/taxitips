@@ -285,28 +285,50 @@ REGION_CITIES: dict[str, list[str]] = {
 # resolve_coords runs per alert (hundreds per cycle) and the register
 # changes on a daily cadence at most -- mirrors poller.js's
 # stopNameGazetteer singleton.
-_gazetteer_cache: dict[str, dict] | None = None
+_gazetteer_cache: dict[str, list[dict]] | None = None
 
 
-def _load_gazetteer() -> dict[str, dict]:
+def _load_gazetteer() -> dict[str, list[dict]]:
     global _gazetteer_cache
     if _gazetteer_cache is not None:
         return _gazetteer_cache
 
     from core.models import StopArea  # deferred: keeps this module importable pre-Django-setup
 
-    gaz: dict[str, dict] = {}
+    # Alla platser per namn, inte bara den första: "Ekängen" finns både i
+    # Linköping och vid Trollhättan, och vilken som gäller avgörs av vilket
+    # trafikbolag som skrev larmet (resolve_coords).
+    gaz: dict[str, list[dict]] = {}
     try:
         for name, lat, lon in StopArea.objects.values_list("name", "lat", "lon"):
             if not name or len(name) < 5:
                 continue
-            key = name.lower()
-            if key not in gaz:
-                gaz[key] = {"lat": lat, "lon": lon}
+            gaz.setdefault(name.lower(), []).append({"lat": lat, "lon": lon})
     except Exception:
         pass  # ingestion infrastructure missing/unmigrated -- degrade, don't crash
     _gazetteer_cache = gaz
     return gaz
+
+
+def _outside_market(lat: float | None, lon: float | None, region: str) -> bool:
+    """
+    Ligger punkten i ett ANNAT län än det regionala trafikbolagets?
+
+    Östgötatrafikens "linje 10 mot Ekängen" placerades vid Ekängen utanför
+    Trollhättan, och Dalatrafikens "Runnvägen" i Strömstad: namnet slogs upp
+    i hela landet. Tipsen hamnade i Västra Götaland och väckte fel förare
+    (2026-10-03). Ett regionalt bolag kör i sitt eget län, så en träff utanför
+    det är fel ort. Rikstäckande källor (Trafikverket, SJ) har ingen
+    marknadsnyckel och berörs inte; en punkt utanför alla län (okänd) godtas
+    som förut.
+    """
+    from core.areas import MARKET_COUNTY, place_for
+
+    market = MARKET_COUNTY.get(region)
+    if not market or lat is None or lon is None:
+        return False
+    county, _municipality, _codes = place_for(lat, lon)
+    return county is not None and county != market
 
 
 def resolve_coords(alert: dict, taxi: dict) -> tuple[float | None, float | None, str]:
@@ -323,10 +345,11 @@ def resolve_coords(alert: dict, taxi: dict) -> tuple[float | None, float | None,
     if lat is not None and lon is not None:
         return lat, lon, "exact"
 
+    region = str(alert.get("region") or "").lower()
     place_names = [*(taxi.get("hubs") or []), *(taxi.get("places") or []), *(alert.get("places") or [])]
     for name in place_names:
         geo = resolve_place_coords(name)
-        if geo:
+        if geo and not _outside_market(geo["lat"], geo["lon"], region):
             return geo["lat"], geo["lon"], "place"
 
     # Tier 3: individual stop names ("Elektravägen", "Hässelby strand")
@@ -337,9 +360,12 @@ def resolve_coords(alert: dict, taxi: dict) -> tuple[float | None, float | None,
     if gaz:
         text = f"{alert.get('header') or ''} {alert.get('description') or ''}".lower()
         best_name = None
-        for name, coord in gaz.items():
-            if name in text and (best_name is None or len(name) > len(best_name)):
-                best_name, best_coord = name, coord
+        for name, coords in gaz.items():
+            if name not in text or (best_name is not None and len(name) <= len(best_name)):
+                continue
+            inside = [c for c in coords if not _outside_market(c["lat"], c["lon"], region)]
+            if inside:
+                best_name, best_coord = name, inside[0]
         if best_name:
             return best_coord["lat"], best_coord["lon"], "gazetteer"
 
@@ -348,7 +374,6 @@ def resolve_coords(alert: dict, taxi: dict) -> tuple[float | None, float | None,
     # of silently vanishing. Callers must label this in `reasons` --
     # this function only reports the precision, it doesn't decide how the
     # UI presents it.
-    region = str(alert.get("region") or "").lower()
     anchor_city = REGION_ANCHOR.get(region)
     if anchor_city:
         geo = resolve_place_coords(anchor_city)

@@ -16,6 +16,9 @@ const severityTierLabels = {
   'road_work_or_queue': 'Vägarbete eller köbildning',
   'road_work': 'Mindre vägarbete',
   'disruption_unclassified': 'Störning (osäker klassificering)',
+  // Trafikbolagets meddelande som inte räknas som ett tips: visas längst ner
+  // i listan, aldrig som notis (core/api.py, "minor").
+  'ignore': 'Övrigt – trafikbolagets meddelande',
 };
 
 /// Short (card-width) version of the same tiers, for the compact list view.
@@ -30,6 +33,7 @@ const severityTierShortLabels = {
   'road_work_or_queue': 'Vägarbete/kö',
   'road_work': 'Vägarbete',
   'disruption_unclassified': 'Osäker bedömning',
+  'ignore': 'Övrigt',
 };
 
 const confidenceLabels = {

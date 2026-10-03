@@ -24,7 +24,7 @@ from core.models import SeverityTier
 from core.repository import upsert_opportunities, upsert_source_events
 from core.sources.smhi import nearest_weather
 from core.taxi_relevance import enrich_alert
-from core.text_scoring import Assessment, classify_transit_alert, departure_clock
+from core.text_scoring import Assessment, classify_transit_alert, departure_clock, departure_date
 
 Assessed = tuple[dict, dict, Assessment, float | None, float | None, str]
 
@@ -38,11 +38,31 @@ def single_departure_time(alert: dict, result: Assessment, now: datetime) -> dat
     """Klockslaget för en enstaka inställd avgång ("kl 16:59"), eller None."""
     if not result.rule_id.endswith(".single_departure"):
         return None
-    clock = departure_clock(f"{alert.get('header') or ''} {alert.get('description') or ''}")
+    text = f"{alert.get('header') or ''} {alert.get('description') or ''}"
+    clock = departure_clock(text)
     if not clock:
         return None
     day = timezone.localtime(alert.get("active_from") or now)
+    # "Vy Tåg 382, 7 oktober klockan 06:14": avgången är den 7:e, inte den dag
+    # meddelandet publicerades.
+    dated = departure_date(text, day.date())
+    if dated:
+        day = day.replace(year=dated.year, month=dated.month, day=dated.day)
     return day.replace(hour=clock[0], minute=clock[1], second=0, microsecond=0)
+
+
+# En inställd avgång längre fram syns först en stund före avgången -- inte från
+# det att trafikbolaget publicerade den (ibland dagar i förväg).
+SINGLE_DEPARTURE_LEAD = timedelta(minutes=60)
+
+
+def start_time_for(alert: dict, result: Assessment, now: datetime):
+    """Källans starttid, men en framtida enstaka avgång börjar strax före avgången."""
+    start = alert.get("active_from")
+    departure = single_departure_time(alert, result, now)
+    if departure and departure - SINGLE_DEPARTURE_LEAD > (start or now):
+        return departure - SINGLE_DEPARTURE_LEAD
+    return start
 
 
 def affected_time(alert: dict, result: Assessment, now: datetime) -> datetime:
@@ -234,7 +254,7 @@ def write(
             # coalesce(region,'skane') för tips utan koordinat, och "" hade
             # matchat ingen marknad alls. Se Opportunity.region.
             "region": alert.get("region") or None,
-            "start_time": alert.get("active_from"),
+            "start_time": start_time_for(alert, result, now),
             "end_time": end_time,
             "demand_score": score,
             "confidence": result.confidence,
