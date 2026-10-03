@@ -653,14 +653,29 @@ def principal_for(request) -> Principal:
     if accounts.account_block(user_id=user_id, email=payload.get("email") or "") is not None:
         return Principal(user_id=user_id, aal=aal)
 
+    # Personal först (adminwebben), men behåll kundmedlemskap om det finns.
+    # Annars förlorar t.ex. en plattformsadmin som också äger demobolaget
+    # GET /api/fleet/company (403 no_company) när hen loggar in i appen.
     staff = StaffRole.objects.filter(user_id=user_id, is_active=True).first()
+    member = CompanyMember.objects.filter(user_id=user_id, status="active").first()
+
     if staff is not None:
+        permissions = set(staff_permissions_for(staff.role))
+        company_id = None
+        role = ""
+        if member is not None:
+            company_id = str(member.company_id)
+            role = member.role or ""
+            member_perms = set(permissions_for(member.role))
+            if accounts.company_block(member.company_id) is not None:
+                member_perms = {p for p in member_perms if p == Perm.VIEW_COMPANY}
+            permissions |= member_perms
         return Principal(
             user_id=user_id, staff_role=staff.role, aal=aal,
-            permissions=staff_permissions_for(staff.role),
+            company_id=company_id, role=role,
+            permissions=frozenset(permissions),
         )
 
-    member = CompanyMember.objects.filter(user_id=user_id, status="active").first()
     if member is None:
         return Principal(user_id=user_id, aal=aal)
     permissions = permissions_for(member.role)

@@ -150,6 +150,17 @@ class AccountBlockTests(_Base):
         })
         self.assertEqual(self.call("get", "/api/admin/overview", other_admin).status_code, 403)
 
+    def test_staff_who_also_owns_a_company_keeps_customer_overview(self):
+        """Plattformsadmin + company_owner: appens kundläge får inte 403 no_company."""
+        data = self.full_setup()
+        owner = str(data["owner"].user_id)
+        StaffRole.objects.create(user_id=owner, role=StaffRole.Role.PLATFORM_ADMIN)
+        response = self.call("get", "/api/fleet/company", owner, email="agare@example.test")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["company"]["id"], str(data["company"].id))
+        # Adminwebben fungerar fortfarande.
+        self.assertEqual(self.call("get", "/api/admin/overview", owner).status_code, 200)
+
     def test_you_cannot_block_yourself(self):
         response = self.call("post", "/api/admin/blocks/new", self.admin_id, {
             "kind": "user", "value": self.admin_id, "reason": "oops",

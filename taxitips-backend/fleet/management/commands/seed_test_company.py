@@ -136,9 +136,23 @@ class Command(BaseCommand):
             license=license, vehicle=vehicle, created_by=None,
             label="Testtelefon", now=now,
         )
+        # Alla telefoner på bolaget (även utan godkännande) får rätt län —
+        # annars kan en gammal Skåne-prefs styra flödet innan parkoppling.
+        from billing.models import Device
+        from fleet import device_prefs
+
+        entitled = [base, *extras]
+        synced = 0
+        for device in Device.objects.filter(company_id=company.id):
+            prefs, did = device_prefs.align_prefs_to_entitlement(
+                device.notify_prefs, entitled,
+            )
+            if did:
+                device_prefs.write_device_prefs(device.id, prefs)
+                synced += 1
 
         counties = ", ".join(
-            f"{c} {areas.COUNTY_NAMES[c]}" for c in (base, *extras)
+            f"{c} {areas.COUNTY_NAMES[c]}" for c in entitled
         )
         self.stdout.write("")
         self.stdout.write(self.style.SUCCESS(f"ANSLUTNINGSKOD: {issued.code}"))
@@ -147,5 +161,6 @@ class Command(BaseCommand):
         self.stdout.write(f"bolagskod     : {company.join_code}")
         self.stdout.write(f"bil           : {vehicle.plate}")
         self.stdout.write(f"lan           : {counties}")
+        self.stdout.write(f"telefoner synk: {synced}")
         self.stdout.write(f"betalperiod   : till {now + timedelta(days=options['days']):%Y-%m-%d}")
         self.stdout.write("")

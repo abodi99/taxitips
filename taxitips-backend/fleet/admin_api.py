@@ -71,8 +71,8 @@ def _staff(request, permission: str) -> roles.Principal:
     """
     Plattformspersonal med rätt behörighet, annars ett fel.
 
-    `principal_for` läser `StaffRole` före `company_members`, och en
-    kundmedlem får därför aldrig en admin-behörighet här.
+    `principal_for` sätter `staff_role` från `StaffRole`. En ren
+    kundmedlem (utan personalrad) får aldrig admin-behörighet här.
     """
     principal = access.principal_for(request)
     if principal.user_id is None:
