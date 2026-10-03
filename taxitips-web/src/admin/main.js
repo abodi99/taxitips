@@ -70,7 +70,8 @@ const el = {
 };
 
 const state = {
-  view: "oversikt",
+  // Helhetsbilden först; Hem (att göra) är ett klick bort.
+  view: "dashboard",
   companyId: null,
   query: "",
   pushStatus: "",
