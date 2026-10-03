@@ -238,8 +238,8 @@ export const admin = {
       body: { reason, immediate },
     }),
   undoCancel: (id) => request(`/api/admin/companies/${id}/undo-cancel`, { method: "POST", body: {} }),
-  inviteOwner: (id, email) =>
-    request(`/api/admin/companies/${id}/owner-invite`, { method: "POST", body: { email } }),
+  inviteOwner: (id, email, role = "company_owner") =>
+    request(`/api/admin/companies/${id}/owner-invite`, { method: "POST", body: { email, role } }),
   paymentLink: (orderId, payment, daysUntilDue = 14) =>
     request(`/api/admin/orders/${orderId}/payment-link`, {
       method: "POST",

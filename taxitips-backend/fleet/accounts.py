@@ -93,6 +93,14 @@ def email_for(user_id) -> str:
     return row.email if row else ""
 
 
+def user_ids_for_email(email: str) -> list:
+    """Konton som senast setts med adressen (katalogen, inte Supabase Auth)."""
+    email = normalize_email(email)
+    if not email:
+        return []
+    return list(KnownAccount.objects.filter(email=email).values_list("user_id", flat=True))
+
+
 def emails_for(user_ids) -> dict[str, str]:
     return {
         str(row.user_id): row.email

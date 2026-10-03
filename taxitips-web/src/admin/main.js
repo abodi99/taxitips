@@ -1005,12 +1005,14 @@ async function act(action, ds) {
     }
 
     case "member-role": {
-      const owner = ds.role === "company_owner";
-      if (!confirm(owner
-        ? "Gör personen till ägare? Ägaren kan beställa, säga upp och hantera inloggningar."
-        : "Gör personen till administratör? Hen kan hantera bilar och förare men inte betalning.")) return;
+      const what = {
+        company_owner: "ägare. Ägaren kan beställa, säga upp och hantera inloggningar",
+        fleet_admin: "Bilar och förare. Hen sköter bilar, län och förartelefoner men inte betalning",
+        finance: "Ekonomi. Hen ser och betalar fakturor men ändrar inte bilar eller förare",
+      }[ds.role];
+      if (!confirm(`Ändra rollen till ${what}?`)) return;
       await admin.setMember(state.companyId, ds.user, { role: ds.role });
-      flash(owner ? "Personen är nu ägare." : "Personen är nu administratör.");
+      flash(`Rollen är ändrad till ${views.MEMBER_ROLE[ds.role] ?? ds.role}.`);
       return render();
     }
 
@@ -1774,10 +1776,15 @@ async function salesAction(action, ds) {
     case "owner-invite": {
       const email = document.getElementById("ownerEmail")?.value.trim();
       if (!email) throw new ApiError(400, "Skriv e-postadressen.", "email_required");
-      const invite = await admin.inviteOwner(companyId, email);
-      // Länken skickas av Supabase Auth, som också skapar kontot om det inte
-      // finns. Kontot knyts till bolaget först när personen loggar in med den
-      // här adressen (fleet/api.py:claim_invite).
+      const role = document.getElementById("ownerRole")?.value || "company_owner";
+      const invite = await admin.inviteOwner(companyId, email, role);
+      // Servern mejlar inbjudan med en inloggningslänk. Kontot knyts till
+      // bolaget när personen loggar in med adressen (fleet/api.py:claim_invite).
+      if (invite.mailSent) {
+        flash(`Inbjudan är mejlad till ${invite.email}. Den gäller till ${invite.expiresAt.slice(0, 10)}.`);
+        return render();
+      }
+      // Reserv utan service_role-nyckel på servern: en vanlig inloggningslänk.
       const { error } = await supabase().auth.signInWithOtp({
         email: invite.email,
         options: { shouldCreateUser: true, emailRedirectTo: portalUrl() },

@@ -20,7 +20,7 @@ function clientCell(c) {
   const line = [PLATFORM[c.platform] ?? c.platform, version, c.deviceModel].filter(Boolean).join(" · ");
   return `${esc(line || "Ingen appinfo")}${c.osVersion ? `<div class="muted">${esc(c.osVersion)}</div>` : ""}`;
 }
-const ROLE = { company_owner: "Ägare", company_admin: "Administratör" };
+const ROLE = { company_owner: "Ägare", fleet_admin: "Bilar och förare", finance: "Ekonomi", company_admin: "Administratör (äldre)" };
 
 function accountRows(accounts, { manage = false, compact = false } = {}) {
   if (!accounts.length) {

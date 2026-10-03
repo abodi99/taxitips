@@ -50,6 +50,9 @@ urlpatterns = [
     path("claim-invite", api.claim_invite),
     path("invites", api.create_invite),
     # Företag och behörigheter
+    path("members", api.members_view),
+    path("members/invite", api.member_invite),
+    path("members/invites/<uuid:invite_id>/revoke", api.member_invite_revoke),
     path("members/remove", api.remove_member),
     path("ownership/transfer", api.transfer_ownership),
     path("ownership/<uuid:transfer_id>/accept", api.accept_ownership),

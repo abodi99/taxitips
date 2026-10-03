@@ -312,13 +312,19 @@ export function addCarsBlock(d, config) {
 /** Steg Kundkonto: bjud in den som sköter kontot i kundportalen och appen. */
 export function ownerBlock(d) {
   const profile = d.profile ?? {};
+  const members = (d.members ?? []).some((m) => m.status === "active");
   return `
     <div class="card">
-      <h2>Bjud in kundens administratör</h2>
-      <p class="muted">Personen får en inloggningslänk och kopplas till företaget när hen loggar in.
-        Sedan kan hen själv koppla förare i appen.</p>
+      <h2>Bjud in en inloggning</h2>
+      <p class="muted">Personen får ett mejl från Taxi Tips med en inloggningslänk och kopplas till företaget
+        när hen loggar in. Gäller i 14 dagar.</p>
       <div class="inline-field">
-        <input id="ownerEmail" type="email" value="${esc(profile.contactEmail ?? "")}" placeholder="namn@bolaget.se" />
+        <input id="ownerEmail" type="email" value="${esc(members ? "" : profile.contactEmail ?? "")}" placeholder="namn@bolaget.se" />
+        <select id="ownerRole" aria-label="Roll">
+          <option value="company_owner">Ägare</option>
+          <option value="fleet_admin">Bilar och förare</option>
+          <option value="finance">Ekonomi</option>
+        </select>
         <button class="btn btn-primary" type="button" data-action="owner-invite">Skicka inbjudan</button>
       </div>
       ${(d.ownerInvites ?? []).length ? `<ul class="plain">${d.ownerInvites.map((i) => `

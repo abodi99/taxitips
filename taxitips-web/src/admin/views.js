@@ -753,10 +753,18 @@ function verificationCard(d, config) {
     </div>`;
 }
 
+/** Kundens roller (fleet/roles.py). "company_admin" är en äldre roll utan behörigheter. */
+export const MEMBER_ROLE = {
+  company_owner: "Ägare",
+  fleet_admin: "Bilar och förare",
+  finance: "Ekonomi",
+  company_admin: "Administratör (äldre, utan behörighet)",
+};
+const ROLE_CHOICES = { company_owner: "Ägare", fleet_admin: "Bilar och förare", finance: "Ekonomi" };
+
 function membersCard(d, config) {
   const members = d.members ?? [];
   const manage = !!config?.canManage;
-  const ROLE = { company_owner: "Ägare", company_admin: "Administratör" };
   return `
     <div class="card">
       <h2>Vem kan logga in</h2>
@@ -769,16 +777,15 @@ function membersCard(d, config) {
             <td data-label="Konto">${m.email
               ? `<a href="#" data-action="open-account" data-user="${esc(m.userId)}">${esc(m.email)}</a>`
               : '<span class="muted">E-post okänd (inte inloggad sedan katalogen infördes)</span>'}</td>
-            <td data-label="Roll">${esc(ROLE[m.role] ?? m.role)}</td>
+            <td data-label="Roll">${esc(MEMBER_ROLE[m.role] ?? m.role)}</td>
             <td data-label="Status">${m.blocked
               ? `<span class="pill pill-danger">Spärrad</span><div class="muted">${esc(m.blocked.reason)}</div>`
               : m.status === "active" ? '<span class="pill pill-ok">Aktiv</span>' : '<span class="pill">Avstängd här</span>'}</td>
             <td data-label="">${manage ? `<div class="btn-row">
               ${m.email && !m.blocked ? `<button class="btn btn-primary btn-small" data-action="member-login-link" data-user="${esc(m.userId)}">Skapa inloggningslänk</button>` : ""}
               <details class="more-menu"><summary class="btn btn-quiet btn-small">Mer</summary><div class="more-items">
-                ${m.role === "company_admin"
-                  ? `<button class="btn btn-quiet btn-small" data-action="member-role" data-user="${esc(m.userId)}" data-role="company_owner">Gör till ägare</button>`
-                  : `<button class="btn btn-quiet btn-small" data-action="member-role" data-user="${esc(m.userId)}" data-role="company_admin">Gör till administratör</button>`}
+                ${Object.entries(ROLE_CHOICES).filter(([r]) => r !== m.role).map(([r, label]) =>
+                  `<button class="btn btn-quiet btn-small" data-action="member-role" data-user="${esc(m.userId)}" data-role="${r}">Byt roll: ${esc(label)}</button>`).join("")}
                 ${m.status === "active"
                   ? `<button class="btn btn-quiet btn-small" data-action="member-status" data-user="${esc(m.userId)}" data-status="disabled">Stäng av i företaget</button>`
                   : `<button class="btn btn-quiet btn-small" data-action="member-status" data-user="${esc(m.userId)}" data-status="active">Aktivera i företaget</button>`}
@@ -787,7 +794,9 @@ function membersCard(d, config) {
               </div></details>
             </div>` : ""}</td>
           </tr>`).join("")}</tbody></table></div>`
-        : '<p class="muted">Ingen kan logga in än. Bjud in kundens administratör nedan.</p>'}
+        : '<p class="muted">Ingen kan logga in än. Bjud in kundens ägare nedan.</p>'}
+      <p class="muted small"><b>Ägare</b> gör allt. <b>Bilar och förare</b> sköter bilar, län och förartelefoner.
+        <b>Ekonomi</b> ser och betalar fakturor.</p>
     </div>`;
 }
 

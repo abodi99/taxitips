@@ -1353,6 +1353,90 @@ def resolve_review(request, review_id):
 # ---------------------------------------------------------------------------
 
 
+@require_GET
+@handle
+def members_view(request):
+    """
+    GET /api/fleet/members -- vilka som kan logga in i företaget, och
+    inbjudningar som inte använts. Alla i företaget får se listan; att ändra
+    kräver MANAGE_MEMBERS.
+    """
+    from fleet import accounts
+    from fleet.models import OwnerInvite
+
+    principal = _principal(request, Perm.VIEW_COMPANY)
+    rows = list(CompanyMember.objects.filter(company_id=principal.company_id, status="active"))
+    emails = accounts.emails_for([m.user_id for m in rows])
+    now = timezone.now()
+    return _json(request, {
+        "ok": True,
+        "canManage": principal.can(Perm.MANAGE_MEMBERS),
+        "roles": list(sales.CUSTOMER_INVITE_ROLES),
+        "members": [
+            {"userId": str(m.user_id), "email": emails.get(str(m.user_id), ""), "role": m.role,
+             "isMe": str(m.user_id) == str(principal.user_id)}
+            for m in rows
+        ],
+        "invites": [
+            {"id": str(i.id), "email": i.email, "role": i.role,
+             "expiresAt": i.expires_at.isoformat(), "expired": i.expires_at <= now}
+            for i in OwnerInvite.objects.filter(
+                company_id=principal.company_id, status=OwnerInvite.Status.PENDING
+            ).order_by("-created_at")
+        ],
+    })
+
+
+@csrf_exempt
+@require_POST
+@handle
+def member_invite(request):
+    """
+    POST /api/fleet/members/invite {"email": "...", "role": "fleet_admin"|"finance"}
+
+    Ägaren bjuder in en kollega. Mejlet har en inloggningslänk; kontot knyts
+    till företaget när personen loggar in (claim_invite).
+    """
+    from fleet import accounts
+
+    principal = _principal(request, Perm.MANAGE_MEMBERS)
+    body = _body(request)
+    role = str(body.get("role") or "fleet_admin")
+    if role not in sales.CUSTOMER_INVITE_ROLES:
+        raise sales.SalesError("invalid_role", "Välj en roll i listan.")
+    company = Company.objects.get(id=principal.company_id)
+    ratelimit.enforce(ratelimit.DRIVER_INVITE_SEND, f"member:{company.id}")
+    inviter = accounts.email_for(principal.user_id) or ""
+    invite = sales.invite_owner(
+        company, str(body.get("email", "")), actor_user_id=principal.user_id,
+        role=role, inviter=inviter, actor_kind="customer",
+    )
+    if not invite.mail_sent:
+        # Utan mejl är inbjudan värdelös för kunden: hen kan inte ge länken vidare.
+        sales.revoke_owner_invite(invite, actor_user_id=principal.user_id)
+        raise sales.SalesError(
+            "invite_unavailable",
+            "Det gick inte att skicka inbjudan just nu. Försök igen om en stund.",
+            status=503,
+        )
+    return _json(request, {"ok": True, "inviteId": str(invite.id), "email": invite.email})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def member_invite_revoke(request, invite_id):
+    """POST /api/fleet/members/invites/<id>/revoke"""
+    from fleet.models import OwnerInvite
+
+    principal = _principal(request, Perm.MANAGE_MEMBERS)
+    invite = OwnerInvite.objects.filter(id=invite_id, company_id=principal.company_id).first()
+    if invite is None:
+        raise sales.SalesError("unknown_invite", "Inbjudan finns inte.", status=404)
+    sales.revoke_owner_invite(invite, actor_user_id=principal.user_id)
+    return _json(request, {"ok": True})
+
+
 @csrf_exempt
 @require_POST
 @handle

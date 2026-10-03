@@ -22,7 +22,9 @@ from __future__ import annotations
 import smtplib
 
 from django.conf import settings
-from django.core.mail import EmailMessage, get_connection
+from django.core.mail import EmailMultiAlternatives, get_connection
+
+from fleet import email_layout
 
 
 class PermanentMailError(Exception):
@@ -62,7 +64,7 @@ def send(row) -> None:
     """
     if not (row.to_address or "").strip() or "@" not in row.to_address:
         raise PermanentMailError("Ingen giltig mottagaradress.")
-    message = EmailMessage(
+    message = EmailMultiAlternatives(
         subject=row.subject,
         body=row.body,
         from_email=from_address(),
@@ -70,6 +72,11 @@ def send(row) -> None:
         reply_to=[getattr(settings, "FLEET_MAIL_REPLY_TO", "") or "hej@taxitips.se"],
         headers={"X-TaxiTips-Category": row.category},
         connection=_connection(),
+    )
+    # Samma innehåll med logga och färger. Texten ovan är reserven för
+    # klienter som inte visar HTML (fleet/email_layout.py).
+    message.attach_alternative(
+        email_layout.from_text(row.subject, row.body, row.payload), "text/html"
     )
     try:
         message.send(fail_silently=False)

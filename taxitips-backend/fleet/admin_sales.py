@@ -525,19 +525,23 @@ def undo_cancel(request, company_id):
 @handle
 def invite_owner(request, company_id):
     """
-    POST /api/admin/companies/<id>/owner-invite {"email": "..."}
+    POST /api/admin/companies/<id>/owner-invite {"email": "...", "role": "company_owner"}
 
-    Adminwebben skickar sedan inloggningslänken med Supabase Auth till samma
-    adress; när personen loggar in i kundportalen knyts kontot till bolaget.
+    Servern mejlar en inbjudan med inloggningslänk (fleet/sales.py). När
+    `mailSent` är falskt (ingen service_role-nyckel) skickar adminwebben en
+    vanlig inloggningslänk med Supabase Auth i stället. När personen loggar in
+    i kundportalen knyts kontot till bolaget.
     """
     principal = _staff(request, Perm.ADMIN_SELL)
     company = _company_or_404(company_id)
+    body = _body(request)
     invite = sales.invite_owner(
-        company, str(_body(request).get("email", "")), actor_user_id=principal.user_id
+        company, str(body.get("email", "")), actor_user_id=principal.user_id,
+        role=str(body.get("role") or "company_owner"), inviter="Taxi Tips",
     )
     return _json(request, {
-        "ok": True, "inviteId": str(invite.id), "email": invite.email,
-        "expiresAt": _iso(invite.expires_at),
+        "ok": True, "inviteId": str(invite.id), "email": invite.email, "role": invite.role,
+        "expiresAt": _iso(invite.expires_at), "mailSent": invite.mail_sent,
     })
 
 

@@ -31,7 +31,9 @@ from fleet.roles import Perm
 _LIMIT = 100
 _LOG_LIMIT = 40
 
-MEMBER_ROLES = ("company_owner", "company_admin")
+# Rollerna som ger något i fleet/roles.py. "company_admin" fanns här förut men
+# saknar behörigheter där -- en sådan medlem kom inte ens in i portalen.
+MEMBER_ROLES = ("company_owner", "fleet_admin", "finance")
 MEMBER_STATUSES = ("active", "disabled")
 
 

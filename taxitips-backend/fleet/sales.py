@@ -594,25 +594,81 @@ def _temporary_access(company: Company, coupon: Coupon, specs, *, actor_user_id,
 # ---------------------------------------------------------------------------
 
 
-def invite_owner(company: Company, email: str, *, actor_user_id, now=None) -> OwnerInvite:
+# Roller en inbjudan kan ge (fleet/roles.py). Kunden själv bjuder bara in
+# till de två senare: en ny ägare går via ägarbytet, som kräver båda parter.
+INVITE_ROLES = ("company_owner", "fleet_admin", "finance")
+CUSTOMER_INVITE_ROLES = ("fleet_admin", "finance")
+
+
+def invite_owner(
+    company: Company, email: str, *, actor_user_id, role: str = "company_owner",
+    inviter: str = "", actor_kind: str = "sales", now=None,
+) -> OwnerInvite:
+    """
+    Bjuder in en inloggning till företaget och mejlar en länk.
+
+    Länken är en engångslänk från Supabase Auth (fleet/auth_admin.py) som
+    loggar in i kundportalen, där inbjudan löses in (claim_owner_invite). Utan
+    service_role-nyckeln skickas inget mejl: `invite.mail_sent` är då falskt
+    och anroparen får be personen begära en inloggningslänk själv.
+    """
     from fleet import accounts
 
     now = now or timezone.now()
     email = _email(email, "e-postadressen", required=True)
+    if role not in INVITE_ROLES:
+        raise SalesError("invalid_role", "Okänd roll.")
     accounts.assert_email_allowed(email)
+    if CompanyMember.objects.filter(
+        company_id=company.id, status="active",
+        user_id__in=accounts.user_ids_for_email(email),
+    ).exists():
+        raise SalesError("already_member", f"{email} kan redan logga in i företaget.", status=409)
     OwnerInvite.objects.filter(
         company_id=company.id, email=email, status=OwnerInvite.Status.PENDING
     ).update(status=OwnerInvite.Status.REVOKED)
     invite = OwnerInvite.objects.create(
-        company_id=company.id, email=email, created_by=actor_user_id,
+        company_id=company.id, email=email, role=role, created_by=actor_user_id,
         expires_at=now + timedelta(days=OWNER_INVITE_DAYS),
     )
     audit.record(
         "owner_invited", company_id=company.id, actor_user_id=actor_user_id,
-        actor_kind="sales", subject_type="owner_invite", subject_id=invite.id,
-        detail={"email": email},
+        actor_kind=actor_kind, subject_type="owner_invite", subject_id=invite.id,
+        detail={"email": email, "role": role},
     )
+    invite.mail_sent = send_member_invite(invite, company=company, inviter=inviter)
     return invite
+
+
+def revoke_owner_invite(invite: OwnerInvite, *, actor_user_id=None) -> None:
+    changed = OwnerInvite.objects.filter(
+        id=invite.id, status=OwnerInvite.Status.PENDING
+    ).update(status=OwnerInvite.Status.REVOKED)
+    if changed:
+        audit.record(
+            "owner_invite_revoked", company_id=invite.company_id, actor_user_id=actor_user_id,
+            actor_kind="customer", subject_type="owner_invite", subject_id=invite.id,
+            detail={"email": invite.email},
+        )
+
+
+def send_member_invite(invite: OwnerInvite, *, company: Company, inviter: str = "") -> bool:
+    """Ny länk och nytt mejl för en väntande inbjudan. Falskt när länken inte går att få."""
+    from fleet import auth_admin, notifications
+
+    if not auth_admin.configured():
+        return False
+    try:
+        link = auth_admin.invite_link(invite.email, notifications.portal_url())
+    except auth_admin.AuthAdminError:
+        return False
+    notifications.member_invite(
+        invite, link=link.url, company_name=company.name, inviter=inviter,
+        send_no=OwnerInvite.objects.filter(
+            company_id=invite.company_id, email=invite.email
+        ).count(),
+    )
+    return True
 
 
 @transaction.atomic

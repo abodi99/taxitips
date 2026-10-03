@@ -42,7 +42,7 @@ SERVICE_CATEGORIES = frozenset({
     "activation", "trial_started", "trial_ending", "trial_ended",
     "order_confirmed", "payment_failed", "grace_started", "renewal_reminder",
     "price_step", "cancellation_confirmed", "cancellation_applied",
-    "device_blocked", "review_opened", "driver_invite",
+    "device_blocked", "review_opened", "driver_invite", "member_invite",
 })
 
 
@@ -390,6 +390,50 @@ def driver_invite(invite, *, link: str, company_name: str, plate: str) -> Outbox
             "strunta i det.\n"
             + _SIGNATURE
         ),
-        payload={"inviteId": str(invite.id), "kind": "driver_invite"},
+        payload={
+            "inviteId": str(invite.id), "kind": "driver_invite",
+            "button": {"url": link, "label": "Välj lösenord"},
+        },
         key_parts=(invite.id, invite.send_count),
+    )
+
+
+MEMBER_ROLE_TEXT = {
+    "company_owner": "som ägare",
+    "fleet_admin": "för att sköta bilar och förare",
+    "finance": "för att sköta betalning och fakturor",
+}
+
+
+def member_invite(invite, *, link: str, company_name: str, inviter: str = "", send_no: int = 1) -> OutboxMessage | None:
+    """
+    Inbjudan till kundportalen (fleet/sales.py:invite_owner): ägaren eller
+    Taxi Tips lägger till en inloggning i företaget.
+
+    Länken loggar in direkt; portalen knyter kontot till företaget och ber om
+    ett lösenord. `send_no` i nyckeln: en ny inbjudan är ett nytt mejl.
+    """
+    company = company_name or "ert taxibolag"
+    who = inviter or "Taxi Tips"
+    role = MEMBER_ROLE_TEXT.get(invite.role, "")
+    return queue(
+        category="member_invite", company_id=invite.company_id, to_address=invite.email,
+        subject=f"Du är inbjuden till {company} i Taxi Tips",
+        body=(
+            "Hej!\n\n"
+            f"{who} har bjudit in dig till {company} i Taxi Tips{(' ' + role) if role else ''}.\n\n"
+            "Tryck på länken för att logga in. Du får välja ett lösenord direkt:\n"
+            f"{link}\n\n"
+            "Du kommer till kundportalen på taxitips.se, där du ser bilarna, förarna och "
+            "abonnemanget. Samma inloggning fungerar i appen.\n\n"
+            "Länken fungerar en gång och inbjudan gäller i 14 dagar. Har länken gått ut: gå till "
+            f"{portal_url()} och tryck \"Glömt lösenord\" med {invite.email}.\n\n"
+            "Väntade du dig inte det här mejlet kan du strunta i det.\n"
+            + _SIGNATURE
+        ),
+        payload={
+            "inviteId": str(invite.id), "kind": "member_invite",
+            "button": {"url": link, "label": "Logga in och välj lösenord"},
+        },
+        key_parts=(invite.id, send_no),
     )
