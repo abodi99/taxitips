@@ -812,6 +812,25 @@ const LICENSE_OPEN = ["active", "trial", "pending_cancel"];
  * (fleet/pricing.py), aldrig här -- och verkställs när säljaren bekräftat att
  * kunden godkänt. Samma regel som i fleet/admin_vehicles.py.
  */
+/**
+ * Kundens länbyten den här månaden (fleet/county_changes.py): två per bil och
+ * kalendermånad, även under provet. Personalens egna ändringar räknas inte.
+ * När kunden ringer för att hen "inte får byta län" är det här svaret, och
+ * knappen ger ett extra byte som kunden sedan gör själv.
+ */
+function countyChangesRow(l, sell) {
+  const c = l.countyChanges;
+  if (!c || !LICENSE_OPEN.includes(l.status)) return "";
+  const total = (c.limit ?? 2) + (c.extra ?? 0);
+  return `<div class="driving ${c.remaining > 0 ? "" : "warn"}">
+      <span>Länbyten kvar den här månaden: <b>${esc(c.remaining)} av ${esc(total)}</b>
+        ${c.extra ? `<span class="muted">(varav ${esc(c.extra)} extra från support)</span>` : ""}</span>
+      ${sell ? `<button class="btn btn-quiet btn-small" data-action="county-change-allow"
+        data-license="${esc(l.id)}" data-plate="${esc(l.vehicle)}"
+        title="Kunden byter sedan själv. Gäller bara den här månaden.">Tillåt ett extra länbyte</button>` : ""}
+    </div>`;
+}
+
 function carsCard(d, config, pending = null) {
   const all = d.licenses ?? [];
   const open = all.filter((l) => LICENSE_OPEN.includes(l.status));
@@ -848,6 +867,7 @@ function carsCard(d, config, pending = null) {
                 aria-label="Ta bort ${esc(name(c))}" title="Ta bort ${esc(name(c))}">✕</button>` : ""}</span>`).join("")}
             ${l.scheduledBaseCounty ? `<span class="muted">baslän byts till ${esc(name(l.scheduledBaseCounty))} vid förnyelse</span>` : ""}
           </div>
+          ${countyChangesRow(l, sell)}
           ${l.status === "pending_cancel" ? `<p class="muted">Bilen avslutas vid nästa förnyelse${l.endsAt ? ` (${esc(date(l.endsAt))})` : ""}.</p>` : ""}
 
           <div class="driving ${l.activePhone ? "on" : ""}">

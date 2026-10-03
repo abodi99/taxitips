@@ -28,6 +28,7 @@ urlpatterns = [
     path("vehicles", api.create_vehicle),
     path("pairing-codes", api.issue_pairing_code),
     path("driver-invites", api.driver_invites_view),
+    path("driver-invites/bulk", api.driver_invites_bulk),
     path("driver-invites/<uuid:invite_id>/resend", api.resend_driver_invite),
     path("driver-invites/<uuid:invite_id>/revoke", api.revoke_driver_invite),
     path("approvals/<uuid:approval_id>/block", api.block_approval),

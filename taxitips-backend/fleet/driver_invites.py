@@ -94,12 +94,18 @@ def create_invite(
     label: str = "",
     created_by=None,
     now=None,
+    send_limit: ratelimit.Limit = ratelimit.DRIVER_INVITE_SEND,
 ) -> DriverInvite:
+    """
+    `send_limit` är bromsen för utskicket. Massinbjudan räknar mot sin egen
+    dygnsgräns (ratelimit.DRIVER_INVITE_BULK) i stället för timgränsen, men
+    reglerna i övrigt är desamma -- samma prövning, samma mejl.
+    """
     now = now or timezone.now()
     email = normalize_email(email)
     pairing.check_pairable(license, vehicle)
     accounts.assert_email_allowed(email)
-    ratelimit.enforce(ratelimit.DRIVER_INVITE_SEND, str(license.company_id))
+    ratelimit.enforce(send_limit, str(license.company_id))
 
     # En väntande inbjudan per adress och företag: den nya ersätter den gamla
     # (samma princip som en ny engångskod för samma bil).

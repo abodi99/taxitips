@@ -1792,6 +1792,62 @@ class DeviceSwapGrant(models.Model):
         ]
 
 
+class CountyChange(models.Model):
+    """
+    Ett länbyte som KUNDEN gjort på en bil -- det som räknas mot månadskvoten
+    (fleet/county_changes.py).
+
+    En egen tabell och inte revisionsloggen: `audit.record` kastar aldrig, och
+    en gräns som räknar rader i en logg som tyst kan sakna en rad släpper
+    igenom precis det den ska stoppa. Personalens byten skrivs inte här (de
+    begränsas inte), bara i revisionsloggen som förut.
+
+    `order_id` är satt när bytet beställdes (betald bil, schemalagt till
+    förnyelsen). En misslyckad eller avbruten beställning räknas inte -- då
+    blev det inget byte.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    license_id = models.UUIDField()
+    company_id = models.UUIDField()
+    from_county = models.CharField(max_length=4, blank=True, default="")
+    to_county = models.CharField(max_length=4, blank=True, default="")
+    # trial = direkt på en provbil, order = schemalagt via beställning.
+    via = models.CharField(max_length=16)
+    order_id = models.UUIDField(null=True, blank=True)
+    actor_user_id = models.UUIDField(null=True, blank=True)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "fleet_county_change"
+        indexes = [
+            models.Index(fields=["license_id", "-created_at"]),
+        ]
+
+
+class CountyChangeGrant(models.Model):
+    """
+    Extra länbyte som personal gett en bil för en kalendermånad (YYYY-MM).
+
+    Effektiv gräns = 2 + antal grants för månaden (fleet/county_changes.py),
+    samma tänk som telefonbytena (DeviceSwapGrant).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    license_id = models.UUIDField()
+    company_id = models.UUIDField()
+    month_key = models.CharField(max_length=7)  # YYYY-MM, Europe/Stockholm
+    granted_by = models.UUIDField(null=True, blank=True)
+    note = models.CharField(max_length=300, blank=True, default="")
+    created_at = models.DateTimeField()
+
+    class Meta:
+        db_table = "fleet_county_change_grant"
+        indexes = [
+            models.Index(fields=["license_id", "month_key"]),
+        ]
+
+
 class ClientError(models.Model):
     """
     Ett fel som appen rapporterat (krasch eller ett misslyckat kritiskt flöde)

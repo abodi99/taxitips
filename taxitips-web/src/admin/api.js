@@ -176,6 +176,11 @@ export const admin = {
     }),
   accountTestPush: (userId) =>
     request(`/api/admin/accounts/${userId}/test-push`, { method: "POST", body: {} }),
+  allowCountyChange: (licenseId, note = "") =>
+    request(`/api/admin/licenses/${licenseId}/allow-county-change`, {
+      method: "POST",
+      body: { note },
+    }),
   allowDeviceSwap: (userId, note = "") =>
     request(`/api/admin/accounts/${userId}/allow-device-swap`, {
       method: "POST",

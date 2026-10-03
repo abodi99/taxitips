@@ -1251,6 +1251,17 @@ async function act(action, ds) {
       return render();
     }
 
+    case "county-change-allow": {
+      const note = prompt(
+        `Tillåt ett extra länbyte för ${ds.plate || "bilen"} den här månaden?\n\n` +
+          "Anteckning (valfritt, syns i revisionen):",
+      );
+      if (note === null) return;
+      const body = await admin.allowCountyChange(ds.license, note.trim());
+      flash(`Extra länbyte beviljat. Kvar den här månaden: ${body.countyChanges?.remaining ?? "?"}.`);
+      return render();
+    }
+
     case "account-allow-device-swap": {
       const note = prompt(
         "Tillåt ett extra telefonbyte den här månaden?\n\nAnteckning (valfritt, syns i revisionen):",

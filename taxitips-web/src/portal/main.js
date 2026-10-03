@@ -1,5 +1,5 @@
 import { promptAndSetPassword, sendPasswordReset } from "../auth_password.js";
-import { ApiError, api, supabase } from "./api.js";
+import { ApiError, api, countyName, supabase } from "./api.js";
 import * as views from "./views.js";
 import { quoteHtml } from "./views.js";
 
@@ -32,7 +32,7 @@ const el = {
   codeFor: document.getElementById("codeFor"),
 };
 
-let state = { view: "oversikt", data: null, orders: null, members: null };
+let state = { view: "oversikt", data: null, orders: null, members: null, bulkInvite: null };
 
 // Inbjudningsmejlet (fleet/notifications.py:member_invite) loggar in direkt
 // via #...&type=invite. Läses innan Supabase-klienten tömmer adressraden, så
@@ -158,7 +158,7 @@ function render() {
   if (!data) return;
   const html = {
     oversikt: () => views.oversikt(data),
-    bilar: () => views.bilar(data),
+    bilar: () => views.bilar(data, state.bulkInvite),
     lan: () => views.lan(data),
     abonnemang: () => views.abonnemang(data, state.orders?.orders ?? []),
     foretag: () => views.foretag(data, state.members),
@@ -361,6 +361,11 @@ el.view.addEventListener("submit", async (event) => {
     await inviteDriver(form);
     return;
   }
+  if (form.id === "bulkInviteForm") {
+    event.preventDefault();
+    await inviteDriversBulk(form);
+    return;
+  }
   if (form.id !== "vehicleForm") return;
   event.preventDefault();
   clearError();
@@ -398,6 +403,62 @@ async function inviteDriver(form) {
     await refresh();
     showNotice(
       `Inbjudan skickad till ${email}. Föraren väljer lösenord via mejlet och loggar sedan in i appen.`,
+    );
+  } catch (error) {
+    showError(error);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+const BULK_MAX_ROWS = 200;
+
+/**
+ * "Bjud in många förare": en rad per förare, `e-post;regnr;namn`. Semikolon,
+ * tabb (inklistrat från Excel) och komma godtas som avgränsare -- ingen av dem
+ * kan stå i en e-postadress. Servern prövar varje rad för sig och svarar per
+ * rad; här håller vi bara reda på radnumret så att felen går att hitta.
+ */
+function parseBulkRows(text) {
+  const rows = [];
+  text.split(/\r?\n/).forEach((raw, index) => {
+    const line = raw.trim();
+    if (!line) return;
+    const [email = "", plate = "", ...rest] = line.split(/[;\t,]/).map((p) => p.trim());
+    rows.push({ line: index + 1, email, plate, label: rest.join(" ").trim() });
+  });
+  return rows;
+}
+
+async function inviteDriversBulk(form) {
+  clearError();
+  const rows = parseBulkRows(String(new FormData(form).get("rows") ?? ""));
+  if (!rows.length) {
+    showError(new ApiError(400, "Skriv minst en förare, en per rad.", "rows_required"));
+    return;
+  }
+  if (rows.length > BULK_MAX_ROWS) {
+    showError(
+      new ApiError(400, `Högst ${BULK_MAX_ROWS} förare åt gången. Dela upp listan.`, "too_many_rows"),
+    );
+    return;
+  }
+  const button = form.querySelector('button[type="submit"]');
+  button.disabled = true;
+  try {
+    const result = await api.inviteDriversBulk(
+      rows.map(({ email, plate, label }) => ({ email, plate, label })),
+    );
+    // Svaret kommer i samma ordning som raderna skickades.
+    state.bulkInvite = {
+      sent: result.sent,
+      results: result.results.map((r, i) => ({ ...r, line: rows[i]?.line })),
+    };
+    await refresh();
+    showNotice(
+      result.failed
+        ? `${result.sent} inbjudningar skickade. ${result.failed} rader gick inte -- se listan.`
+        : `${result.sent} inbjudningar skickade.`,
     );
   } catch (error) {
     showError(error);
@@ -459,11 +520,14 @@ el.view.addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
   clearError();
-  const { action, license, vehicle, plate, approval, invite, user, email } = button.dataset;
+  const { action, license, vehicle, plate, approval, invite, user, email, status } = button.dataset;
   button.disabled = true;
   try {
-    await handle(action, { license, vehicle, plate, approval, invite, user, email });
+    await handle(action, { license, vehicle, plate, approval, invite, user, email, status });
   } catch (error) {
+    // Gränsen för länbyten: hämta om, så att "Länbyten kvar" visar rätt,
+    // och visa sedan serverns förklaring.
+    if (error instanceof ApiError && error.reason === "county_change_limit") await refresh();
     showError(error);
   } finally {
     button.disabled = false;
@@ -529,6 +593,21 @@ async function handle(action, ctx) {
       const select = document.querySelector(`[data-county-for="${ctx.license}"]`);
       const county = select?.value;
       if (!county) return;
+      if (ctx.status === "trial") {
+        // Provbilen byter direkt och utan kostnad -- ingen beställning, men
+        // bytet räknas mot bilens två i månaden.
+        if (
+          !confirm(
+            `Byta baslän till ${countyName(county)}? Det gäller direkt. ` +
+              "Varje bil kan byta län två gånger per månad.",
+          )
+        )
+          return;
+        await api.setTrialCounty(ctx.license, county);
+        await refresh();
+        showNotice(`Baslänet är nu ${countyName(county)}.`);
+        return;
+      }
       const now = confirm(
         "Behöver du det nya länet direkt?\n\n" +
           "OK: vi köper länet som tillägg nu (proportionellt för resten av " +

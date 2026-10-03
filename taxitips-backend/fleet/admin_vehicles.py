@@ -18,7 +18,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_POST
 
 from core.api import _json
-from fleet import licensing, sessions
+from fleet import county_changes, licensing, sessions
 from fleet.admin_api import _body, _record, _staff, handle
 from fleet.models import License, Subscription, VehicleSession
 from fleet.roles import Perm
@@ -142,6 +142,33 @@ def remove_license(request, license_id):
         detail={"was": license.status, "reason": reason, "sessions_ended": ended},
     )
     return _json(request, {"ok": True})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def allow_county_change(request, license_id):
+    """
+    POST /api/admin/licenses/<id>/allow-county-change {"note": "…"}
+
+    Ger bilen ett extra länbyte den här kalendermånaden (Europe/Stockholm),
+    när kunden har bytt två gånger och har ett riktigt skäl. Kunden byter
+    sedan själv; personalen byter inte åt hen. Samma tänk som extra
+    telefonbyte (fleet/device_swaps.py).
+    """
+    principal = _staff(request, Perm.ADMIN_SELL)
+    license = _license_or_404(license_id)
+    note = str(_body(request).get("note") or "").strip()[:300]
+    result = county_changes.grant_extra_change(
+        license, actor_user_id=principal.user_id, note=note,
+    )
+    summary = result["countyChanges"]
+    _record(
+        principal, "admin_county_change_grant", company_id=license.company_id,
+        subject_type="license", subject_id=license.id,
+        detail={"month": summary["month"], "remaining": summary["remaining"], "note": note},
+    )
+    return _json(request, {"ok": True, **result})
 
 
 def _reason(request) -> str:

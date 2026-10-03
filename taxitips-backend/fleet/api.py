@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import logging
+import uuid
 
 from django.db import transaction
 from django.utils import timezone
@@ -38,6 +39,7 @@ from fleet import (
     audit,
     commerce,
     company_details,
+    county_changes,
     device_swaps,
     discounts,
     driver_invites,
@@ -89,6 +91,7 @@ _DOMAIN_ERRORS = (
     pairing.PairingError,
     driver_invites.DriverInviteError,
     device_swaps.DeviceSwapError,
+    county_changes.CountyChangeError,
     sessions.SessionError,
     licensing.LicensingError,
     orders.OrderError,
@@ -506,10 +509,15 @@ def company_overview(request):
             driver_invites.view(invite, now)
         )
 
+    open_licenses = list(
+        License.objects.filter(company_id=company_id).exclude(status=License.Status.CANCELED)
+    )
+    # Länbyten kvar den här månaden (fleet/county_changes.py), för alla bilar
+    # i två frågor.
+    county_change_rows = county_changes.summaries_for([lic.id for lic in open_licenses], now=now)
+
     rows = []
-    for license in License.objects.filter(company_id=company_id).exclude(
-        status=License.Status.CANCELED
-    ):
+    for license in open_licenses:
         serving = sessions.current_vehicle(license)
         session = sessions.active_session_for_license(license.id)
         assignment = VehicleAssignment.objects.filter(
@@ -535,6 +543,7 @@ def company_overview(request):
                 ).exclude(active_to__lte=now)
             ],
             "endsAt": license.ends_at.isoformat() if license.ends_at else None,
+            "countyChanges": county_change_rows[str(license.id)],
             "activePhone": (
                 {
                     "deviceId": str(session.device_id),
@@ -743,6 +752,120 @@ def driver_invites_view(request):
     return _json(request, {"ok": True, "invite": driver_invites.view(invite)})
 
 
+BULK_INVITE_MAX_ROWS = 200
+
+
+def _bulk_license(principal: roles.Principal, row: dict, open_licenses: list[License]) -> License:
+    """
+    Bilen för en rad i massinbjudan: `licenseId`, annars registreringsnumret,
+    annars bolagets enda bil. Ett bolag med en bil ska inte behöva skriva
+    regnumret på varje rad; ett med flera måste, annars gissar vi bil.
+    """
+    license_id = str(row.get("licenseId") or "").strip()
+    if license_id:
+        try:
+            uuid.UUID(license_id)
+        except ValueError as exc:
+            raise licensing.LicensingError("unknown_license", "Licensen finns inte.", status=404) from exc
+        return _company_license(principal, license_id)
+    plate = licensing.normalize_plate(row.get("plate"))
+    if plate:
+        assignment = (
+            VehicleAssignment.objects.filter(
+                license__company_id=principal.company_id, vehicle__plate=plate,
+                ended_at__isnull=True, license__in=open_licenses,
+            )
+            .select_related("license")
+            .first()
+        )
+        if assignment is None:
+            raise licensing.LicensingError(
+                "unknown_vehicle", f"Bilen {plate} finns inte i företaget.", status=404,
+            )
+        return assignment.license
+    if len(open_licenses) == 1:
+        return open_licenses[0]
+    raise licensing.LicensingError(
+        "plate_required", "Skriv bilens registreringsnummer. Företaget har flera bilar.",
+    )
+
+
+@csrf_exempt
+@require_POST
+@handle
+def driver_invites_bulk(request):
+    """
+    POST /api/fleet/driver-invites/bulk
+         {"rows": [{"email": "...", "plate": "ABC123" | "licenseId": "...", "label": "Anna"}]}
+
+    Massinbjudan för stora bolag: högst 200 rader per anrop. Varje rad går
+    genom samma `create_invite` som en enskild inbjudan -- samma prövning,
+    samma mejl -- och får ett eget svar `{email, ok, reason?, message?}`. En
+    trasig rad stoppar inte de andra; varje lyckad rad är sparad för sig.
+    """
+    principal = _principal(request, Perm.MANAGE_DEVICES)
+    rows = _body(request).get("rows")
+    if not isinstance(rows, list) or not rows:
+        raise driver_invites.DriverInviteError("rows_required", "Lägg till minst en förare.")
+    if len(rows) > BULK_INVITE_MAX_ROWS:
+        raise driver_invites.DriverInviteError(
+            "too_many_rows",
+            f"Högst {BULK_INVITE_MAX_ROWS} förare åt gången. Dela upp listan.",
+        )
+    ratelimit.enforce(ratelimit.DRIVER_INVITE_BULK_CALLS, str(principal.company_id))
+
+    open_licenses = list(
+        License.objects.filter(
+            company_id=principal.company_id,
+            status__in=[License.Status.ACTIVE, License.Status.TRIAL, License.Status.PENDING_CANCEL],
+        )
+    )
+    now = timezone.now()
+    seen: set[str] = set()
+    results = []
+    for raw in rows:
+        row = raw if isinstance(raw, dict) else {}
+        email = str(row.get("email") or "").strip()
+        result = {"email": email}
+        try:
+            normalized = driver_invites.normalize_email(email)
+            if normalized in seen:
+                # Två rader med samma adress hade gett två mejl, och den andra
+                # hade ersatt den första inbjudan.
+                raise driver_invites.DriverInviteError(
+                    "duplicate_email", "Adressen finns redan på en rad ovanför.",
+                )
+            seen.add(normalized)
+            license = _bulk_license(principal, row, open_licenses)
+            vehicle = sessions.current_vehicle(license)
+            if vehicle is None:
+                raise licensing.LicensingError("unknown_vehicle", "Bilen finns inte.", status=404)
+            risk.guard_pairing(vehicle)
+            invite = driver_invites.create_invite(
+                license=license, vehicle=vehicle, email=normalized,
+                label=str(row.get("label") or ""), created_by=principal.user_id, now=now,
+                send_limit=ratelimit.DRIVER_INVITE_BULK,
+            )
+            result.update({"ok": True, "inviteId": str(invite.id), "plate": vehicle.plate})
+        except _DOMAIN_ERRORS as exc:
+            result.update({
+                "ok": False,
+                "reason": getattr(exc, "reason", "error"),
+                "message": getattr(exc, "message", "Något gick fel."),
+            })
+        except Exception:
+            # Ett oväntat fel på en rad får inte ta med sig de rader som redan
+            # skickats: varje inbjudan är sin egen transaktion.
+            log.exception("fleet.api: massinbjudan, oväntat fel på en rad")
+            result.update({"ok": False, "reason": "internal_error", "message": "Något gick fel."})
+        results.append(result)
+
+    sent = sum(1 for r in results if r["ok"])
+    return _json(request, {
+        "ok": True, "sent": sent, "failed": len(results) - sent, "results": results,
+    })
+
+
 def _company_invite(principal: roles.Principal, invite_id):
     from fleet.models import DriverInvite
 
@@ -878,6 +1001,11 @@ def quote(request):
     """
     principal = _principal(request, Perm.VIEW_BILLING)
     plan = _plan_from_body(principal.company_id, _body(request))
+    # Säg nej redan vid offerten, så att kunden inte godkänner ett pris för
+    # ett byte som sedan vägras.
+    county_changes.assert_plan_allowed(
+        county_changes.plan_changes(principal.company_id, plan.request["baseCountyChanges"])
+    )
     return _json(request, {"ok": True, **plan.as_dict()})
 
 
@@ -905,10 +1033,30 @@ def create_order(request):
     payment = str(body.get("payment") or commerce.PAYMENT_CARD)
     if payment not in (commerce.PAYMENT_CARD, commerce.PAYMENT_INVOICE):
         payment = commerce.PAYMENT_CARD
-    order, payment_info = commerce.place_order(
-        principal.company_id, plan, created_by=principal.user_id, actor_kind="customer",
-        payment=payment, idempotency=body.get("idempotency_key"),
-    )
+
+    def place():
+        return commerce.place_order(
+            principal.company_id, plan, created_by=principal.user_id, actor_kind="customer",
+            payment=payment, idempotency=body.get("idempotency_key"),
+        )
+
+    if not plan.request["baseCountyChanges"]:
+        order, payment_info = place()
+    else:
+        # Baslänsbyte räknas mot bilens två byten i månaden när kunden
+        # beställer det (fleet/county_changes.py). Kontroll, beställning och
+        # bokföring i samma transaktion med licenserna låsta: två flikar som
+        # beställer samtidigt ska inte båda se "ett kvar". Samma beställning
+        # igen (dubbelklick, samma idempotensnyckel) är inget nytt byte.
+        key = body.get("idempotency_key") or orders.idempotency_key(principal.company_id, plan)
+        with transaction.atomic():
+            changes = county_changes.plan_changes(
+                principal.company_id, plan.request["baseCountyChanges"], lock=True,
+            )
+            if not Order.objects.filter(idempotency_key=key).exists():
+                county_changes.assert_plan_allowed(changes)
+            order, payment_info = place()
+            county_changes.record_plan(changes, order=order, actor_user_id=principal.user_id)
     notifications.order_confirmed(order)
     return _json(request, {
         "ok": True,
@@ -1569,19 +1717,27 @@ def close_account(request):
 @handle
 def trial_vehicle_county(request, license_id):
     """
-    POST /api/fleet/trial/vehicles/<id>/county {"base": "01"}
+    POST /api/fleet/trial/vehicles/<id>/county {"base": "01", "extras": ["12"]?}
 
-    Ägaren byter län på en provbil i appen. Kostar inget under provet; en betald
-    bil byter län via en beställning (licensing.set_trial_counties).
+    Ägaren byter län på en provbil i appen eller portalen. Kostar inget under
+    provet; en betald bil byter län via en beställning. Högst två byten per bil
+    och månad (`county_change_limit`, fleet/county_changes.py). Utan `extras`
+    behålls bilens extra län.
     """
     principal = _principal(request, Perm.MANAGE_VEHICLES)
     license = _company_license(principal, license_id)
-    base, _extras = licensing.set_trial_counties(license, base=_body(request).get("base") or "")
+    body = _body(request)
+    result = county_changes.change_trial_counties(
+        license, base=body.get("base") or "",
+        extras=list(body.get("extras") or []) if "extras" in body else None,
+        actor_user_id=principal.user_id,
+    )
     audit.record(
         "trial_counties_set", company_id=principal.company_id, actor_user_id=principal.user_id,
-        actor_kind="customer", subject_type="license", subject_id=license.id, detail={"base": base},
+        actor_kind="customer", subject_type="license", subject_id=license.id,
+        detail={"base": result["base"], "extras": result["extras"], "counted": result["counted"]},
     )
-    return _json(request, {"ok": True, "base": base})
+    return _json(request, {"ok": True, **result})
 
 
 @csrf_exempt

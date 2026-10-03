@@ -596,16 +596,20 @@ def return_from_replacement(*, license: License, actor_user_id=None, now=None):
 # ---------------------------------------------------------------------------
 
 
+def assert_trial_license(license: License) -> None:
+    if license.status != License.Status.TRIAL:
+        raise LicensingError(
+            "paid_license", "Bilen är betald. Län på en betald bil ändras via en beställning.",
+        )
+
+
 def set_trial_counties(license: License, *, base: str, extras: list[str] | None = None, now=None):
     """
     Byter län på en PROVBIL, direkt. Kostar inget under provet. En betald bil
     byter län via en offert (tillägg kostar, borttag gäller vid förnyelse),
     så att fakturan stämmer.
     """
-    if license.status != License.Status.TRIAL:
-        raise LicensingError(
-            "paid_license", "Bilen är betald. Län på en betald bil ändras via en beställning.",
-        )
+    assert_trial_license(license)
     now = now or timezone.now()
     base = assert_county_available(str(base or license.base_county))
     extra_codes = sorted({assert_county_available(str(c)) for c in (extras or [])} - {base})

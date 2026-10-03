@@ -291,11 +291,85 @@ function connectDriver(row) {
     </form>`;
 }
 
-export function bilar(data) {
+/**
+ * Länbyten kvar den här månaden (fleet/county_changes.py). Två per bil och
+ * kalendermånad, plus ett extra om support gett det. Servern räknar; vyn
+ * visar bara svaret.
+ */
+export function countyChangesLeft(row) {
+  const c = row.countyChanges;
+  if (!c) return "";
+  const total = (c.limit ?? 2) + (c.extra ?? 0);
+  return c.remaining > 0
+    ? `<p class="muted">Länbyten kvar den här månaden: <b>${esc(c.remaining)} av ${esc(total)}</b></p>`
+    : `<p class="muted">Länbyten kvar den här månaden: <b>0 av ${esc(total)}</b>.
+       Du kan byta igen nästa månad, eller kontakta support om det inte kan vänta.</p>`;
+}
+
+/**
+ * Många förare på en gång: en rad per förare, `e-post;regnr;namn`. Regnumret
+ * får utelämnas när bolaget bara har en bil. Varje rad får ett eget svar från
+ * servern; en rad med fel stoppar inte de andra.
+ */
+function bulkInvite(rows, result) {
+  const single = rows.length === 1;
+  const plate = (i, fallback) => (single ? "" : rows[i]?.vehicle || fallback);
+  // Radbrytning i platshållaren: &#10; efter att varje rad escapats.
+  const example = [
+    `anna@exempel.se;${plate(0, "ABC123")};Anna`,
+    `bo@exempel.se;${plate(1, "DEF456")}`,
+  ]
+    .map(esc)
+    .join("&#10;");
+  return `<div class="card">
+      <h2>Bjud in många förare</h2>
+      <p class="muted">En rad per förare: <code>e-post;regnr;namn</code>. Namnet är valfritt.
+      ${
+        single
+          ? "Ni har en bil, så regnumret kan lämnas tomt."
+          : "Skriv bilens registreringsnummer på varje rad."
+      } Högst 200 rader åt gången. Varje förare får ett eget mejl.</p>
+      <form id="bulkInviteForm">
+        <label for="bulkInviteRows">Förare</label>
+        <textarea id="bulkInviteRows" name="rows" rows="6" required spellcheck="false"
+          autocomplete="off" placeholder="${example}"></textarea>
+        <div class="btn-row"><button class="btn btn-primary" type="submit">Skicka inbjudningar</button></div>
+      </form>
+      ${result ? bulkResult(result) : ""}
+    </div>`;
+}
+
+function bulkResult(result) {
+  const failed = result.results.filter((r) => !r.ok);
+  return `<div class="bulk-result" role="status">
+      <p><b>${esc(result.sent)} skickade</b>${
+        failed.length ? `, <b>${esc(failed.length)} gick inte</b>` : ""
+      }.</p>
+      ${
+        failed.length
+          ? `<table><thead><tr><th>Rad</th><th>E-post</th><th>Varför</th></tr></thead><tbody>
+              ${failed
+                .map(
+                  (r) => `<tr>
+                    <td data-label="Rad">${esc(r.line)}</td>
+                    <td data-label="E-post">${esc(r.email || "—")}</td>
+                    <td data-label="Varför">${esc(r.message || "Något gick fel.")}</td>
+                  </tr>`,
+                )
+                .join("")}
+             </tbody></table>
+             <p class="muted">Rätta raderna ovan och skicka bara dem igen.</p>`
+          : ""
+      }
+    </div>`;
+}
+
+export function bilar(data, bulkInviteResult = null) {
   const canManage = (data.permissions ?? []).includes("manage_devices");
   const rows = data.licenses ?? [];
 
   return `
+    ${canManage && rows.length ? bulkInvite(rows, bulkInviteResult) : ""}
     <div class="card">
       <h2>Lägg till en bil</h2>
       <p class="muted">Registreringsnumret identifierar bilen. En billicens
@@ -318,6 +392,7 @@ export function bilar(data) {
             ? ` → byts till ${esc(countyName(row.scheduledBaseCounty))} vid nästa förnyelse`
             : ""
         }</p>
+        ${countyChangesLeft(row)}
 
         <h3>Godkända telefoner</h3>
         ${
@@ -378,6 +453,8 @@ export function lan(data) {
       eller byta baslän gäller vid nästa förnyelse. Behöver du ett nytt län
       direkt: köp det som tillägg nu och schemalägg baslänsbytet -- tillägget
       tas bort automatiskt vid bytet, så ingen betalar två gånger.</p>
+      <p class="muted">Varje bil kan byta län två gånger per månad, även under
+      provet. Att köpa ett extra län räknas inte som ett byte.</p>
     </div>
 
     ${rows
@@ -394,11 +471,17 @@ export function lan(data) {
             ? row.extraCounties.map((c) => esc(countyName(c))).join(", ")
             : '<span class="muted">inga</span>'
         }</p>
+        ${countyChangesLeft(row)}
         <div class="btn-row">
           <label class="visually-hidden" for="county-${esc(row.licenseId)}">Län</label>
           <select id="county-${esc(row.licenseId)}" data-county-for="${esc(row.licenseId)}">${options}</select>
           <button class="btn btn-primary" data-action="add-county" data-license="${esc(row.licenseId)}">Köp extra län</button>
-          <button class="btn btn-quiet" data-action="change-base" data-license="${esc(row.licenseId)}">Byt baslän</button>
+          ${
+            row.countyChanges && row.countyChanges.remaining <= 0
+              ? ""
+              : `<button class="btn btn-quiet" data-action="change-base" data-license="${esc(row.licenseId)}"
+                   data-status="${esc(row.status)}">Byt baslän</button>`
+          }
         </div>
       </div>`,
       )

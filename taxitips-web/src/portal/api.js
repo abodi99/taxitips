@@ -98,6 +98,12 @@ export const api = {
     }),
   resendInvite: (inviteId) =>
     request(`/api/fleet/driver-invites/${inviteId}/resend`, { method: "POST", body: {} }),
+  /** rows: [{email, plate?, label?}] -- svaret har ett resultat per rad, i samma ordning. */
+  inviteDriversBulk: (rows) =>
+    request("/api/fleet/driver-invites/bulk", { method: "POST", body: { rows } }),
+  /** Byt län på en provbil direkt (kostar inget, räknas mot månadens två byten). */
+  setTrialCounty: (licenseId, base) =>
+    request(`/api/fleet/trial/vehicles/${licenseId}/county`, { method: "POST", body: { base } }),
   members: () => request("/api/fleet/members"),
   inviteMember: (email, role) =>
     request("/api/fleet/members/invite", { method: "POST", body: { email, role } }),

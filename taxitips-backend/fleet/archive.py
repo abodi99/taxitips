@@ -37,6 +37,8 @@ from fleet.models import (
     AccountBlock,
     ChangeReview,
     CompanyProfile,
+    CountyChange,
+    CountyChangeGrant,
     CouponRedemption,
     DeviceApproval,
     DeviceCredential,
@@ -198,6 +200,8 @@ def delete(company_id, *, actor_user_id, confirm_name: str, now=None) -> dict:
     gone("ansökningar", JoinRequest.objects.filter(company_id=company_id))
     gone("bilkopplingar", VehicleAssignment.objects.filter(license__company_id=company_id))
     gone("län", LicenseCounty.objects.filter(license__company_id=company_id))
+    gone("länbyten", CountyChange.objects.filter(company_id=company_id))
+    gone("extra länbyten", CountyChangeGrant.objects.filter(company_id=company_id))
     gone("licenser", License.objects.filter(company_id=company_id))
     gone("bilar", Vehicle.objects.filter(company_id=company_id))
     gone("väntande ändringar", PendingChange.objects.filter(company_id=company_id))
