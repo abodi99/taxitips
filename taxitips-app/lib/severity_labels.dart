@@ -275,6 +275,30 @@ String compensationLabel(num? amountKr, {bool? perPerson}) {
   return 'Taxi ersätts · upp till ${amountKr.round()} kr$per';
 }
 
+/// Ersättningen som en mening till föraren i tipsbladet: "Resenären kan få
+/// taxin betald upp till 1 500 kr per resenär".
+///
+/// "Kan få", inte "har rätt till": rätten gäller om villkoren är uppfyllda,
+/// och det vet vi inte. Beloppet och om det gäller per resenär eller per resa
+/// följer samma regler som [compensationLabel] -- saknas beloppet nämns inget.
+/// Mellanslagen i beloppet är hårda så att "1 500 kr" aldrig bryts mitt i.
+String compensationSentence(num? amountKr, {bool? perPerson}) {
+  const base = 'Resenären kan få taxin betald';
+  if (amountKr == null) return base;
+  final per = switch (perPerson) {
+    true => ' per resenär',
+    false => ' per resa',
+    null => '',
+  };
+  final digits = amountKr.round().toString();
+  final grouped = StringBuffer();
+  for (var i = 0; i < digits.length; i++) {
+    if (i > 0 && (digits.length - i) % 3 == 0) grouped.write('\u00A0');
+    grouped.write(digits[i]);
+  }
+  return '$base upp till $grouped\u00A0kr$per';
+}
+
 /// "Vad gör resenären i stället?" — nästa avgång och ersättningstrafik.
 ///
 /// Meningen kommer färdigformulerad från backend (core/alternatives.py);
@@ -474,6 +498,7 @@ class TravelOptions {
     }
     return parts.join(' · ');
   }
+
   bool get isWeak => hasAlternative && !isLastDeparture;
 }
 

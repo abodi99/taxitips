@@ -179,6 +179,14 @@ String strengthWord(SignalStrength s, {SignalCategory? category}) {
   };
 }
 
+/// Vad styrkan betyder, i en mening: ett läge vi ser, aldrig ett löfte.
+/// Bara för tips -- ett väghinder har ingen "värt att köra"-bedömning.
+String strengthMeaning(SignalStrength s) => switch (s) {
+  SignalStrength.high => 'Troligt att folk behöver taxi här.',
+  SignalStrength.medium => 'Kan vara värt att följa. Håll koll.',
+  SignalStrength.low => 'Troligen få som behöver taxi här.',
+};
+
 /// Ikonen för ett tips: färdsättet för kollektivtrafik, typen av hinder för väg.
 /// Varför backend visar väghändelsen: villkoret i `rule_id`
 /// (`road.<nivå>.<villkor>`, se core/text_scoring.road_tier). Null för rader

@@ -5,14 +5,23 @@ import 'package:flutter/material.dart';
 import '../severity_labels.dart';
 import '../theme.dart';
 import 'brand_icons.dart';
+import 'signal_card.dart' show LiveTravelText;
 
 /// Avgångstavlan: den drabbade avgången stort, "om X" räknat mot den, och hur
 /// länge resenären blir stående efter den. Mörk som en riktig tavla, så att
 /// den syns först -- det är den raden föraren fattar beslutet på.
 class DepartureBoard extends StatefulWidget {
-  const DepartureBoard({super.key, required this.travel});
+  const DepartureBoard({
+    super.key,
+    required this.travel,
+    this.showAlternative = true,
+  });
 
   final TravelOptions travel;
+
+  /// Raden om ersättningstrafik. Tipsbladet visar den under "Mer om tipset"
+  /// i stället, så att tavlan bara svarar på "när" och "hur länge".
+  final bool showAlternative;
 
   @override
   State<DepartureBoard> createState() => _DepartureBoardState();
@@ -42,8 +51,11 @@ class _DepartureBoardState extends State<DepartureBoard> {
     final dep = travel.departure!;
     final rel = relativeDeparture(dep.at);
     final wait = travel.waitText;
-    final waitStrong =
-        travel.isLastDeparture || (travel.gapMinutes ?? 0) > 30;
+    final waitStrong = travel.isLastDeparture || (travel.gapMinutes ?? 0) > 30;
+    final alternative =
+        widget.showAlternative &&
+        travel.hasAlternative &&
+        (travel.alternative ?? '').isNotEmpty;
     final (chip, chipBg, chipFg) = dep.cancelled
         ? ('INSTÄLLD', TbColors.danger, TbColors.vit)
         : (
@@ -104,12 +116,8 @@ class _DepartureBoardState extends State<DepartureBoard> {
                   fontSize: 34,
                   height: 1.05,
                   fontWeight: FontWeight.w800,
-                  color: dep.cancelled
-                      ? const Color(0x99FFFFFF)
-                      : TbColors.vit,
-                  decoration: dep.cancelled
-                      ? TextDecoration.lineThrough
-                      : null,
+                  color: dep.cancelled ? const Color(0x99FFFFFF) : TbColors.vit,
+                  decoration: dep.cancelled ? TextDecoration.lineThrough : null,
                   decorationColor: TbColors.danger,
                   decorationThickness: 3,
                 ),
@@ -138,9 +146,7 @@ class _DepartureBoardState extends State<DepartureBoard> {
               ),
             ),
           ],
-          if (wait != null ||
-              (travel.hasAlternative &&
-                  (travel.alternative ?? '').isNotEmpty)) ...[
+          if (wait != null || alternative) ...[
             const SizedBox(height: 12),
             Container(height: 1, color: const Color(0x26FFFFFF)),
             const SizedBox(height: 10),
@@ -172,7 +178,7 @@ class _DepartureBoardState extends State<DepartureBoard> {
                 ),
               ],
             ),
-          if (travel.hasAlternative && (travel.alternative ?? '').isNotEmpty)
+          if (alternative)
             Padding(
               padding: EdgeInsets.only(top: wait != null ? 6 : 0),
               child: Row(
@@ -215,7 +221,7 @@ class FactorList extends StatelessWidget {
       children: [
         for (final f in factors)
           Padding(
-            padding: const EdgeInsets.only(bottom: 6),
+            padding: const EdgeInsets.only(bottom: 8),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -223,7 +229,7 @@ class FactorList extends StatelessWidget {
                   f.supports
                       ? Icons.check_circle_rounded
                       : Icons.remove_circle_outline_rounded,
-                  size: 18,
+                  size: 22,
                   color: f.supports ? TbColors.live : TbColors.skiffer,
                 ),
                 const SizedBox(width: 8),
@@ -231,7 +237,7 @@ class FactorList extends StatelessWidget {
                   child: Text(
                     f.text,
                     style: TextStyle(
-                      fontSize: 14.5,
+                      fontSize: 16.5,
                       height: 1.3,
                       fontWeight: FontWeight.w600,
                       color: f.supports ? TbColors.ink : TbColors.skiffer,
@@ -242,6 +248,59 @@ class FactorList extends StatelessWidget {
             ),
           ),
       ],
+    );
+  }
+}
+
+/// Nästa avgång som en egen ruta: hur länge folk blir stående är det som
+/// avgör om tipset är värt en körning. Bara resan -- aldrig vilken tjänst som
+/// svarade. Används när tipset saknar en egen drabbad avgång (då tar
+/// [DepartureBoard] över).
+class NextDepartureBox extends StatelessWidget {
+  const NextDepartureBox({super.key, required this.travel});
+
+  final TravelOptions travel;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = travel.isStrong ? TbColors.live : TbColors.midnatt;
+    final Widget icon = travel.isLastDeparture
+        ? Icon(Icons.last_page, size: 22, color: color)
+        : travel.hasAlternative
+        ? BrandIcons.bus(size: 22, color: color)
+        : Icon(Icons.schedule_rounded, size: 22, color: color);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: travel.isStrong
+            ? TbColors.live.withValues(alpha: 0.08)
+            : TbColors.vit,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: travel.isStrong
+              ? TbColors.live.withValues(alpha: 0.4)
+              : TbColors.line,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(padding: const EdgeInsets.only(top: 1), child: icon),
+          const SizedBox(width: 10),
+          Expanded(
+            child: LiveTravelText(
+              travel,
+              style: TextStyle(
+                fontSize: 17,
+                height: 1.35,
+                fontWeight: FontWeight.w700,
+                color: travel.isStrong ? TbColors.live : TbColors.ink,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

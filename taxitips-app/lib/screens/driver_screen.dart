@@ -23,9 +23,7 @@ import 'support_chat_screen.dart';
 import '../push_service.dart';
 import '../severity_labels.dart';
 import '../theme.dart';
-import '../widgets/alert_feedback_bar.dart';
-import '../widgets/tip_report_button.dart';
-import '../widgets/tip_detail_parts.dart';
+import '../widgets/tip_sheet.dart';
 import '../widgets/brand_icons.dart';
 import '../followed_events.dart';
 import '../signal_kinds.dart';
@@ -2416,42 +2414,6 @@ class _DriverScreenState extends State<DriverScreen>
       ? 2
       : 1;
 
-  /// "Därför"-raderna, utan den om väntan när avgångstavlan redan visar den.
-  List<TipFactor> _sheetFactors(Map<String, dynamic> a) {
-    final factors = TipFactor.of(a);
-    final travel = TravelOptions.of(a);
-    if (travel?.departure == null || travel?.waitText == null) return factors;
-    return [
-      for (final f in factors)
-        if (!f.text.startsWith('Nästa ') &&
-            !f.text.startsWith('Sista avgången'))
-          f,
-    ];
-  }
-
-  String _placeName(Map<String, dynamic> a) {
-    final places = ((a['taxi'] as Map?)?['places'] as List?) ?? [];
-    if (places.isNotEmpty) return places.first.toString();
-    // Real opportunities never carry taxi.places (that's a legacy events-era
-    // field) -- fall back to the actual title rather than a hardcoded "Skåne"
-    // that told the driver nothing about which disruption they'd tapped.
-    final title = a['title']?.toString().trim();
-    if (title == null || title.isEmpty) return 'Skåne';
-    return displayTitle(title: title, mode: a['mode']?.toString());
-  }
-
-  // 'header'/'taxi.driverHint' were legacy events-era fields never populated
-  // on real opportunities (get_smart_alerts never returns them) -- this always
-  // fell through to a generic placeholder instead of the actual, specific
-  // description that's right there in a['summary'] and already shown on the
-  // card the driver just tapped. Showing that same real text here, not a
-  // vaguer restatement, is what makes the sheet worth opening.
-  String _hint(Map<String, dynamic> a) {
-    final summary = a['summary']?.toString().trim();
-    if (summary != null && summary.isNotEmpty) return summary;
-    return 'Ingen ytterligare beskrivning tillgänglig.';
-  }
-
   List<Map<String, dynamic>> get _places {
     final statsByName = <String, Map<String, dynamic>>{
       for (final p in _asMaps(_data?['placeStats']))
@@ -2529,248 +2491,42 @@ class _DriverScreenState extends State<DriverScreen>
         // EN mekanism via scrollController. Utan detta konkurrerar
         // BottomSheets drag-detektor med SingleChildScrollView om
         // gesterna: föraren försöker skrolla ner i en lång text men
-        // sheetet stängs istället. initialChildSize 0.75 räcker för
-        // beslutsfakta och knapparna; användaren drar upp till 0.96
-        // när "Mer om tipset" är utfällt.
+        // sheetet stängs istället. initialChildSize 0.85 visar vad, var,
+        // hur bråttom och styrkan; knapparna ligger fast i nederkanten.
+        // Användaren drar upp till 0.96 när "Mer om tipset" är utfällt.
         return DraggableScrollableSheet(
           expand: false,
-          initialChildSize: 0.75,
+          initialChildSize: 0.85,
           minChildSize: 0.35,
           maxChildSize: 0.96,
           snap: true,
-          snapSizes: const [0.35, 0.75, 0.96],
+          snapSizes: const [0.35, 0.85, 0.96],
           // true: om föraren drar ner förbi minsta storlek stängs sheetet
           // automatiskt (samma känsla som en vanlig modal bottom sheet).
           shouldCloseOnMinExtent: true,
           builder: (_, scrollController) {
-            return DecoratedBox(
-              decoration: const BoxDecoration(
-                color: TbColors.foam,
-                borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-              ),
-              child: SafeArea(
-                top: false,
-                child: SingleChildScrollView(
-                  controller: scrollController,
-                  padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 4,
-                          margin: const EdgeInsets.only(bottom: 14),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade400,
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                        ),
-                      ),
-                      // Ordningen följer förarens beslut: vad och hur starkt
-                      // (datumet litet uppe till höger), var, vilken avgång och
-                      // hur länge folk blir stående -- sedan skälen och knapparna.
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: strengthColor(
-                                strengthOfAlert(a),
-                                category: categoryOfAlert(a),
-                              ),
-                              borderRadius: BorderRadius.circular(
-                                categoryOfAlert(a) == SignalCategory.road
-                                    ? 7
-                                    : 11,
-                              ),
-                            ),
-                            child: Icon(
-                              iconForAlert(a),
-                              color: TbColors.vit,
-                              size: 24,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '${categoryOfAlert(a).label} · ${shortWhat(a)}'
-                                      .toUpperCase(),
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(
-                                    fontSize: 11.5,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.6,
-                                    color: TbColors.skiffer,
-                                  ),
-                                ),
-                                const SizedBox(height: 5),
-                                StrengthPill(
-                                  strength: strengthOfAlert(a),
-                                  category: categoryOfAlert(a),
-                                ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          _SheetDate(
-                            start: DateTime.tryParse(
-                              a['start_time']?.toString() ?? '',
-                            )?.toLocal(),
-                            end: DateTime.tryParse(
-                              a['end_time']?.toString() ?? '',
-                            )?.toLocal(),
-                            ended: a['is_active'] == false,
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 12),
-                      Text(
-                        _placeName(a),
-                        style: const TextStyle(
-                          fontFamily: kDisplayFont,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w700,
-                          height: 1.15,
-                        ),
-                      ),
-                      // Avgången och väntan -- det som avgör om det är värt att
-                      // köra dit. Tåg och enstaka avgångar får en avgångstavla;
-                      // övriga den enkla raden om nästa avgång.
-                      if (TravelOptions.of(a) case final travel?) ...[
-                        const SizedBox(height: 12),
-                        if (travel.departure != null)
-                          DepartureBoard(travel: travel)
-                        else
-                          _NextDepartureBox(travel: travel),
-                      ],
-                      // Därför: läget och omständigheterna som räknades
-                      // (tid på dygnet, ersättning, väder) -- fakta, inte
-                      // ett löfte. Föraren avgör.
-                      if (_sheetFactors(a) case final factors
-                          when factors.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        FactorList(factors: factors),
-                      ],
-                      // Ersättningsrätten, för äldre svar utan "Därför" (där
-                      // står den redan som en rad).
-                      if (a['compensation_eligible'] == true &&
-                          TipFactor.of(a).isEmpty) ...[
-                        const SizedBox(height: 8),
-                        Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(
-                              Icons.receipt_long,
-                              size: 17,
-                              color: TbColors.live,
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                '${compensationLabel(a['compensation_amount_kr'] as num?, perPerson: a['compensation_per_person'] as bool?)} — resenären har rätt till ersättning för taxi.',
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  height: 1.35,
-                                  fontWeight: FontWeight.w700,
-                                  color: TbColors.live,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                      const SizedBox(height: 14),
-                      // Kör dit (telefonens navigering) och Följ -- de två saker
-                      // föraren gör med ett tips. Ett väghinder kör man runt, inte
-                      // till: där finns bara Följ.
-                      ActionRow(
-                        compact: true,
-                        lat: categoryOfAlert(a) == SignalCategory.road
-                            ? null
-                            : (a['lat'] as num?)?.toDouble(),
-                        lon: (a['lon'] as num?)?.toDouble(),
-                        driveLabel: _distanceFor(a) == null
-                            ? 'Kör dit'
-                            : 'Kör dit · ${distanceText(_distanceFor(a))}',
-                        followed: a['is_favorite'] == true,
-                        onToggleFollow: widget.api.supportsFavorites
-                            ? (v) => _toggleFavorite(a, v)
-                            : null,
-                      ),
-                      const SizedBox(height: 16),
-                      // Källans egen beskrivning, efter beslutsfakta. Mindre när
-                      // avgångstavlan redan sagt det viktiga.
-                      Text(
-                        _hint(a),
-                        style: TextStyle(
-                          fontSize: TravelOptions.of(a)?.departure != null
-                              ? 13.5
-                              : 15,
-                          height: 1.4,
-                          fontWeight: FontWeight.w500,
-                          color: TravelOptions.of(a)?.departure != null
-                              ? TbColors.skiffer
-                              : TbColors.ink,
-                        ),
-                      ),
-                      // "Fick körning / Ingen kund" frågar om ett tips gav kunder --
-                      // ett väghinder lovar inga.
-                      if (a['id'] != null &&
-                          categoryOfAlert(a) != SignalCategory.road) ...[
-                        const SizedBox(height: 16),
-                        AlertFeedbackBar(
-                          api: widget.api,
-                          opportunityId: a['id'].toString(),
-                        ),
-                      ],
-                      if (url != null && url.isNotEmpty)
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: TextButton.icon(
-                            style: TextButton.styleFrom(
-                              foregroundColor: TbColors.midnatt,
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 4,
-                              ),
-                              minimumSize: const Size(0, 40),
-                            ),
-                            onPressed: () async {
-                              final uri = Uri.tryParse(url);
-                              if (uri != null) {
-                                await launchUrl(
-                                  uri,
-                                  mode: LaunchMode.externalApplication,
-                                );
-                              }
-                            },
-                            icon: const Icon(Icons.open_in_new, size: 16),
-                            label: const Text('Trafikbolagets sida'),
-                          ),
-                        ),
-                      if (a['id'] != null)
-                        TipReportButton(
-                          api: widget.api,
-                          opportunityId: a['id'].toString(),
-                        ),
-                      const SizedBox(height: 4),
-                      const TipsNotPromisesNote(),
-                      const SizedBox(height: 8),
-                      TextButton(
-                        onPressed: () => Navigator.pop(ctx),
-                        child: const Text('Stäng'),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
+            // Innehållet och ordningen bor i TipSheetBody (widgets/tip_sheet.dart):
+            // vad och var, hur bråttom, värt att köra dit, vad gör jag nu, mer.
+            return TipSheetBody(
+              alert: a,
+              api: widget.api,
+              scrollController: scrollController,
+              distanceKm: _distanceFor(a),
+              onToggleFavorite: widget.api.supportsFavorites
+                  ? (v) => _toggleFavorite(a, v)
+                  : null,
+              onOpenSourcePage: url == null || url.isEmpty
+                  ? null
+                  : () async {
+                      final uri = Uri.tryParse(url);
+                      if (uri != null) {
+                        await launchUrl(
+                          uri,
+                          mode: LaunchMode.externalApplication,
+                        );
+                      }
+                    },
+              onClose: () => Navigator.pop(ctx),
             );
           },
         );
@@ -3830,99 +3586,6 @@ class _ScorePresetChip extends StatelessWidget {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-/// Datumet, litet uppe till höger: "I dag 2 okt · 19:09". Alltid med datum
-/// -- ett tips som läses efter midnatt ska inte gå att ta för en annan dag.
-class _SheetDate extends StatelessWidget {
-  const _SheetDate({required this.start, this.end, this.ended = false});
-
-  final DateTime? start;
-  final DateTime? end;
-  final bool ended;
-
-  @override
-  Widget build(BuildContext context) {
-    if (start == null) return const SizedBox.shrink();
-    final endClock = end == null
-        ? null
-        : '${end!.hour.toString().padLeft(2, '0')}:'
-              '${end!.minute.toString().padLeft(2, '0')}';
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.end,
-      children: [
-        Text(
-          dateText(start),
-          style: const TextStyle(
-            fontSize: 12.5,
-            fontWeight: FontWeight.w600,
-            color: TbColors.skiffer,
-          ),
-        ),
-        if (ended)
-          Text(
-            endClock == null ? 'Slut' : 'Slut $endClock',
-            style: const TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w700,
-              color: TbColors.skiffer,
-            ),
-          ),
-      ],
-    );
-  }
-}
-
-/// Nästa avgång som en egen ruta högst upp i detaljvyn: hur länge folk blir
-/// stående är det som avgör om tipset är värt en körning. Bara resan --
-/// aldrig vilken tjänst som svarade.
-class _NextDepartureBox extends StatelessWidget {
-  const _NextDepartureBox({required this.travel});
-
-  final TravelOptions travel;
-
-  @override
-  Widget build(BuildContext context) {
-    final color = travel.isStrong ? TbColors.live : TbColors.midnatt;
-    final Widget icon = travel.isLastDeparture
-        ? Icon(Icons.last_page, size: 20, color: color)
-        : travel.hasAlternative
-        ? BrandIcons.bus(size: 20, color: color)
-        : Icon(Icons.schedule_rounded, size: 20, color: color);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-      decoration: BoxDecoration(
-        color: travel.isStrong
-            ? TbColors.live.withValues(alpha: 0.08)
-            : TbColors.vit,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: travel.isStrong
-              ? TbColors.live.withValues(alpha: 0.4)
-              : TbColors.line,
-        ),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Padding(padding: const EdgeInsets.only(top: 1), child: icon),
-          const SizedBox(width: 10),
-          Expanded(
-            child: LiveTravelText(
-              travel,
-              style: TextStyle(
-                fontSize: 16,
-                height: 1.35,
-                fontWeight: FontWeight.w800,
-                color: travel.isStrong ? TbColors.live : TbColors.ink,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
