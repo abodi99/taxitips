@@ -143,8 +143,10 @@ class RegistrationRulesTests(FleetTestCase):
             self.register(vehicles=[{"plate": "ABC123", "baseCounty": "12", "extraCounties": ["01"]}])
         self.assertEqual(caught.exception.reason, "trial_extra_county")
 
-    def test_a_seller_can_still_give_three_cars(self):
-        self.assertEqual(trials.vehicle_limit_for(Trial.Source.SALES), 3)
+    def test_every_trial_is_one_car(self):
+        """Ägarens beslut 2026-10-03: en bil i provet, även när en säljare lagt upp det."""
+        for source in (Trial.Source.SELF_SIGNUP, Trial.Source.SALES, Trial.Source.SALES_INVITE):
+            self.assertEqual(trials.vehicle_limit_for(source), 1, source)
 
     def test_the_precheck_answers_before_an_account_exists(self):
         client = Client()

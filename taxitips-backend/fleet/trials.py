@@ -40,7 +40,9 @@ from fleet.models import License, SalesInvite, Trial
 TRIAL_DAYS = 7
 TRIAL_VEHICLE_LIMIT = 1
 # Prov som en säljare lagt upp efter ett samtal (Trial.Source.SALES/SALES_INVITE).
-SALES_TRIAL_VEHICLE_LIMIT = 3
+# En bil, som alla andra prov (ägarens beslut 2026-10-03; var tre). Fler bilar
+# är en beställning, eller en kupong som plattformsadministratören skapat.
+SALES_TRIAL_VEHICLE_LIMIT = TRIAL_VEHICLE_LIMIT
 # Karenstiden mellan två gratisperioder. Räknas på provets START, så att ett
 # avbrutet prov inte kan användas för att korta ner den.
 TRIAL_COOLDOWN_MONTHS = 24
@@ -172,7 +174,7 @@ def create_trial(
 
 
 def vehicle_limit_for(source: str) -> int:
-    """En bil för den som registrerar sig själv, fler när en säljare lagt upp provet."""
+    """En bil, vem som än lägger upp provet. Hålls som funktion om reglerna skiljer sig igen."""
     if source in (Trial.Source.SALES, Trial.Source.SALES_INVITE):
         return SALES_TRIAL_VEHICLE_LIMIT
     return TRIAL_VEHICLE_LIMIT
