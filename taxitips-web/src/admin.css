@@ -31,9 +31,6 @@
   margin: 0 auto;
   padding: 1.25rem 1.25rem 4rem;
 }
-.admin-main > .login-card {
-  margin-top: 3rem;
-}
 
 .admin-shell:not([hidden]) {
   display: grid;

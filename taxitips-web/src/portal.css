@@ -104,10 +104,6 @@ h3 {
   padding: 1.25rem;
   margin-bottom: 1rem;
 }
-.login-card {
-  max-width: 420px;
-  margin: 3rem auto;
-}
 
 label {
   display: block;
@@ -182,11 +178,385 @@ input[aria-invalid="true"] { border-color: var(--danger); }
   opacity: 0.55;
   cursor: not-allowed;
 }
+/* `display: inline-flex` ovan slår annars ut `hidden`: "Logga ut" syntes på
+   inloggningssidan innan någon loggat in. */
+.btn[hidden] {
+  display: none;
+}
 .btn-row {
   display: flex;
   flex-wrap: wrap;
   gap: 0.5rem;
   margin-top: 0.75rem;
+}
+
+/* --- Webbläsarens egna ytor ------------------------------------------- */
+
+::selection {
+  background: rgba(252, 163, 17, 0.35);
+  color: var(--midnatt);
+}
+input,
+select,
+textarea {
+  caret-color: var(--midnatt);
+}
+
+/* --- Knappvarianter som inloggningen och medlemskapet delar ------------ */
+
+.btn-block {
+  width: 100%;
+}
+.btn-lg {
+  min-height: 52px;
+  font-size: 1.02rem;
+}
+.btn-outline {
+  background: var(--vit);
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+.btn-outline:hover {
+  border-color: var(--midnatt);
+}
+.btn-primary,
+.btn-outline,
+.btn-quiet {
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+a.btn {
+  text-decoration: none;
+}
+
+/* Laddningsläge (src/auth_form.js:setBusy): etiketten byts och en snurra syns. */
+.btn-spinner {
+  display: none;
+  width: 1em;
+  height: 1em;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: btn-spin 0.7s linear infinite;
+}
+.btn.is-busy {
+  cursor: progress;
+  opacity: 0.9;
+}
+.btn.is-busy .btn-spinner {
+  display: inline-block;
+}
+@keyframes btn-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn-spinner {
+    animation-duration: 1.6s;
+  }
+}
+
+/* --- Inloggning (portal.html och admin.html) ----------------------------
+   Ett sammanhållet kort: formuläret och en panel i midnatt som säger vad
+   sidan är till för. Formuläret står först i koden; på bred skärm hamnar
+   panelen till vänster, på mobil under formuläret så att fälten syns direkt. */
+
+.auth:not([hidden]) {
+  display: grid;
+  max-width: 980px;
+  margin: clamp(1.25rem, 5vh, 3.5rem) auto 0;
+  background: var(--vit);
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  overflow: hidden;
+  box-shadow: 0 24px 60px -24px rgba(13, 23, 41, 0.28), 0 2px 6px rgba(13, 23, 41, 0.05);
+}
+
+@media (min-width: 860px) {
+  .auth:not([hidden]) {
+    grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+  }
+  .auth-panel {
+    order: -1;
+  }
+}
+
+.auth-card {
+  padding: clamp(1.5rem, 5vw, 3rem);
+}
+
+.auth-card h1 {
+  font-size: clamp(1.7rem, 4vw, 2.1rem);
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  margin-bottom: 0.5rem;
+}
+
+.auth-lead {
+  margin: 0 0 1.5rem;
+  color: var(--ink-soft);
+  max-width: 44ch;
+}
+.auth-lead a,
+.auth-foot a {
+  color: var(--midnatt);
+  font-weight: 600;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--guld);
+  text-decoration-thickness: 2px;
+}
+
+.auth-form {
+  display: grid;
+  gap: 1.1rem;
+}
+
+.auth-field {
+  display: grid;
+  gap: 0.4rem;
+}
+.auth-field label {
+  margin: 0;
+  font-size: 0.92rem;
+}
+
+.auth input {
+  min-height: 52px;
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  border-color: rgba(20, 33, 61, 0.24);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.auth .pw-field input {
+  padding-right: 3.25rem;
+}
+.auth input::placeholder {
+  color: rgba(82, 96, 120, 0.8);
+}
+.auth input:hover {
+  border-color: rgba(20, 33, 61, 0.4);
+}
+.auth input:focus,
+.auth input:focus-visible {
+  outline: none;
+  border-color: var(--guld-djup);
+  box-shadow: 0 0 0 4px rgba(252, 163, 17, 0.3);
+}
+.auth input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+.auth input[aria-invalid="true"]:focus {
+  box-shadow: 0 0 0 4px rgba(192, 57, 43, 0.18);
+}
+
+.auth-alert,
+.auth-sent {
+  margin: 0;
+  padding: 0.75rem 0.9rem;
+  border-radius: 12px;
+  font-size: 0.93rem;
+  font-weight: 500;
+  line-height: 1.45;
+}
+.auth-alert {
+  color: var(--danger);
+  background: rgba(192, 57, 43, 0.07);
+  border: 1px solid rgba(192, 57, 43, 0.22);
+}
+.auth-sent {
+  margin-top: 1rem;
+  color: var(--ok);
+  background: rgba(31, 138, 91, 0.08);
+  border: 1px solid rgba(31, 138, 91, 0.22);
+}
+
+.auth-form .btn-primary {
+  margin-top: 0.35rem;
+}
+
+.auth-or {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  margin: 1.5rem 0;
+  color: var(--ink-soft);
+  font-size: 0.85rem;
+}
+.auth-or::before,
+.auth-or::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--line);
+}
+
+.auth-alt {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: center;
+}
+
+/* "Glömt lösenord?" -- en knapp (den skickar ett mejl) som ser ut som en länk. */
+.auth-link {
+  min-height: 44px;
+  padding: 0 0.75rem;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--midnatt);
+  font: inherit;
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: underline;
+  text-decoration-color: rgba(20, 33, 61, 0.3);
+  text-underline-offset: 4px;
+  cursor: pointer;
+}
+.auth-link:hover {
+  text-decoration-color: var(--guld);
+}
+.auth-link[disabled] {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.auth-note {
+  margin: 1.25rem 0 0;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+}
+
+.auth-foot {
+  margin: 1.5rem 0 0;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--line);
+  font-size: 0.95rem;
+  color: var(--ink-soft);
+}
+
+/* Panelen: vad sidan är till för, i midnatt med varumärkets vägbild. */
+.auth-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding: clamp(1.5rem, 5vw, 3rem);
+  color: var(--vit);
+  /* Vägen och målpunkten ur varumärkets vägbild (brand/graphics/route-background.svg),
+     nedtill till höger där ingen text står. */
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 400 260'%3E%3Cpath d='M-20 210H190Q250 210 250 150V70' fill='none' stroke='%23253551' stroke-width='28' stroke-linecap='round'/%3E%3Cpath d='M40 210H190Q250 210 250 150V70' fill='none' stroke='%23FCA311' stroke-width='6' stroke-linecap='round'/%3E%3Ccircle cx='250' cy='70' r='11' fill='%23FCA311'/%3E%3C/svg%3E")
+      right -12px bottom -12px / 260px auto no-repeat,
+    var(--midnatt);
+}
+
+.auth-panel-title {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: clamp(1.5rem, 3.2vw, 2rem);
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+}
+.auth-panel-title .admin-badge {
+  font-family: var(--font-body);
+  font-size: 0.75rem;
+  letter-spacing: 0.04em;
+}
+
+.auth-panel-lead {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  max-width: 36ch;
+}
+
+.auth-points {
+  list-style: none;
+  margin: 0.75rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 1.1rem;
+}
+.auth-points li {
+  display: grid;
+  grid-template-columns: 1.5rem minmax(0, 1fr);
+  column-gap: 0.85rem;
+  color: rgba(255, 255, 255, 0.76);
+  font-size: 0.93rem;
+}
+.auth-points li::before {
+  content: "";
+  grid-row: span 2;
+  width: 1.5rem;
+  height: 1.5rem;
+  margin-top: 0.05rem;
+  background: var(--guld);
+  -webkit-mask: var(--icon) center / contain no-repeat;
+  mask: var(--icon) center / contain no-repeat;
+}
+.auth-points strong {
+  color: var(--vit);
+  font-weight: 600;
+}
+.auth-points li[data-icon="drivers"] { --icon: url("/brand/icons/drivers.svg"); }
+.auth-points li[data-icon="map-pin"] { --icon: url("/brand/icons/map-pin.svg"); }
+.auth-points li[data-icon="office"] { --icon: url("/brand/icons/office.svg"); }
+.auth-points li[data-icon="notification"] { --icon: url("/brand/icons/notification.svg"); }
+.auth-points li[data-icon="clock"] { --icon: url("/brand/icons/clock.svg"); }
+
+.auth-help {
+  margin: auto 0 0;
+  padding-top: 1.25rem;
+  padding-right: 9.5rem; /* fri från vägen nedtill till höger */
+  font-size: 0.9rem;
+  color: rgba(255, 255, 255, 0.72);
+}
+.auth-help a {
+  color: var(--guld);
+  font-weight: 600;
+  text-underline-offset: 3px;
+}
+
+@media (max-width: 859px) {
+  .auth:not([hidden]) {
+    border-radius: 18px;
+  }
+  /* Smal panel: vägen skulle korsa texten, så den utgår. */
+  .auth-panel {
+    background: var(--midnatt);
+  }
+  .auth-help {
+    padding-right: 0;
+  }
+}
+
+/* Mobil: 16px sidomarginal (gäller hela portalen, inte bara inloggningen). */
+@media (max-width: 520px) {
+  .portal-main {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+  .auth-card,
+  .auth-panel {
+    padding: 1.5rem 1.25rem;
+  }
+}
+
+/* Dev-inloggningen i adminwebben (bara Vite-dev). */
+.dev-login:not([hidden]) {
+  display: grid;
+  gap: 0.4rem;
+  margin-top: 1.25rem;
+  padding: 0.9rem;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+}
+.dev-login p {
+  margin: 0;
+  font-size: 0.85rem;
 }
 
 .tabs {
@@ -308,6 +678,308 @@ th {
   border-top: 1px solid var(--line-strong);
   padding-top: 0.5rem;
   margin-top: 0.5rem;
+}
+
+/* --- Medlemskap (Abonnemang och fakturor) --------------------------------
+   Ett kort, läst uppifrån: var ni står, vad som ingår, vad det kostar, och
+   nästa steg längst ner. Inga kort i kortet: delarna skiljs med luft och
+   tunna linjer. */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.card.member {
+  padding: 0;
+  overflow: hidden;
+  border-radius: 18px;
+  box-shadow: 0 18px 40px -28px rgba(13, 23, 41, 0.35);
+}
+.member > * {
+  padding-left: clamp(1.1rem, 3.5vw, 2rem);
+  padding-right: clamp(1.1rem, 3.5vw, 2rem);
+}
+
+.member-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  padding-top: clamp(1.25rem, 3.5vw, 1.75rem);
+}
+.member-head h2 {
+  font-size: clamp(1.35rem, 3vw, 1.6rem);
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  margin: 0 0 0.3rem;
+}
+.member-sub {
+  margin: 0;
+  color: var(--ink-soft);
+  max-width: 60ch;
+}
+.member-head .pill {
+  flex: none;
+  margin-top: 0.3rem;
+}
+
+.member-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 0;
+  margin: 1.25rem 0 0;
+  padding-top: 1rem;
+  padding-bottom: 1rem;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+  background: var(--ljusgra);
+}
+.member-facts > div {
+  padding: 0.15rem 1rem 0.15rem 0;
+}
+.member-facts > div + div {
+  padding-left: 1rem;
+  border-left: 1px solid var(--line);
+}
+.member-facts dt {
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+.member-facts dd {
+  margin: 0.15rem 0 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.member-body {
+  display: grid;
+  gap: 1.75rem;
+  padding-top: 1.5rem;
+  padding-bottom: 1.5rem;
+}
+@media (min-width: 860px) {
+  .member-body {
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    gap: 2.5rem;
+  }
+  .member-price {
+    padding-left: 2.5rem;
+    border-left: 1px solid var(--line);
+  }
+}
+
+.member h3 {
+  font-size: 0.95rem;
+  margin: 0 0 0.75rem;
+}
+
+.member-features {
+  display: grid;
+  gap: 1.25rem;
+}
+@media (min-width: 560px) {
+  .member-features:has(.feature-col-plus) {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.feature-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 0.7rem;
+}
+@media (min-width: 560px) {
+  .feature-list-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+.feature {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(0, 1fr);
+  gap: 0.6rem;
+  align-items: start;
+}
+.feature-text b {
+  display: block;
+  font-weight: 600;
+}
+.feature-text > span:not(.visually-hidden) {
+  display: block;
+  font-size: 0.88rem;
+  color: var(--ink-soft);
+}
+.feature-icon {
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+}
+.feature-icon::before {
+  content: "";
+  width: 1rem;
+  height: 1rem;
+  background: currentColor;
+  -webkit-mask: var(--feature-icon) center / contain no-repeat;
+  mask: var(--feature-icon) center / contain no-repeat;
+}
+.feature.is-on .feature-icon {
+  background: rgba(31, 138, 91, 0.12);
+  color: var(--ok);
+  --feature-icon: url("/brand/icons/check.svg");
+}
+/* Låset: samma streckstil som ikonerna i public/brand/icons. */
+.feature.is-locked .feature-icon {
+  background: rgba(252, 163, 17, 0.16);
+  color: var(--guld-djup);
+  --feature-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cg fill='none' stroke='%23000' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='5' y='11' width='14' height='10' rx='2'/%3E%3Cpath d='M8 11V8a4 4 0 0 1 8 0v3'/%3E%3C/g%3E%3C/svg%3E");
+}
+
+.member-terms {
+  margin: 1.5rem 0 0;
+  padding: 1rem 0 0;
+  border-top: 1px solid var(--line);
+  list-style: none;
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+
+.price-rows {
+  margin: 0;
+  display: grid;
+  gap: 0.9rem;
+}
+.price-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.15rem 1rem;
+  align-items: baseline;
+}
+.price-row dt {
+  font-weight: 600;
+}
+.price-row dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.1rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.price-note {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+.price-total {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.1rem 1rem;
+  align-items: baseline;
+  margin-top: 1.1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--line-strong);
+}
+.price-total b {
+  justify-self: end;
+  font-family: var(--font-display);
+  font-size: 1.35rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.price-total-vat {
+  grid-column: 2;
+  justify-self: end;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.price-fine {
+  margin: 1rem 0 0;
+  font-size: 0.85rem;
+  color: var(--ink-soft);
+}
+
+/* Nästa steg: ett band längst ner i kortet, i guldets ljusaste ton. */
+.member-cta {
+  display: grid;
+  gap: 1rem;
+  align-items: center;
+  padding-top: 1.25rem;
+  padding-bottom: 1.25rem;
+  background: rgba(252, 163, 17, 0.1);
+  border-top: 1px solid rgba(224, 143, 0, 0.3);
+}
+@media (min-width: 760px) {
+  .member-cta {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2rem;
+  }
+}
+.member-cta h3 {
+  font-size: 1.1rem;
+  margin: 0 0 0.35rem;
+}
+.member-cta p {
+  margin: 0;
+  max-width: 62ch;
+}
+.member-cta-act {
+  display: grid;
+  gap: 0.5rem;
+  justify-items: stretch;
+}
+@media (min-width: 760px) {
+  .member-cta-act {
+    justify-items: end;
+    text-align: right;
+  }
+}
+.member-fine {
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+.member-cta.is-done {
+  background: rgba(31, 138, 91, 0.07);
+  border-top-color: rgba(31, 138, 91, 0.25);
+}
+.member-cta.is-quiet {
+  background: var(--ljusgra);
+  border-top-color: var(--line);
+  color: var(--ink-soft);
+}
+
+@media (max-width: 640px) {
+  .member-facts > div + div {
+    padding-left: 0;
+    border-left: 0;
+  }
+  .member-facts {
+    gap: 0.75rem;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .member-head {
+    flex-direction: column-reverse;
+  }
+  .member-head .pill {
+    margin-top: 0;
+  }
 }
 
 @media (max-width: 640px) {
