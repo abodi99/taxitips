@@ -335,6 +335,14 @@ backenden (bara för `generate_link`) och att `taxitips.se/forare` godtas som
 redirect av Supabase Auth; utan nyckeln visas bara koden. Detaljer:
 `docs/fleet-abonnemang.md` §3.
 
+**Länbyten och massinbjudan** (2026-10-03): en bil får byta län högst två
+gånger per kalendermånad, även under provet (`fleet/county_changes.py`, tabellerna
+`fleet_county_change`/`fleet_county_change_grant`, migration `fleet/0021`). Felet är
+`county_change_limit`, läget `countyChanges` per bil, och support ger ett extra byte
+med `POST /api/admin/licenses/<id>/allow-county-change`. Stora bolag bjuder in
+förare i klump: `POST /api/fleet/driver-invites/bulk`. Detaljer:
+`docs/fleet-abonnemang.md` §3 och §8.
+
 **Supportchatten** (`fleet/support.py`, 2026-09-26): användare skriver i appen
 (Inställningar -> Chatta med support), personalen svarar under **Support** i
 adminwebben. Bara text. En konversation per användare: kontot om appen är

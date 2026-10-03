@@ -98,6 +98,15 @@ ersätter den gamla), "Skicka igen" ger ny länk och sju nya dygn, "Ta bort"
 återkallar. Koden finns kvar som reserv ("Har du en kod?" / "Visa kod i
 stället").
 
+**Många förare på en gång** (2026-10-03): `POST /api/fleet/driver-invites/bulk
+{"rows": [{"email", "plate" | "licenseId", "label"}]}`, högst 200 rader. Varje
+rad går genom samma `create_invite` och får ett eget svar `{email, ok, reason?,
+message?}`; en trasig rad stoppar inte de andra. Utan regnr väljs bolagets enda
+bil, annars `plate_required`. Bromsen är egen (`DRIVER_INVITE_BULK`, 500 mejl
+per dygn och bolag) i stället för timgränsen på 30, som hade fått rad 31 att
+fallera. Portalen: "Bjud in många förare" under Bilar, en rad per förare
+`e-post;regnr;namn`.
+
 ### Bolagskoden
 
 Får hitta företaget och lägga en **ansökan** (`POST /api/fleet/join-request`).
@@ -258,6 +267,7 @@ order utan villkorsversion går inte att knyta till ett avtal i efterhand.
 | Väntande betalning | Ger ingen åtkomst och förstör ingen befintlig. |
 | Minskning | Nästa förnyelse. Kunden väljer vilka bilar/län och ser kommande totalpris. |
 | Baslänsbyte | Nästa förnyelse. Behövs länet nu: köp som tillägg, tillägget tas bort automatiskt vid bytet. |
+| Länbyte, gräns | **Två per bil och kalendermånad** (Europe/Stockholm), även under provet -- annars får en bil som hoppar mellan län alla län till priset av ett. Räknas när kunden beställer bytet (betald bil) eller byter direkt (provbil, även byte av ett extra län mot ett annat). Köp av extra län räknas inte, och inte heller personalens ändringar. Därefter `county_change_limit`; support ger ett extra byte för månaden (`POST /api/admin/licenses/<id>/allow-county-change`). Läget per bil: `countyChanges` i `/api/fleet/company` och adminens kundsida. `fleet/county_changes.py`. |
 | Uppsägning | Stoppar nästa period. Åtkomst den betalda perioden ut. Ingen extra frist, inget supportsamtal. |
 | Ångra uppsägning | Går fram till slutdatumet. Introduktions- och provhistorik behålls. |
 | Misslyckad förnyelse | Högst **7 dagars** frist, räknad från **ursprunglig** förfallotid. Bara för den som betalat förut. |

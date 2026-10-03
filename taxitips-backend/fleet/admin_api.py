@@ -36,8 +36,8 @@ from billing.models import Company, CompanyMember, Device
 from core.api import _json
 from core.models import OpportunityReport, PushDelivery
 from fleet import (
-    access, archive, audit, discounts, driver_invites, licensing, pairing, pricing, risk, roles,
-    sessions, trials,
+    access, archive, audit, county_changes, discounts, driver_invites, licensing, pairing, pricing,
+    risk, roles, sessions, trials,
 )
 from fleet.api import _DOMAIN_ERRORS, _error
 from fleet.models import (
@@ -336,8 +336,11 @@ def company_detail(request, company_id):
     sub = Subscription.objects.filter(company_id=company.id).select_related("price_version").first()
     window = access.company_window(company.id, now)
 
+    license_rows = list(License.objects.filter(company_id=company.id).order_by("-created_at"))
+    # Länbyten kvar den här månaden per bil (fleet/county_changes.py).
+    county_change_rows = county_changes.summaries_for([lic.id for lic in license_rows], now=now)
     licenses = []
-    for lic in License.objects.filter(company_id=company.id).order_by("-created_at"):
+    for lic in license_rows:
         serving = sessions.current_vehicle(lic)
         session = sessions.active_session_for_license(lic.id)
         assignment = VehicleAssignment.objects.filter(license=lic, ended_at__isnull=True).first()
@@ -351,6 +354,7 @@ def company_detail(request, company_id):
             "scheduledBaseCounty": lic.scheduled_base_county,
             "counties": list(access.license_counties(lic.id, now)),
             "endsAt": _iso(lic.ends_at),
+            "countyChanges": county_change_rows[str(lic.id)],
             "extraCounties": [
                 c.county_code for c in LicenseCounty.objects.filter(
                     license=lic, kind=LicenseCounty.Kind.EXTRA

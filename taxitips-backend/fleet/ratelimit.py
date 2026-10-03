@@ -39,6 +39,16 @@ INVITE_REDEEM = Limit("invite_redeem", limit=10, window_seconds=3600)
 # "Skicka igen", så att portalen inte kan användas för att mejlbomba någon.
 DRIVER_INVITE_SEND = Limit("driver_invite_send", limit=30, window_seconds=3600)
 DRIVER_INVITE_RESEND = Limit("driver_invite_resend", limit=5, window_seconds=3600)
+# Massinbjudan (`/api/fleet/driver-invites/bulk`): ett stort bolag lägger in
+# alla förare på en gång, och 30 i timmen hade fått rad 31 av 50 att fallera.
+# Räknas per mejl men över ett dygn: 500 räcker för att bjuda in hela flottan
+# för ett bolag med 200 bilar och två förare per bil, med marginal för rättade
+# adresser, och är fortfarande ett tak för hur mycket post portalen kan skicka
+# från ett bolag. Varje adress har högst en väntande inbjudan (en ny ersätter
+# den gamla), så en enskild mottagare får inte 500 mejl utan att det syns.
+DRIVER_INVITE_BULK = Limit("driver_invite_bulk", limit=500, window_seconds=86400)
+# Antalet massanrop, så att ett skript inte kan mala i taket rad för rad.
+DRIVER_INVITE_BULK_CALLS = Limit("driver_invite_bulk_calls", limit=20, window_seconds=3600)
 # Inlösen kräver redan en inloggning; bromsen är per konto och per telefon.
 DRIVER_INVITE_CLAIM = Limit("driver_invite_claim", limit=10, window_seconds=3600)
 # Supportchatten: en människa som skriver många korta rader i rad ska inte

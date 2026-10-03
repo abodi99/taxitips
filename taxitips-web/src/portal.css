@@ -392,3 +392,25 @@ th {
 .invite-list .btn-row {
   margin: 0;
 }
+
+/* "Bjud in många förare" (Bilar och telefoner). En rad per förare, så
+   fältet har fast teckenbredd: kolumnerna e-post;regnr;namn går att läsa. */
+#bulkInviteForm textarea {
+  width: 100%;
+  min-height: 9rem;
+  padding: 0.6rem 0.7rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  font-family: "IBM Plex Mono", ui-monospace, monospace;
+  font-size: 1rem; /* 16px: iOS zoomar inte in vid fokus */
+  line-height: 1.45;
+  background: var(--vit);
+  color: var(--ink);
+  resize: vertical;
+}
+.bulk-result {
+  margin-top: 1rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid var(--line);
+  overflow-wrap: anywhere;
+}

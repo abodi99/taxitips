@@ -85,6 +85,7 @@ urlpatterns = [
     path("licenses/<uuid:license_id>/counties", admin_vehicles.set_trial_counties),
     path("licenses/<uuid:license_id>/remove", admin_vehicles.remove_license),
     path("licenses/<uuid:license_id>/base-county", admin_vehicles.set_base_county_now),
+    path("licenses/<uuid:license_id>/allow-county-change", admin_vehicles.allow_county_change),
     path("companies/<uuid:company_id>/base-county", admin_vehicles.set_company_base_county),
     path("pending-changes/<uuid:change_id>/undo", admin_vehicles.undo_pending_change),
     path("orders/<uuid:order_id>/payment-link", admin_sales.order_payment_link),

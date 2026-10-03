@@ -695,6 +695,10 @@ tr.clickable:hover td {
 .driving.on {
   background: color-mix(in srgb, var(--ok) 9%, var(--vit));
 }
+/* Inga länbyten kvar: det kunden ringer om ska synas utan att läsa siffran. */
+.driving.warn {
+  background: color-mix(in srgb, var(--warn) 12%, var(--vit));
+}
 .car .btn-row {
   margin-top: 0.5rem;
 }
