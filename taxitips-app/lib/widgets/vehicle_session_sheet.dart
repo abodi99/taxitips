@@ -210,8 +210,8 @@ class _VehicleSessionSheetState extends State<VehicleSessionSheet> {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text(
-                  'Telefonen är inte godkänd för någon bil. Be din '
-                  'administratör om en anslutningskod.',
+                  'Telefonen är inte kopplad till någon bil. Be din chef bjuda '
+                  'in dig med din e-post, och logga in som förare.',
                   style: TextStyle(color: Colors.grey.shade800, height: 1.3),
                 ),
               )

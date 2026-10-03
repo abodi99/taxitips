@@ -11,9 +11,11 @@ import '../widgets/brand_icons.dart';
 import '../widgets/company_settings_panel.dart';
 import '../widgets/notification_log_sheet.dart';
 import '../widgets/notify_prefs_sheet.dart';
+import '../widgets/password_visibility.dart';
 import '../widgets/settings_ui.dart';
 import '../widgets/vehicle_session_sheet.dart';
 import 'support_chat_screen.dart';
+import 'trial_welcome_screen.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({
@@ -44,8 +46,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   String? _companyName;
   String? _currentPlate;
   bool _hasCars = false;
+
   /// Licensens län (rättighet), visningsnamn i kort form.
   List<String> _licenseCountyLabels = const [];
+
   /// Valda län i notiserna/filtret, om de smalnar av rättigheten.
   List<String> _activeCountyLabels = const [];
 
@@ -236,8 +240,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Lämna denna telefon?'),
         content: const Text(
-          'Telefonen kopplas från bilen. För att köra igen loggar du in, '
-          'eller skriver in en ny kod från din chef.',
+          'Telefonen kopplas från bilen. För att köra igen trycker du på '
+          '"Jag är förare" och loggar in med din e-post. Då behöver din chef '
+          'ha bjudit in dig.',
         ),
         actions: [
           TextButton(
@@ -267,7 +272,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       builder: (ctx) => AlertDialog(
         title: const Text('Avsluta företagskontot?'),
         content: const Text(
-          'Abonnemanget förnyas inte. Pågår ett prov avslutas det. '
+          'Medlemskapet förnyas inte. Pågår ett prov avslutas det. '
           'Ni kan använda appen perioden ut.',
         ),
         actions: [
@@ -379,26 +384,40 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 24),
                   ],
 
-                  if (widget.api.canUseSupport) ...[
+                  if (widget.api.canUseSupport || _isOffice) ...[
                     SettingsGroup(
                       children: [
-                        SettingsNavRow(
-                          icon: Icons.chat_bubble_outline,
-                          iconColor: TbColors.taxiDeep,
-                          title: 'Chatta med oss',
-                          subtitle: _supportUnread > 0
-                              ? (_supportUnread == 1
-                                    ? 'Ett nytt svar'
-                                    : '$_supportUnread nya svar')
-                              : null,
-                          trailing: _supportUnread > 0
-                              ? Badge.count(
-                                  count: _supportUnread,
-                                  backgroundColor: TbColors.danger,
-                                )
-                              : null,
-                          onTap: _openSupportChat,
-                        ),
+                        // Välkomsten till provet igen (ägaren, som såg den
+                        // efter registreringen).
+                        if (_isOffice)
+                          SettingsNavRow(
+                            icon: Icons.help_outline,
+                            iconColor: TbColors.taxiDeep,
+                            title: 'Så fungerar Taxi Tips',
+                            subtitle: 'Provet, bilar och förare',
+                            onTap: () => TrialWelcomeScreen.openFromSettings(
+                              context,
+                              widget.api,
+                            ),
+                          ),
+                        if (widget.api.canUseSupport)
+                          SettingsNavRow(
+                            icon: Icons.chat_bubble_outline,
+                            iconColor: TbColors.taxiDeep,
+                            title: 'Chatta med oss',
+                            subtitle: _supportUnread > 0
+                                ? (_supportUnread == 1
+                                      ? 'Ett nytt svar'
+                                      : '$_supportUnread nya svar')
+                                : null,
+                            trailing: _supportUnread > 0
+                                ? Badge.count(
+                                    count: _supportUnread,
+                                    backgroundColor: TbColors.danger,
+                                  )
+                                : null,
+                            onTap: _openSupportChat,
+                          ),
                       ],
                     ),
                     const SizedBox(height: 24),
@@ -450,7 +469,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   if (!_isOffice && !_isDevice)
                     const Padding(
                       padding: EdgeInsets.only(bottom: 24),
-                      child: Text('Logga in eller anslut telefonen.'),
+                      child: Text('Logga in för att se inställningarna.'),
                     ),
 
                   _Footer(
@@ -684,6 +703,7 @@ class _PasswordChangeDialogState extends State<_PasswordChangeDialog> {
   final _newPassword = TextEditingController();
   bool _codeSent = false;
   bool _busy = false;
+  bool _hidePassword = true;
   String? _error;
 
   @override
@@ -786,9 +806,14 @@ class _PasswordChangeDialogState extends State<_PasswordChangeDialog> {
               const SizedBox(height: 8),
               TextField(
                 controller: _newPassword,
-                obscureText: true,
-                decoration: const InputDecoration(
+                obscureText: _hidePassword,
+                decoration: InputDecoration(
                   labelText: 'Nytt lösenord (minst 8)',
+                  suffixIcon: PasswordVisibilityButton(
+                    hidden: _hidePassword,
+                    onToggle: () =>
+                        setState(() => _hidePassword = !_hidePassword),
+                  ),
                 ),
               ),
             ],
@@ -862,7 +887,11 @@ class _CountiesOverview extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const Icon(Icons.chevron_right, size: 20, color: TbColors.muted),
+                  const Icon(
+                    Icons.chevron_right,
+                    size: 20,
+                    color: TbColors.muted,
+                  ),
                 ],
               ),
               const SizedBox(height: 10),
@@ -903,8 +932,8 @@ class _CountiesOverview extends StatelessWidget {
                 narrowed
                     ? 'Filtret visar ${activeLabels.join(', ')}. Tryck för att ändra.'
                     : licenseLabels.length == 1
-                        ? 'Tips och notiser i det här länet.'
-                        : 'Tips och notiser i alla dina län. Tryck för att begränsa.',
+                    ? 'Tips och notiser i det här länet.'
+                    : 'Tips och notiser i alla dina län. Tryck för att begränsa.',
                 style: const TextStyle(
                   fontSize: 13,
                   color: TbColors.muted,

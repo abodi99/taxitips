@@ -127,9 +127,10 @@ Future<void> showDataInfoDialog(BuildContext context) async {
     builder: (ctx) => AlertDialog(
       title: const Text('Om datan'),
       content: const Text(
-        'Taxi Tips bygger på officiell trafik- och väderinformation för '
-        'Skåne. Varje förslag räknas fram automatiskt utifrån aktuella '
-        'störningar i tåg- och busstrafiken, vägtrafiken och vädret.',
+        'Taxi Tips bygger på officiell trafikinformation: tåg, buss, väg, '
+        'flyg och färjor. Event och väder räknas också in. Varje tips '
+        'räknas fram automatiskt. Det är en bedömning, inte ett löfte. '
+        'Hur mycket vi ser är olika i olika län.',
         style: TextStyle(height: 1.4),
       ),
       actions: [

@@ -815,11 +815,9 @@ class ApiClient {
         }
       }
 
-      final status = company?['status']?.toString() ?? '';
-      final subStatus = company?['subscription_status']?.toString() ?? '';
-      final subId = company?['stripe_subscription_id']?.toString();
-      final hasSubscription = subId != null && subId.isNotEmpty;
-
+      // Inget om betalning eller abonnemang härifrån: appen visar det inte och
+      // säljer ingenting (lib/membership_copy.dart). Medlemskapets läge kommer
+      // från servern (GET /api/fleet/company), aldrig ur de här raderna.
       return {
         'user': {'id': user.id, 'email': user.email, 'name': profile?['name']},
         'profile': profile,
@@ -828,19 +826,8 @@ class ApiClient {
             : {
                 ...company,
                 'watchedAreas': company['watched_areas'] ?? [],
-                'joinCode': company['join_code'],
                 'orgNumber': company['org_number'],
-                'subscriptionStatus': subStatus,
-                'stripeSubscriptionId': subId,
-                'stripeCustomerId': company['stripe_customer_id'],
               },
-        'billing': {
-          'hasSubscription': hasSubscription,
-          'subscriptionId': subId,
-          'subscriptionStatus': subStatus,
-          'status': status,
-          'seats': company?['seats'],
-        },
         'role': role,
         'devices': devices,
         'members': members,
@@ -884,6 +871,11 @@ class ApiClient {
           'needsSession': status['needsSession'] == true,
           'message': status['message'],
           'licensedCounties': licensed.toList()..sort(),
+          // Servern säger om länen saknar begränsning (företag som inte är på
+          // licensmodellen än). Utan det betyder en tom lista "okänt", och då
+          // erbjöd länsväljaren alla län.
+          if (status['unrestrictedCounties'] is bool)
+            'unrestrictedCounties': status['unrestrictedCounties'],
         };
       } on ApiException catch (e) {
         // Inget nät: säg det, i stället för att falla vidare och svara
@@ -1418,6 +1410,10 @@ class ApiClient {
           'catalog': (body['typeCatalog'] as List?) ?? notifyTypeCatalog,
           'tips': const <String>[],
         },
+        // Vad provet visar (fleet/features.py). Null = servern sa inget.
+        'features': ?(body['features'] is Map
+            ? Map<String, dynamic>.from(body['features'] as Map)
+            : null),
         // Förarens enkla regler: kategorier, nivåer och paus (core/notify.py).
         'categoryCatalog': (body['categoryCatalog'] as List?) ?? const [],
         'levels': (body['levels'] as List?) ?? const ['all', 'medium', 'high'],
