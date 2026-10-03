@@ -24,7 +24,10 @@ skickar en ansökan. Ingen App Store-prenumeration, ingen IAP.
 **Appen säljer ingenting**: inga priser, köpknappar eller betallänkar. Nya
 kunder registrerar sig i appen och får ett kortfritt prov; betalning sker
 utanför appen (säljare, faktura, kundportalen på webben). Skälet och reglerna:
-`docs/fleet-abonnemang.md` §9c.
+`docs/fleet-abonnemang.md` §9c. Texterna om medlemskap bor på ett ställe i
+appen, `taxitips-app/lib/membership_copy.dart` (neutral text, ingen länk, och
+serverns betalningsmeddelanden visas aldrig rakt av); `test/membership_copy_test.dart`
+vaktar att inga köpvägar, priser eller nya `launchUrl` smyger in.
 
 ## 2. Var koden ligger
 
@@ -445,7 +448,7 @@ Tester — båda ska vara gröna innan något deployas:
 
 ```bash
 cd taxitips-backend && CELERY_TASK_ALWAYS_EAGER=1 ./.venv/bin/python manage.py test   # 1016
-cd taxitips-app && flutter test && flutter analyze                                     # 77
+cd taxitips-app && flutter test && flutter analyze                                     # 184
 cd taxitips-web && npx vite build                                                      # index + portal + admin
 ```
 

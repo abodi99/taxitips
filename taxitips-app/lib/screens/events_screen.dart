@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api_client.dart';
 import '../followed_events.dart';
+import '../membership_copy.dart';
 import '../signal_kinds.dart' show countyShort;
 import '../net_status.dart';
 import '../theme.dart';
@@ -72,8 +73,8 @@ class _EventsScreenState extends State<EventsScreen> {
   Map<String, int> _dayCounts = const {};
   bool _loading = true;
   String? _error;
-  // Satt när företaget har ett prov: evenemangen ingår i abonnemanget
-  // (fleet/features.py). Ingen länk -- betalningen sker utanför appen.
+  // Satt när provet inte omfattar evenemang (fleet/features.py). Neutral text,
+  // ingen länk -- medlemskapet sköts utanför appen (membership_copy.dart).
   String? _locked;
   bool _preview = false;
   String _previewNote = '';
@@ -206,10 +207,9 @@ class _EventsScreenState extends State<EventsScreen> {
         _previewNote = body['previewNote']?.toString() ?? '';
         _attribution = body['attribution']?.toString() ?? '';
         _maxDays = (body['maxDays'] as num?)?.toInt() ?? _maxDays;
-        _locked = body['reason'] == 'feature_locked'
-            ? (body['message']?.toString() ??
-                  'Ingår när företaget har ett abonnemang.')
-            : null;
+        // Appens egen text, inte serverns: texterna om medlemskap bor på ett
+        // ställe (lib/membership_copy.dart).
+        _locked = body['reason'] == 'feature_locked' ? kNotInTrialNote : null;
         _loading = false;
       });
     } catch (e) {

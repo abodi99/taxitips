@@ -8,6 +8,7 @@ import '../analytics.dart';
 import '../api_client.dart';
 import '../net_status.dart';
 import '../theme.dart';
+import '../widgets/password_visibility.dart';
 
 class SignupScreen extends StatefulWidget {
   const SignupScreen({
@@ -45,6 +46,8 @@ class SignupScreenState extends State<SignupScreen> {
   // Satt när Supabase kräver att e-posten bekräftas innan kontot kan logga in.
   String? _confirmEmail;
   bool _busy = false;
+  // Lösenordet är dolt tills ögat trycks (samma som i inloggningen).
+  bool _hidePassword = true;
   Timer? _lookupTimer;
 
   @override
@@ -562,10 +565,16 @@ class SignupScreenState extends State<SignupScreen> {
                           const SizedBox(height: 16),
                           TextField(
                             controller: _password,
-                            obscureText: true,
+                            obscureText: _hidePassword,
                             decoration: InputDecoration(
                               labelText: 'Lösenord (minst 8 tecken)',
                               prefixIcon: const Icon(Icons.lock_outline),
+                              suffixIcon: PasswordVisibilityButton(
+                                hidden: _hidePassword,
+                                onToggle: () => setState(
+                                  () => _hidePassword = !_hidePassword,
+                                ),
+                              ),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
@@ -586,7 +595,8 @@ class SignupScreenState extends State<SignupScreen> {
                                 _Step(n: 2, text: 'Lägg till bilen'),
                                 _Step(
                                   n: 3,
-                                  text: 'Ge förarna en kod — provet startar',
+                                  text:
+                                      'Bjud in förarna — provet startar när första telefonen kopplas',
                                 ),
                               ],
                             ),

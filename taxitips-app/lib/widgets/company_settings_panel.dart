@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../membership_copy.dart';
 import '../push_service.dart';
 import '../signal_kinds.dart';
 import '../net_status.dart';
@@ -19,6 +20,36 @@ import 'settings_ui.dart';
 /// TaxiTips och företaget, utanför appen -- ett köp av en digital tjänst i appen
 /// är det Apple och Google kräver sina egna betalsystem för. Därför finns
 /// inga priser, inga köpknappar och inga länkar till betalning i den här filen.
+/// Länbyten kvar för en provbil den här kalendermånaden, ur licensradens
+/// `countyChanges` (servern räknar; en gräns per bil och månad).
+///
+/// `total` är `remaining + used`: det är månadens hela utrymme oavsett om
+/// servern lägger extra byten i `limit` eller bredvid den. Null när servern
+/// inte skickar fältet (äldre server) -- då visar appen ingen räknare och
+/// stänger inget; servern säger själv nej med `county_change_limit`.
+class CountyChanges {
+  const CountyChanges({required this.remaining, required this.total});
+
+  final int remaining;
+  final int total;
+
+  bool get exhausted => remaining <= 0;
+
+  String get label => 'Länbyten kvar den här månaden: $remaining av $total';
+}
+
+CountyChanges? countyChangesOf(Map<String, dynamic> license) {
+  final raw = license['countyChanges'];
+  if (raw is! Map) return null;
+  final remaining = (raw['remaining'] as num?)?.toInt();
+  if (remaining == null) return null;
+  final used = (raw['used'] as num?)?.toInt();
+  final limit = (raw['limit'] as num?)?.toInt();
+  final left = remaining < 0 ? 0 : remaining;
+  final total = used != null ? left + used : (limit ?? left);
+  return CountyChanges(remaining: left, total: total < left ? left : total);
+}
+
 class CompanySettingsPanel extends StatefulWidget {
   const CompanySettingsPanel({super.key, required this.api});
 
@@ -165,21 +196,22 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     }
     if (access['ok'] == true) {
       if (reason == 'trial') {
-        final card = trial?['cardOnFile'] == true;
+        final continues = trial?['cardOnFile'] == true;
         final until = _daysLeft(access['validUntil']);
-        if (card) {
+        if (continues) {
+          // Inget om kort eller förnyelse: bara att företaget fortsätter.
           return (
             TbColors.live,
             'Provperiod',
-            'Kort sparat · auto-förnyelse $until · $cars',
+            'Medlemskapet fortsätter efter provet · $until · $cars',
           );
         }
         return (TbColors.taxiDeep, 'Provperiod', '$until · $cars');
       }
       if (reason == 'grace') {
         return (
-          TbColors.danger,
-          'Betalningen saknas',
+          TbColors.taxiDeep,
+          'Medlemskap pausas snart',
           'Tipsen fungerar till ${_date(access['validUntil'])}.',
         );
       }
@@ -187,13 +219,31 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       return (TbColors.live, 'Aktivt', until.isEmpty ? '' : 'Förnyas $until');
     }
     if (reason == 'trial_ended') {
-      return (
-        TbColors.muted,
-        'Provet är slut',
-        'Vi har mejlat hur ni fortsätter.',
-      );
+      return (TbColors.muted, 'Provet är slut', 'Tipsen är pausade.');
     }
-    return (TbColors.muted, 'Pausat', access['message']?.toString() ?? '');
+    // Serverns text visas bara för skäl som inte handlar om medlemskap
+    // (membershipNotice): en uppmaning att betala hör inte hemma i appen.
+    return (
+      TbColors.muted,
+      'Pausat',
+      isMembershipReason(reason)
+          ? 'Tipsen är pausade.'
+          : membershipNotice(
+              reason,
+              serverMessage: access['message']?.toString(),
+              fallback: '',
+            ),
+    );
+  }
+
+  /// En neutral rad under rubriken när medlemskapet är orsaken till att tipsen
+  /// är pausade eller snart pausas. Ingen länk, inget pris, ingen knapp.
+  String? get _membershipNote {
+    final access = Map<String, dynamic>.from(_data?['access'] as Map? ?? {});
+    final reason = access['reason']?.toString();
+    return isMembershipReason(reason) || reason == 'grace'
+        ? kMembershipOnWeb
+        : null;
   }
 
   String _daysLeft(Object? iso) {
@@ -307,7 +357,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
         title: Text('Spärra ${phone['label'] ?? 'telefonen'}?'),
         content: const Text(
           'Telefonen slutar visa tips direkt och lämnar bilen. '
-          'Föraren behöver en ny inbjudan eller kod för att komma in igen.',
+          'Föraren behöver en ny inbjudan för att komma in igen.',
         ),
         actions: [
           TextButton(
@@ -391,6 +441,13 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
 
   Future<void> _changeCounty(Map<String, dynamic> license) async {
     final current = license['baseCounty']?.toString();
+    final changes = countyChangesOf(license);
+    // Raden är avstängd när inga byten finns kvar; det här är bältet och
+    // hängslena, och servern avgör ändå (`county_change_limit`).
+    if (changes != null && changes.exhausted) {
+      _snack('Inga länbyten kvar den här månaden.', isError: true);
+      return;
+    }
     final entries = _countyNames.entries.toList()
       ..sort((a, b) => a.value.compareTo(b.value));
     final picked = await showModalBottomSheet<String>(
@@ -402,12 +459,20 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
           shrinkWrap: true,
           children: [
             const Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, 8),
+              padding: EdgeInsets.fromLTRB(20, 0, 20, 4),
               child: Text(
                 'Var kör bilen?',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
               ),
             ),
+            if (changes != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
+                child: Text(
+                  '${changes.label}. Ett byte använder ett av dem.',
+                  style: const TextStyle(color: TbColors.muted, height: 1.35),
+                ),
+              ),
             for (final c in entries)
               ListTile(
                 title: Text(c.value),
@@ -428,6 +493,11 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       _snack(
         '${license['vehicle']} kör nu i ${_countyNames[picked] ?? picked}',
       );
+    } on ApiException catch (e) {
+      // Gränsen är nådd: serverns svenska text visas som den är, och raden
+      // läses om så att räknaren stämmer (och bytet stängs av).
+      if (e.reason == 'county_change_limit' && mounted) await _reload();
+      _snack(e.message, isError: true);
     } catch (e) {
       _snack(_cleanError(e), isError: true);
     }
@@ -524,6 +594,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     final canEditCar =
         isTrial && _permissions.contains('manage_vehicles') && !_suspended;
     final counties = _counties(license);
+    final changes = countyChangesOf(license);
 
     void act(BuildContext ctx, Future<void> Function() action) {
       Navigator.pop(ctx);
@@ -553,17 +624,30 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
               const SizedBox(height: 16),
               SettingsGroup(
                 children: [
-                  SettingsNavRow(
-                    icon: Icons.place_outlined,
-                    title: counties.isEmpty ? 'Inget län' : counties,
-                    subtitle: canEditCar ? 'Tryck för att byta län' : null,
-                    trailingIcon: canEditCar
-                        ? Icons.chevron_right
-                        : Icons.lock_outline,
-                    onTap: canEditCar
-                        ? () => act(ctx, () => _changeCounty(license))
-                        : () {},
-                  ),
+                  // Raden gör något eller säger varför den inte gör det --
+                  // ingen tryckyta som inte svarar.
+                  if (canEditCar && !(changes?.exhausted ?? false))
+                    SettingsNavRow(
+                      icon: Icons.place_outlined,
+                      title: counties.isEmpty ? 'Inget län' : counties,
+                      subtitle: [
+                        'Tryck för att byta län',
+                        if (changes != null) changes.label,
+                      ].join('\n'),
+                      onTap: () => act(ctx, () => _changeCounty(license)),
+                    )
+                  else
+                    SettingsInfoRow(
+                      icon: Icons.place_outlined,
+                      title: counties.isEmpty ? 'Inget län' : counties,
+                      value: canEditCar
+                          // Inga byten kvar: nästa månad börjar om.
+                          ? '${changes!.label}\n'
+                                'Du kan byta län igen nästa månad.'
+                          : isTrial
+                          ? 'Bara en administratör kan byta län.'
+                          : 'Länet kan inte bytas i appen.',
+                    ),
                 ],
               ),
               const SizedBox(height: 16),
@@ -770,9 +854,13 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
           line: statusLine,
           color: color,
         ),
+        if (_membershipNote != null) ...[
+          const SizedBox(height: 12),
+          _InfoNote(icon: Icons.info_outline, text: _membershipNote!),
+        ],
         if (_trialOpen && trial?['cardOnFile'] != true) ...[
           const SizedBox(height: 12),
-          _PortalContinueBanner(endsAt: trial?['endsAt']?.toString()),
+          _TrialIncludesNote(endsAt: trial?['endsAt']?.toString()),
         ],
         const SizedBox(height: 20),
         const SettingsGroupLabel('Bilar'),
@@ -1050,12 +1138,14 @@ class _AddCarDialogState extends State<_AddCarDialog> {
   }
 }
 
-/// Vad provet omfattar och att ett mejl visar vägen vidare. Ingen länk, inget
-/// pris, ingen köpknapp: Apple och Google tillåter inte att appen leder till
-/// en betalning utanför butikerna (docs/fleet-abonnemang.md §9c). Betalningen
-/// sker via mejlet, kundportalen eller en säljare.
-class _PortalContinueBanner extends StatelessWidget {
-  const _PortalContinueBanner({this.endsAt});
+/// Vad provet omfattar, i neutrala ord. Ingen länk, inget pris, ingen
+/// köpknapp, ingen hänvisning till ett mejl om hur man fortsätter: Apple och
+/// Google tillåter inte att appen leder till en betalning utanför butikerna
+/// (docs/fleet-abonnemang.md §9c, lib/membership_copy.dart). Vilka kategorier
+/// som ingår står inte här -- det är serverns (`features`), och i appen syns
+/// det som ett lås.
+class _TrialIncludesNote extends StatelessWidget {
+  const _TrialIncludesNote({this.endsAt});
 
   final String? endsAt;
 
@@ -1068,6 +1158,24 @@ class _PortalContinueBanner extends StatelessWidget {
               '${until.year}-'
               '${until.month.toString().padLeft(2, '0')}-'
               '${until.day.toString().padLeft(2, '0')}. ';
+    return _InfoNote(
+      icon: Icons.lock_outline,
+      text:
+          '${date}Det som har ett lås i appen ingår inte i provet. '
+          '$kMembershipOnWeb',
+    );
+  }
+}
+
+/// En neutral informationsruta (gul ton) med ikon och text.
+class _InfoNote extends StatelessWidget {
+  const _InfoNote({required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
@@ -1077,16 +1185,11 @@ class _PortalContinueBanner extends StatelessWidget {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(
-            Icons.mark_email_read_outlined,
-            color: TbColors.taxiDeep,
-            size: 22,
-          ),
+          Icon(icon, color: TbColors.taxiDeep, size: 22),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              '${date}Under provet visas tåg och buss. Hur ni fortsätter med '
-              'flyg, färjor, evenemang och olyckor står i mejlet vi skickat.',
+              text,
               style: const TextStyle(
                 fontWeight: FontWeight.w600,
                 color: TbColors.ink,

@@ -18,6 +18,7 @@ import 'screens/login_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/signup_screen.dart';
+import 'screens/trial_welcome_screen.dart';
 import 'theme.dart';
 import 'screens/welcome_screen.dart';
 import 'widgets/force_upgrade_overlay.dart';
@@ -56,12 +57,16 @@ class TaxiPrognosApp extends StatefulWidget {
 /// Första start: onboarding → välkomst (Logga in / Registrera). Inloggningen
 /// är en för förare, ägare och kontor, bara e-post och lösenord; rollen
 /// avgörs av servern (ApiClient.signIn). Ingen bolagskod.
+///
+/// `trialWelcome` är ägarens välkomst till provet, en gång direkt efter att
+/// ett nytt företag registrerats (TrialWelcomeScreen).
 enum AppRoute {
   onboarding,
   welcome,
   login,
   driverLogin,
   signup,
+  trialWelcome,
   shell,
   driverInvite,
 }
@@ -131,11 +136,34 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
   /// Efter inloggning: en registrering som väntade på bekräftad e-post görs
   /// klart innan appen visas. Ett fel där (t.ex. orgnr som redan finns) visas
   /// i företagspanelen, som försöker igen -- det får inte stänga ute kontot.
+  ///
+  /// Blev företaget registrerat just nu (länken i mejlet, sedan inloggning)
+  /// får ägaren välkomsten till provet, precis som efter koden i appen.
   Future<void> _afterLogin() async {
+    Map<String, dynamic>? registered;
     try {
-      await widget.api.completePendingRegistration();
+      registered = await widget.api.completePendingRegistration();
     } catch (_) {}
-    if (mounted) _goShell();
+    if (!mounted) return;
+    if (registered?['created'] == true) {
+      await _goAfterRegistration();
+    } else {
+      _goShell();
+    }
+  }
+
+  /// Ett nytt företag är registrerat: välkomsten till provet, en gång. Är den
+  /// redan sedd går ägaren rakt in i appen. Den finns kvar i Inställningar.
+  Future<void> _goAfterRegistration() async {
+    if (await TrialWelcomeScreen.seen()) {
+      if (mounted) _goShell();
+      return;
+    }
+    if (!mounted) return;
+    setState(() {
+      _route = AppRoute.trialWelcome;
+      _invite = null;
+    });
   }
 
   void _goShell() {
@@ -221,12 +249,17 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
               ),
               AppRoute.signup => SignupScreen(
                 api: widget.api,
+                // Konto skapat och e-post bekräftad: välkomsten till provet.
                 onDone: () async {
                   await registerForPush(widget.api);
-                  _goShell();
+                  await _goAfterRegistration();
                 },
                 onLogin: () => setState(() => _route = AppRoute.login),
                 onBack: () => setState(() => _route = AppRoute.welcome),
+              ),
+              AppRoute.trialWelcome => TrialWelcomeScreen(
+                api: widget.api,
+                onDone: _goShell,
               ),
               AppRoute.shell => _AppShell(
                 api: widget.api,

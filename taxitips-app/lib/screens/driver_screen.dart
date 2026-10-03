@@ -14,6 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../analytics.dart';
 import '../api_client.dart';
 import '../feed_cache.dart';
+import '../membership_copy.dart';
 import '../net_status.dart';
 import '../widgets/offline_banner.dart';
 import '../widgets/ferry_event_widgets.dart';
@@ -416,10 +417,11 @@ class _DriverScreenState extends State<DriverScreen>
   /// telefon utan län får inga notiser alls (core/notify.py, `no_area`).
   Future<void> _syncNotifyRegionsFromFilter() async {
     if (widget.api.deviceToken == null) return;
-    final counties = _counties.isEmpty && _municipalities.isEmpty
-        ? _licensedCounties
-        : _counties;
-    if (counties == null) return;
+    final fromLicense = _counties.isEmpty && _municipalities.isEmpty;
+    final counties = fromLicense ? _licensedCounties : _counties;
+    // Inga län att skicka (okänt, eller licensen har inga än): skicka inget,
+    // så att en tom lista inte skriver över länen parkopplingen satt.
+    if (counties == null || (fromLicense && counties.isEmpty)) return;
     try {
       await widget.api.saveNotifyPrefs(
         regions: const [],
@@ -752,10 +754,11 @@ class _DriverScreenState extends State<DriverScreen>
     if (net != null) return netMessage(net);
     final s = e.toString();
     if (s.contains('Ogiltig')) {
-      return 'Koden fungerar inte. Be din chef om en ny kod.';
+      return 'Inloggningen fungerar inte. Logga in igen.';
     }
     if (s.contains('401') || s.contains('licens')) {
-      return 'Telefonen har ingen åtkomst. Logga in igen, eller be din chef om en kod.';
+      return 'Telefonen har ingen åtkomst. Logga in igen, eller be din chef '
+          'att bjuda in dig.';
     }
     return s.replaceFirst(RegExp(r'^(ApiException|Exception):\s*'), '');
   }
@@ -1077,6 +1080,14 @@ class _DriverScreenState extends State<DriverScreen>
         _entitled = result['entitled'] == true;
         _entitlementReason = result['reason']?.toString();
         _entitlementMessage = result['message']?.toString();
+        // Servern säger uttryckligen att länen är begränsade (licensmodellen)
+        // men telefonen har inga än -- t.ex. ingen bil vald och ingen godkänd
+        // bil. Då finns inga län att välja, i stället för att alla 21 erbjuds.
+        if (licensed.isEmpty && result['unrestrictedCounties'] == false) {
+          _licensedCounties = <String>{};
+          _counties.clear();
+          _municipalities.clear();
+        }
         if (licensed.isNotEmpty) {
           _licensedCounties = licensed;
           // Sparade val utanför licensen hade bara gett en tom lista.
@@ -1336,24 +1347,23 @@ class _DriverScreenState extends State<DriverScreen>
   Map<String, dynamic> get _features =>
       (_data?['features'] as Map?)?.cast<String, dynamic>() ?? const {};
 
-  static SignalCategory? _featureCategory(Object? key) =>
-      signalCategoryFromKey(key == 'events' ? 'event' : key?.toString());
-
   Set<SignalCategory> get _lockedCategories => {
     for (final k in (_features['locked'] as List?) ?? const [])
-      ?_featureCategory(k),
+      ?signalCategoryFromFeatureKey(k),
   };
 
   Map<SignalCategory, int> get _lockedCounts {
     final raw = (_features['hiddenCounts'] as Map?) ?? const {};
     return {
       for (final e in raw.entries)
-        ?_featureCategory(e.key): (e.value as num).toInt(),
+        ?signalCategoryFromFeatureKey(e.key): (e.value as num).toInt(),
     };
   }
 
-  /// Förklaringen bakom ett lås. Ingen länk och inget pris: betalningen sker
-  /// utanför appen, via mejlet, kundportalen eller en säljare (§9c).
+  /// Förklaringen bakom ett lås. Ingen länk, inget pris och ingen uppmaning:
+  /// bara att det inte ingår i provet och vem som sköter medlemskapet
+  /// (lib/membership_copy.dart, §9c). Serverns egen låstext visas inte --
+  /// texterna om medlemskap är appens.
   Future<void> _showLocked(SignalCategory category) async {
     final count = _lockedCounts[category] ?? 0;
     await showModalBottomSheet<void>(
@@ -1375,7 +1385,7 @@ class _DriverScreenState extends State<DriverScreen>
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      '${category.label} ingår i abonnemanget',
+                      '${category.label} ingår inte i provet',
                       style: const TextStyle(
                         fontSize: 19,
                         fontWeight: FontWeight.w800,
@@ -1405,10 +1415,7 @@ class _DriverScreenState extends State<DriverScreen>
               ],
               const SizedBox(height: 12),
               Text(
-                (_features['lockedMessage']?.toString().isNotEmpty ?? false)
-                    ? '${_features['lockedMessage']} Den som sköter företagets '
-                          'konto har fått ett mejl om hur ni fortsätter.'
-                    : 'Under provet visas tåg och buss.',
+                kNotInTrialNote,
                 style: TextStyle(
                   fontSize: 14,
                   height: 1.4,
@@ -1794,7 +1801,9 @@ class _DriverScreenState extends State<DriverScreen>
           : '${names.take(2).join(', ')} +${names.length - 2}';
     }
     if (_licensedCounties != null) {
-      return 'Alla dina län (${_licensedCounties!.length})';
+      return _licensedCounties!.isEmpty
+          ? 'Inga län än. Välj bil först.'
+          : 'Alla dina län (${_licensedCounties!.length})';
     }
     return 'Inget län valt';
   }
@@ -1907,7 +1916,9 @@ class _DriverScreenState extends State<DriverScreen>
                             Padding(
                               padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                               child: Text(
-                                'Bara länen ni har licens för visas här.',
+                                _licensedCounties!.isEmpty
+                                    ? 'Välj bil först. Då visas bilens län här.'
+                                    : 'Du kan bara välja bilens län.',
                                 style: TextStyle(
                                   color: Colors.grey.shade700,
                                   fontWeight: FontWeight.w600,
@@ -2404,7 +2415,8 @@ class _DriverScreenState extends State<DriverScreen>
     if (travel?.departure == null || travel?.waitText == null) return factors;
     return [
       for (final f in factors)
-        if (!f.text.startsWith('Nästa ') && !f.text.startsWith('Sista avgången'))
+        if (!f.text.startsWith('Nästa ') &&
+            !f.text.startsWith('Sista avgången'))
           f,
     ];
   }
@@ -2691,8 +2703,9 @@ class _DriverScreenState extends State<DriverScreen>
                       Text(
                         _hint(a),
                         style: TextStyle(
-                          fontSize:
-                              TravelOptions.of(a)?.departure != null ? 13.5 : 15,
+                          fontSize: TravelOptions.of(a)?.departure != null
+                              ? 13.5
+                              : 15,
                           height: 1.4,
                           fontWeight: FontWeight.w500,
                           color: TravelOptions.of(a)?.departure != null
@@ -2716,7 +2729,9 @@ class _DriverScreenState extends State<DriverScreen>
                           child: TextButton.icon(
                             style: TextButton.styleFrom(
                               foregroundColor: TbColors.midnatt,
-                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
                               minimumSize: const Size(0, 40),
                             ),
                             onPressed: () async {
@@ -3521,9 +3536,8 @@ class _DriverScreenState extends State<DriverScreen>
       for (final a in _favorites)
         if (lens == null || categoryOfAlert(a) == lens) a,
     ];
-    final savedIds = {
-      for (final a in saved) a['id']?.toString(),
-    }..removeWhere((id) => id == null || id.isEmpty);
+    final savedIds = {for (final a in saved) a['id']?.toString()}
+      ..removeWhere((id) => id == null || id.isEmpty);
     final feedTips = [
       for (final a in tips)
         if (!savedIds.contains(a['id']?.toString())) a,
@@ -3919,8 +3933,8 @@ class _EntitlementBanner extends StatelessWidget {
   (String, String, IconData, Color) get _copy => switch (reason) {
     'trial_not_started' => (
       'Välkommen! Ett steg kvar',
-      'Lägg till en bil och ge föraren en kod under Inställningar. '
-          'Provperioden på 7 dagar startar när den första telefonen kopplas.',
+      'Lägg till en bil under Inställningar och koppla en telefon. '
+          'Provperioden startar när den första telefonen kopplas.',
       Icons.flag_outlined,
       TbColors.live,
     ),
@@ -3930,17 +3944,19 @@ class _EntitlementBanner extends StatelessWidget {
       Icons.block,
       TbColors.danger,
     ),
+    // Skäl som handlar om medlemskap får appens neutrala text, aldrig serverns:
+    // den kan innehålla en uppmaning om betalning (membership_copy.dart).
     'trial_ended' => (
       'Provperioden är slut',
-      'Nya tips visas inte just nu. Er kontaktperson på TaxiTips hjälper er '
-          'att fortsätta — det är inte samma sak som "inga störningar just nu".',
+      'Nya tips visas inte just nu. $kMembershipOnWeb Det är inte samma sak '
+          'som "inga störningar just nu".',
       Icons.info_outline,
       TbColors.taxiDeep,
     ),
     _ => (
       'Tipsen är pausade',
-      '${message ?? 'Företagets abonnemang är inte aktivt.'} Det är inte samma '
-          'sak som "inga störningar just nu".',
+      '${membershipNotice(reason, serverMessage: message, fallback: 'Åtkomsten är inte aktiv.')} '
+          'Det är inte samma sak som "inga störningar just nu".',
       Icons.info_outline,
       TbColors.taxiDeep,
     ),

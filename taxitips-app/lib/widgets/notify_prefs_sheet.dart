@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../api_client.dart';
+import '../membership_copy.dart';
 import '../signal_kinds.dart';
 import '../net_status.dart';
 import '../theme.dart';
@@ -40,6 +41,11 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
   String _minLevel = 'all';
   DateTime? _pausedUntil;
   Set<String> _licensedCounties = {};
+
+  /// Kategorier provet inte omfattar (`features.locked`, fleet/features.py).
+  /// Servern skickar ingen notis för dem; reglaget är därför låst i stället
+  /// för att se påslaget ut utan att något händer.
+  Set<SignalCategory> _lockedCategories = {};
 
   String get _geoSummary {
     if (!_enabled) return 'Notiser av — ingen push skickas.';
@@ -120,6 +126,12 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
         _licensedCounties = {
           for (final c in (data['licensedCounties'] as List?) ?? const [])
             c.toString(),
+        };
+        final features = data['features'];
+        _lockedCategories = {
+          if (features is Map)
+            for (final k in (features['locked'] as List?) ?? const [])
+              ?signalCategoryFromFeatureKey(k),
         };
         _catalog =
             (meta['catalog'] as List?)?.cast<Map<String, dynamic>>() ?? [];
@@ -308,30 +320,40 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
         for (final c in _categoryCatalog)
           Padding(
             padding: const EdgeInsets.only(bottom: 8),
-            child: Material(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(12),
-              child: SwitchListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                secondary: Icon(
-                  signalCategoryFromKey(c['id']?.toString())?.icon ??
-                      Icons.notifications_rounded,
-                  color: TbColors.midnatt,
-                ),
-                title: Text(
-                  c['label']?.toString() ?? '',
-                  style: const TextStyle(fontWeight: FontWeight.w700),
-                ),
-                value: _categories[c['id']?.toString()] ?? true,
-                activeThumbColor: TbColors.ink,
-                activeTrackColor: TbColors.signal,
-                onChanged: editable
-                    ? (v) {
-                        setState(() => _categories[c['id'].toString()] = v);
-                        _persist();
-                      }
-                    : null,
-              ),
+            child: Builder(
+              builder: (context) {
+                final category = signalCategoryFromKey(c['id']?.toString());
+                final locked =
+                    category != null && _lockedCategories.contains(category);
+                return Material(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  child: SwitchListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 12),
+                    secondary: Icon(
+                      category?.icon ?? Icons.notifications_rounded,
+                      color: TbColors.midnatt,
+                    ),
+                    title: Text(
+                      c['label']?.toString() ?? '',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    // Låst: inga notiser för kategorin ingår i provet.
+                    subtitle: locked ? const Text(kNotInTrial) : null,
+                    value: locked
+                        ? false
+                        : (_categories[c['id']?.toString()] ?? true),
+                    activeThumbColor: TbColors.ink,
+                    activeTrackColor: TbColors.signal,
+                    onChanged: editable && !locked
+                        ? (v) {
+                            setState(() => _categories[c['id'].toString()] = v);
+                            _persist();
+                          }
+                        : null,
+                  ),
+                );
+              },
             ),
           ),
       ],
@@ -423,8 +445,10 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                     border: Border.all(color: TbColors.taxiDeep),
                   ),
                   child: const Text(
-                    'Ingen enhet kopplad — du kan se filtren men inte spara. '
-                    'Öppna appen med bolagskod på telefonen först.',
+                    'Den här telefonen är inte kopplad till en bil. Du kan se '
+                    'inställningarna men inte spara dem. Öppna Inställningar, '
+                    'tryck på bilen och välj "Kör själv med den här '
+                    'telefonen".',
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
                       height: 1.35,
