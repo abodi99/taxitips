@@ -104,7 +104,7 @@ def travel_options(
     next_departure_minutes: int | None,
     is_last_departure: bool,
     has_alternative: bool,
-    alternative_note: str,
+    alternative_note: str | None,
     now: datetime,
     departure_at: datetime | None = None,
     destination: str = "",
@@ -118,6 +118,9 @@ def travel_options(
     Ett tips som skrevs för 20 minuter sedan påstod annars "om 45 min" när
     det i verkligheten var 25.
     """
+    # Kolumnen är nullable; en NULL-rad kraschade hela /api/alerts och appen
+    # visade "Inloggningen fungerar inte" (den mappar varje "Ogiltig…" dit).
+    alternative_note = alternative_note or ""
     minutes = next_departure_minutes
     clock = None
     departed = False
