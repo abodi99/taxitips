@@ -11,15 +11,23 @@ from fleet.tests.test_sales import SalesTestCase
 
 
 class TrialExtendTests(SalesTestCase):
-    def test_sales_can_start_a_trial_with_custom_length(self):
+    def test_a_trial_is_always_seven_days_when_it_starts(self):
+        """
+        Ägarens beslut 2026-10-03: provet är 7 dagar för alla. Ett säljarprov
+        hade fått 14; mer tid är en förlängning med skäl, inte en annan start.
+        """
         company = self.new_company()
-        response = self.post(
+        refused = self.post(
             f"/api/admin/companies/{company.id}/trial",
             {"vehicles": self.vehicles("LNG01"), "days": 21},
         )
+        self.assertEqual(refused.status_code, 400)
+        self.assertEqual(refused.json()["reason"], "invalid_trial_days")
+        self.assertFalse(Trial.objects.filter(company_id=company.id).exists())
+
+        response = self.post(f"/api/admin/companies/{company.id}/trial", {"vehicles": self.vehicles("LNG01")})
         self.assertEqual(response.status_code, 200, response.content)
-        trial = Trial.objects.get(company_id=company.id)
-        self.assertEqual(trial.planned_days, 21)
+        self.assertIn(Trial.objects.get(company_id=company.id).planned_days, (None, trials.TRIAL_DAYS))
 
     def test_extend_pending_trial_increases_planned_days(self):
         company = self.new_company()
@@ -37,7 +45,7 @@ class TrialExtendTests(SalesTestCase):
 
     def test_extend_active_trial_moves_end_date(self):
         company = self.new_company()
-        self.post(f"/api/admin/companies/{company.id}/trial", {"vehicles": self.vehicles("E2"), "days": 10})
+        self.post(f"/api/admin/companies/{company.id}/trial", {"vehicles": self.vehicles("E2")})
         trial = Trial.objects.get(company_id=company.id)
         started = timezone.now() - timedelta(days=2)
         Trial.objects.filter(id=trial.id).update(

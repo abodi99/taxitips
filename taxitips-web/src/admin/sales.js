@@ -269,12 +269,9 @@ export function addCarsBlock(d, config) {
         ${!paying ? `
         <div class="start-option">
           <h4>${trialOpen ? "Lägg till i provet" : "Starta gratis prov"}</h4>
-          <p class="muted">Standard ${esc(config.trial?.days)} dagar (justera nedan), högst
-            ${esc(config.trial?.vehicleLimit)} bilar. Startar när första telefonen kopplas. Kostar inget.</p>
-          <label>Provlängd (dagar)
-            <input id="trialDays" type="number" min="1" max="${esc(config.trial?.maxDays ?? 365)}"
-              value="${esc(d.trial?.plannedDays ?? config.trial?.days ?? 7)}" />
-          </label>
+          <p class="muted">${esc(config.trial?.days ?? 7)} dagar, högst ${esc(config.trial?.vehicleLimit)} bilar.
+            Startar när första telefonen kopplas. Kostar inget. Behöver kunden mer tid: förläng provet
+            under Betalning.</p>
           <button class="btn btn-primary" type="button" data-action="pkg-trial">
             ${trialOpen ? "Lägg till provbilar" : "Starta prov"}</button>
         </div>` : ""}

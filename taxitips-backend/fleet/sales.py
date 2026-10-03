@@ -377,8 +377,8 @@ def start_trial(
     now=None,
 ) -> Trial:
     """
-    Kortfritt prov i 7 dagar (eller valfri längd som säljaren anger), eller fler
-    provbilar i ett pågående prov.
+    Kortfritt prov i 7 dagar (trials.TRIAL_DAYS, samma för alla), eller fler
+    provbilar i ett pågående prov. Mer tid ges som förlängning (extend_trial).
 
     Samma regler som självregistreringen: ett prov per organisationsnummer och
     24 månader, högst tre bilar när säljaren lägger upp provet (en vid

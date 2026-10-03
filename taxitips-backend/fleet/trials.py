@@ -111,12 +111,18 @@ def eligibility(*, country: str, org_number: str, now=None) -> Eligibility:
 
 @transaction.atomic
 def _validate_planned_days(days: int | None) -> None:
+    """
+    Provet är alltid TRIAL_DAYS långt när det startar -- samma för alla, vem
+    som än lägger upp det (ägarens beslut 2026-10-03: ett säljarprov hade fått
+    14 dagar). Behöver en kund mer tid är det en förlängning: en egen, loggad
+    åtgärd med skäl (extend_trial), inte en annan startlängd.
+    """
     if days is None:
         return
-    if not 1 <= int(days) <= TRIAL_MAX_PLANNED_DAYS:
+    if int(days) != TRIAL_DAYS:
         raise TrialError(
             "invalid_trial_days",
-            f"Provlängd: 1–{TRIAL_MAX_PLANNED_DAYS} dagar.",
+            f"Provet är {TRIAL_DAYS} dagar. Behöver kunden mer tid: förläng provet under Betalning.",
         )
 
 

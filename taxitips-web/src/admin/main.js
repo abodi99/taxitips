@@ -1589,15 +1589,14 @@ async function salesAction(action, ds) {
 
     case "pkg-trial": {
       const { vehicles } = packageChange();
-      const daysRaw = document.getElementById("trialDays")?.value;
-      const days = daysRaw ? Number(daysRaw) : undefined;
-      const result = await admin.startTrial(companyId, vehicles, days);
+      // Provet är alltid 7 dagar (fleet/trials.py); mer tid är en förlängning.
+      const result = await admin.startTrial(companyId, vehicles);
       flash(
         `Provet omfattar nu ${result.vehicles} av högst ${result.vehicleLimit} bilar` +
           (result.plannedDays ? ` (${result.plannedDays} dagar)` : "") +
           ". " +
           (result.endsAt ? "" : "Det startar när första telefonen ansluts. ") +
-          "Lägg till förare under Licenser och bilar.",
+          "Bjud in förarna under Bilar och förare.",
       );
       return render();
     }
