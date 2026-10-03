@@ -237,11 +237,39 @@ def purge_old(days: int = 7, batch_size: int = PURGE_BATCH_SIZE) -> dict[str, in
     favoriten tipset via snapshot.
     """
     cutoff = timezone.now() - timezone.timedelta(days=days)
+    # Tipsen raderas med rå SQL, så modellernas CASCADE gäller inte -- bara
+    # databasens främmande nycklar, och de nekar. Ett enda gammalt tips med en
+    # tågbedömning fällde hela omgången, och gallringen stod still i en månad
+    # (2026-10-03: 73 000 tips äldre än sju dagar). Barnraderna tas därför i
+    # samma sats: nycklarna prövas när satsen är klar. Ett tips med en ÖPPEN
+    # rapport sparas tills rapporten är granskad -- annars försvinner det som
+    # rapporten handlar om. Förarnas feedback lämnas kvar för kalibreringen.
     opportunities = _delete_in_batches(
         """
-        delete from opportunities where id in (
-            select id from opportunities where end_time < %s limit %s
+        with doomed as (
+            select o.id from opportunities o
+            where o.end_time < %s
+              and not exists (
+                select 1 from opportunity_report r
+                where r.opportunity_id = o.id and r.status = 'open'
+              )
+            limit %s
+        ),
+        assessments as (
+            delete from rail_assessment where opportunity_id in (select id from doomed)
+        ),
+        reports as (
+            delete from opportunity_report where opportunity_id in (select id from doomed)
+        ),
+        pushes as (
+            update push_delivery set opportunity_id = null
+            where opportunity_id in (select id from doomed)
+        ),
+        saved as (
+            update opportunity_favorite set opportunity_id = null
+            where opportunity_id in (select id from doomed)
         )
+        delete from opportunities where id in (select id from doomed)
         """,
         [cutoff],
         batch_size,

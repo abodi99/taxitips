@@ -456,6 +456,35 @@ class FavoriteTests(TestCase):
         self.assertIsNone(fav.opportunity)
         self.assertEqual(fav.snapshot["title"], "Sparat tips")
 
+    def test_purge_removes_old_tips_with_assessments_but_keeps_open_reports(self):
+        """
+        Ett gammalt tips med en tågbedömning fällde hela gallringen: den rå
+        DELETE:n gick inte igenom de främmande nycklarna, och inget raderades
+        på en månad (2026-10-03). Nu följer bedömningen med tipset, och ett
+        tips med en öppen rapport ligger kvar tills rapporten är granskad.
+        """
+        from core.models import OpportunityReport, RailAssessment
+        from core.repository import purge_old
+
+        old = timezone.now() - timedelta(days=10)
+        assessed = opportunity(title="Gammalt tåg")
+        reported = opportunity(title="Rapporterat")
+        Opportunity.objects.filter(id__in=[assessed.id, reported.id]).update(end_time=old)
+        RailAssessment.objects.create(
+            opportunity=assessed, cache_key="k", rule_score=50, model_score=40, final_score=40,
+        )
+        OpportunityReport.objects.create(opportunity=reported, reason="Fel station")
+
+        # Nycklarna prövas direkt, som i produktionen -- Djangos egna är
+        # uppskjutna till commit och hade släppt igenom felet i ett test.
+        with connection.cursor() as cur:
+            cur.execute("set constraints all immediate")
+        result = purge_old(days=7)
+        self.assertEqual(result["opportunities"], 1)
+        self.assertFalse(Opportunity.objects.filter(id=assessed.id).exists())
+        self.assertFalse(RailAssessment.objects.exists())
+        self.assertTrue(Opportunity.objects.filter(id=reported.id).exists())
+
     def test_purge_removes_favorites_older_than_seven_days(self):
         from core.repository import purge_old
 
