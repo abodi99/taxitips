@@ -512,7 +512,47 @@ function orderStatus(status) {
 
 /* --- Företag och behörigheter ------------------------------------------- */
 
-export function foretag(data) {
+/**
+ * Vem som kan logga in i portalen och appens adminläge. Ägaren bjuder in en
+ * kollega med e-post; servern mejlar en inloggningslänk (fleet/sales.py).
+ * En ny ägare bjuds inte in här -- det är ägarbytet nedan.
+ */
+function membersCard(m) {
+  if (!m) return "";
+  const roleText = {
+    fleet_admin: "Fordonsadministratör – bilar, län och förartelefoner",
+    finance: "Ekonomiansvarig – betalning och fakturor",
+  };
+  return `
+    <div class="card" id="inloggningar">
+      <h2>Inloggningar</h2>
+      <p class="muted">De som kan logga in här och i appens adminläge. Förare loggar in under Bilar.</p>
+      <table><tbody>${(m.members ?? []).map((p) => `
+        <tr><td>${esc(p.email || "Okänd e-post")}${p.isMe ? ' <span class="muted">(du)</span>' : ""}</td>
+          <td>${esc(roleName(p.role))}</td>
+          <td>${m.canManage && !p.isMe ? `<button class="btn btn-quiet" data-action="member-remove"
+            data-user="${esc(p.userId)}" data-email="${esc(p.email)}">Ta bort</button>` : ""}</td></tr>`).join("")}
+        ${(m.invites ?? []).map((i) => `
+        <tr><td>${esc(i.email)} <span class="muted">${i.expired ? "inbjudan har gått ut" : `inbjuden, gäller till ${esc(date(i.expiresAt))}`}</span></td>
+          <td>${esc(roleName(i.role))}</td>
+          <td>${m.canManage ? `<button class="btn btn-quiet" data-action="member-invite-revoke"
+            data-invite="${esc(i.id)}" data-email="${esc(i.email)}">Återkalla</button>` : ""}</td></tr>`).join("")}
+      </tbody></table>
+      ${m.canManage ? `
+      <h3>Bjud in en kollega</h3>
+      <form id="memberInviteForm" novalidate>
+        <label for="mEmail">E-post</label>
+        <input id="mEmail" name="email" type="email" autocomplete="off" required placeholder="namn@bolaget.se" />
+        <label for="mRole">Roll</label>
+        <select id="mRole" name="role">${(m.roles ?? []).map((r) =>
+          `<option value="${esc(r)}">${esc(roleText[r] ?? roleName(r))}</option>`).join("")}</select>
+        <div class="btn-row"><button class="btn btn-primary" type="submit">Skicka inbjudan</button></div>
+        <p class="muted">Kollegan får ett mejl med en inloggningslänk som gäller i 14 dagar.</p>
+      </form>` : '<p class="muted">Bara företagsägaren kan bjuda in fler.</p>'}
+    </div>`;
+}
+
+export function foretag(data, members = null) {
   const company = data.company ?? {};
   const twoFactor = data.twoFactor ?? {};
   return `
@@ -529,6 +569,8 @@ export function foretag(data) {
       inte i sig bevis på behörighet att företräda företaget. Byte av
       organisationsnummer är ett byte av avtalspart och granskas.</p>
     </div>
+
+    ${membersCard(members)}
 
     ${detailsCards(data)}
 

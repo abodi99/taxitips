@@ -320,6 +320,13 @@ roll. Reglerna för vad som är klart bor på ett ställe (`src/admin/views.js`,
 och Google-inloggning är inte konfigurerad i produktionens Supabase Auth, så
 adminwebben loggar in med en e-postlänk.
 
+**Mejl och inbjudningar** (2026-10-03, `docs/auth-mejl.md`): alla mejl har samma
+layout (`fleet/email_layout.py`). Utkorgen skickar HTML + text. Supabase Auth-mallarna
+genereras med `manage.py build_auth_email_templates` till `taxitips-web/public/email/`
+och pekas ut med `GOTRUE_MAILER_TEMPLATES_*` på auth-tjänsten. Inbjudan till portalen
+mejlas av servern (`sales.invite_owner`): admin bjuder in ägaren, och ägaren bjuder in
+kollegor (`/api/fleet/members`, rollerna `fleet_admin`/`finance`).
+
 **Förarinbjudan med e-post** (2026-10-01, `fleet/driver_invites.py`): ägaren
 bjuder in förarens e-post per bil (portalen "Bilar och telefoner", appens bilblad),
 föraren väljer lösenord på `taxitips.se/forare` och loggar in i appen under

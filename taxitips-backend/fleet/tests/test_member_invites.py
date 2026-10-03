@@ -134,3 +134,22 @@ class EmailLayoutTests(FleetTestCase):
         out = email_layout.from_text("Din kod", "Skriv koden i appen.", {"code": "123456"})
         self.assertIn("letter-spacing:6px", out)
         self.assertIn("123456", out)
+
+
+class AuthTemplateTests(FleetTestCase):
+    def test_the_auth_templates_keep_gotrues_placeholders(self):
+        import tempfile
+        from pathlib import Path
+
+        from django.core.management import call_command
+
+        with tempfile.TemporaryDirectory() as out:
+            call_command("build_auth_email_templates", out=out, stdout=open("/dev/null", "w"))
+            confirmation = (Path(out) / "confirmation.html").read_text()
+            recovery = (Path(out) / "recovery.html").read_text()
+        # Registreringen: koden till appen och länken till webben.
+        self.assertIn("{{ .Token }}", confirmation)
+        self.assertIn('href="{{ .ConfirmationURL }}"', confirmation)
+        self.assertIn("/email/logo.png", confirmation)
+        # Återställningen är bara en länk: appen ber inte om någon kod där.
+        self.assertNotIn("{{ .Token }}", recovery)

@@ -32,7 +32,12 @@ const el = {
   codeFor: document.getElementById("codeFor"),
 };
 
-let state = { view: "oversikt", data: null, orders: null };
+let state = { view: "oversikt", data: null, orders: null, members: null };
+
+// Inbjudningsmejlet (fleet/notifications.py:member_invite) loggar in direkt
+// via #...&type=invite. Läses innan Supabase-klienten tömmer adressraden, så
+// att personen får välja ett lösenord och kan logga in igen utan mejl.
+let arrivedByInvite = /(^|[#&])type=invite(&|$)/.test(window.location.hash);
 
 /**
  * Länken i mejlen om provslut (portal#fortsatt). Ankaret försvinner när
@@ -137,6 +142,10 @@ async function refresh() {
     if (state.view === "abonnemang" && !state.orders) {
       state.orders = await api.orders();
     }
+    if (state.view === "foretag") {
+      // Listan är en extra: företagssidan ska visas även om den inte svarar.
+      state.members = await api.members().catch(() => null);
+    }
   } catch (error) {
     showError(error);
     return;
@@ -152,7 +161,7 @@ function render() {
     bilar: () => views.bilar(data),
     lan: () => views.lan(data),
     abonnemang: () => views.abonnemang(data, state.orders?.orders ?? []),
-    foretag: () => views.foretag(data),
+    foretag: () => views.foretag(data, state.members),
   }[state.view];
   el.view.innerHTML = html ? html() : "";
 }
@@ -251,6 +260,11 @@ supabase().auth.onAuthStateChange(async (event, session) => {
   if (event === "SIGNED_IN" && session && el.app.hidden) {
     await enterApp(session);
   }
+  if (event === "SIGNED_IN" && session && arrivedByInvite) {
+    arrivedByInvite = false;
+    alert("Välkommen till Taxi Tips! Välj ett lösenord, så kan du logga in igen här och i appen.");
+    await promptAndSetPassword(supabase()).catch((error) => alert(error?.message ?? "Kunde inte spara lösenordet."));
+  }
 });
 
 document.getElementById("forgotPassword")?.addEventListener("click", async () => {
@@ -307,6 +321,7 @@ for (const tab of el.tabs) {
     for (const other of el.tabs) other.setAttribute("aria-selected", "false");
     tab.setAttribute("aria-selected", "true");
     state.view = tab.dataset.view;
+    if (state.view === "foretag") state.members = await api.members().catch(() => null);
     if (state.view === "abonnemang" && !state.orders) {
       try {
         state.orders = await api.orders();
@@ -325,6 +340,20 @@ el.view.addEventListener("submit", async (event) => {
   if (form.id === "contactForm" || form.id === "billingForm") {
     event.preventDefault();
     await saveDetails(form);
+    return;
+  }
+  if (form.id === "memberInviteForm") {
+    event.preventDefault();
+    clearError();
+    const data = new FormData(form);
+    const email = String(data.get("email") ?? "").trim();
+    try {
+      await api.inviteMember(email, String(data.get("role") ?? "fleet_admin"));
+      await refresh();
+      showNotice(`Inbjudan är skickad till ${email}.`);
+    } catch (error) {
+      showError(error);
+    }
     return;
   }
   if (form.classList.contains("invite-form")) {
@@ -430,10 +459,10 @@ el.view.addEventListener("click", async (event) => {
   const button = event.target.closest("button[data-action]");
   if (!button) return;
   clearError();
-  const { action, license, vehicle, plate, approval, invite } = button.dataset;
+  const { action, license, vehicle, plate, approval, invite, user, email } = button.dataset;
   button.disabled = true;
   try {
-    await handle(action, { license, vehicle, plate, approval, invite });
+    await handle(action, { license, vehicle, plate, approval, invite, user, email });
   } catch (error) {
     showError(error);
   } finally {
@@ -448,6 +477,18 @@ async function handle(action, ctx) {
       el.codeFor.textContent = `För ${ctx.plate || "bilen"}.`;
       el.codeValue.textContent = result.code;
       el.codeDialog.showModal();
+      return;
+    }
+    case "member-invite-revoke": {
+      if (!confirm(`Återkalla inbjudan till ${ctx.email}?`)) return;
+      await api.revokeMemberInvite(ctx.invite);
+      return refresh();
+    }
+    case "member-remove": {
+      if (!confirm(`Ta bort ${ctx.email || "personen"}? Hen kan inte längre logga in i företaget.`)) return;
+      await api.removeMember(ctx.user);
+      await refresh();
+      showNotice(`${ctx.email || "Personen"} är borttagen.`);
       return;
     }
     case "resend-invite": {

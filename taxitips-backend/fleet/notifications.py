@@ -422,7 +422,7 @@ def member_invite(invite, *, link: str, company_name: str, inviter: str = "", se
         body=(
             "Hej!\n\n"
             f"{who} har bjudit in dig till {company} i Taxi Tips{(' ' + role) if role else ''}.\n\n"
-            "Tryck på länken för att logga in. Du får välja ett lösenord direkt:\n"
+            "Logga in här – du får välja ett lösenord direkt:\n"
             f"{link}\n\n"
             "Du kommer till kundportalen på taxitips.se, där du ser bilarna, förarna och "
             "abonnemanget. Samma inloggning fungerar i appen.\n\n"

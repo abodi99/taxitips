@@ -2181,20 +2181,13 @@ class ApiClient {
     return {'members': (meData['members'] as List?) ?? const []};
   }
 
-  /// Inbjudan av ny admin kräver Auth Admin (skapas på webbportalen).
-  /// Klienten kan inte skapa auth-användare med anon-nyckeln.
+  /// Bjud in en kollega (fleet_admin eller finance). Servern mejlar en
+  /// inloggningslänk till kundportalen (POST /api/fleet/members/invite).
   Future<Map<String, dynamic>> addMember({
     required String email,
     String name = '',
-    String role = 'company_admin',
-  }) async {
-    throw ApiException(
-      501,
-      'Bjud in kollegor via webbportalen (taxitips.se) — '
-      'appen kan ta bort admins och hantera förartelefoner, '
-      'men nya inloggningar skapas med e-postinbjudan där.',
-    );
-  }
+    String role = 'fleet_admin',
+  }) => _owner('members/invite', {'email': email.trim(), 'role': role});
 
   Future<Map<String, dynamic>> removeMember(String userId) async {
     await ensureInitialized();

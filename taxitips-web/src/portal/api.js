@@ -98,6 +98,13 @@ export const api = {
     }),
   resendInvite: (inviteId) =>
     request(`/api/fleet/driver-invites/${inviteId}/resend`, { method: "POST", body: {} }),
+  members: () => request("/api/fleet/members"),
+  inviteMember: (email, role) =>
+    request("/api/fleet/members/invite", { method: "POST", body: { email, role } }),
+  revokeMemberInvite: (inviteId) =>
+    request(`/api/fleet/members/invites/${inviteId}/revoke`, { method: "POST", body: {} }),
+  removeMember: (userId) =>
+    request("/api/fleet/members/remove", { method: "POST", body: { user_id: userId } }),
   revokeInvite: (inviteId) =>
     request(`/api/fleet/driver-invites/${inviteId}/revoke`, { method: "POST", body: {} }),
   blockPhone: (approvalId, reason) =>
