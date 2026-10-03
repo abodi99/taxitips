@@ -10,9 +10,12 @@ from fleet import (
     admin_accounts, admin_activity, admin_api, admin_app_version, admin_crm, admin_followup, admin_sales,
     admin_status, admin_support, admin_tip_reports, admin_vehicles,
 )
+from fleet import admin_dashboard
 
 urlpatterns = [
     path("overview", admin_api.overview),
+    # Dashboarden: ledning, sälj, support, uppföljning, drift och användning.
+    path("dashboard", admin_dashboard.dashboard),
     # Varje koppling (databas, kö, källor, Stripe, Bolagsverket, Firebase, SMTP).
     path("status", admin_status.status),
     # Minsta och rekommenderade appversion per plattform -- se core/app_version.py.
