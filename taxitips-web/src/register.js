@@ -1,6 +1,7 @@
 import { setupConsent } from "./consent.js";
 import { trackEvent } from "./analytics.js";
 import { loadRuntimeConfig, portal } from "./config.js";
+import { setupPasswordToggles } from "./password_toggle.js";
 import { supabase } from "./portal/api.js";
 
 /**
@@ -222,13 +223,8 @@ form.querySelectorAll("[data-field] input").forEach((input) => {
 
 // ---------- Visa lösenord ----------
 
-$("showPass").addEventListener("click", (e) => {
-  const input = $("password");
-  const show = input.type === "password";
-  input.type = show ? "text" : "password";
-  e.currentTarget.textContent = show ? "Dölj" : "Visa";
-  e.currentTarget.setAttribute("aria-pressed", String(show));
-});
+// Samma ögonknapp som inloggningen i portalen och adminwebben.
+setupPasswordToggles(form);
 
 // ---------- Skicka ----------
 

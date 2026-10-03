@@ -1,5 +1,7 @@
+import { authErrorMessage, flagField, setBusy } from "../auth_form.js";
 import { promptAndSetPassword, sendPasswordReset } from "../auth_password.js";
-import { ApiError, api, countyName, supabase } from "./api.js";
+import { setupPasswordToggles } from "../password_toggle.js";
+import { ApiError, COUNTIES, api, countyName, supabase } from "./api.js";
 import * as views from "./views.js";
 import { quoteHtml } from "./views.js";
 
@@ -30,9 +32,15 @@ const el = {
   codeDialog: document.getElementById("codeDialog"),
   codeValue: document.getElementById("codeValue"),
   codeFor: document.getElementById("codeFor"),
+  loginSubmit: document.getElementById("loginSubmit"),
+  magicSent: document.getElementById("magicSent"),
 };
 
-let state = { view: "oversikt", data: null, orders: null, members: null, bulkInvite: null };
+setupPasswordToggles(el.login ?? document);
+
+let state = {
+  view: "oversikt", data: null, orders: null, members: null, bulkInvite: null, pricing: null,
+};
 
 // Inbjudningsmejlet (fleet/notifications.py:member_invite) loggar in direkt
 // via #...&type=invite. Läses innan Supabase-klienten tömmer adressraden, så
@@ -151,6 +159,51 @@ async function refresh() {
     return;
   }
   render();
+  // Antalet bilar kan ha ändrats: priset under Abonnemang hämtas om.
+  if (state.view === "abonnemang") loadPricing();
+}
+
+/** Provbilarna som en beställning: samma ändring som "Fortsätt efter provet". */
+function continueChange() {
+  const cars = state.data?.continueVehicles ?? [];
+  if (!cars.length) return null;
+  return {
+    addVehicles: cars.map((c) => ({
+      plate: c.plate, baseCounty: c.baseCounty, label: "", extraCounties: [],
+    })),
+  };
+}
+
+/**
+ * Priset i medlemskapsvyn. Två offerter från servern, som inte ändrar något
+ * (POST /api/fleet/quote): fortsättningen med bolagets egna provbilar -- eller
+ * nuläget, för den som redan betalar -- och en bil med ett extra län, för
+ * länspriset. Portalen räknar inga belopp själv (fleet/pricing.py).
+ *
+ * Ett fel här är inget fel för kunden: vyn säger då bara att priset visas
+ * innan något godkänns. En ekonomiroll utan rätt att se priser får samma text.
+ */
+let pricingRun = 0;
+async function loadPricing() {
+  const data = state.data;
+  if (!data) return;
+  const run = ++pricingRun;
+  state.pricing = { loading: true };
+  const cars = data.continueVehicles ?? [];
+  const base = String(cars[0]?.baseCounty ?? data.licenses?.[0]?.baseCounty ?? "12");
+  const extra = Object.keys(COUNTIES).find((code) => code !== base);
+  const [own, probe] = await Promise.allSettled([
+    api.quote(continueChange() ?? {}),
+    api.quote({
+      addVehicles: [{ plate: "", baseCounty: base, label: "", extraCounties: [extra] }],
+    }),
+  ]);
+  if (run !== pricingRun) return; // en senare hämtning har redan tagit över
+  state.pricing = {
+    quote: own.status === "fulfilled" ? own.value : null,
+    probe: probe.status === "fulfilled" ? probe.value : null,
+  };
+  if (state.view === "abonnemang") render();
 }
 
 function render() {
@@ -160,7 +213,7 @@ function render() {
     oversikt: () => views.oversikt(data),
     bilar: () => views.bilar(data, state.bulkInvite),
     lan: () => views.lan(data),
-    abonnemang: () => views.abonnemang(data, state.orders?.orders ?? []),
+    abonnemang: () => views.abonnemang(data, state.orders?.orders ?? [], state.pricing),
     foretag: () => views.foretag(data, state.members),
   }[state.view];
   el.view.innerHTML = html ? html() : "";
@@ -213,20 +266,38 @@ async function completePendingRegistration() {
 
 /* --- Inloggning --------------------------------------------------------- */
 
+function showLoginError(message) {
+  el.loginError.textContent = message;
+  el.loginError.hidden = false;
+}
+
+/**
+ * E-posten ur formuläret, eller tom sträng med felet visat vid fältet. Alla
+ * tre vägarna (lösenord, inloggningslänk, glömt lösenord) börjar här, och ett
+ * nytt försök tar bort förra försökets fel och kvitto.
+ */
+function loginEmail() {
+  el.loginError.hidden = true;
+  if (el.magicSent) el.magicSent.hidden = true;
+  const email = String(new FormData(el.loginForm).get("email") ?? "").trim();
+  if (!email) {
+    showLoginError("Skriv din e-post först.");
+    flagField(document.getElementById("email"));
+  }
+  return email;
+}
+
 /**
  * Inloggningslänk via e-post. `shouldCreateUser: false`: portalen skapar inga
  * konton på egen hand. Ett inbjudet konto skapas när säljaren skickar den
  * första länken; den här knappen ger en ny länk om den första hunnit gå ut.
  */
-document.getElementById("magicLink")?.addEventListener("click", async () => {
-  el.loginError.hidden = true;
-  const email = String(new FormData(el.loginForm).get("email") ?? "").trim();
-  const sent = document.getElementById("magicSent");
-  if (!email) {
-    el.loginError.textContent = "Skriv din e-post först.";
-    el.loginError.hidden = false;
-    return;
-  }
+document.getElementById("magicLink")?.addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const email = loginEmail();
+  const sent = el.magicSent;
+  if (!email) return;
+  setBusy(button, true, "Skickar länken …");
   try {
     const { error } = await supabase().auth.signInWithOtp({
       email,
@@ -236,11 +307,12 @@ document.getElementById("magicLink")?.addEventListener("click", async () => {
       },
     });
     if (error) throw error;
-    sent.textContent = `Om ${email} har ett konto kommer en inloggningslänk strax.`;
+    sent.textContent = `Om ${email} har ett konto kommer en inloggningslänk strax. Kolla inkorgen, och skräpposten.`;
     sent.hidden = false;
   } catch (error) {
-    el.loginError.textContent = error?.message ?? "Kunde inte skicka länken.";
-    el.loginError.hidden = false;
+    showLoginError(authErrorMessage(error, "Kunde inte skicka länken."));
+  } finally {
+    setBusy(button, false);
   }
 });
 
@@ -267,15 +339,12 @@ supabase().auth.onAuthStateChange(async (event, session) => {
   }
 });
 
-document.getElementById("forgotPassword")?.addEventListener("click", async () => {
-  el.loginError.hidden = true;
-  const email = String(new FormData(el.loginForm).get("email") ?? "").trim();
-  const sent = document.getElementById("magicSent");
-  if (!email) {
-    el.loginError.textContent = "Skriv din e-post först.";
-    el.loginError.hidden = false;
-    return;
-  }
+document.getElementById("forgotPassword")?.addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const email = loginEmail();
+  const sent = el.magicSent;
+  if (!email) return;
+  setBusy(button, true, "Skickar …");
   try {
     const { error } = await sendPasswordReset(
       supabase(),
@@ -283,29 +352,37 @@ document.getElementById("forgotPassword")?.addEventListener("click", async () =>
       `${window.location.origin}${window.location.pathname}`,
     );
     if (error) throw error;
-    sent.textContent = `Om ${email} har ett konto kommer en återställningslänk strax.`;
+    sent.textContent = `Om ${email} har ett konto kommer en länk för att välja nytt lösenord strax.`;
     sent.hidden = false;
   } catch (error) {
-    el.loginError.textContent = error?.message ?? "Kunde inte skicka länken.";
-    el.loginError.hidden = false;
+    showLoginError(authErrorMessage(error, "Kunde inte skicka länken."));
+  } finally {
+    setBusy(button, false);
   }
 });
 
 el.loginForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
-  el.loginError.hidden = true;
   const form = new FormData(el.loginForm);
+  const email = loginEmail();
+  if (!email) return;
+  const password = String(form.get("password") ?? "");
+  if (!password) {
+    showLoginError("Skriv ditt lösenord.");
+    flagField(document.getElementById("password"));
+    return;
+  }
+  setBusy(el.loginSubmit, true, "Loggar in …");
   try {
-    const { data, error } = await supabase().auth.signInWithPassword({
-      email: String(form.get("email") ?? ""),
-      password: String(form.get("password") ?? ""),
-    });
+    const { data, error } = await supabase().auth.signInWithPassword({ email, password });
     if (error) throw error;
     await enterApp(data.session);
   } catch (error) {
-    el.loginError.textContent =
-      error?.message ?? "Kunde inte logga in. Kontrollera e-post och lösenord.";
-    el.loginError.hidden = false;
+    showLoginError(
+      authErrorMessage(error, "Kunde inte logga in. Kontrollera e-post och lösenord."),
+    );
+  } finally {
+    setBusy(el.loginSubmit, false);
   }
 });
 
@@ -330,6 +407,7 @@ for (const tab of el.tabs) {
       }
     }
     render();
+    if (state.view === "abonnemang") loadPricing();
   });
 }
 
@@ -620,13 +698,8 @@ async function handle(action, ctx) {
       });
     }
     case "continue-trial": {
-      const cars = state.data?.continueVehicles ?? [];
-      if (!cars.length) return;
-      const change = {
-        addVehicles: cars.map((c) => ({
-          plate: c.plate, baseCounty: c.baseCounty, label: "", extraCounties: [],
-        })),
-      };
+      const change = continueChange();
+      if (!change) return;
       const trial = state.data?.trial;
       const activeTrial = trial && ["pending", "active"].includes(trial.status);
       if (activeTrial) {

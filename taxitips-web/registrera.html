@@ -78,10 +78,11 @@
 
           <div class="rf" data-field="password">
             <label for="password">Välj lösenord</label>
-            <div class="rf-pass">
+            <div class="rf-pass pw-field">
               <input id="password" name="password" type="password" autocomplete="new-password" required
                 minlength="8" aria-describedby="passHint" />
-              <button type="button" class="rf-show" id="showPass" aria-pressed="false">Visa</button>
+              <button type="button" class="pw-toggle" id="showPass" data-password-toggle="password"
+                aria-label="Visa lösenord" aria-pressed="false"></button>
             </div>
             <p class="rf-hint" id="passHint">Minst 8 tecken.</p>
           </div>

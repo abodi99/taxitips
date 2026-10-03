@@ -37,17 +37,37 @@ function statusPill(status) {
  * (portal#fortsatt). Under pågående prov: spara kort för auto-förnyelse.
  * Efter prov utan kort: vanlig beställning (betala nu).
  */
-function continueCard(data) {
+/**
+ * Var kunden står i fortsättningen efter provet. Översiktens kort och
+ * medlemskapet under Abonnemang läser samma svar, så att de aldrig visar två
+ * olika steg för samma bolag.
+ *
+ *   card_on_file -- kortet är sparat; första dragningen vid provets slut
+ *   finish_card  -- bilarna är bekräftade men kortet inte sparat hos Stripe
+ *   commit       -- pågående prov; bekräfta bilar och spara kort
+ *   pay          -- provet är slut utan kort; vanlig beställning
+ */
+export function continueState(data) {
   const cars = data.continueVehicles ?? [];
   const canBuy = (data.permissions ?? []).includes("purchase");
-  if (!cars.length || !canBuy) return "";
-  const n = cars.length;
+  if (!cars.length || !canBuy) return null;
   const trial = data.trial;
   const activeTrial = trial && ["pending", "active"].includes(trial.status);
-  const cardOnFile = trial?.cardOnFile === true;
-  const committed = trial?.committed === true;
+  if (activeTrial && trial.cardOnFile === true) return { kind: "card_on_file", cars, trial };
+  if (activeTrial && trial.committed === true && trial.paymentUrl) {
+    return { kind: "finish_card", cars, trial };
+  }
+  if (activeTrial) return { kind: "commit", cars, trial };
+  return { kind: "pay", cars, trial };
+}
 
-  if (activeTrial && cardOnFile) {
+function continueCard(data) {
+  const state = continueState(data);
+  if (!state) return "";
+  const { cars, trial } = state;
+  const n = cars.length;
+
+  if (state.kind === "card_on_file") {
     return `<div class="card continue-card" id="fortsatt">
       <h2>Auto-förnyelse är klar</h2>
       <p>${cars.map((c) => `<b>${esc(c.plate)}</b>`).join(", ")}</p>
@@ -60,7 +80,7 @@ function continueCard(data) {
     </div>`;
   }
 
-  if (activeTrial && committed && !cardOnFile && trial.paymentUrl) {
+  if (state.kind === "finish_card") {
     return `<div class="card continue-card" id="fortsatt">
       <h2>Slutför kortet</h2>
       <p>${cars.map((c) => `<b>${esc(c.plate)}</b>`).join(", ")}</p>
@@ -73,7 +93,7 @@ function continueCard(data) {
     </div>`;
   }
 
-  if (activeTrial) {
+  if (state.kind === "commit") {
     return `<div class="card continue-card" id="fortsatt">
       <h2>Fortsätt med ${esc(n)} ${n === 1 ? "bil" : "bilar"}</h2>
       <p>${cars.map((c) => `<b>${esc(c.plate)}</b>`).join(", ")}</p>
@@ -491,21 +511,362 @@ export function lan(data) {
 
 /* --- Abonnemang och fakturor -------------------------------------------- */
 
-export function abonnemang(data, orders) {
+/**
+ * Kategorierna i appen. Nycklarna är fleet/features.py:ALL_CATEGORIES;
+ * texterna är desamma som i mejlen om provet
+ * (fleet/notifications.py:_TRIAL_SCOPE), så att portalen inte lovar något
+ * mejlet inte säger.
+ */
+const CATEGORY_TEXT = {
+  transit: ["Tåg och buss", "Inställda tåg, sista avgången och ersättningstrafik"],
+  flight: ["Flyg", "Ankomster till flygplatserna"],
+  ferry: ["Färjor", ""],
+  events: ["Evenemang", "När publiken går hem"],
+  road: ["Trafikolyckor", ""],
+};
+const ALL_CATEGORIES = ["transit", "flight", "ferry", "events", "road"];
+const TRIAL_CATEGORIES = ["transit"];
+
+const inTrial = (trial) => Boolean(trial && ["pending", "active"].includes(trial.status));
+
+/**
+ * Vad bolaget ser i appen just nu. Servern avgör (fleet/features.py). Skickar
+ * GET /api/fleet/company med `features` används det rakt av; annars läses det
+ * ur provets läge med samma regel: ett pågående prov utan sparat kort ser tåg
+ * och buss, allt annat ser allt.
+ */
+function membershipPlan(data) {
+  const f = data.features;
+  if (f && Array.isArray(f.categories)) {
+    const on = ALL_CATEGORIES.filter((c) => f.categories.includes(c));
+    return { plan: f.plan, on, locked: ALL_CATEGORIES.filter((c) => !on.includes(c)) };
+  }
+  const t = data.trial;
+  if (inTrial(t) && !(t.committed && t.cardOnFile)) {
+    return {
+      plan: "trial",
+      on: TRIAL_CATEGORIES,
+      locked: ALL_CATEGORIES.filter((c) => !TRIAL_CATEGORIES.includes(c)),
+    };
+  }
+  return { plan: "full", on: ALL_CATEGORIES, locked: [] };
+}
+
+/** Var bolaget står: prov, prov med sparat kort, medlem, prov slut, eller inget. */
+function membershipStage(data) {
+  const sub = data.subscription ?? {};
+  const t = data.trial;
+  if (inTrial(t)) return t.committed && t.cardOnFile ? "trial_committed" : "trial";
+  if ((data.licenseCount ?? 0) > 0 || ["active", "trialing", "past_due"].includes(sub.status)) {
+    return "member";
+  }
+  if ((data.continueVehicles ?? []).length) return "trial_ended";
+  return "none";
+}
+
+function featureItem(key, state) {
+  const [label, detail] = CATEGORY_TEXT[key] ?? [key, ""];
+  return `<li class="feature is-${state}">
+      <span class="feature-icon" aria-hidden="true"></span>
+      <span class="feature-text"><b>${esc(label)}</b>${detail ? `<span>${esc(detail)}</span>` : ""}
+        <span class="visually-hidden">${state === "on" ? "(ingår)" : "(låst)"}</span></span>
+    </li>`;
+}
+
+function featuresSection(data, stage) {
+  const { plan, on, locked } = membershipPlan(data);
+  if (plan === "trial" && locked.length) {
+    return `<div class="member-features">
+      <div class="feature-col">
+        <h3>Ingår i provet</h3>
+        <ul class="feature-list">${on.map((k) => featureItem(k, "on")).join("")}</ul>
+      </div>
+      <div class="feature-col feature-col-plus">
+        <h3>Låses upp med medlemskap</h3>
+        <ul class="feature-list">${locked.map((k) => featureItem(k, "locked")).join("")}</ul>
+      </div>
+    </div>`;
+  }
+  const heading = {
+    trial_committed: "Allt är upplåst redan nu",
+    member: "Det här ingår",
+  }[stage] ?? "Det här ingår i medlemskapet";
+  return `<div class="member-features">
+      <div class="feature-col feature-col-wide">
+        <h3>${esc(heading)}</h3>
+        <ul class="feature-list feature-list-grid">${on.map((k) => featureItem(k, "on")).join("")}</ul>
+      </div>
+    </div>`;
+}
+
+const findLine = (quote, prefix) =>
+  (quote?.lines ?? []).find((line) => String(line.key ?? "").startsWith(prefix)) ?? null;
+
+/**
+ * Vad det kostar, ur serverns offert (POST /api/fleet/quote, som inte ändrar
+ * något). Portalen räknar inget själv: styckpriset, anteckningen och summan
+ * är serverns rader. `pricing.quote` är fortsättningen med bolagets egna bilar
+ * (eller nuläget), `pricing.probe` en bil med ett extra län -- den enda vägen
+ * till länspriset utan en prislista i klienten.
+ */
+function priceSection(stage, pricing) {
+  if (!pricing || pricing.loading) {
+    return `<div class="member-price" aria-busy="true">
+      <h3>Vad det kostar</h3>
+      <p class="muted">Hämtar priset …</p>
+    </div>`;
+  }
+  const plan = pricing.quote?.nextPeriod ?? null;
+  const probe = pricing.probe?.nextPeriod ?? null;
+  const ownLicenses = findLine(plan, "licenses_");
+  const licenseLine = ownLicenses ?? findLine(probe, "licenses_");
+  const countyLine = findLine(plan, "extra_counties") ?? findLine(probe, "extra_counties");
+  const discount = findLine(plan, "company_discount");
+  const currency = plan?.currency ?? probe?.currency ?? "SEK";
+  const vatBp = plan?.vatRateBp ?? probe?.vatRateBp;
+
+  if (!licenseLine && !countyLine) {
+    return `<div class="member-price">
+      <h3>Vad det kostar</h3>
+      <p class="muted">Du ser hela priset och godkänner det innan något köps.</p>
+    </div>`;
+  }
+
+  const row = (label, line) =>
+    line
+      ? `<div class="price-row">
+          <dt>${esc(label)}</dt>
+          <dd>${esc(money(line.unit_price_ore, currency))}</dd>
+          ${line.note ? `<p class="price-note">${esc(line.note)}</p>` : ""}
+        </div>`
+      : "";
+
+  let total = "";
+  if (ownLicenses && plan) {
+    const n = ownLicenses.quantity;
+    const who = `${n} ${n === 1 ? "bil" : "bilar"}`;
+    const label = stage === "member" ? `Nästa period (${who})` : `Efter provet (${who})`;
+    total = `<div class="price-total">
+        <span>${esc(label)}</span>
+        <b>${esc(money(plan.amountOre, currency))}</b>
+        <span class="price-total-vat">${esc(money(plan.totalOre, currency))} inkl. moms</span>
+      </div>`;
+  }
+
+  return `<div class="member-price">
+      <h3>Vad det kostar</h3>
+      <dl class="price-rows">
+        ${row("Per bil och månad", licenseLine)}
+        ${row("Extra län, per bil och månad", countyLine)}
+        ${
+          discount
+            ? `<div class="price-row"><dt>${esc(discount.label)}</dt>
+                <dd>${esc(money(discount.amount_ore, currency))}</dd>
+                ${discount.note ? `<p class="price-note">${esc(discount.note)}</p>` : ""}</div>`
+            : ""
+        }
+      </dl>
+      ${total}
+      <p class="price-fine">Priserna är exklusive moms${
+        vatBp != null ? ` (${esc((vatBp / 100).toLocaleString("sv-SE"))} %)` : ""
+      }. Du ser hela beloppet och godkänner det innan något köps.</p>
+    </div>`;
+}
+
+/** "flyg, färjor och evenemang" */
+function joinSv(words) {
+  if (words.length < 2) return words.join("");
+  return `${words.slice(0, -1).join(", ")} och ${words.at(-1)}`;
+}
+
+/** Nästa steg: starta medlemskapet, slutföra kortet, eller inget alls. */
+function membershipAction(data, stage, plan) {
+  const cs = continueState(data);
+  const plates = cs ? cs.cars.map((c) => `<b>${esc(c.plate)}</b>`).join(", ") : "";
+  const theCars = cs?.cars.length === 1 ? "bilen" : "bilarna";
+  const trial = data.trial;
+  const unlocked = joinSv(plan.locked.map((k) => (CATEGORY_TEXT[k] ?? [k])[0].toLowerCase()));
+  const unlockText = unlocked
+    ? ` ${unlocked.charAt(0).toUpperCase()}${unlocked.slice(1)} öppnas när kortet är sparat.`
+    : "";
+
+  switch (cs?.kind) {
+    case "commit":
+      return `<div class="member-cta">
+          <div class="member-cta-text">
+            <h3>Fortsätt efter provet</h3>
+            <p>Bekräfta ${theCars} (${plates}) och spara kortet hos Stripe. Inget
+              dras under provet. Första dragningen sker ${esc(date(trial?.endsAt))},
+              sedan en gång i månaden.${esc(unlockText)}</p>
+          </div>
+          <div class="member-cta-act">
+            <button class="btn btn-primary btn-lg" data-action="continue-trial">Fortsätt efter provet</button>
+            <p class="member-fine">Du ser beloppet och godkänner det innan kortet sparas.</p>
+          </div>
+        </div>`;
+    case "finish_card":
+      return `<div class="member-cta">
+          <div class="member-cta-text">
+            <h3>Spara kortet</h3>
+            <p>Ni har bekräftat ${theCars} (${plates}). Spara kortet på Stripes
+              sida, så fortsätter appen efter provet. Inget dras förrän
+              ${esc(date(trial?.endsAt))}.</p>
+          </div>
+          <div class="member-cta-act">
+            <a class="btn btn-primary btn-lg" href="${esc(trial.paymentUrl)}" target="_blank" rel="noopener">Spara kortet hos Stripe</a>
+            <button class="btn btn-quiet" data-action="cancel-trial-commit">Avbryt</button>
+          </div>
+        </div>`;
+    case "card_on_file":
+      return `<div class="member-cta is-done">
+          <div class="member-cta-text">
+            <h3>Klart. Medlemskapet tar vid efter provet.</h3>
+            <p>Kortet är sparat för ${plates}. Första dragningen sker
+              ${esc(date(trial?.firstChargeAt || trial?.endsAt))}, sedan varje
+              månad tills ni säger upp.</p>
+          </div>
+          <div class="member-cta-act">
+            <button class="btn btn-quiet" data-action="cancel-trial-commit">Avbryt auto-förnyelse</button>
+          </div>
+        </div>`;
+    case "pay":
+      return `<div class="member-cta">
+          <div class="member-cta-text">
+            <h3>Fortsätt med ${theCars}</h3>
+            <p>Provet är slut för ${plates}. Du ser priset och godkänner det,
+              sedan betalar du på Stripes betalsida. Appen öppnas när
+              betalningen har gått igenom.</p>
+          </div>
+          <div class="member-cta-act">
+            <button class="btn btn-primary btn-lg" data-action="continue-trial">Visa pris och betala</button>
+          </div>
+        </div>`;
+    default:
+      break;
+  }
+
+  if (stage === "trial" || stage === "trial_ended") {
+    const canBuy = (data.permissions ?? []).includes("purchase");
+    const text = !canBuy
+      ? "Ägaren eller ekonomiansvarig startar medlemskapet här."
+      : "Lägg upp bilen och anslut en telefon under <em>Bilar och telefoner</em>. Sedan kan ni fortsätta efter provet här.";
+    return `<div class="member-cta is-quiet"><div class="member-cta-text"><p>${text}</p></div></div>`;
+  }
+  return "";
+}
+
+function membershipCard(data, pricing) {
+  const sub = data.subscription ?? {};
+  const t = data.trial;
+  const stage = membershipStage(data);
+  const plan = membershipPlan(data);
+
+  const head = {
+    trial: [
+      "Ni provar Taxi Tips",
+      t?.endsAt
+        ? `Gratis till ${dateTime(t.endsAt)}. Inget kort behövs under provet.`
+        : "Provet startar när den första telefonen ansluts och kostar ingenting.",
+      '<span class="pill pill-warn">Provperiod</span>',
+    ],
+    trial_committed: [
+      "Medlemskapet är klart",
+      `Kortet är sparat och allt är upplåst. Medlemskapet tar vid ${date(t?.firstChargeAt || t?.endsAt)}.`,
+      '<span class="pill pill-ok">Kort sparat</span>',
+    ],
+    member: [
+      "Medlemskap",
+      sub.cancelAtPeriodEnd
+        ? `Uppsagt. Allt fungerar som vanligt till ${date(sub.accessUntil)}.`
+        : "Allt ingår. Förnyas en gång i månaden tills ni säger upp.",
+      statusPill(sub.status),
+    ],
+    trial_ended: [
+      "Provet är slut",
+      "Fortsätt med medlemskap, så öppnas appen igen för era bilar.",
+      '<span class="pill pill-danger">Provet slut</span>',
+    ],
+    none: ["Medlemskap", "Lägg till en bil för att komma igång.", statusPill("none")],
+  }[stage];
+
+  const facts = {
+    trial: t
+      ? [
+          ["Provet slutar", t.endsAt ? date(t.endsAt) : "Vid första telefonen"],
+          ["Provbilar", `${t.vehiclesUsed ?? 0} av ${t.vehicleLimit ?? 0}`],
+          ["Under provet", "0 kr"],
+        ]
+      : [],
+    trial_committed: t
+      ? [
+          ["Första dragningen", date(t.firstChargeAt || t.endsAt)],
+          ["Provbilar", `${t.vehiclesUsed ?? 0} av ${t.vehicleLimit ?? 0}`],
+          ["Under provet", "0 kr"],
+        ]
+      : [],
+    member: [
+      ["Bilar", String(data.licenseCount ?? 0)],
+      ["Extra län", String(data.extraCountyCount ?? 0)],
+      sub.cancelAtPeriodEnd
+        ? ["Gäller till", date(sub.accessUntil)]
+        : ["Nästa betalning", date(sub.currentPeriodEnd)],
+    ],
+  }[stage] ?? [];
+
+  return `<section class="card member" aria-labelledby="memberTitle">
+      <div class="member-head">
+        <div>
+          <h2 id="memberTitle">${esc(head[0])}</h2>
+          <p class="member-sub">${esc(head[1])}</p>
+        </div>
+        ${head[2]}
+      </div>
+
+      ${
+        facts.length
+          ? `<dl class="member-facts">${facts
+              .map(([k, v]) => `<div><dt>${esc(k)}</dt><dd>${esc(v)}</dd></div>`)
+              .join("")}</dl>`
+          : ""
+      }
+
+      <div class="member-body">
+        <div class="member-left">
+          ${featuresSection(data, stage)}
+          <ul class="member-terms">
+            <li>En licens per bil. Förarna i bilen delar den och byter telefon utan extra kostnad.</li>
+            <li>Månadsvis. Säg upp när ni vill, allt fungerar perioden ut.</li>
+          </ul>
+        </div>
+        ${priceSection(stage, pricing)}
+      </div>
+
+      ${membershipAction(data, stage, plan)}
+    </section>`;
+}
+
+export function abonnemang(data, orders, pricing = null) {
   const sub = data.subscription ?? {};
   const canBuy = (data.permissions ?? []).includes("purchase");
   const canCancel = (data.permissions ?? []).includes("cancel_subscription");
+  const rows = [
+    ["Status", statusPill(sub.status)],
+    sub.currentPeriodStart
+      ? ["Innevarande period", `${esc(date(sub.currentPeriodStart))} – ${esc(date(sub.currentPeriodEnd))}`]
+      : null,
+    sub.currentPeriodEnd ? ["Nästa betalning", esc(date(sub.currentPeriodEnd))] : null,
+    sub.priceVersion ? ["Prisversion", esc(sub.priceVersion)] : null,
+    sub.introEndsAt ? ["Introduktionen slutar", esc(date(sub.introEndsAt))] : null,
+    sub.graceUntil ? ["Betalningsfrist", esc(dateTime(sub.graceUntil))] : null,
+  ].filter(Boolean);
 
   return `
+    ${membershipCard(data, pricing)}
+
     <div class="card">
-      <h2>Abonnemang</h2>
+      <h2>Hantera abonnemanget</h2>
       <table><tbody>
-        <tr><td data-label="Status">Status</td><td data-label="">${statusPill(sub.status)}</td></tr>
-        <tr><td data-label="Period">Innevarande period</td><td data-label="">${esc(date(sub.currentPeriodStart))} – ${esc(date(sub.currentPeriodEnd))}</td></tr>
-        <tr><td data-label="Nästa betalning">Nästa betalning</td><td data-label="">${esc(date(sub.currentPeriodEnd))}</td></tr>
-        <tr><td data-label="Prisversion">Prisversion</td><td data-label="">${esc(sub.priceVersion ?? "—")}</td></tr>
-        ${sub.introEndsAt ? `<tr><td data-label="Introduktion">Introduktionen slutar</td><td data-label="">${esc(date(sub.introEndsAt))}</td></tr>` : ""}
-        ${sub.graceUntil ? `<tr><td data-label="Betalningsfrist">Betalningsfrist</td><td data-label="">${esc(dateTime(sub.graceUntil))}</td></tr>` : ""}
+        ${rows.map(([k, v]) => `<tr><td class="kv-key">${esc(k)}</td><td>${v}</td></tr>`).join("")}
       </tbody></table>
       ${
         canBuy

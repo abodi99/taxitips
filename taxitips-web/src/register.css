@@ -168,28 +168,9 @@
 
 .rf-error a { color: inherit; }
 
+/* Ögonknappen kommer från src/password_toggle.css; här bara platsen för den. */
 .rf-pass { position: relative; }
-.rf-pass input { padding-right: 5rem; }
-
-.rf-show {
-  position: absolute;
-  right: 0.35rem;
-  top: 50%;
-  translate: 0 -50%;
-  min-height: 44px;
-  min-width: 4rem;
-  padding: 0 0.75rem;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--midnatt);
-  font: inherit;
-  font-weight: 600;
-  font-size: 0.92rem;
-  cursor: pointer;
-}
-
-.rf-show:hover { background: var(--ljusgra); }
+.rf-pass input { padding-right: 3.5rem; }
 
 #submitBtn { margin-top: 0.5rem; min-height: 56px; font-size: 1.05rem; }
 #submitBtn:disabled { cursor: wait; opacity: 0.8; }

@@ -1,4 +1,6 @@
+import { authErrorMessage, flagField, setBusy } from "../auth_form.js";
 import { promptAndSetPassword, sendPasswordReset } from "../auth_password.js";
+import { setupPasswordToggles } from "../password_toggle.js";
 import { ApiError, supabase } from "../portal/api.js";
 import * as acc from "./accounts.js";
 import * as activity from "./activity.js";
@@ -451,20 +453,50 @@ async function enterApp(session) {
   await render();
 }
 
+setupPasswordToggles(el.login ?? document);
+
+function showLoginError(message) {
+  el.loginError.textContent = message;
+  el.loginError.hidden = false;
+}
+
+/**
+ * E-posten ur formuläret, eller tom sträng med felet visat vid fältet. Ett
+ * nytt försök tar bort förra försökets fel och kvitto.
+ */
+function loginEmail() {
+  el.loginError.hidden = true;
+  const sent = document.getElementById("magicSent");
+  if (sent) sent.hidden = true;
+  const email = String(new FormData(el.loginForm).get("email") ?? "").trim();
+  if (!email) {
+    showLoginError("Skriv din e-post först.");
+    flagField(document.getElementById("email"));
+  }
+  return email;
+}
+
 el.loginForm?.addEventListener("submit", async (event) => {
   event.preventDefault();
-  el.loginError.hidden = true;
   const form = new FormData(el.loginForm);
+  const email = loginEmail();
+  if (!email) return;
+  const password = String(form.get("password") ?? "");
+  if (!password) {
+    showLoginError("Skriv ditt lösenord.");
+    flagField(document.getElementById("password"));
+    return;
+  }
+  const submit = document.getElementById("loginSubmit");
+  setBusy(submit, true, "Loggar in …");
   try {
-    const { data, error } = await supabase().auth.signInWithPassword({
-      email: String(form.get("email") ?? ""),
-      password: String(form.get("password") ?? ""),
-    });
+    const { data, error } = await supabase().auth.signInWithPassword({ email, password });
     if (error) throw error;
     await enterApp(data.session);
   } catch (error) {
-    el.loginError.textContent = error?.message ?? "Kunde inte logga in.";
-    el.loginError.hidden = false;
+    showLoginError(authErrorMessage(error, "Kunde inte logga in."));
+  } finally {
+    setBusy(submit, false);
   }
 });
 
@@ -480,11 +512,11 @@ if (import.meta.env.DEV) {
   if (mount) {
     mount.hidden = false;
     mount.innerHTML = `
-      <p class="muted" style="margin:1rem 0 0.4rem">Lokal utveckling</p>
-      <button id="devLoginBtn" class="btn btn-primary" type="button">
+      <p class="muted"><b>Lokal utveckling</b></p>
+      <button id="devLoginBtn" class="btn btn-outline btn-block" type="button">
         Logga in som lokal admin
       </button>
-      <p class="muted" style="margin-top:0.4rem;font-size:0.85rem">
+      <p class="muted">
         ${DEV_EMAIL} — syns bara i Vite-dev, inte i produktionsbygget.
       </p>`;
     document.getElementById("devLoginBtn")?.addEventListener("click", async () => {
@@ -521,15 +553,12 @@ if (import.meta.env.DEV) {
  * `shouldCreateUser: false`: adminwebben skapar aldrig konton. Att någon kan
  * begära en länk till en okänd adress får inte bli ett sätt att registrera sig.
  */
-document.getElementById("magicLink")?.addEventListener("click", async () => {
-  el.loginError.hidden = true;
-  const email = String(new FormData(el.loginForm).get("email") ?? "").trim();
+document.getElementById("magicLink")?.addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const email = loginEmail();
   const sent = document.getElementById("magicSent");
-  if (!email) {
-    el.loginError.textContent = "Skriv din e-post först.";
-    el.loginError.hidden = false;
-    return;
-  }
+  if (!email) return;
+  setBusy(button, true, "Skickar länken …");
   try {
     const { error } = await supabase().auth.signInWithOtp({
       email,
@@ -542,8 +571,9 @@ document.getElementById("magicLink")?.addEventListener("click", async () => {
     sent.textContent = `Om ${email} har ett konto kommer en inloggningslänk strax.`;
     sent.hidden = false;
   } catch (error) {
-    el.loginError.textContent = error?.message ?? "Kunde inte skicka länken.";
-    el.loginError.hidden = false;
+    showLoginError(authErrorMessage(error, "Kunde inte skicka länken."));
+  } finally {
+    setBusy(button, false);
   }
 });
 
@@ -565,15 +595,12 @@ supabase().auth.onAuthStateChange(async (event, session) => {
   }
 });
 
-document.getElementById("forgotPassword")?.addEventListener("click", async () => {
-  el.loginError.hidden = true;
-  const email = String(new FormData(el.loginForm).get("email") ?? "").trim();
+document.getElementById("forgotPassword")?.addEventListener("click", async (event) => {
+  const button = event.currentTarget;
+  const email = loginEmail();
   const sent = document.getElementById("magicSent");
-  if (!email) {
-    el.loginError.textContent = "Skriv din e-post först.";
-    el.loginError.hidden = false;
-    return;
-  }
+  if (!email) return;
+  setBusy(button, true, "Skickar …");
   try {
     const { error } = await sendPasswordReset(
       supabase(),
@@ -584,8 +611,9 @@ document.getElementById("forgotPassword")?.addEventListener("click", async () =>
     sent.textContent = `Om ${email} har ett konto kommer en återställningslänk strax.`;
     sent.hidden = false;
   } catch (error) {
-    el.loginError.textContent = error?.message ?? "Kunde inte skicka länken.";
-    el.loginError.hidden = false;
+    showLoginError(authErrorMessage(error, "Kunde inte skicka länken."));
+  } finally {
+    setBusy(button, false);
   }
 });
 
