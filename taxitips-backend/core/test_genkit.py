@@ -183,3 +183,58 @@ class AiNeverSolePushTests(TestCase):
         prompt = _prompt_for(make(score=30)).lower()
         for word in ("device", "token", "company", "bolag", "notify_prefs", "lat=", "lon="):
             self.assertNotIn(word, prompt)
+
+
+class EnrichmentAndCacheFidelityTests(TestCase):
+    def test_review_updates_level_stations_and_mode(self):
+        o = make(
+            score=75,
+            level="high",
+            mode="unknown",
+            places=[],
+            destination="",
+            title="Förseningar pga växelfel",
+            summary="Tågtrafiken mellan Malmö C och Lund C är inställd.",
+        )
+        review(
+            o,
+            lambda p: (
+                '{"score": 35, "severity_tier": "vehicle_delayed", '
+                '"stranded": false, "has_alternative": true, '
+                '"mode": "train", "from_station": "Malmö C", "to_station": "Lund C", '
+                '"why": "bussar ersätter"}'
+            ),
+        )
+        o.refresh_from_db()
+        self.assertEqual(o.demand_score, 35)
+        self.assertEqual(o.level, "low")
+        self.assertEqual(o.mode, "train")
+        self.assertTrue(o.has_alternative)
+        self.assertEqual(o.places, ["Malmö C", "Lund C"])
+        self.assertEqual(o.destination, "Lund C")
+
+    def test_cache_hit_preserves_tier_alternative_and_avoids_duplicate_rows(self):
+        from core.genkit import apply_cached
+
+        o = make(score=75, level="high", title="Buss 21B ersätter spårvagn")
+        review(
+            o,
+            lambda p: (
+                '{"score": 25, "severity_tier": "vehicle_cancelled", '
+                '"stranded": false, "has_alternative": true, "why": "buss ersätter"}'
+            ),
+        )
+        self.assertEqual(RailAssessment.objects.filter(opportunity=o).count(), 1)
+
+        # Nästa pollcykel skriver tillbaka regelvärdena; apply_cached ska återställa allt
+        # utan att skapa en ny rad i rail_assessment.
+        make(score=75, level="high", title="Buss 21B ersätter spårvagn")
+        o.refresh_from_db()
+        self.assertTrue(apply_cached(o))
+        o.refresh_from_db()
+        self.assertEqual(o.demand_score, 25)
+        self.assertEqual(o.severity_tier, "vehicle_cancelled")
+        self.assertTrue(o.has_alternative)
+        self.assertEqual(o.level, "low")
+        self.assertEqual(RailAssessment.objects.filter(opportunity=o).count(), 1)
+

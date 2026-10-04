@@ -188,6 +188,19 @@ class Command(BaseCommand):
             for a, r, comp, o in assessed
         ])
 
+        if client.last_stats.get("complete") is not False:
+            from django.db.models import Q
+            from core.models import Opportunity
+
+            now = timezone.now()
+            current_ids = [a.external_id for a in alerts]
+            (
+                Opportunity.objects.filter(kind="transit", external_id__startswith="tvr:")
+                .filter(Q(end_time__gt=now) | Q(end_time__isnull=True))
+                .exclude(external_id__in=current_ids)
+                .update(end_time=now, expired_reason="source_removed", updated_at=now)
+            )
+
         status.written = written
         spread = sorted({o.score for _a, _r, _c, o in assessed}, reverse=True)
         self.stdout.write(self.style.SUCCESS(

@@ -404,10 +404,8 @@ def effective_level(opportunity, active: bool = True) -> str:
         return customer_likelihood(
             getattr(opportunity, "severity_tier", None), score, score, has_alternative,
         )
-    if getattr(opportunity, "ai_adjusted_at", None) is not None:
-        rescored = final_level(score, stored == "high", has_alternative)
-        return min(stored, rescored, key=lambda lvl: _LEVEL_ORDER[lvl])
-    return stored
+    rescored = final_level(score, stored == "high", has_alternative)
+    return min(stored, rescored, key=lambda lvl: _LEVEL_ORDER[lvl])
 
 
 _LEVEL_ORDER = {"low": 0, "medium": 1, "high": 2}

@@ -168,3 +168,36 @@ class FutureSingleDeparture(TestCase):
         self.assertEqual(o.departure_at, departure)
         self.assertEqual(o.start_time, datetime(2026, 10, 7, 5, 14, tzinfo=ZoneInfo("Europe/Stockholm")))
         self.assertLessEqual(o.end_time, datetime(2026, 10, 7, 7, 0, tzinfo=ZoneInfo("Europe/Stockholm")))
+
+
+class PlannedFutureMaintenanceAndExpiration(TestCase):
+    def test_planned_future_disruption_starts_on_stated_date(self):
+        published = datetime(2026, 9, 29, 14, 21, tzinfo=ZoneInfo("Europe/Stockholm"))
+        alert = _alert(
+            id="sl:planned1",
+            region="sl",
+            active_from=published,
+            header="Kommande: Spårvagnslinje 21 ersätts med buss 10–15 oktober på grund av banarbete",
+            description="Från lördag 10 oktober till torsdag 15 oktober är spårvagnstrafiken på Lidingöbanan ersatt med bussar.",
+        )
+        write("sl", assess([alert]), [])
+        o = Opportunity.objects.get(external_id="sl:planned1")
+        self.assertEqual(o.start_time, datetime(2026, 10, 10, 0, 0, tzinfo=ZoneInfo("Europe/Stockholm")))
+        self.assertTrue(o.has_alternative)
+
+    def test_vanished_alert_is_expired_on_next_write(self):
+        from django.utils import timezone
+
+        now = timezone.now()
+        a1 = _alert(id="sl:keep", region="sl", active_from=now)
+        a2 = _alert(id="sl:vanish", region="sl", active_from=now)
+        write("sl", assess([a1, a2]), [])
+        self.assertIsNone(Opportunity.objects.get(external_id="sl:vanish").end_time)
+
+        # Nästa poll har bara kvar sl:keep -> sl:vanish ska avslutas med source_removed.
+        write("sl", assess([a1]), [])
+        vanished = Opportunity.objects.get(external_id="sl:vanish")
+        self.assertEqual(vanished.expired_reason, "source_removed")
+        self.assertIsNotNone(vanished.end_time)
+        self.assertLessEqual(vanished.end_time, timezone.now())
+

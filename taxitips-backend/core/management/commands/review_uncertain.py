@@ -32,14 +32,35 @@ MODEL = "googleai/gemini-flash-lite-latest"
 _ai = None
 
 
-def _genkit():
+def _resolve_gemini_key() -> str | None:
+    from pathlib import Path
+
+    env_file = Path(__file__).resolve().parents[3] / ".env"
+    if env_file.exists():
+        for line in env_file.read_text().splitlines():
+            line = line.strip()
+            if line.startswith("GEMINI_API_KEY="):
+                val = line.split("=", 1)[1].strip().strip('"').strip("'")
+                if val:
+                    return val
+    return os.environ.get("GEMINI_API_KEY")
+
+
+def _genkit(api_key: str):
     global _ai
     if _ai is not None:
         return _ai
     from genkit import Genkit
     from genkit_google_genai import GoogleAI
 
-    _ai = Genkit(plugins=[GoogleAI()], model=MODEL)
+    class _DirectGoogleAI(GoogleAI):
+        """Löser modellen direkt utan GET /v1beta/models (som avvisar AQ.-nycklar)."""
+
+        async def init(self):
+            action = self._resolve_model(MODEL)
+            return [action] if action else []
+
+    _ai = Genkit(plugins=[_DirectGoogleAI(api_key=api_key)], model=MODEL)
     return _ai
 
 
@@ -48,17 +69,20 @@ class ReviewVerdict(BaseModel):
     severity_tier: str = ""
     stranded: bool = False
     has_alternative: bool | None = None
+    mode: str | None = None
+    from_station: str | None = None
+    to_station: str | None = None
     why: str = Field(default="", max_length=300)
 
 
 def call_genkit(prompt: str) -> str:
-    key = os.environ.get("GEMINI_API_KEY")
+    key = _resolve_gemini_key()
     if not key:
         raise RuntimeError(
             "GEMINI_API_KEY saknas. Skapa en nyckel på "
             "https://aistudio.google.com/apikey och lägg i .env"
         )
-    ai = _genkit()
+    ai = _genkit(key)
 
     async def _run() -> str:
         response = await ai.generate(
@@ -93,10 +117,13 @@ class Command(BaseCommand):
         )
 
     def handle(self, *args, **options):
+        from django.db.models import Q
+
+        now = timezone.now()
         qs = (
-            Opportunity.objects.filter(end_time__gt=timezone.now())
+            Opportunity.objects.filter(kind="transit", end_time__gt=now)
+            .filter(Q(start_time__lte=now) | Q(start_time__isnull=True))
             .exclude(severity_tier="ignore")
-            .exclude(kind="road")
         )
         if not options["all"]:
             qs = qs.filter(confidence="low")

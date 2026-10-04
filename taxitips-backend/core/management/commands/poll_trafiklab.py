@@ -63,6 +63,10 @@ class Command(BaseCommand):
             self.stdout.write(f"\n{len(alerts)} störningar (inget skrevs)")
             return
 
-        written, spread = write("trafiklab", assessed, cached_region_weather())
+        failed_regions = [err["operator"] for err in fetched.get("errors") or []]
+        written, spread = write(
+            "trafiklab", assessed, cached_region_weather(),
+            exclude_regions=failed_regions,
+        )
         status.written = written
         self.stdout.write(self.style.SUCCESS(f"skrev {written} tips | poängnivåer: {spread}"))

@@ -91,7 +91,8 @@ def road_tier(alert: dict) -> tuple[str, str]:
     return SeverityTier.ROAD_WORK, "minor"
 
 _STATED_ALTERNATIVE_RE = re.compile(
-    r"(övriga avgångar|ersättningsbuss|ersättningstrafik|buss ersätter|tågbyte)",
+    r"(övriga avgångar|hänvisas till alternativa avgångar|ersättningsbuss|ersättningstrafik|"
+    r"buss(?:ar)?(?:\s+\w+)?\s+ersätter|ersätter\s+buss(?:ar)?|ersätts\s+(?:av|med)\s+buss(?:ar)?|tågbyte)",
     re.IGNORECASE,
 )
 _NO_ALTERNATIVE_YET_RE = re.compile(

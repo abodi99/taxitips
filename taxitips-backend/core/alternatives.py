@@ -31,12 +31,12 @@ LOCAL_TZ = ZoneInfo("Europe/Stockholm")
 # generella "ersättningstrafik".
 _ALTERNATIVE_PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"ersättningsbuss(?:ar|arna|en)?", re.IGNORECASE), "Ersättningsbuss"),
-    (re.compile(r"buss(?:ar)? ersätter", re.IGNORECASE), "Buss ersätter"),
+    (re.compile(r"buss(?:ar)?(?:\s+\w+)?\s+ersätter|ersätter\s+buss(?:ar)?|ersätts\s+(?:av|med)\s+buss(?:ar)?", re.IGNORECASE), "Buss ersätter"),
     (re.compile(r"ersättningstrafik", re.IGNORECASE), "Ersättningstrafik"),
     (re.compile(r"ersättningsfordon", re.IGNORECASE), "Ersättningsfordon"),
     (re.compile(r"taxi ersätter|ersättningstaxi", re.IGNORECASE), "Taxi ersätter"),
     (re.compile(r"tågbyte", re.IGNORECASE), "Tågbyte"),
-    (re.compile(r"övriga avgångar", re.IGNORECASE), "Övriga avgångar går"),
+    (re.compile(r"övriga avgångar|hänvisas till alternativa avgångar", re.IGNORECASE), "Övriga avgångar går"),
     (re.compile(r"hänvisas till linje\s*\w+", re.IGNORECASE), "Hänvisas till annan linje"),
     (re.compile(r"res med linje\s*\w+", re.IGNORECASE), "Alternativ linje anvisad"),
 ]

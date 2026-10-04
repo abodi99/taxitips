@@ -12,19 +12,28 @@ likadant tre gånger.
 from __future__ import annotations
 
 import json
+import re
 from datetime import datetime, timedelta
+from typing import Sequence
 
+from django.db.models import Q
 from django.utils import timezone
 
 from core import taxi_context
 from core.alternatives import alternative_from_text
 from core.compensation import compensation_signal
 from core.geo import REGION_ANCHOR, resolve_coords
-from core.models import SeverityTier
+from core.models import Opportunity, SeverityTier, SourceEvent
 from core.repository import upsert_opportunities, upsert_source_events
 from core.sources.smhi import nearest_weather
 from core.taxi_relevance import enrich_alert
-from core.text_scoring import Assessment, classify_transit_alert, departure_clock, departure_date
+from core.text_scoring import (
+    _MONTHS,
+    Assessment,
+    classify_transit_alert,
+    departure_clock,
+    departure_date,
+)
 
 Assessed = tuple[dict, dict, Assessment, float | None, float | None, str]
 
@@ -55,13 +64,62 @@ def single_departure_time(alert: dict, result: Assessment, now: datetime) -> dat
 # det att trafikbolaget publicerade den (ibland dagar i förväg).
 SINGLE_DEPARTURE_LEAD = timedelta(minutes=60)
 
+_WEEKDAY_OPT = r"(?:(?:måndag|tisdag|onsdag|torsdag|fredag|lördag|söndag)(?:en)?(?:\s+den)?\s+)?"
+_MONTH_PAT = "|".join(_MONTHS)
+_PLANNED_START_RE = re.compile(
+    r"(?:"
+    r"\bkommande\s*:[^\n.]*?\b(?P<d1>\d{1,2})(?:\s*[–-]\s*\d{1,2})?\s+(?P<m1>" + _MONTH_PAT + r")"
+    r"|\b(?:från(?:\s+och\s+med)?|fr\.?\s*o\.?\s*m\.?)\s+" + _WEEKDAY_OPT + r"(?P<d2>\d{1,2})(?:\s*[–-]\s*\d{1,2})?\s+(?P<m2>" + _MONTH_PAT + r")"
+    r"|^\s*" + _WEEKDAY_OPT + r"(?P<d3>\d{1,2})(?:\s*[–-]\s*\d{1,2})?\s+(?P<m3>" + _MONTH_PAT + r")"
+    r"|\b(?P<d4>\d{1,2})\s*[–-]\s*\d{1,2}\s+(?P<m4>" + _MONTH_PAT + r")"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def planned_start_time(alert: dict, now: datetime) -> datetime | None:
+    """
+    Starttid för planerade arbeten längre fram ("Kommande: ... 10–15 oktober",
+    "Från lördag 10 oktober ..."). Publiceras ofta dagar i förväg med active_from
+    satt till publiceringstiden.
+    """
+    import datetime as _dt
+
+    ref = timezone.localtime(alert.get("active_from") or now)
+    today = ref.date()
+    for part in (alert.get("header") or "", alert.get("description") or ""):
+        match = _PLANNED_START_RE.search(part)
+        if not match:
+            continue
+        day_str = match.group("d1") or match.group("d2") or match.group("d3") or match.group("d4")
+        month_str = match.group("m1") or match.group("m2") or match.group("m3") or match.group("m4")
+        if not day_str or not month_str:
+            continue
+        day, month = int(day_str), _MONTHS.index(month_str.lower()) + 1
+        for year in (today.year, today.year + 1):
+            try:
+                candidate = _dt.date(year, month, day)
+            except ValueError:
+                break
+            if (candidate - today).days > -183:
+                if candidate > today:
+                    return ref.replace(
+                        year=candidate.year, month=candidate.month, day=candidate.day,
+                        hour=0, minute=0, second=0, microsecond=0,
+                    )
+                break
+    return None
+
 
 def start_time_for(alert: dict, result: Assessment, now: datetime):
-    """Källans starttid, men en framtida enstaka avgång börjar strax före avgången."""
+    """Källans starttid, men en framtida enstaka avgång eller planerat arbete börjar först när det gäller."""
     start = alert.get("active_from")
     departure = single_departure_time(alert, result, now)
     if departure and departure - SINGLE_DEPARTURE_LEAD > (start or now):
         return departure - SINGLE_DEPARTURE_LEAD
+    planned = planned_start_time(alert, now)
+    if planned and (start is None or planned > start):
+        return planned
     return start
 
 
@@ -140,6 +198,8 @@ def write(
     assessed: list[Assessed],
     region_weather: list[dict] | None = None,
     kind: str = "transit",
+    *,
+    exclude_regions: Sequence[str] | None = None,
 ) -> tuple[int, list[int]]:
     """Skriver source_events + opportunities. Returnerar (antal skrivna, poängspridning)."""
     region_weather = region_weather or []
@@ -290,6 +350,35 @@ def write(
         }
 
     written = upsert_opportunities([_row(*row) for row in assessed])
+
+    # Avsluta tips som inte längre finns kvar i källans aktiva flöde: många
+    # operatörer sätter ett långt slutdatum i larmet och plockar i stället bort
+    # larmet ur flödet när störningen är över.
+    now = timezone.now()
+    current_ids = [alert["id"] for alert, *_ in assessed]
+    source_ext_ids = SourceEvent.objects.filter(source=source).values("external_id")
+    stale_qs = (
+        Opportunity.objects.filter(kind=kind, external_id__in=source_ext_ids)
+        .filter(Q(end_time__gt=now) | Q(end_time__isnull=True))
+        .exclude(external_id__in=current_ids)
+    )
+    if exclude_regions:
+        stale_qs = stale_qs.exclude(region__in=list(exclude_regions))
+    stale_qs.update(end_time=now, expired_reason="source_removed", updated_at=now)
+
+    # Återställ cachad AI-bedömning direkt i skrivsteget så att osäkra tips
+    # inte pendlar tillbaka till regelvärden mellan review_uncertain-rundorna.
+    if kind == "transit" and current_ids:
+        from core.genkit import apply_cached
+
+        uncertain_ids = [
+            alert["id"]
+            for alert, _t, result, _lat, _lon, _p in assessed
+            if result.confidence == "low" and result.tier != SeverityTier.IGNORE
+        ]
+        if uncertain_ids:
+            for opp in Opportunity.objects.filter(external_id__in=uncertain_ids, confidence="low"):
+                apply_cached(opp)
 
     spread = sorted({r.score for _a, _t, r, _lat, _lon, _p in assessed}, reverse=True)
     return written, spread
