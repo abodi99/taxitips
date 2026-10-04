@@ -217,6 +217,30 @@ class NamedTrainCancelled(TestCase):
         self.assertIsNone(departure_date("klockan 06:14", dt.date(2026, 10, 2)))
 
 
+class WatchedLineNotice(TestCase):
+    """Östgötatrafiken: 608 innehållslösa förseningsrader på tre dygn (2026-10-04)."""
+
+    def test_a_delay_notice_without_details_is_a_weak_certain_delay(self):
+        from core.text_scoring import WATCHED_LINE_NOTICE_SCORE
+
+        alert = {
+            "header": "Försening på linje 6 mot Malmslätt",
+            "description": "En försening har registrerats på din bevakade linje. Sök din resa i appen.",
+        }
+        result = classify_transit_alert(alert, _taxi(score=35, serious=False, mediumish=True))
+        self.assertEqual(result.tier, SeverityTier.VEHICLE_DELAYED)
+        self.assertEqual(result.score, WATCHED_LINE_NOTICE_SCORE)
+        # Säker: ingen AI-granskning (review_uncertain tar bara confidence=low).
+        self.assertEqual(result.confidence, Confidence.HIGH)
+        self.assertTrue(result.rule_id.endswith(".vehicle_delayed.watched_line_notice"))
+        self.assertFalse(result.stranded)
+
+    def test_a_real_cancellation_is_not_swallowed(self):
+        alert = {"header": "Inställd avgång", "description": "Linje 6 kl 14:10 från Malmslätt är inställd."}
+        result = classify_transit_alert(alert, _taxi(score=85))
+        self.assertNotEqual(result.rule_id.rsplit(".", 1)[-1], "watched_line_notice")
+
+
 class FacilityNotices(TestCase):
     """Hiss, trappa och stängda/flyttade hållplatser låg i förarnas lista (2026-10-04)."""
 

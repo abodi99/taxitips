@@ -162,6 +162,14 @@ BUS_LINE_CANCELLED_SCORE = 45
 RAIL_DELAY_SCORE = 30
 BUS_DELAY_SCORE = 15
 UNCLASSIFIED_CAP = 30
+# Östgötatrafiken: "En försening har registrerats på din bevakade linje. Sök din
+# resa i appen." 608 rader på tre dygn (2026-10-04), alla oklassade och skickade
+# till AI-granskningen. Texten säger varken hur länge, var eller när -- ingen
+# regel och ingen modell kan läsa ut mer. En försening, svag, med säker etikett.
+WATCHED_LINE_NOTICE_SCORE = 10
+_WATCHED_LINE_NOTICE_RE = re.compile(
+    r"försening har registrerats på din bevakade linje", re.IGNORECASE
+)
 
 
 @dataclass
@@ -310,6 +318,13 @@ def classify_transit_alert(alert: dict, taxi: dict | None) -> Assessment:
             return Assessment(
                 SeverityTier.IGNORE, 0, Confidence.MEDIUM,
                 ["hållplats eller anläggning – inte en körning"], f"{mode}.ignore.facility", mode,
+            )
+        if _WATCHED_LINE_NOTICE_RE.search(notice_text):
+            return Assessment(
+                SeverityTier.VEHICLE_DELAYED, WATCHED_LINE_NOTICE_SCORE, Confidence.HIGH,
+                ["försening utan längd, plats eller tid"],
+                f"{mode}.vehicle_delayed.watched_line_notice", mode,
+                factors=[tc.Factor("Bara en försening, utan detaljer", "-", 10)],
             )
 
     if mode == "road":
