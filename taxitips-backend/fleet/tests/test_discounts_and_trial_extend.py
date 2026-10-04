@@ -74,6 +74,75 @@ class TrialExtendTests(SalesTestCase):
         self.assertEqual(response.json()["reason"], "reason_required")
 
 
+class TrialVehicleLimitTests(SalesTestCase):
+    """
+    Ägarens beslut 2026-10-04: ny registrering får 1 bil, 7 dagar, ett län och
+    tåg & buss. Fler bilar delas ut för hand i admin, med skäl i loggen.
+    """
+
+    def start(self, plate):
+        company = self.new_company()
+        self.post(f"/api/admin/companies/{company.id}/trial", {"vehicles": self.vehicles(plate)})
+        return company, Trial.objects.get(company_id=company.id)
+
+    def test_every_new_trial_has_one_car(self):
+        _company, trial = self.start("ONE01")
+        self.assertEqual(trial.vehicle_limit, 1)
+        self.assertEqual(Trial._meta.get_field("vehicle_limit").default, 1)
+
+    def test_admin_gives_more_cars_by_hand_and_it_is_logged(self):
+        from fleet.models import AuditEvent
+
+        company, trial = self.start("MAN01")
+        refused = self.post(
+            f"/api/admin/companies/{company.id}/trial", {"vehicles": self.vehicles("MAN02")},
+        )
+        self.assertEqual(refused.status_code, 400)
+
+        response = self.post(
+            f"/api/admin/companies/{company.id}/trial/vehicles",
+            {"vehicleLimit": 3, "reason": "Stort bolag vill prova med tre bilar"},
+            user=self.sales_id,
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["vehicleLimit"], 3)
+        trial.refresh_from_db()
+        self.assertEqual(trial.vehicle_limit, 3)
+        added = self.post(
+            f"/api/admin/companies/{company.id}/trial", {"vehicles": self.vehicles("MAN02")},
+        )
+        self.assertEqual(added.status_code, 200, added.content)
+        event = AuditEvent.objects.filter(action="trial_vehicle_limit_set").get()
+        self.assertEqual((event.detail["before"], event.detail["after"]), (1, 3))
+
+    def test_the_limit_never_drops_below_the_cars_already_in_the_trial(self):
+        company, _trial = self.start("LOW01")
+        response = self.post(
+            f"/api/admin/companies/{company.id}/trial/vehicles",
+            {"vehicleLimit": 0, "reason": "Fel"}, user=self.sales_id,
+        )
+        self.assertEqual(response.json()["reason"], "invalid_vehicle_limit")
+        self.post(
+            f"/api/admin/companies/{company.id}/trial/vehicles",
+            {"vehicleLimit": 2, "reason": "Två bilar"}, user=self.sales_id,
+        )
+        self.post(f"/api/admin/companies/{company.id}/trial", {"vehicles": self.vehicles("LOW02")})
+        lowered = self.post(
+            f"/api/admin/companies/{company.id}/trial/vehicles",
+            {"vehicleLimit": 1, "reason": "Tillbaka till en"}, user=self.sales_id,
+        )
+        self.assertEqual(lowered.status_code, 400)
+        self.assertEqual(lowered.json()["reason"], "below_current")
+
+    def test_a_reason_is_required(self):
+        company, _trial = self.start("WHY01")
+        response = self.post(
+            f"/api/admin/companies/{company.id}/trial/vehicles",
+            {"vehicleLimit": 2, "reason": " "}, user=self.sales_id,
+        )
+        self.assertEqual(response.json()["reason"], "reason_required")
+
+
 class CompanyDiscountTests(SalesTestCase):
     def test_admin_sets_percent_discount_and_quote_reflects_it(self):
         company = self.new_company()

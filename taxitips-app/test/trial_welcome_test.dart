@@ -93,7 +93,7 @@ void main() {
       find.textContaining('Provet startar när du kopplar den första telefonen'),
       findsOneWidget,
     );
-    expect(find.text('Du kan ha 1 bil i provet.'), findsOneWidget);
+    expect(find.text('Du kan ha 1 bil i provet, med ett län.'), findsOneWidget);
   });
 
   testWidgets('sida 2: pågående prov visar slutdatum, längd räknas ur datum', (

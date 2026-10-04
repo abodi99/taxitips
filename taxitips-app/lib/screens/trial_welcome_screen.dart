@@ -500,7 +500,7 @@ class _TrialPage extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             limit == 1
-                ? 'Du kan ha 1 bil i provet.'
+                ? 'Du kan ha 1 bil i provet, med ett län.'
                 : 'Du kan ha upp till $limit bilar i provet.',
             style: _bodyStyle,
           ),

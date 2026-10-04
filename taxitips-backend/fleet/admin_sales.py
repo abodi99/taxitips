@@ -336,6 +336,28 @@ def extend_trial(request, company_id):
 @csrf_exempt
 @require_POST
 @handle
+def set_trial_vehicle_limit(request, company_id):
+    """POST /api/admin/companies/<id>/trial/vehicles {"vehicleLimit": 3, "reason": "..."}"""
+    principal = _staff(request, Perm.ADMIN_SELL)
+    body = _body(request)
+    company = _company_or_404(company_id)
+    trial = trials.set_vehicle_limit(
+        company.id,
+        body.get("vehicleLimit"),
+        reason=str(body.get("reason", "")),
+        actor_user_id=principal.user_id,
+        actor_kind="sales" if principal.can(Perm.ADMIN_SELL) else "platform_admin",
+    )
+    return _json(request, {
+        "ok": True,
+        "vehicleLimit": trial.vehicle_limit,
+        "vehicles": trials.trial_vehicle_count(trial),
+    })
+
+
+@csrf_exempt
+@require_POST
+@handle
 def redeem_coupon(request, company_id):
     """POST /api/admin/companies/<id>/coupon {"code": "...", "vehicles": [...]}"""
     principal = _staff(request, Perm.ADMIN_SELL)

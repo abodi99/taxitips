@@ -47,6 +47,10 @@ SALES_TRIAL_VEHICLE_LIMIT = TRIAL_VEHICLE_LIMIT
 # avbrutet prov inte kan användas för att korta ner den.
 TRIAL_COOLDOWN_MONTHS = 24
 INVITE_VALID_DAYS = 7
+# Fler bilar i ett prov är ett manuellt beslut av personalen i admin (ägarens
+# beslut 2026-10-04: ny registrering får 1 bil, 7 dagar, ett län och tåg & buss;
+# mer delas ut för hand). Aldrig formulärets eller kundens val.
+TRIAL_MANUAL_MAX_VEHICLES = 25
 # Säljaren/admin kan förlänga eller sätta längre prov, men inte obegränsat.
 TRIAL_MAX_PLANNED_DAYS = 365
 TRIAL_EXTEND_MAX_DAYS = 366
@@ -264,6 +268,52 @@ def extend_trial(
             },
             "reason": reason.strip()[:300],
         },
+    )
+    return trial
+
+
+def set_vehicle_limit(
+    company_id,
+    limit: int,
+    *,
+    reason: str,
+    actor_user_id,
+    actor_kind: str = "sales",
+) -> Trial:
+    """
+    Sätter hur många bilar ett väntande eller pågående prov får ha. Manuellt
+    av personal i admin, med skäl i loggen. Aldrig under antalet bilar provet
+    redan har: bilar tas bort för sig, så att ingen förare tappar sin bil i tysthet.
+    """
+    try:
+        limit = int(limit)
+    except (TypeError, ValueError):
+        raise TrialError("invalid_vehicle_limit", "Antal bilar ska vara ett heltal.")
+    if not 1 <= limit <= TRIAL_MANUAL_MAX_VEHICLES:
+        raise TrialError("invalid_vehicle_limit", f"Bilar i provet: 1–{TRIAL_MANUAL_MAX_VEHICLES}.")
+    if not (reason or "").strip():
+        raise TrialError("reason_required", "Skriv varför provet får fler eller färre bilar.")
+
+    trial = active_trial(company_id)
+    if trial is None:
+        raise TrialError("no_trial", "Företaget har inget prov.")
+    current = trial_vehicle_count(trial)
+    if limit < current:
+        raise TrialError(
+            "below_current",
+            f"Provet har redan {current} bilar. Ta bort bilar först om gränsen ska sänkas.",
+        )
+    before = trial.vehicle_limit
+    Trial.objects.filter(id=trial.id).update(vehicle_limit=limit)
+    trial.refresh_from_db()
+    audit.record(
+        "trial_vehicle_limit_set",
+        company_id=company_id,
+        actor_user_id=actor_user_id,
+        actor_kind=actor_kind,
+        subject_type="trial",
+        subject_id=trial.id,
+        detail={"before": before, "after": limit, "vehicles": current, "reason": reason.strip()[:300]},
     )
     return trial
 

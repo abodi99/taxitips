@@ -68,6 +68,7 @@ urlpatterns = [
     path("companies/<uuid:company_id>/orders", admin_sales.create_order),
     path("companies/<uuid:company_id>/trial", admin_sales.start_trial),
     path("companies/<uuid:company_id>/trial/extend", admin_sales.extend_trial),
+    path("companies/<uuid:company_id>/trial/vehicles", admin_sales.set_trial_vehicle_limit),
     path("companies/<uuid:company_id>/discount", admin_sales.set_discount),
     path("companies/<uuid:company_id>/discount/clear", admin_sales.clear_discount),
     path("companies/<uuid:company_id>/discounts", admin_sales.list_discounts),

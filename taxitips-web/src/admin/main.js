@@ -1631,6 +1631,15 @@ async function salesAction(action, ds) {
       return render();
     }
 
+    case "trial-vehicles": {
+      const limit = Number(document.getElementById("trialVehicleLimit")?.value || 0);
+      const reason = prompt(`Provet får högst ${limit} ${limit === 1 ? "bil" : "bilar"}.\n\nSkriv varför (sparas i loggen):`);
+      if (reason === null || !reason.trim()) return;
+      const result = await admin.setTrialVehicleLimit(state.companyId, limit, reason.trim());
+      flash(`Provet får nu ha högst ${result.vehicleLimit} ${result.vehicleLimit === 1 ? "bil" : "bilar"}.`);
+      return render();
+    }
+
     case "trial-extend": {
       const days = Number(document.getElementById("trialExtendDays")?.value || 0);
       const reason = prompt(`Förläng provet med ${days} dagar.\n\nSkriv varför (sparas i loggen):`);

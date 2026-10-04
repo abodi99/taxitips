@@ -335,7 +335,8 @@ class Trial(models.Model):
     requires_payment_method = models.BooleanField(default=True)
 
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
-    vehicle_limit = models.IntegerField(default=3)
+    # En bil (fleet/trials.TRIAL_VEHICLE_LIMIT). Fler bara manuellt i admin.
+    vehicle_limit = models.IntegerField(default=1)
     # Säljaren kan sätta längre prov än standard (7 dagar). Gäller när klockan
     # startar (`fleet.trials.start_trial`), inte vid självregistrering.
     planned_days = models.IntegerField(null=True, blank=True)

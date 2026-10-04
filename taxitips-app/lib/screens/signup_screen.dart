@@ -397,8 +397,8 @@ class SignupScreenState extends State<SignupScreen> {
                           ),
                           const SizedBox(height: 8),
                           Text(
-                            'Prova gratis i 7 dagar med en bil. Inget kort behövs. '
-                            'Under provet visas tåg och buss.',
+                            'Prova gratis i 7 dagar med en bil i ett län. '
+                            'Inget kort behövs. Under provet visas tåg och buss.',
                             textAlign: TextAlign.center,
                             style: TextStyle(
                               color: Colors.grey.shade600,

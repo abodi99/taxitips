@@ -205,9 +205,10 @@ def _offer_lines(offer: dict | None) -> str:
 # Vad provet visar och vad abonnemanget lägger till (fleet/features.py). Står i
 # mejlen och aldrig som köpknapp i appen (docs/fleet-abonnemang.md §9c).
 _TRIAL_SCOPE = (
-    "Under provet visar appen tåg och buss: inställda tåg, sista avgången och "
-    "ersättningstrafik. Med abonnemang får förarna också flyg (ankomster), färjor, "
-    "evenemang (när publiken går hem) och trafikolyckor.\n"
+    "Under provet visar appen tåg och buss i bilens län: inställda tåg, sista "
+    "avgången och ersättningstrafik. Med abonnemang får förarna också flyg (ankomster), "
+    "färjor, evenemang (när publiken går hem) och trafikolyckor, och bilarna kan ha "
+    "fler län.\n"
 )
 
 

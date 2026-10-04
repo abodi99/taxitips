@@ -238,6 +238,12 @@ export const admin = {
       method: "POST",
       body: { days, reason },
     }),
+  // Fler bilar i provet: alltid ett manuellt beslut med skäl (fleet/trials.set_vehicle_limit).
+  setTrialVehicleLimit: (id, vehicleLimit, reason) =>
+    request(`/api/admin/companies/${id}/trial/vehicles`, {
+      method: "POST",
+      body: { vehicleLimit, reason },
+    }),
   setDiscount: (id, body) =>
     request(`/api/admin/companies/${id}/discount`, { method: "POST", body }),
   clearDiscount: (id, reason) =>

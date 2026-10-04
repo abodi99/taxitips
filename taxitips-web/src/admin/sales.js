@@ -439,7 +439,16 @@ export function trialExtendBlock(d, config) {
         <input id="trialExtendDays" type="number" min="1" max="366" value="7" />
         <button class="btn btn-quiet" type="button" data-action="trial-extend">Förläng med dagar</button>
       </div>
-      <p class="muted">Skälet sparas i händelselogg. Gäller bara det här bolagets prov.</p>
+      <p>Bilar i provet: <b>${esc(t.vehicles ?? 0)}</b> av högst <b>${esc(t.vehicleLimit ?? 1)}</b>.
+        <span class="muted">Ett nytt prov har en bil, ett län per bil och tåg &amp; buss.</span></p>
+      <div class="inline-field">
+        <label class="visually-hidden" for="trialVehicleLimit">Högst antal bilar i provet</label>
+        <input id="trialVehicleLimit" type="number" min="${esc(Math.max(1, t.vehicles ?? 1))}" max="25"
+          value="${esc(t.vehicleLimit ?? 1)}" />
+        <button class="btn btn-quiet" type="button" data-action="trial-vehicles">Ändra antal bilar</button>
+      </div>
+      <p class="muted">Skälet sparas i händelseloggen. Gäller bara det här bolagets prov.
+        Fler län på en provbil lägger du till under Bilar och förare.</p>
     </div>`;
 }
 
