@@ -612,3 +612,7 @@ FEED_CONTEXT_FULL_LIMIT = 3000
 AI_GATE_MAX_PER_CYCLE = 5
 # Tidsgräns per anrop. Fem anrop ryms med god marginal i pushtaskens 100 s.
 AI_GATE_TIMEOUT_S = 8.0
+
+# Förarbesked (core/briefs.py): så många tips per körning (var 2:a minut), starkast
+# först. ~300 tips per dygn på medel- eller stark nivå ryms med marginal.
+AI_BRIEF_MAX_PER_RUN = 30

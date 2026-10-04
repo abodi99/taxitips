@@ -385,6 +385,7 @@ class _WhatAndWhere extends StatelessWidget {
         ? TbColors.skiffer
         : strengthColor(strengthOfAlert(alert), category: category);
     final place = tipPlace(alert);
+    final brief = ended ? null : tipBrief(alert);
     final county = alert['countyName']?.toString() ?? '';
     final distance = distanceKm == null
         ? ''
@@ -513,6 +514,20 @@ class _WhatAndWhere extends StatelessWidget {
                   ),
                 ),
             ],
+          ),
+        ],
+        // Kort sagt: vad, var, när och varför, i en rad (core/briefs.py).
+        if (brief != null) ...[
+          const SizedBox(height: 10),
+          Text(
+            brief,
+            key: const ValueKey('tip-brief'),
+            style: const TextStyle(
+              fontSize: 17,
+              height: 1.3,
+              fontWeight: FontWeight.w600,
+              color: TbColors.midnatt,
+            ),
           ),
         ],
       ],

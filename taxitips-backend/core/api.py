@@ -32,7 +32,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.gzip import gzip_page
 from django.views.decorators.http import require_GET, require_POST
 
-from core import areas, notify, thresholds
+from core import areas, briefs, notify, thresholds
 # Alias: `notify_prefs` är vyn nedan.
 from core import notify_prefs as notify_prefs_rules
 from core.alternatives import travel_options
@@ -317,6 +317,9 @@ def _serialize(o: Opportunity, distance_km: float | None, now) -> dict:
         "id": str(o.id),
         "title": o.title,
         "summary": o.summary,
+        # En rad i förarens ord (core/briefs.py), bara när den skrevs från
+        # tipset som det ser ut nu. Saknas den visar appen det den alltid visat.
+        "brief": briefs.current_brief(o),
         "kind": o.kind,
         "mode": o.mode,
         "severity_tier": o.severity_tier,

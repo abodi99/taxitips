@@ -108,6 +108,12 @@ def review_uncertain_task() -> None:
     _run("review_uncertain")
 
 
+@shared_task(name="core.tasks.write_briefs_task")
+def write_briefs_task() -> None:
+    """Förarbesked -- se core/briefs.py."""
+    _run("write_briefs")
+
+
 @shared_task(name="core.tasks.combine_signals_task")
 def combine_signals_task() -> None:
     """Kombinationslagret -- se core/combine.py."""

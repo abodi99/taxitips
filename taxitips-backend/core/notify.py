@@ -718,15 +718,21 @@ def push_body(opportunity) -> str:
     alternativ -- fältet är tomt när källan inte sagt något, och då säger
     notisen inget heller.
     """
+    from core.briefs import current_brief
+
     parts = []
     summary = (opportunity.summary or "").strip()
-    if summary:
-        parts.append(summary[:140])
+    # Förarbeskedet när det hunnit skrivas: samma uppgifter, i förarens ord.
+    brief = current_brief(opportunity)
+    shown = brief or summary[:140]
+    if shown:
+        parts.append(shown)
     if opportunity.is_last_departure:
         parts.append("Sista avgången — inget kommer efter.")
     elif (
         getattr(opportunity, "next_departure_at", None) is not None
-        and "nästa avgång" not in summary.lower()
+        and "nästa avgång" not in (brief or summary).lower()
+        and not (brief and opportunity.next_departure_at.astimezone(ZoneInfo("Europe/Stockholm")).strftime("%H:%M") in brief)
     ):
         # Järnvägens summary skriver redan ut nästa avgång i sin egen text
         # ("Nästa avgång går 06:13."). Utan den kontrollen stod samma uppgift

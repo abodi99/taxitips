@@ -141,6 +141,23 @@ class SignalCard extends StatelessWidget {
                           ),
                       ],
                     ),
+                    if (travel == null &&
+                        active &&
+                        tipBrief(alert) != null) ...[
+                      // Utan avgångsuppgift är beskedet det som säger mest.
+                      const SizedBox(height: 8),
+                      Text(
+                        tipBrief(alert)!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 14,
+                          height: 1.3,
+                          fontWeight: FontWeight.w600,
+                          color: TbColors.midnatt,
+                        ),
+                      ),
+                    ],
                     if (travel != null) ...[
                       const SizedBox(height: 8),
                       LiveTravelText(
@@ -170,6 +187,14 @@ class SignalCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Förarbeskedet från backend (core/briefs.py): en rad i förarens ord, bara
+/// skriven ur tipsets egna fält. `null` när det saknas -- då visas det som
+/// alltid visats.
+String? tipBrief(Map alert) {
+  final brief = alert['brief']?.toString().trim() ?? '';
+  return brief.isEmpty ? null : brief;
 }
 
 /// Platsen först ("Göteborg C"), annars källans rubrik med färdsättet.

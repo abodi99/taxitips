@@ -351,6 +351,17 @@ class Opportunity(models.Model):
             "poäng, inga källnamn."
         ),
     )
+    # Förarbeskedet (core/briefs.py): en rad skriven av språkmodellen ur tipsets
+    # egna fält. Nullbara och utanför repository._OPPORTUNITY_COLUMNS, så att
+    # insamlingens upsert varken skriver över dem eller kräver dem vid insert.
+    brief = models.CharField(
+        max_length=120, null=True, blank=True,
+        help_text="En rad för föraren: vad, var, när, varför. Bara siffror som finns i tipset.",
+    )
+    brief_key = models.CharField(
+        max_length=64, null=True, blank=True,
+        help_text="Hash av fälten beskedet skrevs från; ett annat värde betyder att det är inaktuellt.",
+    )
 
     computed_at = models.DateTimeField(db_default=models.functions.Now())
     updated_at = models.DateTimeField(db_default=models.functions.Now())
