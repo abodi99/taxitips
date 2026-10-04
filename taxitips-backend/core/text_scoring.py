@@ -207,6 +207,30 @@ def is_single_departure(text: str) -> bool:
     return bool(_SINGLE_DEPARTURE_RE.search(text))
 
 
+# "Nästa avgång är Västtågen 7241klockan 15:53 från Bankeryd": källan har själv
+# skrivit när nästa går. Regeln läste det inte -- Västtågen 7239 fick 85 och en
+# notis 2026-10-04 med 35 minuter till nästa tåg. Bara ett utskrivet klockslag
+# räknas; "hänvisas till nästa avgång" utan tid säger inget om väntan.
+_STATED_NEXT_RE = re.compile(
+    r"nästa (?:avgång|tåg|buss|tur)\b[^.\n]{0,80}?(?:kl(?:ockan)?\.?\s*)?\b(\d{1,2})[:.](\d{2})\b",
+    re.IGNORECASE,
+)
+
+
+def stated_next_departure_clock(text: str) -> tuple[tuple[int, int], str] | None:
+    """
+    Klockslaget källan skrivit för nästa avgång, och texten UTAN den meningen
+    (där den inställda avgångens klockslag då står först). None om inget står.
+    """
+    match = _STATED_NEXT_RE.search(text or "")
+    if not match:
+        return None
+    hour, minute = int(match.group(1)), int(match.group(2))
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        return None
+    return (hour, minute), f"{text[:match.start()]} {text[match.end():]}"
+
+
 def departure_clock(text: str) -> tuple[int, int] | None:
     """Första klockslaget i texten ("kl 20:40" -> (20, 40)), eller None."""
     for match in _CLOCK_RE.finditer(text or ""):

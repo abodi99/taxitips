@@ -201,3 +201,73 @@ class PlannedFutureMaintenanceAndExpiration(TestCase):
         self.assertIsNotNone(vanished.end_time)
         self.assertLessEqual(vanished.end_time, timezone.now())
 
+
+
+class StatedNextDeparture(TestCase):
+    """
+    Västtrafik skriver nästa avgång i texten. Västtågen 7239 fick 85 och en notis
+    2026-10-04 trots att nästa tåg gick 35 minuter senare.
+    """
+
+    WHEN = datetime(2026, 10, 4, 15, 0, tzinfo=ZoneInfo("Europe/Stockholm"))
+
+    def vt(self, **overrides):
+        return _alert(
+            id="vt:7239", region="vt", active_from=self.WHEN,
+            header="Västtågen 7239 klockan 15:18 är inställt från Bankeryd station",
+            description=(
+                "Nästa avgång är Västtågen 7241klockan 15:53 från Bankeryd station mot Jönköping. "
+                "Orsaken är obehöriga i spårområdet."
+            ),
+            **overrides,
+        )
+
+    def test_the_wait_is_measured_from_the_cancelled_departure(self):
+        from core.ingest import stated_next_departure
+
+        next_at, minutes = stated_next_departure(self.vt(), self.WHEN)
+        self.assertEqual(minutes, 35)
+        self.assertEqual((next_at.hour, next_at.minute), (15, 53))
+
+    def test_the_known_gap_rule_scores_it_instead_of_a_whole_line_stop(self):
+        from core.scoring import gap_score
+
+        alert = self.vt()
+        (_a, _t, result, *_rest), = assess([alert])
+        self.assertTrue(result.rule_id.endswith(".known_gap"), result.rule_id)
+        self.assertEqual(result.score, gap_score(35))
+        self.assertEqual(alert["next_departure_minutes"], 35)
+
+    def test_a_referral_without_a_clock_says_nothing(self):
+        from core.ingest import stated_next_departure
+
+        alert = _alert(
+            header="Inställd avgång",
+            description="Avgången kl 15:23 är inställd. Resenärer hänvisas till nästa avgång.",
+            active_from=self.WHEN,
+        )
+        self.assertIsNone(stated_next_departure(alert, self.WHEN))
+
+    def test_the_next_departure_after_midnight_is_tomorrow(self):
+        from core.ingest import stated_next_departure
+
+        alert = _alert(
+            header="Tåg 8901 klockan 23:50 är inställt",
+            description="Nästa avgång är tåg 8903 klockan 05:10.",
+            active_from=datetime(2026, 10, 4, 23, 0, tzinfo=ZoneInfo("Europe/Stockholm")),
+        )
+        _next_at, minutes = stated_next_departure(alert, self.WHEN)
+        self.assertEqual(minutes, 5 * 60 + 20)
+
+    def test_without_a_cancelled_clock_the_wait_is_from_now_and_never_negative(self):
+        from core.ingest import stated_next_departure
+
+        alert = _alert(header="Inställt", description="Nästa avgång kl. 15:40.", active_from=self.WHEN)
+        self.assertEqual(stated_next_departure(alert, self.WHEN)[1], 40)
+        later = datetime(2026, 10, 4, 16, 0, tzinfo=ZoneInfo("Europe/Stockholm"))
+        self.assertIsNone(stated_next_departure(alert, later))
+
+    def test_a_source_that_already_knows_the_next_departure_wins(self):
+        alert = self.vt(next_departure_minutes=12)
+        assess([alert])
+        self.assertEqual(alert["next_departure_minutes"], 12)

@@ -33,9 +33,42 @@ from core.text_scoring import (
     classify_transit_alert,
     departure_clock,
     departure_date,
+    stated_next_departure_clock,
 )
 
 Assessed = tuple[dict, dict, Assessment, float | None, float | None, str]
+
+
+def stated_next_departure(alert: dict, now: datetime) -> tuple[datetime, int] | None:
+    """
+    "Nästa avgång … klockan 15:53" i källans egen text -> (tidpunkt, väntan i
+    minuter). Väntan mäts från den inställda avgången när texten anger den, som
+    för järnvägen (core/scoring.py): det är väntan resenären står inför, och den
+    får inte dra iväg medan tiden går. Utan avgångstid mäts den från nu. None när
+    texten inte säger något, eller när tiden redan har passerat.
+    """
+    text = f"{alert.get('header') or ''} {alert.get('description') or ''}"
+    stated = stated_next_departure_clock(text)
+    if not stated:
+        return None
+    (hour, minute), rest = stated
+    day = timezone.localtime(alert.get("active_from") or now)
+    dated = departure_date(text, day.date())
+    if dated:
+        day = day.replace(year=dated.year, month=dated.month, day=dated.day)
+    next_at = day.replace(hour=hour, minute=minute, second=0, microsecond=0)
+    cancelled = departure_clock(rest)
+    if cancelled:
+        reference = day.replace(hour=cancelled[0], minute=cancelled[1], second=0, microsecond=0)
+        if next_at < reference:
+            # 23:50 inställd, nästa 05:10: nästa går i morgon bitti.
+            next_at += timedelta(days=1)
+    else:
+        reference = timezone.localtime(now)
+    minutes = round((next_at - reference).total_seconds() / 60)
+    if minutes < 0 or minutes > 24 * 60:
+        return None
+    return next_at, minutes
 
 # En enstaka inställd avgång är över för resenären när nästa har gått. Utan
 # tidtabell vet vi inte när, men tre kvart efter den inställda avgången står
@@ -149,7 +182,14 @@ def end_time_for(alert: dict, result: Assessment, when: datetime) -> datetime | 
 def assess(alerts: list[dict]) -> list[Assessed]:
     """alert -> (alert, taxi, Assessment, lat, lon, precision) för varje larm."""
     out = []
+    now = timezone.now()
     for alert in alerts:
+        # Samma fält som SL fyller från sin tidtabell (sl.enrich_next_departures):
+        # då tar glappregeln i classify_transit_alert över, och kortet visar tiden.
+        if alert.get("next_departure_minutes") is None:
+            stated = stated_next_departure(alert, now)
+            if stated:
+                alert["next_departure_at"], alert["next_departure_minutes"] = stated
         taxi = enrich_alert(alert)
         result = classify_transit_alert(alert, taxi)
         lat, lon, precision = resolve_coords(alert, taxi)
