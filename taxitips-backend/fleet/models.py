@@ -1902,3 +1902,26 @@ class ClientError(models.Model):
             models.Index(fields=["company_id", "-last_at"]),
             models.Index(fields=["created_at"]),
         ]
+
+
+class CompanyNotifyDefault(models.Model):
+    """
+    Företagets standard för notiserna: det en ny förartelefon får när den
+    kopplas till en bil (fleet/notify_settings.py, fleet/pairing.py).
+
+    Bara reglerna (läge, kategorier, typer, svagare tips, tysta timmar, tak per
+    timme) -- core/notify_prefs.DEFAULT_FIELDS. Området blir alltid bilens län,
+    och en paus hör till en förare, inte ett företag. Saknas raden får nya
+    telefoner Rekommenderat, som förut.
+
+    En egen tabell och inte `companies` (Supabase äger den, billing/models.py)
+    eller CompanyProfile (avtalsuppgifter).
+    """
+
+    company_id = models.UUIDField(primary_key=True)
+    prefs = models.JSONField(default=dict, blank=True)
+    updated_at = models.DateTimeField()
+    updated_by = models.UUIDField(null=True, blank=True)
+
+    class Meta:
+        db_table = "fleet_company_notify_default"

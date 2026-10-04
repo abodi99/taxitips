@@ -10,6 +10,7 @@ import 'client_log.dart';
 import 'config.dart';
 import 'device_credential.dart';
 import 'net_status.dart';
+import 'notify_rules_api.dart';
 import 'pending_feedback.dart';
 import 'severity_labels.dart';
 
@@ -1422,6 +1423,12 @@ class ApiClient {
         'licensedCounties': (body['licensedCounties'] as List?) ?? const [],
         'licensedCountiesUnrestricted':
             body['licensedCountiesUnrestricted'] != false,
+        // Färdiga lägen och detaljerade val (core/notify_prefs.py). Tomt från
+        // en äldre server: då visas varken lägena eller de nya reglagen.
+        'preset': body['preset']?.toString(),
+        'presetCatalog': (body['presetCatalog'] as List?) ?? const [],
+        'weakMaxPerHour': body['weakMaxPerHour'],
+        'maxPerHourChoices': (body['maxPerHourChoices'] as List?) ?? const [],
       };
     }
     final meDev = await getDeviceMe();
@@ -1539,6 +1546,24 @@ class ApiClient {
       municipalities: municipalities,
       from: from,
       to: to,
+      deviceToken: deviceToken,
+      accessToken: _accessToken,
+    );
+  }
+
+  /// Läge och detaljerade val: `preset`, `weak`, `quietHours` (null = inga)
+  /// och `maxPerHour` (null = inget tak). Kartan skickas som den är, så null
+  /// betyder "ta bort" -- till skillnad från [saveNotifyPrefs]. Svaret är
+  /// serverns hela svar (`prefs`, `preset`). Kräver TaxiTips-servern.
+  Future<Map<String, dynamic>> saveNotifyRules(
+    Map<String, dynamic> body,
+  ) async {
+    if (_backend == null) {
+      throw ApiException(400, 'Notisvalen kräver TaxiTips-servern.');
+    }
+    return postNotifyRules(
+      baseUrl: TaxiTipsConfig.apiBaseUrl,
+      body: body,
       deviceToken: deviceToken,
       accessToken: _accessToken,
     );

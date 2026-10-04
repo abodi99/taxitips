@@ -7,6 +7,7 @@ import * as activity from "./activity.js";
 import { bindTooltips, dashboard } from "./dashboard.js";
 import { callsCell, followUpBody, nextCell, uppfoljning } from "./followup.js";
 import { admin } from "./api.js";
+import { notifyBody } from "../notify_editor.js";
 import * as sales from "./sales.js";
 import { LEVEL, statusBanner, statusView } from "./status.js";
 import { appVersionCard, bindAppVersionForm, loadAppVersion } from "./app_version.js";
@@ -658,6 +659,30 @@ el.view.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.target;
   clearError();
+  if (form.classList.contains("notify-form")) {
+    // Notiserna för kundens telefoner (src/notify_editor.js, fleet/admin_notify.py).
+    const body = notifyBody(form, event.submitter);
+    if (!body) return showError(new ApiError(400, "Välj ett läge först.", "preset_required"));
+    const buttons = form.querySelectorAll('button[type="submit"]');
+    for (const b of buttons) b.disabled = true;
+    try {
+      if (form.dataset.target === "default") {
+        const result = await admin.setNotifyDefault(state.companyId, body);
+        flash(result.phonesChanged
+          ? `Standarden är sparad och gäller nu ${result.phonesChanged} telefon(er).`
+          : "Standarden är sparad. Nya telefoner får den när de kopplas till en bil.");
+      } else {
+        await admin.setDeviceNotify(state.companyId, form.dataset.device, body);
+        flash("Notiserna är ändrade på telefonen. Ändringen är loggad.");
+      }
+      await render();
+    } catch (error) {
+      showError(error);
+    } finally {
+      for (const b of buttons) b.disabled = false;
+    }
+    return;
+  }
   if (form.dataset.crmForm) {
     const button = form.querySelector('button[type="submit"]');
     if (button) button.disabled = true;

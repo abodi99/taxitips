@@ -309,6 +309,14 @@ def approve_device(
     if company is None:
         raise PairingError("unknown_company", "Företaget finns inte.")
 
+    # Ny telefon för FÖRETAGET (aldrig godkänd här förut, oavsett bil): den får
+    # företagets standard för notiserna nedan. En telefon som byter bil inom
+    # företaget eller installeras om behåller förarens egna val.
+    existing = Device.objects.filter(token=installation_id).values_list("id", flat=True).first()
+    new_to_company = existing is None or not DeviceApproval.objects.filter(
+        device_id=existing, company_id=company_id
+    ).exists()
+
     device = _upsert_device(
         company_id=company_id,
         installation_id=installation_id,
@@ -381,10 +389,13 @@ def approve_device(
     # Körområdet: en nyparkopplad telefon får licensens län -- alltid, inte
     # bara när inget var valt. Se fleet/device_prefs.py (samma regel vid
     # admin-byte av baslän).
-    from fleet import device_prefs
+    from fleet import device_prefs, notify_settings
 
     counties = list(license_counties_for(license, now))
-    prefs = device_prefs.apply_counties_to_prefs(device.notify_prefs, counties)
+    prefs = device.notify_prefs
+    if new_to_company:
+        prefs = notify_settings.prefs_for_new_phone(company_id, prefs)
+    prefs = device_prefs.apply_counties_to_prefs(prefs, counties)
     device_prefs.write_device_prefs(device.id, prefs)
 
     RiskSignal.objects.create(
