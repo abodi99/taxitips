@@ -616,3 +616,9 @@ AI_GATE_TIMEOUT_S = 8.0
 # Förarbesked (core/briefs.py): så många tips per körning (var 2:a minut), starkast
 # först. ~300 tips per dygn på medel- eller stark nivå ryms med marginal.
 AI_BRIEF_MAX_PER_RUN = 30
+
+# Högst så många AI-anrop per minut, alla syften tillsammans. Gratisnivån hos
+# Google tillåter 15 per minut och modell (mätt 2026-10-04: 429 efter 15 anrop),
+# och stötar -- granskningen tar 40 tips, beskeden 30 -- slog i taket direkt.
+# Det som inte hinner med i en körning tas i nästa. Med betald nivå kan taket höjas.
+AI_MAX_CALLS_PER_MINUTE = 12

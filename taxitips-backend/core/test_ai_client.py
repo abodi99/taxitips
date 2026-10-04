@@ -121,3 +121,24 @@ class ReviewCommandTests(TestCase):
         call_command("review_uncertain", stdout=out)
         self.assertIn("AI används inte just nu", out.getvalue())
         self.assertFalse(AiCall.objects.exists())
+
+
+@override_settings(TAXITIPS_AI="on")
+class MinuteCapTests(TestCase):
+    def test_a_burst_waits_for_the_next_minute(self):
+        with patch.object(ai_client, "api_key", return_value="test-key"), \
+                patch.object(thresholds, "AI_MAX_CALLS_PER_MINUTE", 2), \
+                patch.object(ai_client, "transport", fake()):
+            ai_client.generate("brief", "p", Verdict)
+            ai_client.generate("brief", "p", Verdict)
+            with self.assertRaises(ai_client.AiUnavailable) as caught:
+                ai_client.generate("brief", "p", Verdict)
+        self.assertIn("minuttaket", str(caught.exception))
+        # En minut senare går det igen.
+        from datetime import timedelta
+        from django.utils import timezone
+
+        AiCall.objects.update(created_at=timezone.now() - timedelta(seconds=61))
+        with patch.object(ai_client, "api_key", return_value="test-key"), \
+                patch.object(thresholds, "AI_MAX_CALLS_PER_MINUTE", 2):
+            self.assertIsNone(ai_client.unavailable_reason())

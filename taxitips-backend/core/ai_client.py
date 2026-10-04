@@ -93,6 +93,11 @@ def unavailable_reason(now=None) -> str | None:
         return "avstängd (TAXITIPS_AI=off)"
     if not api_key():
         return "GEMINI_API_KEY saknas"
+    last_minute = AiCall.objects.filter(
+        created_at__gte=(now or timezone.now()) - timedelta(seconds=60),
+    ).count()
+    if last_minute >= thresholds.AI_MAX_CALLS_PER_MINUTE:
+        return f"minuttaket nått ({thresholds.AI_MAX_CALLS_PER_MINUTE} anrop per minut)"
     used = spend(now)
     if used["callsToday"] >= thresholds.AI_DAILY_CALL_CAP:
         return f"dagstaket nått ({thresholds.AI_DAILY_CALL_CAP} anrop)"
