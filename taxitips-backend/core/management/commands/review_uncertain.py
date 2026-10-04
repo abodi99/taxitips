@@ -12,56 +12,20 @@ inte är low.
 
 Kostnadsval, medvetna
 ----------------------
-- gemini-flash-lite-latest: billigast som räcker för klassificering.
+- thresholds.AI_MODEL_EXTRACT (låst Flash-Lite): billigast som räcker för
+  klassificering. Anropet går via core/ai_client.py: kostnadslogg, dagstak,
+  månadsbudget och TAXITIPS_AI=off.
 - temperature=0: samma text → samma svar, cachen blir meningsfull.
 - --limit: tak per körning.
 """
-
-import asyncio
-import os
 
 from django.core.management.base import BaseCommand
 from django.utils import timezone
 from pydantic import BaseModel, Field
 
+from core import ai_client, thresholds
 from core.genkit import review
 from core.models import Opportunity
-
-MODEL = "googleai/gemini-flash-lite-latest"
-
-_ai = None
-
-
-def _resolve_gemini_key() -> str | None:
-    from pathlib import Path
-
-    env_file = Path(__file__).resolve().parents[3] / ".env"
-    if env_file.exists():
-        for line in env_file.read_text().splitlines():
-            line = line.strip()
-            if line.startswith("GEMINI_API_KEY="):
-                val = line.split("=", 1)[1].strip().strip('"').strip("'")
-                if val:
-                    return val
-    return os.environ.get("GEMINI_API_KEY")
-
-
-def _genkit(api_key: str):
-    global _ai
-    if _ai is not None:
-        return _ai
-    from genkit import Genkit
-    from genkit_google_genai import GoogleAI
-
-    class _DirectGoogleAI(GoogleAI):
-        """Löser modellen direkt utan GET /v1beta/models (som avvisar AQ.-nycklar)."""
-
-        async def init(self):
-            action = self._resolve_model(MODEL)
-            return [action] if action else []
-
-    _ai = Genkit(plugins=[_DirectGoogleAI(api_key=api_key)], model=MODEL)
-    return _ai
 
 
 class ReviewVerdict(BaseModel):
@@ -73,27 +37,6 @@ class ReviewVerdict(BaseModel):
     from_station: str | None = None
     to_station: str | None = None
     why: str = Field(default="", max_length=300)
-
-
-def call_genkit(prompt: str) -> str:
-    key = _resolve_gemini_key()
-    if not key:
-        raise RuntimeError(
-            "GEMINI_API_KEY saknas. Skapa en nyckel på "
-            "https://aistudio.google.com/apikey och lägg i .env"
-        )
-    ai = _genkit(key)
-
-    async def _run() -> str:
-        response = await ai.generate(
-            model=MODEL,
-            prompt=prompt,
-            output_schema=ReviewVerdict,
-            config={"temperature": 0},
-        )
-        return response.output.model_dump_json()
-
-    return asyncio.run(_run())
 
 
 class Command(BaseCommand):
@@ -147,6 +90,11 @@ class Command(BaseCommand):
             )
             return
 
+        blocked = ai_client.unavailable_reason()
+        if blocked:
+            self.stdout.write(f"AI används inte just nu: {blocked}. Regelsvaren gäller.")
+            return
+
         changed = failed = 0
         for o in uncertain:
             before_score = o.demand_score
@@ -154,7 +102,9 @@ class Command(BaseCommand):
             reclassify = o.confidence == "low"
             result = review(
                 o,
-                call_genkit,
+                ai_client.json_caller(
+                    "review", ReviewVerdict, model=thresholds.AI_MODEL_EXTRACT, subject=o.external_id,
+                ),
                 reclassify=reclassify,
                 bypass_cache=options["force"],
             )

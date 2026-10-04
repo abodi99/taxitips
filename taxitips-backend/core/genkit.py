@@ -62,6 +62,8 @@ _BAD_STATION_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Instruktionerna först och lika för varje tips, tipsets egna data sist: då kan
+# början av prompten återanvändas (cachas) mellan anropen och kostar mindre.
 PROMPT = """Du är bedömare åt TaxiTips, en app för svenska taxiförare.
 Frågan är: står resenärer kvar utan alternativ och behöver taxi -- och
 hur stark är signalen (0–100)?
@@ -69,23 +71,6 @@ hur stark är signalen (0–100)?
 Regelverket gissade på fritext och satte confidence=low. Du får ALL
 tillgänglig data och ska omklassa tipset. Du FÅR höja eller sänka poängen
 och byta severity_tier när texten och signalerna motiverar det.
-
-## Tipset
-Titel: {title}
-Sammanfattning: {summary}
-Nuvarande severity_tier: {severity_tier}
-Färdsätt (mode): {mode}
-Region: {region}
-Platser: {places}
-Regelpoäng: {score}/100
-Har ersättningsalternativ (has_alternative): {has_alternative}
-Alternativanteckning: {alternative_note}
-Nästa avgång (minuter): {next_departure_minutes}
-Sista avgången idag: {is_last_departure}
-Regelverkets skäl: {reasons}
-
-## Rå källkontext
-{context_block}
 
 ## severity_tier — välj EXAKT en
 - line_paused: hela linjen/sträckan stoppad nu, ingen trafik
@@ -115,6 +100,23 @@ Regelverkets skäl: {reasons}
 
 Svara ENDAST med JSON:
 {{"score": <0-100>, "severity_tier": "<en av listan>", "stranded": <true|false>, "has_alternative": <true|false|null>, "mode": "<train|metro|tram|bus|boat|>", "from_station": "<startstation eller tom>", "to_station": "<slutstation eller tom>", "why": "<kort motivering på svenska>"}}
+
+## Tipset
+Titel: {title}
+Sammanfattning: {summary}
+Nuvarande severity_tier: {severity_tier}
+Färdsätt (mode): {mode}
+Region: {region}
+Platser: {places}
+Regelpoäng: {score}/100
+Har ersättningsalternativ (has_alternative): {has_alternative}
+Alternativanteckning: {alternative_note}
+Nästa avgång (minuter): {next_departure_minutes}
+Sista avgången idag: {is_last_departure}
+Regelverkets skäl: {reasons}
+
+## Rå källkontext
+{context_block}
 """
 
 

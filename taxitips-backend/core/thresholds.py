@@ -31,6 +31,26 @@ NOTIFY_SCORE_FLOOR = 60
 # Tillfälligt: ersätts när modellen läser fakta och reglerna sätter poängen.
 AI_RAISE_CAP = 55
 
+# Språkmodellerna, låsta till en version (core/ai_client.py). Ett "-latest"-alias
+# byter modell -- och pris -- utan att något här ändras. Kontrollerat mot
+# ai.google.dev/gemini-api/docs/models 2026-10-04.
+AI_MODEL_EXTRACT = "gemini-3.5-flash-lite"  # läsa fritext: billigast som räcker
+AI_MODEL_GATE = "gemini-3.8-flash"  # andra bedömningen före en notis
+# Pris i USD per miljon tokens (in, ut), ai.google.dev/gemini-api/docs/pricing
+# 2026-10-04. 3.8 Flash har introduktionspris t.o.m. 2026-12-31; därefter 1,50/7,50.
+AI_PRICE_USD_PER_MTOK = {
+    "gemini-3.5-flash-lite": (0.30, 2.50),
+    "gemini-3.8-flash": (0.75, 3.75),
+}
+# Okänd modell räknas med det dyraste priset: budgetspärren ska hellre slå till tidigt.
+AI_PRICE_FALLBACK = (1.50, 7.50)
+AI_USD_SEK = 10.0
+# Budgeten är 500 kr/mån; spärren slår till vid 400 så att marginalen finns kvar.
+AI_MONTHLY_BUDGET_KR = 400
+# Dagstak på antal anrop: skyddar mot en loop som anropar om och om igen. Mätt
+# 2026-10-04: ~825 unika kollektivtrafiktexter per dygn.
+AI_DAILY_CALL_CAP = 3000
+
 # "Övrigt" (severity_tier ignore) i listan: bara meddelanden som började inom
 # så här många timmar. Långa vägarbeten och avstängningar är ingen nyhet.
 FEED_MINOR_MAX_AGE_HOURS = 12

@@ -45,3 +45,8 @@ class Command(BaseCommand):
             f"borttaget: {purged['client_errors']} klientfel, "
             f"{purged['client_activity']} tysta klienter"
         ))
+
+        # AI-anropens kostnadslogg: ett kvartal räcker för budget och uppföljning.
+        from core import ai_client
+
+        self.stdout.write(self.style.SUCCESS(f"borttaget: {ai_client.purge()} AI-anrop"))

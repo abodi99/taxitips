@@ -333,6 +333,10 @@ CELERY_BEAT_SCHEDULE = {
     },
 }
 
+# All AI av utan deploy: TAXITIPS_AI=off i Coolify och en omstart. Reglerna
+# gäller då ensamma, som när modellen inte svarar (core/ai_client.py).
+TAXITIPS_AI = os.environ.get("TAXITIPS_AI", "on").strip().lower()
+
 # Stäng av enskilda beat-poster, t.ex. lokalt:
 #   TAXITIPS_BEAT_DISABLE=push-cycle,review-uncertain
 # så att en lokal worker inte skickar riktiga notiser till testtelefoner

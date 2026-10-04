@@ -855,3 +855,35 @@ class AppVersionPolicy(models.Model):
     def current(cls) -> "AppVersionPolicy":
         obj, _ = cls.objects.get_or_create(id=1)
         return obj
+
+
+class AiCall(models.Model):
+    """
+    Ett anrop till språkmodellen, med vad det kostade.
+
+    core/ai_client.py skriver en rad per anrop, lyckat eller inte. Raderna är
+    budgetens grund (thresholds.AI_DAILY_CALL_CAP, AI_MONTHLY_BUDGET_KR) och
+    det admin visar som månadens AI-kostnad. Kostnaden sparas i miljondels
+    dollar: ett anrop kostar en bråkdel av ett öre, och heltal i öre hade
+    avrundat bort hela räkningen.
+    """
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    purpose = models.CharField(max_length=30, help_text="review, extract, gate, brief, report …")
+    model = models.CharField(max_length=60)
+    ok = models.BooleanField(default=False)
+    tokens_in = models.IntegerField(default=0)
+    tokens_out = models.IntegerField(default=0)
+    cost_micro_usd = models.IntegerField(default=0)
+    latency_ms = models.IntegerField(default=0)
+    error = models.CharField(max_length=200, blank=True, default="")
+    subject = models.CharField(
+        max_length=200, blank=True, default="", help_text="Tipsets external_id när anropet gällde ett tips."
+    )
+
+    class Meta:
+        db_table = "ai_call"
+        ordering = ["-created_at"]
+
+    def __str__(self) -> str:
+        return f"{self.purpose} {self.model} {'ok' if self.ok else 'fel'}"
