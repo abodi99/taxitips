@@ -104,11 +104,18 @@ class DriverAccessTests(FleetTestCase):
         self.assertEqual(body["reason"], "no_active_session")
 
     def test_a_county_the_licence_does_not_pay_for_is_not_visible(self):
-        """Länsrättigheten hör till bilen. Ett filter kan inte vidga den (§5)."""
+        """
+        Länsrättigheten hör till bilen. Ett filter kan inte vidga den (§5).
+
+        Ett län utanför licensen ger bilens eget län i stället för en tom lista
+        (9d58594: en telefon med ett gammalt länsval efter ett länbyte fick
+        annars inga tips alls). Tipset i det obetalda länet syns ändå aldrig.
+        """
         tip(area_codes=["01"], lat=STOCKHOLM["lat"], lon=STOCKHOLM["lon"], region="sl")
+        tip(title="I bilens län")
         body = self.get_alerts(counties="01", **STOCKHOLM)
-        self.assertEqual(body["alerts"], [])
-        self.assertEqual(body.get("reason"), "no_entitled_county")
+        self.assertEqual([a["title"] for a in body["alerts"]], ["I bilens län"])
+        self.assertEqual(body["counties"], ["12"])
 
     def test_gps_position_alone_grants_nothing(self):
         """
