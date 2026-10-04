@@ -52,7 +52,9 @@ class TipFacts(BaseModel):
     to_station: str = ""
     departure_clock: str = Field(default="", description="HH:MM för den drabbade avgången, eller tomt")
     next_departure_clock: str = Field(default="", description="HH:MM för nästa avgång enligt texten, eller tomt")
-    delay_minutes: int | None = None
+    # Heltal, inte nullbart: med `int | None` svarade modellen null i 14 av 14
+    # förseningar i facit (eval_ai 2026-10-04). 0 betyder att texten inte anger längden.
+    delay_minutes: int = Field(default=0, description="förseningens längd i minuter, 0 om den inte anges")
     alternative: str = Field(default="unknown", description=" | ".join(ALTERNATIVES))
     cause: str = ""
     why: str = Field(default="", max_length=300, description="En mening på svenska: vad händer?")
@@ -85,7 +87,7 @@ texten inte något, lämna fältet tomt. Du sätter ingen poäng -- det gör reg
 - from_station, to_station: bara själva namnet ("Lund C"), aldrig ord som "Inställd"
 - departure_clock: den drabbade avgångens klockslag (HH:MM), annars tomt
 - next_departure_clock: nästa avgångs klockslag (HH:MM) om texten anger det, annars tomt
-- delay_minutes: förseningens längd i minuter som heltal om den anges, annars null
+- delay_minutes: förseningens längd i minuter som heltal ("cirka 20 minuter" -> 20), annars 0
 - cause: orsaken, kort
 - why: en mening på svenska om vad som händer
 
@@ -167,7 +169,7 @@ def classify_from_facts(facts: TipFacts | dict, current_mode: str = "", current_
         return verdict(SeverityTier.IGNORE, 0, event)
 
     if event == "delay":
-        minutes = f.delay_minutes
+        minutes = f.delay_minutes or None  # 0 = längden anges inte
         if minutes is not None and minutes >= SERIOUS_DELAY_MIN:
             return verdict(SeverityTier.LINE_DELAYED, SERIOUS_DELAY_SCORE, "serious_delay")
         if minutes is not None and minutes <= SHORT_DELAY_MIN:

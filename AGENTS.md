@@ -535,11 +535,24 @@ Var och en av dem är skriven efter att ha gått sönder på riktigt.
 8. **Migrationer följer expand → migrate → contract.** Aldrig destruktivt i
    samma deploy som koden som slutar använda kolumnen. `pg_dump` före
    migration mot produktion, alltid.
-9. **AI-granskningen (Genkit) på `confidence=low` får omklassa** poäng
-   och `severity_tier` (även höja) -- regelverket har redan sagt att
-   fritexten är osäker. På övriga tips gäller fortfarande bara sänkning
-   (`min(regel, modell)`), klämt i `RailAssessment.save()` när
-   `_allow_reclassify` saknas.
+9. **AI:n läser fakta, reglerna sätter poängen.** All AI går genom
+   `core/ai_client.py`, som har avstängning (`TAXITIPS_AI=off`), låsta modeller,
+   minut-, dygns- och månadstak och kostnadslogg (`ai_call`). Fel eller avstängd
+   AI betyder att regelsvaret gäller.
+   - **Granskningen** (`review_uncertain`, `confidence=low`) ber modellen om
+     fakta (`core/tip_facts.TipFacts`). `classify_from_facts` räknar poängen med
+     fritextreglernas konstanter. En höjning når högst `AI_RAISE_CAP` (under
+     Stark), och en AI-höjning väcker aldrig ensam en telefon (`ai_adjusted_at`).
+     På övriga tips gäller bara sänkning (`min(regel, modell)`, klämt i
+     `RailAssessment.save()`).
+   - **Grinden** (`core/ai_gate.py`) läser `*.ambiguous`-kandidater före notisen.
+     Den får bara stoppa, och släpper igenom om AI:n inte svarar.
+   - **Förarbeskedet** (`core/briefs.py`) kastas om det innehåller en siffra som
+     inte finns i tipset.
+   - **Nattrapporten** (`core/quality_report.py`): koden räknar och AI:n
+     sammanfattar. Förslagen ändrar ingenting.
+   - **Mät före och efter varje prompt- eller modelländring** med
+     `manage.py eval_ai` mot `core/fixtures/golden_tips.jsonl`.
 10. **Ett tips ska alltid gå att förklara**: vilka `source_event_ids`,
     vilken regel, vilken konfidens.
 11. **`notify_worthy` är den riktiga notisgrinden, inte en poänggräns.**
