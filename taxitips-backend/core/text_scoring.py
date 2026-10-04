@@ -123,7 +123,8 @@ FACILITY_NOTICE_RE = re.compile(
     r"(\bhiss|rulltrapp|\btrappa|\btrappan\b|toalett|biljettautomat|väntsal|informationsskärm|"
     r"hållplats\w*[^.]{0,80}(stängd|stängs|indrag|flytta|avstängd|trafikeras inte|tillfällig|inställd)|"
     r"(stannar|trafikerar) inte (vid|hållplats)|"
-    r"(stängd|stängda|indragen|indragna|flyttad|flyttade|tillfällig|avstängd) hållplats|hållplatsläge)",
+    r"(stängd|stängda|indragen|indragna|indraget|flyttad|flyttade|flyttat|flyttas|tillfällig|tillfälligt|"
+    r"avstängd|avstängda|avstängt) hållplats|hållplatsläge)",
     re.IGNORECASE,
 )
 

@@ -227,6 +227,10 @@ class FacilityNotices(TestCase):
             ("Hållplats Elektravägen inställd  pga vägarbete", "Hållplats Västberga gårdsväg flyttad tom februari 2027"),
             ("Tillfälligt indragna hållplatser - Skärpevägen och Långvägen", "På grund av vägarbete."),
             ("Rulltrappan avstängd", "Rulltrappan vid uppgång Nord är avstängd."),
+            # Ägarens egna exempel 2026-10-04, ordagrant.
+            ("Flyttat hållplats", "Linje 4 stannar vid en tillfällig plats."),
+            ("Avstängd hiss", "Hissen vid Centralen är avstängd."),
+            ("Hållplatser tillfälligt stängda", "Linje 1 och 2 stannar inte här."),
         ):
             result = classify_transit_alert({"header": header, "description": description}, _taxi(score=40))
             self.assertEqual(result.tier, SeverityTier.IGNORE, header)
