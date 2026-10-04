@@ -79,6 +79,7 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from core import areas, presence as presence_rules, thresholds
+from core.combine import group_key
 from core.coverage import RAIL_REGION_KEY, notify_region_catalog
 from core.geo import (
     REGION_ANCHOR,
@@ -775,24 +776,6 @@ def snapshot_of(opportunity) -> dict:
         # längs linjen inte väcker samma förare igen. Se group_key.
         "group": group_key(opportunity),
     }
-
-
-def group_key(opportunity) -> str | None:
-    """
-    Händelsen ett tips hör till, när flera tips är samma händelse.
-
-    Ett inställt tåg blir ett tips per station: pollfönstret flyttar sig, och
-    nästa station längs linjen blir tågets "första inställda stopp"
-    (core/sources/trafikverket_rail.py). Mätt 2026-10-04: Västtågen 13311 gav
-    nio notiser på en halvtimme, en per station. Järnvägens id är
-    `tvr:{station}:{tåg}:{avgångstid}`, så tåget och dagen är händelsen och
-    stationen bara var den syns. Övriga källor har ingen gemensam nyckel och
-    notifieras som förut, ett tips i taget.
-    """
-    parts = str(getattr(opportunity, "external_id", "") or "").split(":", 3)
-    if len(parts) == 4 and parts[0] == "tvr" and parts[2] and len(parts[3]) >= 10:
-        return f"train:{parts[2]}:{parts[3][:10]}"
-    return None
 
 
 # --- Cykeln --------------------------------------------------------------

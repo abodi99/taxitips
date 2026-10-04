@@ -14,6 +14,9 @@ att förklara för föraren och att stänga av:
 * `combo.arrival` -- en ankomstvåg (flyg eller färja) medan kollektivtrafiken från
   samma hub är inställd eller stoppad: de som anländer har färre alternativ.
   +ARRIVAL_BOOST.
+* `combo.same_train` -- samma tåg vid flera stationer (group_key). Mätt 2026-10-04:
+  Västtågen 13871 stod som sju rader samtidigt, en per station. Visas som EN rad,
+  stationen där tåget skulle gått härnäst; de andra står i skälet med klockslag.
 
 Ett tips med utskrivet alternativ (ersättningstrafik) förstärks aldrig.
 
@@ -30,9 +33,11 @@ from __future__ import annotations
 import datetime as dt
 from collections import Counter
 from dataclasses import dataclass
+from zoneinfo import ZoneInfo
 
 from core.geo import haversine_km
 
+LOCAL_TZ = ZoneInfo("Europe/Stockholm")
 DUPLICATE_KM = 0.4
 HUB_KM = 0.4
 ARRIVAL_HUB_KM = 2.0
@@ -42,6 +47,30 @@ DISRUPTION_TIERS = frozenset({"line_paused", "vehicle_cancelled"})
 ARRIVAL_KINDS = frozenset({"flight", "ferry"})
 CONFIDENCE_RANK = {"high": 3, "medium": 2, "low": 1}
 DEFAULT_LIFETIME = dt.timedelta(hours=1)
+# En station vars avgång var för en stund sedan räknas fortfarande som "nu": de
+# som stod där har just upptäckt att tåget inte kommer.
+SAME_TRAIN_GRACE = dt.timedelta(minutes=5)
+# Så många andra stationer skälraden räknar upp innan resten blir ett antal.
+SAME_TRAIN_NAMES = 4
+
+
+def group_key(tip) -> str | None:
+    """
+    Händelsen ett tips hör till, när flera tips är samma händelse.
+
+    Ett inställt tåg blir ett tips per station: pollfönstret flyttar sig, och
+    nästa station längs linjen blir tågets "första inställda stopp"
+    (core/sources/trafikverket_rail.py). Mätt 2026-10-04: Västtågen 13311 gav
+    nio notiser på en halvtimme, en per station. Järnvägens id är
+    `tvr:{station}:{tåg}:{avgångstid}`, så tåget och dagen är händelsen och
+    stationen bara var den syns. Övriga källor har ingen gemensam nyckel och
+    behandlas som förut, ett tips i taget. Används av både listan (här) och
+    notiserna (core/notify.py).
+    """
+    parts = str(getattr(tip, "external_id", "") or "").split(":", 3)
+    if len(parts) == 4 and parts[0] == "tvr" and parts[2] and len(parts[3]) >= 10:
+        return f"train:{parts[2]}:{parts[3][:10]}"
+    return None
 
 
 @dataclass(frozen=True)
@@ -81,10 +110,51 @@ def _expires(tips, now: dt.datetime) -> dt.datetime:
     return min(ends) if ends else now + DEFAULT_LIFETIME
 
 
+def _departure(tip, now: dt.datetime) -> dt.datetime:
+    return getattr(tip, "departure_at", None) or tip.start_time or now
+
+
+def _stop_label(tip, now: dt.datetime) -> str:
+    places = getattr(tip, "places", None) or []
+    name = str(places[0]) if places else str(tip.external_id).split(":")[1]
+    return f"{name} {_departure(tip, now).astimezone(LOCAL_TZ):%H:%M}"
+
+
+def _same_train(tips: list, now: dt.datetime) -> list[Found]:
+    """Ett tåg som står som ett tips per station blir en rad (combo.same_train)."""
+    by_group: dict[str, list] = {}
+    for tip in tips:
+        key = group_key(tip)
+        if key:
+            by_group.setdefault(key, []).append(tip)
+    found = []
+    for stops in by_group.values():
+        if len(stops) < 2:
+            continue
+        stops.sort(key=lambda t: (_departure(t, now), str(t.external_id)))
+        upcoming = [t for t in stops if _departure(t, now) >= now - SAME_TRAIN_GRACE]
+        primary = upcoming[0] if upcoming else stops[-1]
+        others = [t for t in stops if t is not primary]
+        labels = [_stop_label(t, now) for t in others[:SAME_TRAIN_NAMES]]
+        rest = len(others) - len(labels)
+        listed = ", ".join(labels) + (f" och {rest} stationer till" if rest else "")
+        found.append(Found(
+            "combo.same_train", "merge", primary.external_id, tuple(t.external_id for t in others), 0,
+            f"Samma tåg gäller även {listed}.", _expires(stops, now),
+        ))
+    return found
+
+
 def find(tips: list, now: dt.datetime) -> list[Found]:
     """Kombinationerna bland aktiva tips. Rent: inga databasanrop."""
-    placed = [t for t in tips if t.lat is not None and t.lon is not None and t.kind != "road"]
-    found: list[Found] = []
+    # 0. Samma tåg vid flera stationer först: de andra stationerna är samma
+    # händelse och ska varken räknas som dubbletter eller förstärka något.
+    found: list[Found] = _same_train([t for t in tips if t.kind != "road"], now)
+    hidden = {member for f in found for member in f.members}
+    placed = [
+        t for t in tips
+        if t.lat is not None and t.lon is not None and t.kind != "road" and t.external_id not in hidden
+    ]
 
     # 1. Dubbletter: samma färdsätt, olika källor, samma plats och tid.
     merged: set[str] = set()
@@ -170,6 +240,7 @@ def run(now: dt.datetime | None = None) -> Counter:
         .only(
             "external_id", "kind", "mode", "severity_tier", "demand_score", "confidence",
             "has_alternative", "lat", "lon", "start_time", "end_time", "title",
+            "departure_at", "places",
         )
     )
     combinations = find(tips, now)
