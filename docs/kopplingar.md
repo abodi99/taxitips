@@ -53,8 +53,13 @@ releasebygge har annan signatur och gör det inte.
 | Push | Firebase-projektet `taxitips-se` (FCM). iOS behöver en APNs-nyckel i Firebase. |
 | Betalning | Stripe live, webhook till backend.taxitips.se/billing/stripe/webhook |
 
-Coolify-apparnas uuid:er och hur man driftsätter står i agentens minne
-(`prod-rollout-path`). Kortversionen:
+**Produktionens detaljer** finns i en privat fil på ägarens Mac, **utanför repot**:
+`~/.taxitips/prod.md` (chmod 600). Den innehåller Coolify-apparnas uuid:er, containrarna,
+alla variabelnamn per app och var varje hemlighet ligger, plus ägarens egna anteckningar.
+Läs den när du behöver den. Kopiera aldrig innehållet in i repot, en chatt eller ett ärende.
+Hemligheternas källa är Coolify, och värden ändras av ägaren i gränssnittet.
+
+Kortversionen av driften:
 
 - **SSH**: `ssh -i ~/.ssh/taxitips_deploy -o IdentitiesOnly=yes root@179.198.213.14`.
   Nyckeln är kopplad till VPS:en i hPanel.
