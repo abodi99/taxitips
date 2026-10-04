@@ -18,9 +18,9 @@ varför tror ni det, och är det värt att köra dit?"*
 
 Affärsmodellen är B2B: taxibolag betalar en Stripe-prenumeration per
 **billicens** (en registrerad bil med ett baslän). Förare bjuds in med e-post
-av företagets administratör och loggar in i appen under "Jag är förare"; en
-engångskod finns kvar som reserv -- bolagskoden ger inte längre åtkomst, den
-skickar en ansökan. Ingen App Store-prenumeration, ingen IAP.
+av företagets administratör, väljer lösenord via länken i mejlet och loggar in i
+appen med e-post och lösenord -- samma inloggning som ägare och kontor
+(2026-10-04). Bolagskoden ger inte längre åtkomst, den skickar en ansökan. Ingen App Store-prenumeration, ingen IAP.
 **Appen säljer ingenting**: inga priser, köpknappar eller betallänkar. Nya
 kunder registrerar sig i appen och får ett kortfritt prov; betalning sker
 utanför appen (säljare, faktura, kundportalen på webben). Skälet och reglerna:
@@ -354,10 +354,12 @@ kollegor (`/api/fleet/members`, rollerna `fleet_admin`/`finance`).
 
 **Förarinbjudan med e-post** (2026-10-01, `fleet/driver_invites.py`): ägaren
 bjuder in förarens e-post per bil (portalen "Bilar och telefoner", appens bilblad),
-föraren väljer lösenord på `taxitips.se/forare` och loggar in i appen under
-**Jag är förare** -- då kopplas telefonen. Kräver `SUPABASE_SERVICE_ROLE_KEY` på
-backenden (bara för `generate_link`) och att `taxitips.se/forare` godtas som
-redirect av Supabase Auth; utan nyckeln visas bara koden. Detaljer:
+föraren väljer lösenord på `taxitips.se/forare` och loggar in i appen med
+**Logga in** (e-post och lösenord) -- då kopplas telefonen. Kräver
+`SUPABASE_SERVICE_ROLE_KEY` på backenden (för `generate_link`) och att
+`taxitips.se/forare` godtas som redirect av Supabase Auth; utan nyckeln hänvisar
+mejlet till "Glömt lösenord?". Inloggning med kod i mejlet (`fleet/driver_login.py`)
+finns bara kvar för äldre appar. Detaljer:
 `docs/fleet-abonnemang.md` §3.
 
 **Länbyten och massinbjudan** (2026-10-03): en bil får byta län högst två

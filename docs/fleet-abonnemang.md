@@ -86,7 +86,7 @@ läses upp (`fleet/driver_invites.py`, tabellen `fleet_driver_invite`).
    appen visar bara koden.
 2. Länken landar på `taxitips.se/forare` (`FLEET_DRIVER_INVITE_REDIRECT`), där
    föraren väljer lösenord. "Glömt lösenord?" i appen leder till samma sida.
-3. Föraren loggar in i appen under **Jag är förare** → appen anropar
+3. Föraren loggar in i appen med **Logga in** (e-post och lösenord) → appen anropar
    `POST /api/fleet/driver-invites/claim` med inloggningen och
    installations-id:t. E-post och konto läses ur den verifierade JWT:n; kontot
    måste vara det som länken skapades för. Förbrukningen är ett villkorat
