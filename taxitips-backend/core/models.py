@@ -485,6 +485,10 @@ class RailAssessment(models.Model):
     )
     verdict = models.TextField(blank=True, help_text="Modellens motivering.")
     model_name = models.CharField(max_length=60, blank=True)
+    facts = models.JSONField(
+        null=True, blank=True,
+        help_text="Det modellen läste ut (core/tip_facts.TipFacts). Poängen räknas från den av reglerna.",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:

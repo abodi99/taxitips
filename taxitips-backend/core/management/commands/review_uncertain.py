@@ -26,9 +26,13 @@ from pydantic import BaseModel, Field
 from core import ai_client, thresholds
 from core.genkit import review
 from core.models import Opportunity
+from core.tip_facts import TipFacts
 
 
 class ReviewVerdict(BaseModel):
+    """Den äldre vägen, där modellen föreslog poängen själv. Granskningen läser
+    numera fakta (core/tip_facts.TipFacts); schemat finns kvar för den äldre vägen."""
+
     score: int = Field(ge=0, le=100)
     severity_tier: str = ""
     stranded: bool = False
@@ -103,8 +107,9 @@ class Command(BaseCommand):
             result = review(
                 o,
                 ai_client.json_caller(
-                    "review", ReviewVerdict, model=thresholds.AI_MODEL_EXTRACT, subject=o.external_id,
+                    "extract", TipFacts, model=thresholds.AI_MODEL_EXTRACT, subject=o.external_id,
                 ),
+                facts=True,
                 reclassify=reclassify,
                 bypass_cache=options["force"],
             )

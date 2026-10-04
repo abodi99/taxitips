@@ -181,7 +181,7 @@ def normalize_key(opportunity: Opportunity) -> str:
     hour = opportunity.start_time.hour if opportunity.start_time else 0
     bucket = "natt" if hour >= 22 or hour <= 5 else "dag"
     alt = "alt" if opportunity.has_alternative else "noalt"
-    return f"v3|{opportunity.severity_tier}|{opportunity.mode}|{title}|{summary}|{bucket}|{alt}"
+    return f"v4|{opportunity.severity_tier}|{opportunity.mode}|{title}|{summary}|{bucket}|{alt}"
 
 
 def _structural_context(opportunity: Opportunity) -> str:
@@ -264,6 +264,48 @@ def _prompt_for(opportunity: Opportunity) -> str:
     )
 
 
+def _facts_prompt_for(opportunity: Opportunity) -> str:
+    from core.tip_facts import FACTS_PROMPT
+
+    return FACTS_PROMPT.format(
+        title=opportunity.title or "",
+        summary=(opportunity.summary or "")[:1200],
+        mode=opportunity.mode or "",
+        region=opportunity.region or "(okänd)",
+        places=", ".join(opportunity.places or []) or "(inga)",
+        alternative_note=(opportunity.alternative_note or "")[:300] or "(ingen)",
+        context_block=_structural_context(opportunity),
+    )
+
+
+def _apply_facts(
+    opportunity: Opportunity,
+    facts: dict,
+    *,
+    reclassify: bool,
+    reuse_assessment: RailAssessment | None = None,
+) -> RailAssessment:
+    """Fakta -> reglernas poäng (core/tip_facts.py) -> tipset."""
+    from core.tip_facts import classify_from_facts
+
+    verdict = classify_from_facts(facts, opportunity.mode or "", opportunity.demand_score)
+    return _apply(
+        opportunity,
+        verdict.score,
+        verdict.why,
+        thresholds.AI_MODEL_EXTRACT,
+        reclassify=reclassify,
+        severity_tier=verdict.tier,
+        has_alternative=verdict.has_alternative,
+        mode=verdict.mode,
+        from_station=_clean_station(verdict.from_station),
+        to_station=_clean_station(verdict.to_station),
+        reuse_assessment=reuse_assessment,
+        facts=facts,
+        condition=verdict.condition,
+    )
+
+
 def apply_cached(opportunity: Opportunity, *, reclassify: bool = True) -> RailAssessment | None:
     """
     Applicerar en redan cachad bedömning om den finns (utan modellanrop).
@@ -277,6 +319,10 @@ def apply_cached(opportunity: Opportunity, *, reclassify: bool = True) -> RailAs
     )
     if not cached:
         return None
+    reuse = cached if cached.opportunity_id == opportunity.id else None
+    if cached.facts:
+        # Räknas om från faktan: en ändrad regel slår igenom utan nytt anrop.
+        return _apply_facts(opportunity, cached.facts, reclassify=reclassify, reuse_assessment=reuse)
     base_model, cached_tier, cached_alt, cached_mode = _decode_model_meta(cached.model_name)
     return _apply(
         opportunity,
@@ -297,9 +343,13 @@ def review(
     *,
     reclassify: bool = True,
     bypass_cache: bool = False,
+    facts: bool = False,
 ) -> RailAssessment | None:
     """
     Granskar ett tips. `call_model` tar en prompt och returnerar text.
+
+    `facts=True`: modellen läser ut fakta (core/tip_facts.TipFacts) och reglerna
+    sätter poängen. Annars den äldre vägen där modellen föreslår poängen själv.
 
     `reclassify=True` (default för confidence=low): modellens score och
     severity_tier får ersätta regelverkets. `reclassify=False`: bara sänka.
@@ -309,6 +359,9 @@ def review(
         if hit is not None:
             log.info("genkit: cacheträff för %s", opportunity.external_id)
             return hit
+
+    if facts:
+        return _review_facts(opportunity, call_model, reclassify=reclassify)
 
     prompt = _prompt_for(opportunity)
     try:
@@ -335,6 +388,22 @@ def review(
         from_station=from_station,
         to_station=to_station,
     )
+
+
+def _review_facts(opportunity: Opportunity, call_model, *, reclassify: bool) -> RailAssessment | None:
+    from core.tip_facts import TipFacts
+
+    try:
+        raw = call_model(_facts_prompt_for(opportunity))
+        match = re.search(r"\{.*\}", raw or "", re.S)
+        if not match:
+            log.warning("genkit: inget JSON i faktasvaret, behåller regelpoäng")
+            return None
+        parsed = TipFacts.model_validate_json(match.group(0))
+    except Exception as exc:
+        log.warning("genkit: faktaanrop misslyckades, behåller regelpoäng: %s", exc)
+        return None
+    return _apply_facts(opportunity, parsed.model_dump(), reclassify=reclassify)
 
 
 def _parse(
@@ -381,6 +450,8 @@ def _apply(
     from_station: str = "",
     to_station: str = "",
     reuse_assessment: RailAssessment | None = None,
+    facts: dict | None = None,
+    condition: str | None = None,
 ) -> RailAssessment:
     """
     Sparar bedömningen och uppdaterar tipset.
@@ -412,6 +483,7 @@ def _apply(
             final_score=final,
             verdict=why,
             model_name=encoded_model,
+            facts=facts,
         )
         assessment._allow_reclassify = reclassify  # type: ignore[attr-defined]
         assessment.save()
@@ -427,6 +499,13 @@ def _apply(
             updates["has_alternative"] = has_alternative
     if mode and opportunity.mode in ("", TransportMode.UNKNOWN) and mode != opportunity.mode:
         updates["mode"] = mode
+    if facts is not None and condition and reclassify:
+        # Spårbarhet: vilken regel som satte poängen ur modellens fakta.
+        eff_mode = updates.get("mode", opportunity.mode) or "unknown"
+        eff_tier_for_rule = updates.get("severity_tier", opportunity.severity_tier)
+        rule_id = f"{eff_mode}.{eff_tier_for_rule}.ai_facts.{condition}"[:80]
+        if rule_id != opportunity.rule_id:
+            updates["rule_id"] = rule_id
 
     # Uppdatera stationer/destination när modellen extraherat rena stationsnamn
     if from_station or to_station:
@@ -461,7 +540,11 @@ def _apply(
 
     if updates or (reclassify and opportunity.confidence == Confidence.LOW):
         reasons = list(opportunity.reasons or [])
-        if final < rule:
+        if facts is not None:
+            tag = f"AI läste: {why[:100]}" if why else "AI läste texten"
+            if tag not in reasons:
+                reasons.append(tag)
+        elif final < rule:
             tag = f"AI sänkte: {why[:80]}" if why else "AI sänkte poängen"
             if tag not in reasons:
                 reasons.append(tag)
