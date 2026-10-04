@@ -114,6 +114,25 @@ _SINGLE_DEPARTURE_RE = re.compile(
     r"delsträcka|del av avgång|enstaka avgång|hänvisas till nästa avgång|nästa ordinarie avgång)",
     re.IGNORECASE,
 )
+# Hållplatser och anläggningar, inte trafik: "Stängd hållplats", "Hiss ur
+# funktion", "hållplatsen flyttas 100 meter". Ingen står strandsatt av en
+# stängd hiss eller en hållplats som flyttats för ett vägarbete -- bussen går.
+# Mätt 2026-10-04: dussintals sådana, flera pågående i månader, låg i
+# förarnas lista som "Övrigt" eller till och med som svaga tips.
+FACILITY_NOTICE_RE = re.compile(
+    r"(\bhiss|rulltrapp|\btrappa|\btrappan\b|toalett|biljettautomat|väntsal|informationsskärm|"
+    r"hållplats\w*[^.]{0,80}(stängd|stängs|indrag|flytta|avstängd|trafikeras inte|tillfällig|inställd)|"
+    r"(stannar|trafikerar) inte (vid|hållplats)|"
+    r"(stängd|stängda|indragen|indragna|flyttad|flyttade|tillfällig|avstängd) hållplats|hållplatsläge)",
+    re.IGNORECASE,
+)
+
+
+def is_facility_notice(text: str) -> bool:
+    """Ett meddelande om en hållplats eller anläggning, inte om trafiken."""
+    return bool(FACILITY_NOTICE_RE.search(text or ""))
+
+
 # "7 oktober klockan 06:14": avgångens datum när det inte är i dag.
 _MONTHS = (
     "januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti",
@@ -273,6 +292,16 @@ def classify_transit_alert(alert: dict, taxi: dict | None) -> Assessment:
     if not taxi or taxi.get("level") == "ignore":
         reasons = _reasons_from(taxi) if taxi else []
         return Assessment(SeverityTier.IGNORE, 0, Confidence.MEDIUM, reasons, f"{mode}.ignore", mode)
+
+    if mode != "road":
+        notice_text = f"{alert.get('header') or ''} {alert.get('description') or ''}"
+        if is_facility_notice(notice_text) and not (
+            _is_whole_line_stop(notice_text) or is_single_departure(notice_text)
+        ):
+            return Assessment(
+                SeverityTier.IGNORE, 0, Confidence.MEDIUM,
+                ["hållplats eller anläggning – inte en körning"], f"{mode}.ignore.facility", mode,
+            )
 
     if mode == "road":
         # Bara etikett, ingen ompoängsättning: score_road_alert har redan

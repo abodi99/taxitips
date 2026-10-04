@@ -152,6 +152,13 @@ _RESOLVED_RE = (
     r"(kör åter|går åter|åter i trafik|uppklarat|är åtgärdat|har upphört|"
     r"trafiken går som vanligt|normal trafik|enligt tidtabell igen|är öppen igen|återupptag)"
 )
+# Hållplatser och anläggningar (hiss, stängd/flyttad hållplats): aldrig i
+# förarens lista, inte ens som "Övrigt". Samma ord som text_scoring.FACILITY_NOTICE_RE,
+# för rader som skrevs innan den regeln fanns.
+_FACILITY_RE = (
+    r"(hiss|rulltrapp|trappa|toalett|biljettautomat|väntsal|informationsskärm|"
+    r"hållplats|hållplatser|hållplatsen|stannar inte vid|trafikerar inte)"
+)
 
 
 def _one_per_road_situation(rows: list[dict]) -> list[dict]:
@@ -466,6 +473,16 @@ def feed_for(
         .exclude(
             Q(severity_tier="ignore")
             & (Q(title__iregex=_RESOLVED_RE) | Q(summary__iregex=_RESOLVED_RE))
+        )
+        .exclude(
+            Q(severity_tier="ignore")
+            & (Q(title__iregex=_FACILITY_RE) | Q(summary__iregex=_FACILITY_RE))
+        )
+        # "Övrigt" är det som hänt nyss, inte ett vägarbete som pågått sedan
+        # augusti: bara meddelanden som började de senaste 12 timmarna.
+        .exclude(
+            Q(severity_tier="ignore")
+            & Q(start_time__lt=now - timedelta(hours=thresholds.FEED_MINOR_MAX_AGE_HOURS))
         )
         .filter(
             Q(start_time__isnull=True)

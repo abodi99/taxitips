@@ -215,3 +215,25 @@ class NamedTrainCancelled(TestCase):
         self.assertEqual(departure_date("7 oktober klockan 06:14", dt.date(2026, 10, 2)), dt.date(2026, 10, 7))
         self.assertEqual(departure_date("tåget 3 januari", dt.date(2026, 12, 20)), dt.date(2027, 1, 3))
         self.assertIsNone(departure_date("klockan 06:14", dt.date(2026, 10, 2)))
+
+
+class FacilityNotices(TestCase):
+    """Hiss, trappa och stängda/flyttade hållplatser låg i förarnas lista (2026-10-04)."""
+
+    def test_stop_and_facility_notices_are_noise(self):
+        for header, description in (
+            ("Stängd hållplats", "Regionbuss linje 150 mot Klågerup stannar inte vid Malmö Styrmansbron (läge B)."),
+            ("Hiss ur funktion", "Hissen från norra änden av perrongen på spår 4 på Laholm station är ur funktion."),
+            ("Hållplats Elektravägen inställd  pga vägarbete", "Hållplats Västberga gårdsväg flyttad tom februari 2027"),
+            ("Tillfälligt indragna hållplatser - Skärpevägen och Långvägen", "På grund av vägarbete."),
+            ("Rulltrappan avstängd", "Rulltrappan vid uppgång Nord är avstängd."),
+        ):
+            result = classify_transit_alert({"header": header, "description": description}, _taxi(score=40))
+            self.assertEqual(result.tier, SeverityTier.IGNORE, header)
+            self.assertEqual(result.score, 0, header)
+
+    def test_a_cancelled_departure_that_names_a_stop_is_still_a_tip(self):
+        alert = {"header": "Inställd avgång",
+                 "description": "Inställd avgång kl 20:40 på linje 5 från hållplats Hälla."}
+        result = classify_transit_alert(alert, _taxi(score=85))
+        self.assertEqual(result.tier, SeverityTier.VEHICLE_CANCELLED)

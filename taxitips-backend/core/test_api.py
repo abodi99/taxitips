@@ -329,6 +329,18 @@ class MarketHorizonTests(ApiTestCase):
         self.assertEqual(body["homeRegion"], "dt")
         self.assertEqual([a["title"] for a in body["alerts"]], ["Dalatips"])
 
+    def test_stop_notices_and_old_other_rows_are_not_shown(self):
+        """Stängda hållplatser, hissar och månadslånga avstängningar är inte "Övrigt"."""
+        now = timezone.now()
+        opportunity(severity_tier=SeverityTier.IGNORE, demand_score=0, title="Stängd hållplats",
+                    summary="Linje 150 stannar inte vid Malmö Dockan.")
+        opportunity(severity_tier=SeverityTier.IGNORE, demand_score=0, title="Hiss ur funktion",
+                    summary="Hissen vid spår 4 är ur funktion.")
+        opportunity(severity_tier=SeverityTier.IGNORE, demand_score=0, title="Vägarbete på Storgatan",
+                    start_time=now - timedelta(days=30))
+        opportunity(severity_tier=SeverityTier.IGNORE, demand_score=0, title="Linje 2 är indragen vid Vasaplatsen")
+        self.assertEqual([a["title"] for a in self.get_alerts()["alerts"]], ["Linje 2 är indragen vid Vasaplatsen"])
+
     def test_other_rows_are_shown_last_and_marked_minor(self):
         """
         "Övrigt" (ignore) döljs inte längre: en indragen spårvagnslinje eller

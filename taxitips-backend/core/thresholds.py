@@ -24,6 +24,10 @@ from core.taxi_context import final_level
 # började räkna läge + omständigheter (core/taxi_context.py).
 NOTIFY_SCORE_FLOOR = 60
 
+# "Övrigt" (severity_tier ignore) i listan: bara meddelanden som började inom
+# så här många timmar. Långa vägarbeten och avstängningar är ingen nyhet.
+FEED_MINOR_MAX_AGE_HOURS = 12
+
 # Marknadshorisont, inte en poängjustering. Avståndet påverkar aldrig
 # poängen (se 20260905000006_drop_reachability_from_score.sql) -- men ett
 # Göteborgståg 400 km bort är inte en Stockholmsförares affär över huvud
