@@ -496,9 +496,11 @@ class RailAssessment(models.Model):
 
     def save(self, *args, **kwargs):
         # Omklassning (confidence=low) sätter _allow_reclassify och får
-        # använda modellens poäng rakt av. Övriga anrop får bara sänka.
+        # använda högst modellens poäng -- genkit._apply kan ha kapat en
+        # höjning (thresholds.AI_RAISE_CAP). Övriga anrop får bara sänka.
         if getattr(self, "_allow_reclassify", False):
-            self.final_score = max(0, min(100, int(self.model_score)))
+            final = self.model_score if self.final_score is None else min(self.final_score, self.model_score)
+            self.final_score = max(0, min(100, int(final)))
         else:
             self.final_score = min(self.rule_score, self.model_score)
         super().save(*args, **kwargs)

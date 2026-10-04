@@ -38,6 +38,7 @@ import json
 import logging
 import re
 
+from core import thresholds
 from core.models import (
     Confidence,
     Opportunity,
@@ -388,6 +389,10 @@ def _apply(
     rule = opportunity.demand_score
     if reclassify:
         final = int(max(0, min(100, model_score)))
+        if final > rule:
+            # En höjning når aldrig Stark på modellens ord (AI_RAISE_CAP); ett
+            # tips som redan låg över taket behåller regelns poäng.
+            final = max(rule, min(final, thresholds.AI_RAISE_CAP))
     else:
         final = min(rule, model_score)
 

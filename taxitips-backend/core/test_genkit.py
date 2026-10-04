@@ -7,6 +7,7 @@ confidence≠low / reclassify=False → bara sänka.
 
 from django.test import TestCase
 
+from core import thresholds
 from core.genkit import normalize_key, review
 from core.models import Opportunity, RailAssessment
 from core.repository import upsert_opportunities
@@ -46,9 +47,24 @@ class ReclassifyTests(TestCase):
             ),
         )
         o.refresh_from_db()
-        self.assertEqual(o.demand_score, 80)
+        # Höjningen kapas under Stark (thresholds.AI_RAISE_CAP); tier och säkerhet följer modellen.
+        self.assertEqual(o.demand_score, thresholds.AI_RAISE_CAP)
         self.assertEqual(o.severity_tier, "line_paused")
         self.assertEqual(o.confidence, "medium")
+        self.assertNotEqual(o.level, "high")
+        self.assertEqual(RailAssessment.objects.get(opportunity=o).final_score, thresholds.AI_RAISE_CAP)
+
+    def test_a_raise_never_lowers_a_tip_already_above_the_cap(self):
+        o = make(score=70, severity_tier="disruption_unclassified")
+        review(o, lambda p: '{"score": 90, "severity_tier": "line_paused", "stranded": true, "why": "stopp"}')
+        o.refresh_from_db()
+        self.assertEqual(o.demand_score, 70)
+
+    def test_a_lowering_is_never_capped(self):
+        o = make(score=85)
+        review(o, lambda p: '{"score": 5, "severity_tier": "disruption_unclassified", "stranded": false, "why": "brus"}')
+        o.refresh_from_db()
+        self.assertEqual(o.demand_score, 5)
 
     def test_dampen_mode_cannot_raise(self):
         o = make(score=40)
@@ -155,12 +171,23 @@ class AiNeverSolePushTests(TestCase):
     def test_a_raise_is_marked_and_never_pushed(self):
         from core import notify
 
-        o = make(score=30, severity_tier="disruption_unclassified")
+        # Poängen ligger redan över taket; modellen höjer TYPEN till notisvärd.
+        # Då är det spärren (ai_only), inte taket, som håller telefonen tyst.
+        o = make(score=70, severity_tier="disruption_unclassified")
         review(o, lambda prompt: self.RAISE)
         o.refresh_from_db()
         self.assertIsNotNone(o.ai_adjusted_at)
         self.assertEqual(o.severity_tier, "line_paused")
         self.assertEqual(notify.decide({"counties": ["05"]}, o).reason, "ai_only")
+        self.assertNotIn(o, notify.candidates())
+
+    def test_a_raised_score_stays_below_the_notification_floor(self):
+        from core import notify
+
+        o = make(score=30, severity_tier="disruption_unclassified")
+        review(o, lambda prompt: self.RAISE)
+        o.refresh_from_db()
+        self.assertLess(o.demand_score, thresholds.NOTIFY_SCORE_FLOOR)
         self.assertNotIn(o, notify.candidates())
 
     def test_lowering_is_not_marked(self):

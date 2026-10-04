@@ -24,6 +24,13 @@ from core.taxi_context import final_level
 # började räkna läge + omständigheter (core/taxi_context.py).
 NOTIFY_SCORE_FLOOR = 60
 
+# Hur högt språkmodellen får HÖJA ett osäkert tips (core/genkit.py, omklassning).
+# Mätt 2026-10-04: "Inställd p.g.a. fordonsfel" (SL) höjdes från 38 till 85 --
+# modellen läser in mer än texten säger. 55 är under Stark (60): en AI-höjning
+# syns högre upp i listan men blir aldrig ensam stark. Sänkningar kapas inte.
+# Tillfälligt: ersätts när modellen läser fakta och reglerna sätter poängen.
+AI_RAISE_CAP = 55
+
 # "Övrigt" (severity_tier ignore) i listan: bara meddelanden som började inom
 # så här många timmar. Långa vägarbeten och avstängningar är ingen nyhet.
 FEED_MINOR_MAX_AGE_HOURS = 12
