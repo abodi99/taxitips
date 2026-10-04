@@ -39,7 +39,7 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from django.db import transaction
-from django.db.models import Count, Min, Q
+from django.db.models import Count, Min, Q, Sum
 from django.db.models.functions import TruncDate
 from django.utils import timezone
 from django.views.decorators.http import require_GET
@@ -595,6 +595,49 @@ def _anvandning(now) -> dict:
 # ---------------------------------------------------------------------------
 
 
+def _kvalitet(now) -> dict:
+    """
+    Tipskvalitet och AI: månadens kostnad mot budgeten, dagens anrop per syfte,
+    notiser som AI-grinden stoppade och den senaste nattrapporten
+    (core/quality_report.py). Siffrorna räknas av koden, sammanfattningen av AI:n.
+    """
+    from core import ai_client
+    from core.models import AiCall, QualityReport
+
+    day_ago = now - timedelta(hours=24)
+    calls = (
+        AiCall.objects.filter(created_at__gte=day_ago)
+        .values("purpose")
+        .annotate(n=Count("id"), failed=Count("id", filter=Q(ok=False)), cost=Sum("cost_micro_usd"))
+        .order_by("-n")
+    )
+    blocked = (
+        Opportunity.objects.filter(notified_at__gte=day_ago)
+        .extra(where=["reasons::text ilike %s"], params=["%AI stoppade notisen%"])
+        .count()
+    )
+    latest = QualityReport.objects.order_by("-day").first()
+    return {
+        "aiEnabled": ai_client.unavailable_reason(now) is None,
+        "aiBlockedReason": ai_client.unavailable_reason(now),
+        "spend": ai_client.spend(now),
+        "calls24h": [
+            {"purpose": c["purpose"], "calls": c["n"], "failed": c["failed"],
+             "costKr": round(ai_client.kronor(c["cost"] or 0), 2)}
+            for c in calls
+        ],
+        "gateBlocked24h": blocked,
+        "report": None if latest is None else {
+            "day": latest.day.isoformat(),
+            "summary": latest.summary,
+            "suggestions": latest.suggestions,
+            "notified": (latest.stats.get("notiser") or {}).get("tips"),
+            "disagreements": (latest.stats.get("granskning") or {}).get("oeniga"),
+            "examples": (latest.stats.get("granskning") or {}).get("exempel") or [],
+        },
+    }
+
+
 def _section(name: str, fn, *args) -> dict:
     """
     Ett avsnitt i en egen savepoint. En tabell som saknas (migrationerna körs
@@ -635,6 +678,7 @@ def build(now=None) -> dict:
         "uppfoljning": _section("uppfoljning", _uppfoljning, now, hidden, risk, open_trials, names),
         "drift": _section("drift", _drift, now),
         "anvandning": _section("anvandning", _anvandning, now),
+        "kvalitet": _section("kvalitet", _kvalitet, now),
     }
 
 

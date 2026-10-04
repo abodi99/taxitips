@@ -306,6 +306,8 @@ CELERY_BEAT_SCHEDULE = {
     "review-uncertain": {"task": "core.tasks.review_uncertain_task", "schedule": 5 * 60},
     # Förarbesked: en rad per tips på medel- eller stark nivå (core/briefs.py).
     "write-briefs": {"task": "core.tasks.write_briefs_task", "schedule": 2 * 60},
+    # Nattrapporten: varje timme, men byggs bara en gång per dygn efter klockan fem.
+    "quality-report": {"task": "core.tasks.quality_report_task", "schedule": 60 * 60},
     # Tätare än pollningen med avsikt: en notis som väntar in nästa pollvarv
     # lägger upp till 90 sekunder till den fördröjning källan redan har, och
     # en störning är som mest värd att köra till i sin första kvart.

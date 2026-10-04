@@ -902,3 +902,27 @@ class AiCall(models.Model):
 
     def __str__(self) -> str:
         return f"{self.purpose} {self.model} {'ok' if self.ok else 'fel'}"
+
+
+class QualityReport(models.Model):
+    """
+    Nattrapporten om tipsens kvalitet (core/quality_report.py), en per dygn.
+
+    Siffrorna räknas av koden; språkmodellen skriver bara sammanfattningen och
+    högst fem förslag ur dem. Förslagen ändrar ingenting -- ägaren eller en
+    kodagent beslutar. Visas under Kvalitet i admins dashboard.
+    """
+
+    day = models.DateField(unique=True)
+    stats = models.JSONField(default=dict)
+    summary = models.TextField(blank=True, default="")
+    suggestions = models.JSONField(default=list, blank=True)
+    model = models.CharField(max_length=60, blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "quality_report"
+        ordering = ["-day"]
+
+    def __str__(self) -> str:
+        return f"Kvalitet {self.day}"

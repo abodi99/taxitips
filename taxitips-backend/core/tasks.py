@@ -114,6 +114,12 @@ def write_briefs_task() -> None:
     _run("write_briefs")
 
 
+@shared_task(name="core.tasks.quality_report_task")
+def quality_report_task() -> None:
+    """Nattrapporten -- se core/quality_report.py. Gör inget när dagens redan finns."""
+    _run("quality_report")
+
+
 @shared_task(name="core.tasks.combine_signals_task")
 def combine_signals_task() -> None:
     """Kombinationslagret -- se core/combine.py."""

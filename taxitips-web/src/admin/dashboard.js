@@ -518,11 +518,72 @@ function anvandning(d) {
   </div>`;
 }
 
+const PURPOSE_LABEL = {
+  extract: "Läsa fritext",
+  review: "Granskning (äldre väg)",
+  gate: "Före notis",
+  brief: "Förarbesked",
+  report: "Nattrapport",
+};
+
+/** Kronor med ören: AI-anrop kostar bråkdelar av en krona. */
+function krDec(value) {
+  return new Intl.NumberFormat("sv-SE", {
+    style: "currency", currency: "SEK", minimumFractionDigits: 2, maximumFractionDigits: 2,
+  }).format(value ?? 0);
+}
+
+function kvalitet(d) {
+  const sp = d.spend ?? {};
+  const r = d.report;
+  const share = sp.budgetKr ? Math.round(((sp.costMonthKr ?? 0) / sp.budgetKr) * 100) : null;
+  const calls = d.calls24h ?? [];
+  return `
+    ${d.aiEnabled ? "" : `<p class="error">AI används inte just nu: ${esc(d.aiBlockedReason)}. Reglerna gäller ensamma.</p>`}
+    <div class="dash-stats dash-stats-2">
+      ${stat("AI-kostnad i månaden", esc(krDec(sp.costMonthKr)),
+        { note: `av ${esc(num(sp.budgetKr))} kr i budget${share === null ? "" : ` (${esc(share)} %)`}`, alert: share !== null && share >= 80 })}
+      ${stat("AI-anrop i dag", num(sp.callsToday), { note: `tak ${esc(num(sp.dailyCallCap))} per dygn` })}
+      ${stat("Notiser som AI stoppade", num(d.gateBlocked24h), { note: "senaste dygnet" })}
+      ${stat("Oeniga bedömningar", r ? num(r.disagreements) : "–",
+        { note: r ? `AI och regel skilde 20+ poäng, ${esc(r.day)}` : "ingen rapport än" })}
+    </div>
+    <h3>AI-anrop senaste dygnet</h3>
+    ${calls.length ? `<div class="table-scroll"><table class="dash-outbox">
+      <thead><tr><th scope="col">Syfte</th><th scope="col" class="num">Anrop</th>
+        <th scope="col" class="num">Misslyckade</th><th scope="col" class="num">Kostnad</th></tr></thead>
+      <tbody>${calls.map((c) => `<tr>
+        <th scope="row">${esc(PURPOSE_LABEL[c.purpose] ?? c.purpose)}</th>
+        <td class="num" data-label="Anrop">${num(c.calls)}</td>
+        <td class="num${c.failed ? " is-bad" : ""}" data-label="Misslyckade">${num(c.failed)}</td>
+        <td class="num" data-label="Kostnad">${esc(krDec(c.costKr))}</td></tr>`).join("")}</tbody>
+    </table></div>` : '<p class="muted dash-empty">Inga AI-anrop senaste dygnet.</p>'}
+    <h3>Nattrapporten${r ? ` för ${esc(r.day)}` : ""}</h3>
+    ${!r ? '<p class="muted dash-empty">Ingen rapport än. Den byggs varje morgon efter klockan fem.</p>' : `
+      ${r.summary
+        ? `<p>${esc(r.summary).replaceAll("\n", "<br>")}</p>`
+        : '<p class="muted">Bara siffror den här dagen – ingen sammanfattning skrevs.</p>'}
+      ${(r.suggestions ?? []).length ? `<h4>Förslag på regeländringar</h4>
+        <p class="muted">Förslagen ändrar ingenting själva.</p>
+        <ul>${r.suggestions.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
+      ${(r.examples ?? []).length ? `<h4>Störst skillnad mellan AI och regel</h4>
+        <div class="table-scroll"><table class="dash-outbox">
+        <thead><tr><th scope="col">Tips</th><th scope="col" class="num">Regel</th>
+          <th scope="col" class="num">AI</th><th scope="col">AI läste</th></tr></thead>
+        <tbody>${r.examples.map((e) => `<tr>
+          <th scope="row">${esc(e.titel)}</th>
+          <td class="num" data-label="Regel">${num(e.regel)}</td>
+          <td class="num" data-label="AI">${num(e.ai)}</td>
+          <td data-label="AI läste">${esc(e.lasning ?? "–")}</td></tr>`).join("")}</tbody>
+        </table></div>` : ""}`}`;
+}
+
 /* --- Sidan --------------------------------------------------------------- */
 
 const SECTIONS = [
   ["ledning", "Ledning"], ["salj", "Sälj"], ["support", "Support"],
   ["uppfoljning", "Uppföljning"], ["drift", "Drift"], ["anvandning", "Användning"],
+  ["kvalitet", "Kvalitet"],
 ];
 
 export function dashboard(d) {
@@ -549,6 +610,8 @@ export function dashboard(d) {
       ${section("drift", "Drift", "Datakällorna, mejlen och notiserna.", () => drift(d.drift), d.drift)}
       ${section("anvandning", "Användning", "Vad förarna svarar på tipsen, och hur många tips som skapas.",
         () => anvandning(d.anvandning), d.anvandning)}
+      ${section("kvalitet", "Kvalitet", "Vad AI:n gjorde med tipsen, vad det kostade och nattens rapport.",
+        () => kvalitet(d.kvalitet ?? {}), d.kvalitet)}
     </div>`;
 }
 
