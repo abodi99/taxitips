@@ -318,14 +318,23 @@ class _SignalMapState extends State<SignalMap> {
             userAgentPackageName: 'se.taxitips.app',
             maxNativeZoom: 19,
           ),
-        SimpleAttributionWidget(
-          source: Text(
-            kCartoKey.isNotEmpty
-                ? '© CARTO · OpenStreetMap'
-                : '© Esri · OpenStreetMap',
+        // Egen liten stil: annars ärver raden skärmens 15 px och blir bredare
+        // än en smal telefon vid stor text.
+        DefaultTextStyle.merge(
+          style: const TextStyle(
+            fontFamily: kBodyFont,
+            fontSize: 11,
+            color: TbColors.midnatt,
           ),
-          alignment: Alignment.bottomLeft,
-          backgroundColor: TbColors.vit.withValues(alpha: 0.7),
+          child: SimpleAttributionWidget(
+            source: Text(
+              kCartoKey.isNotEmpty
+                  ? '© CARTO · OpenStreetMap'
+                  : '© Esri · OpenStreetMap',
+            ),
+            alignment: Alignment.bottomLeft,
+            backgroundColor: TbColors.vit.withValues(alpha: 0.7),
+          ),
         ),
         if (ferryLines.isNotEmpty) PolylineLayer(polylines: ferryLines),
         if (terminalMarkers.isNotEmpty) MarkerLayer(markers: terminalMarkers),

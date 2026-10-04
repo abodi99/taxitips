@@ -24,6 +24,85 @@ class SettingsGroupLabel extends StatelessWidget {
   }
 }
 
+/// Rubriken för en grupp i Inställningar: ett kort namn och en rad om vad man
+/// kan göra där. Stor nog att läsa i bilen.
+class SettingsSectionHeader extends StatelessWidget {
+  const SettingsSectionHeader({
+    super.key,
+    required this.title,
+    required this.description,
+  });
+
+  final String title;
+  final String description;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(
+            header: true,
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontFamily: kDisplayFont,
+                fontSize: 20,
+                fontWeight: FontWeight.w700,
+                color: TbColors.ink,
+              ),
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            description,
+            style: const TextStyle(
+              fontSize: 15,
+              height: 1.35,
+              color: TbColors.muted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// En rad med bara text: något att veta, inget att trycka på.
+class SettingsNoteRow extends StatelessWidget {
+  const SettingsNoteRow({super.key, required this.icon, required this.text});
+
+  final IconData icon;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: TbColors.muted),
+          const SizedBox(width: 16),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(
+                fontSize: 15,
+                height: 1.4,
+                fontWeight: FontWeight.w500,
+                color: TbColors.ink,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class SettingsGroup extends StatelessWidget {
   const SettingsGroup({super.key, required this.children});
 

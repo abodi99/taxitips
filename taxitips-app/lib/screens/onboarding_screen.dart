@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:liquid_swipe/liquid_swipe.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -5,19 +7,54 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../analytics.dart';
 import '../theme.dart';
 
-/// Visad en gång, före välkomstskärmen: vad appen gör, att tipsen är tips
-/// och inte löften, hur man svarar på ett tips och hur man kommer igång. En
-/// sak per sida, kort svenska -- många förare har svenska som andraspråk.
+/// Visad EN gång efter installationen, före välkomstskärmen: vad appen gör,
+/// att tipsen är tips och inte löften, hur man svarar på ett tips och hur man
+/// kommer igång. En sak per sida, kort svenska -- många förare har svenska som
+/// andraspråk.
+///
+/// "Sedd" sparas redan när den visas, och även när appen startar med en
+/// inloggning som redan finns ([markSeen] i main.dart): en förare som loggar
+/// ut och in, eller en ägare som kom in via en länk, möter den aldrig mitt i.
+/// Efter den följer en guidad genomgång på huvudskärmen (guided_tour.dart).
 ///
 /// Sidorna byts med liquid_swipe (svep eller "Nästa"). "Hoppa över" finns
-/// hela tiden: den som redan kan appen ska inte tvingas igenom.
+/// hela tiden: den som redan kan appen ska inte tvingas igenom. Från
+/// Inställningar ("Så fungerar Taxi Tips") öppnas den igen som [replay].
 class OnboardingScreen extends StatefulWidget {
-  const OnboardingScreen({super.key, required this.onDone});
+  const OnboardingScreen({
+    super.key,
+    required this.onDone,
+    this.replay = false,
+  });
 
   final VoidCallback onDone;
 
+  /// Öppnad igen från Inställningar: "Stäng" och "Klar", sista sidan om
+  /// notiser i stället för inloggning.
+  final bool replay;
+
   /// Bumpa versionen när innehållet ändras så mycket att alla bör se det igen.
   static const seenKey = 'tt_onboarding_seen_v1';
+
+  /// Från Inställningar: samma sidor, och tillbaka dit med Stäng/Klar.
+  static Future<void> openFromSettings(BuildContext context) {
+    return Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (ctx) => OnboardingScreen(
+          replay: true,
+          onDone: () => Navigator.of(ctx).pop(),
+        ),
+      ),
+    );
+  }
+
+  /// Sparar att introduktionen är sedd, utan att visa den.
+  static Future<void> markSeen() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool(seenKey, true);
+    } catch (_) {}
+  }
 
   static Future<bool> seen() async {
     try {
@@ -41,17 +78,26 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     super.initState();
     // Sedd redan när den visas, inte först när den klickats igenom: den som
     // stänger appen mitt i ska inte mötas av samma introduktion igen.
-    _markSeen();
+    if (!widget.replay) unawaited(OnboardingScreen.markSeen());
   }
 
-  static Future<void> _markSeen() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool(OnboardingScreen.seenKey, true);
-    } catch (_) {}
-  }
+  List<_PageData> get _pages =>
+      widget.replay ? [..._firstPages.take(3), _replayLast] : _firstPages;
 
-  static const _pages = <_PageData>[
+  /// Sista sidan när introduktionen öppnas igen från Inställningar: föraren är
+  /// redan inloggad, så här står det som återstår.
+  static const _replayLast = _PageData(
+    background: TbColors.navyDeep,
+    foreground: TbColors.foam,
+    accent: TbColors.taxi,
+    icon: Icons.notifications_active_rounded,
+    title: 'Notiser',
+    body:
+        'Slå på notiser under Inställningar. Då säger vi till när ett '
+        'starkt tips dyker upp nära dig.',
+  );
+
+  static const _firstPages = <_PageData>[
     _PageData(
       background: TbColors.navy,
       foreground: TbColors.foam,
@@ -90,18 +136,18 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       icon: Icons.local_taxi_rounded,
       title: 'Kom igång',
       body:
-          'Logga in med din e-post. Slå på notiser så säger vi till när ett '
-          'starkt tips dyker upp nära dig.',
+          'Logga in med din e-post. Sedan visar vi dig runt i appen. Slå på '
+          'notiser så säger vi till när ett starkt tips dyker upp nära dig.',
     ),
   ];
 
   bool get _last => _page == _pages.length - 1;
 
   Future<void> _finish({required bool skipped}) async {
-    await _markSeen();
+    if (!widget.replay) await OnboardingScreen.markSeen();
     await logAnalyticsEvent(
       skipped ? 'onboarding_skip' : 'onboarding_complete',
-      params: {'page': _page + 1},
+      params: {'page': _page + 1, 'replay': widget.replay ? 1 : 0},
     );
     widget.onDone();
   }
@@ -155,9 +201,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       foregroundColor: current.foreground,
                       minimumSize: const Size(48, 48),
                     ),
-                    child: const Text(
-                      'Hoppa över',
-                      style: TextStyle(fontWeight: FontWeight.w700),
+                    child: Text(
+                      widget.replay ? 'Stäng' : 'Hoppa över',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ),
                 ),
@@ -195,7 +241,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           ),
                         ),
                         child: Text(
-                          _last ? 'Kom igång' : 'Nästa',
+                          _last
+                              ? (widget.replay ? 'Klar' : 'Kom igång')
+                              : 'Nästa',
                           style: const TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w800,
