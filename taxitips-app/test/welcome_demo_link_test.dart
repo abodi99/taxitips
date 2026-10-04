@@ -5,7 +5,9 @@ import 'package:taxitips_app/screens/welcome_screen.dart';
 
 void main() {
   test('demon är webbsidan, ingen sida i appen', () {
-    expect(TaxiTipsConfig.demoUrl, 'https://taxitips.se/demo');
+    // app=1: demon döljer sina knappar till registrering och kontakt, så att
+    // appen inte leder vidare mot ett köp (taxitips-web/src/demo/main.js).
+    expect(TaxiTipsConfig.demoUrl, 'https://taxitips.se/demo?app=1');
   });
 
   testWidgets('startskärmen länkar till demon i webbläsaren', (tester) async {

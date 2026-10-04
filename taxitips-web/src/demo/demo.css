@@ -1077,3 +1077,8 @@ svg { width: 1em; height: 1em; flex-shrink: 0; fill: none; stroke: currentColor;
   }
   .mk-ring { display: none; }
 }
+
+/* Öppnad från appen (?app=1): inga vägar till registrering eller köp. */
+.d-in-app .d-top-actions .d-btn,
+.d-in-app .d-sell,
+.d-in-app .d-tour-end { display: none !important; }

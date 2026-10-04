@@ -94,6 +94,7 @@ Kundlivscykeln i `taxitips-backend/fleet/`:
 | `roles.py` | Behörigheter och tvåfaktorskravet. |
 | `risk.py` | Riskgränser. Blockerar nästa ändring, aldrig åtkomsten. |
 | `push_gate.py` | Mottagarkontroll strax före sändning. |
+| `account_deletion.py` | "Radera mitt konto" i appen (Apple 5.1.1(v)): ägarens konto eller förarens telefon + förarkonto. Vägrar bara enda ägaren med ett medlemskap som förnyas. |
 | `client_activity.py` | Senaste inloggning, appversion och telefon per konto/telefon, och appens/serverns fel. Vad som lagras och hur länge: `docs/loggning.md`. |
 
 ## 4. Kör lokalt
@@ -329,6 +330,11 @@ roll. Reglerna för vad som är klart bor på ett ställe (`src/admin/views.js`,
 (`bbf6ca6c-…`) är platform_admin. Konton skapade med Google har inget lösenord
 och Google-inloggning är inte konfigurerad i produktionens Supabase Auth, så
 adminwebben loggar in med en e-postlänk.
+
+**Butiksrelease** (2026-10-04): `docs/release-checklist.md` -- vad som är klart
+(Android-/iOS-konfiguration, privacy manifest, push-rättighet, radering i appen,
+inga köp), vad ägaren gör i Play Console, App Store Connect och Firebase, och hur
+man bygger. `taxitips-app/test/release_config_test.dart` vaktar konfigurationen.
 
 **Mejl och inbjudningar** (2026-10-03, `docs/auth-mejl.md`): alla mejl har samma
 layout (`fleet/email_layout.py`). Utkorgen skickar HTML + text. Supabase Auth-mallarna

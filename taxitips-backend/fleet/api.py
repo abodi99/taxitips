@@ -33,6 +33,7 @@ from core.api import _json
 from core import areas
 from core.tip_reports import TipReportError
 from fleet import (
+    account_deletion,
     accounts,
     access,
     archive,
@@ -87,6 +88,7 @@ log = logging.getLogger(__name__)
 # en except-gren per modul. Ett fel utan begripligt meddelande blir ett
 # supportärende; det är billigare att kräva formen här.
 _DOMAIN_ERRORS = (
+    account_deletion.AccountDeletionError,
     accounts.AccountError,
     archive.ArchiveError,
     pairing.PairingError,
@@ -1717,6 +1719,39 @@ def close_account(request):
     result = ownership.close_account(
         company_id=principal.company_id, actor_user_id=principal.user_id
     )
+    return _json(request, {"ok": True, **result})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def delete_own_account(request):
+    """
+    POST /api/fleet/account/delete {"confirm": "radera"}
+
+    Radera mitt konto, inifrån appen (Apple 5.1.1(v)). Inloggat konto
+    (`Authorization: Bearer`) eller förarens telefon (`X-Device-Token`) --
+    reglerna och vad som finns kvar efteråt står i fleet/account_deletion.py.
+    """
+    from core.entitlement import verify_supabase_jwt
+
+    body = _body(request)
+    auth = request.headers.get("Authorization", "")
+    payload = verify_supabase_jwt(auth[7:].strip()) if auth.lower().startswith("bearer ") else None
+    token = request.headers.get("X-Device-Token")
+    device = None
+    if token:
+        device, _credential, _how = access.device_for_token(token)
+
+    if payload and payload.get("sub"):
+        result = account_deletion.delete_signed_in_account(
+            user_id=str(payload["sub"]), email=str(payload.get("email") or ""),
+            device=device, body=body,
+        )
+    elif device is not None:
+        result = account_deletion.delete_driver_by_device(device=device, body=body)
+    else:
+        raise PermissionDenied("login_required", "Logga in för att fortsätta.", status=401)
     return _json(request, {"ok": True, **result})
 
 

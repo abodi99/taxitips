@@ -103,7 +103,12 @@ SERVICE=$(cd ../taxitips-api && supabase status -o json | python3 -c 'import sys
 ./.venv/bin/python manage.py seed_local_demo --service-key "$SERVICE"
 ```
 
-Lösenord för samtliga: `taxitips123`.
+Lösenord för samtliga: `taxitips123`. Lösenordet finns bara i den lokala
+databasen -- använd det aldrig för ett konto i produktion (repot är publikt).
+
+Inloggningen i appen fylls inte i av sig själv. Vill du slippa skriva lokalt:
+`--dart-define=PREFILL_EMAIL=agare@malmotaxi.se --dart-define=PREFILL_PASSWORD=taxitips123`
+(fungerar bara i debugbyggen).
 
 | Konto | Roll | Bolag | Läge |
 |---|---|---|---|

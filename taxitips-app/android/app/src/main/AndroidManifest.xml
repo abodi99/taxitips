@@ -1,4 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools">
     <!-- GPS för "min plats" / nära mig. Utan dessa nekas Geolocator tyst. -->
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
@@ -9,11 +10,31 @@
          en enda notis. Mätt 2026-09-21: en testtelefon fick notiser bara för
          att tillståndet getts för hand via adb. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Reklam-id: Firebase Analytics lägger till behörigheten av sig själv.
+         Appen visar ingen reklam och använder inte reklam-id:t, så den tas
+         bort – då blir svaret "nej" i Play Consoles fråga om reklam-id och i
+         Data safety. Se också google_analytics_adid_collection_enabled nedan. -->
+    <uses-permission android:name="com.google.android.gms.permission.AD_ID" tools:node="remove" />
+    <!-- Samma sak för Androids Privacy Sandbox (reklam-id och reklamattribution). -->
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_AD_ID" tools:node="remove" />
+    <uses-permission android:name="android.permission.ACCESS_ADSERVICES_ATTRIBUTION" tools:node="remove" />
 
+    <!-- Ingen säkerhetskopia av appens data (Google Drive eller flytt till en
+         ny telefon): förarens nyckel och inloggningen hör till DEN här
+         telefonen. En återställd kopia hade antingen inte gått att läsa
+         (nyckeln i Android Keystore följer inte med) eller gett en ny telefon
+         en gammal telefons åtkomst. En ny telefon kopplas in på nytt. -->
     <application
         android:label="Taxitips"
         android:name="${applicationName}"
-        android:icon="@mipmap/ic_launcher">
+        android:icon="@mipmap/ic_launcher"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules">
+        <!-- Analytics samlar inte reklam-id (se AD_ID ovan). -->
+        <meta-data
+            android:name="google_analytics_adid_collection_enabled"
+            android:value="false" />
         <!-- Google Maps (trafiklagret i förarkartan). Nyckeln från local.properties, se build.gradle.kts. -->
         <meta-data
             android:name="com.google.android.geo.API_KEY"

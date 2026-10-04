@@ -498,6 +498,19 @@ els.tourOpen.addEventListener("click", () => {
 /* ---------- Intro ---------- */
 
 const params = new URLSearchParams(location.search);
+
+/*
+ * Öppnad från appen (`/demo?app=1`, taxitips-app/lib/config.dart). Appen får
+ * inte leda vidare till registrering eller köp (Apple 3.1.1/3.1.3, Google Play
+ * Payments; docs/fleet-abonnemang.md §9c), så säljknapparna och logons länk
+ * till startsidan döljs. Demon i övrigt är densamma.
+ */
+if (params.get("app") === "1") {
+  document.body.classList.add("d-in-app");
+  const logo = document.querySelector(".d-top .brand-logo");
+  logo?.removeAttribute("href");
+  logo?.setAttribute("aria-label", "Taxi Tips");
+}
 const hashTip = TIPS.find((x) => `#${x.id}` === location.hash);
 
 function introSeen() {

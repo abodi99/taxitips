@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Push (APNs). Utan den här rättigheten får iPhone ingen APNs-token, FCM ingen
+  token och föraren aldrig en notis. "development" här: Xcode byter till
+  "production" när appen exporteras för App Store/TestFlight med
+  distributionsprofilen. Kräver att Push Notifications är påslaget för
+  se.taxitips.app i Apple Developer (Identifiers) och att APNs-nyckeln (.p8)
+  ligger i Firebase-projektet taxitips-se.
+-->
+<plist version="1.0">
+<dict>
+	<key>aps-environment</key>
+	<string>development</string>
+</dict>
+</plist>

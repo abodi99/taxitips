@@ -29,6 +29,11 @@ const kInvoicesOnWeb =
 /// Båda meningarna: det som visas där något är låst.
 const kNotInTrialNote = '$kNotInTrial $kMembershipOnWeb';
 
+/// Inställningarnas hänvisning för fakturor och medlemskap. Ingen länk, inget
+/// pris, ingen knapp -- bara var det sköts.
+const kBillingOnWeb =
+    'Fakturor och medlemskap hanteras av företagets administratör på webben.';
+
 /// Skäl (`access.reason`, fleet/access.py) som handlar om betalning eller
 /// avtal. Deras serverstext visas inte; appen använder [membershipNotice].
 const _billingReasons = {
