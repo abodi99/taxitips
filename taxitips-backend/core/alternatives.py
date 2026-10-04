@@ -44,6 +44,10 @@ _ALTERNATIVE_PATTERNS: list[tuple[re.Pattern, str]] = [
 # Meningen som bär beskedet, för att kunna citera källan i stället för att
 # bara påstå att det finns ett alternativ.
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+_NO_ALTERNATIVE_YET_RE = re.compile(
+    r"(invänta info|inga ersättningsbuss|ingen ersättningsbuss|ingen ersättningstrafik|saknas ersättningsbuss)",
+    re.IGNORECASE,
+)
 
 
 def alternative_from_text(*parts: str | None) -> tuple[bool, str]:
@@ -55,7 +59,7 @@ def alternative_from_text(*parts: str | None) -> tuple[bool, str]:
     ersättningsbussen redan står gör en bomresa.
     """
     text = " ".join(p for p in parts if p).strip()
-    if not text:
+    if not text or _NO_ALTERNATIVE_YET_RE.search(text):
         return False, ""
 
     for pattern, label in _ALTERNATIVE_PATTERNS:

@@ -33,8 +33,8 @@ from core.market import (
 # Station/info utan taxinytta -- även om rubriken nämner en station.
 NOISE_RE = re.compile(
     r"(hiss(en|ar|arna)?|rulltrapp|rullstol|toalett|cykel|cyklar|wifi|wi-?fi|"
-    r"biljettautomat|biljettmaskin|entr[eé]|assistans|assistent|ledsag|"
-    r"plattformsavvisare|platsbrist|kort tåg|nya spår)",
+    r"biljettautomat|biljettmaskin|stängd entr[eé]|entr[eé](?:dörr|grind|spärr|hall)|"
+    r"assistans|assistent|ledsag|plattformsavvisare|platsbrist|kort tåg|nya spår)",
     re.IGNORECASE,
 )
 
@@ -42,8 +42,9 @@ _SV = "a-zà-öø-ÿ0-9"
 
 # Allvarliga kollektivstörningar som brukar ge taxibehov.
 SERIOUS_RE = re.compile(
-    rf"(?<![{_SV}])(inställd|inställt|inställda|ställs in|inga avgångar|"
-    r"ingen trafik|trafikstopp|stopp i (trafiken|tågtrafiken|busstrafiken)|"
+    rf"(?<![{_SV}])(inställd|inställt|inställda|delinställd|delinställt|delinställda|"
+    r"ställs in|inga avgångar|ingen trafik|trafikstopp|tågstopp|"
+    r"stopp i (trafiken|tågtrafiken|busstrafiken|spårvagnstrafiken)|"
     r"totalt stopp|stora störningar|stora förseningar|ersättningsbuss|"
     r"ersättningstrafik|strejk|nedrivning|strömavbrott|växelfel|"
     r"signalproblem|tågtrafik (står|stoppad|inställd)|"
@@ -55,8 +56,8 @@ SERIOUS_RE = re.compile(
 
 # Medel -- kan ge efterfrågan men inte alltid "kör hit nu".
 MEDIUM_RE = re.compile(
-    r"\b(försening|förseningar|minskad (service|trafik)|tågbyte|"
-    r"enkelspårsdrift|hastighetsnedsättning|banarbete som påverkar|"
+    r"\b(försening|förseningar|försenad|försenat|försenade|minskad (service|trafik)|"
+    r"tågbyte|enkelspårsdrift|hastighetsnedsättning|banarbete som påverkar|"
     r"förväntas bli (sen|försenad))\b",
     re.IGNORECASE,
 )

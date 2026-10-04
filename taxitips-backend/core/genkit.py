@@ -99,18 +99,21 @@ def normalize_key(opportunity: Opportunity) -> str:
     Cachenyckel på normaliserad form.
 
     Titlar duger inte: tågtitlar bär tågnummer och klockslag och är
-    därmed nästan unika (28 av 28 i en mätning). Nyckeln beskriver i
-    stället störningens FORM -- två störningar med samma form har samma
-    svar. Versionssuffix så gamla dampen-svar inte återanvänds efter
-    omklassningsprompten.
+    därmed nästan unika (28 av 28 i en mätning), medan SL/Skånetrafiken/VT
+    ofta har helt generiska titlar ("Försenad avgång", "Inställd avgång")
+    där hela innehållet ligger i summary. Nyckeln beskriver därför både
+    titelns och sammanfattningens normaliserade form.
     """
     title = (opportunity.title or "").lower()
     title = re.sub(r"\d+", "N", title)
     title = re.sub(r"\s+", " ", title).strip()[:60]
+    summary = (opportunity.summary or "").lower()
+    summary = re.sub(r"\d+", "N", summary)
+    summary = re.sub(r"\s+", " ", summary).strip()[:80]
     hour = opportunity.start_time.hour if opportunity.start_time else 0
     bucket = "natt" if hour >= 22 or hour <= 5 else "dag"
     alt = "alt" if opportunity.has_alternative else "noalt"
-    return f"v2|{opportunity.severity_tier}|{opportunity.mode}|{title}|{bucket}|{alt}"
+    return f"v3|{opportunity.severity_tier}|{opportunity.mode}|{title}|{summary}|{bucket}|{alt}"
 
 
 def _structural_context(opportunity: Opportunity) -> str:

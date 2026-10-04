@@ -32,7 +32,8 @@ _SV = "a-zà-öø-ÿ0-9"
 # avslutande -- \btåg\b skulle missa "Tåget är inställt" helt.
 TRAIN_RE = re.compile(
     rf"(?<![{_SV}])(tåg|påga|pågatåg|öresundståg|krösatåg|kustpilen|pendeltåg|"
-    r"spårvagn|spårfel|spårarbete)"
+    r"mälartåg|västtåg|snälltåg|norrtåg|roslagsbanan|saltsjöbanan|tvärbanan|"
+    r"lidingöbanan|nockebybanan|spårväg|spårvagn|spårfel|spårarbete)"
 )
 BUS_RE = re.compile(rf"(?<![{_SV}])(buss|regionbuss|citybuss|stadsbuss|ersättningsbuss)")
 

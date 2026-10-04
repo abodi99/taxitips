@@ -94,8 +94,13 @@ _STATED_ALTERNATIVE_RE = re.compile(
     r"(övriga avgångar|ersättningsbuss|ersättningstrafik|buss ersätter|tågbyte)",
     re.IGNORECASE,
 )
+_NO_ALTERNATIVE_YET_RE = re.compile(
+    r"(invänta info|inga ersättningsbuss|ingen ersättningsbuss|ingen ersättningstrafik|saknas ersättningsbuss)",
+    re.IGNORECASE,
+)
 _WHOLE_LINE_STOP_RE = re.compile(
-    r"(stopp i tågtrafiken|ingen trafik|inga avgångar|trafikstopp)", re.IGNORECASE
+    r"(stopp i (trafiken|tågtrafiken|busstrafiken|spårvagnstrafiken)|ingen trafik|inga avgångar|trafikstopp|tågstopp|totalt stopp)",
+    re.IGNORECASE,
 )
 # En ENSTAKA avgång, inte linjen: "Inställd avgång kl 20:40", "Hagsätra -
 # Vällingby kl 16:59 är inställd", "Inställd delsträcka", "Resenärer hänvisas
@@ -180,6 +185,8 @@ class Assessment:
 
 
 def _has_stated_alternative(text: str) -> bool:
+    if _NO_ALTERNATIVE_YET_RE.search(text):
+        return False
     return bool(_STATED_ALTERNATIVE_RE.search(text))
 
 
