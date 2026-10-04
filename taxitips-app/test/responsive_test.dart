@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:taxitips_app/screens/driver_login_screen.dart';
 import 'package:taxitips_app/screens/driver_screen.dart';
 import 'package:taxitips_app/screens/login_screen.dart';
 import 'package:taxitips_app/screens/onboarding_screen.dart';
@@ -53,18 +52,14 @@ void main() {
 
   final screens = <String, Widget Function()>{
     'introduktionen': () => OnboardingScreen(onDone: () {}),
-    'välkomst': () =>
-        WelcomeScreen(onLogin: () {}, onSignup: () {}, onDriver: () {}),
+    'välkomst': () => WelcomeScreen(onLogin: () {}, onSignup: () {}),
     'inloggning': () => LoginScreen(
       api: plain(),
       onOwner: () {},
       onDriver: () {},
       onSignup: () {},
       onBack: () {},
-      onDriverLogin: () {},
     ),
-    'förarinloggning': () =>
-        DriverLoginScreen(api: plain(), onDone: () {}, onBack: () {}),
     'registrering': () => SignupScreen(
       api: plain(),
       onDone: () {},

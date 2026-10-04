@@ -1046,7 +1046,7 @@ async function act(action, ds) {
     }
 
     case "driver-invite": {
-      const email = prompt(`Förarens e-post för ${ds.plate}?\n\nFöraren trycker "Jag är förare" i appen, skriver sin e-post och får en kod i mejlet. Inbjudan gäller i 7 dagar.`);
+      const email = prompt(`Förarens e-post för ${ds.plate}?\n\nFöraren får ett mejl, väljer ett lösenord och loggar in i appen med e-post och lösenord. Inbjudan gäller i 7 dagar.`);
       if (!email?.trim()) return;
       const label = prompt("Förarens namn (visas som telefonens namn):", "") ?? "";
       await admin.inviteDriver(state.companyId, ds.license, email.trim(), label.trim());

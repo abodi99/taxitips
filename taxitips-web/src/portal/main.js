@@ -243,7 +243,7 @@ async function companyOrClaim() {
         throw new ApiError(
           403,
           "Kontot är inte kopplat till något företag. Är du förare? Logga in i appen " +
-            "under Jag är förare. Annars: be den som sköter ert konto, eller Taxi Tips, " +
+            "med e-post och lösenord. Annars: be den som sköter ert konto, eller Taxi Tips, " +
             "att bjuda in din e-postadress.",
           "no_company",
         );

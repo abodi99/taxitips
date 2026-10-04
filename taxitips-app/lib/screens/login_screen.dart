@@ -23,13 +23,9 @@ class LoginScreen extends StatefulWidget {
     required this.onDriver,
     required this.onSignup,
     required this.onBack,
-    this.onDriverLogin,
   });
 
   final ApiClient api;
-
-  /// Förare loggar in med bara e-post (DriverLoginScreen).
-  final VoidCallback? onDriverLogin;
 
   /// Kontot hör till ett företag (eller registrerar ett).
   final VoidCallback onOwner;
@@ -50,7 +46,8 @@ class _LoginScreenState extends State<LoginScreen> {
   // en adress eller ett lösenord här följde med i varje byggd app, även den i
   // butikerna. `kDebugMode` är en konstant, så releasebygget saknar grenen.
   static const _prefillEnabled =
-      kDebugMode && bool.fromEnvironment('ENABLE_TEST_LOGIN', defaultValue: true);
+      kDebugMode &&
+      bool.fromEnvironment('ENABLE_TEST_LOGIN', defaultValue: true);
   static const _prefillEmail = String.fromEnvironment('PREFILL_EMAIL');
   static const _prefillPassword = String.fromEnvironment('PREFILL_PASSWORD');
 
@@ -142,7 +139,8 @@ class _LoginScreenState extends State<LoginScreen> {
   String _friendly(Object e) {
     final text = e.toString();
     if (text.contains('Invalid login credentials')) {
-      return 'Fel e-post eller lösenord.';
+      return 'Fel e-post eller lösenord. Ny förare? Välj först ett lösenord '
+          'med länken i inbjudan, eller tryck Glömt lösenord.';
     }
     if (text.contains('Email not confirmed')) {
       return 'Bekräfta din e-post först. Tryck på länken i mejlet.';
@@ -159,7 +157,7 @@ class _LoginScreenState extends State<LoginScreen> {
         return e.message.isNotEmpty
             ? e.message
             : 'Du har bytt telefon två gånger den här månaden. '
-                'Kontakta support så hjälper vi dig byta igen.';
+                  'Kontakta support så hjälper vi dig byta igen.';
       }
       return e.message;
     }
@@ -264,7 +262,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 4),
                 const Text(
-                  'För ägare och kontor.',
+                  'För förare, ägare och kontor. Ny förare? Välj först ett '
+                  'lösenord med länken i inbjudan.',
                   style: TextStyle(color: TbColors.muted, fontSize: 15),
                 ),
                 const SizedBox(height: 22),
@@ -363,12 +362,6 @@ class _LoginScreenState extends State<LoginScreen> {
                   action: 'Registrera ditt företag',
                   onTap: _busy ? null : widget.onSignup,
                 ),
-                if (widget.onDriverLogin != null)
-                  _LinkRow(
-                    lead: 'Förare?',
-                    action: 'Logga in med bara e-post',
-                    onTap: _busy ? null : widget.onDriverLogin,
-                  ),
               ],
             ),
           ),

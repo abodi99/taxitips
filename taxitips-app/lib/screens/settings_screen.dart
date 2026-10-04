@@ -249,8 +249,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('Lämna denna telefon?'),
         content: const Text(
           'Telefonen kopplas från bilen. För att köra igen trycker du på '
-          '"Jag är förare" och loggar in med din e-post. Då behöver din chef '
-          'ha bjudit in dig.',
+          '"Logga in" och skriver din e-post och ditt lösenord. Då behöver din '
+          'chef ha bjudit in dig.',
         ),
         actions: [
           TextButton(
@@ -613,9 +613,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
         barrierDismissible: false,
         builder: (_) => const PopScope(
           canPop: false,
-          child: Center(
-            child: CircularProgressIndicator(color: TbColors.taxi),
-          ),
+          child: Center(child: CircularProgressIndicator(color: TbColors.taxi)),
         ),
       ),
     );

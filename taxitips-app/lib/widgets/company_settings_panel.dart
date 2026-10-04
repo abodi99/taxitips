@@ -280,9 +280,9 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
 
   // ── Förare: inbjudan med e-post ────────────────────────────────────────
 
-  /// En ny förare: chefen skriver förarens e-post. Föraren trycker "Jag är
-  /// förare" i appen, skriver e-posten och får en kod i mejlet -- då kopplas
-  /// telefonen till bilen med bilens län (fleet/driver_login.py).
+  /// En ny förare: chefen skriver förarens e-post. Föraren får ett mejl,
+  /// väljer lösenord och loggar in i appen med e-post och lösenord -- då
+  /// kopplas telefonen till bilen med bilens län (fleet/driver_invites.py).
   Future<void> _inviteDriver(Map<String, dynamic> license) async {
     final plate = license['vehicle']?.toString() ?? 'bilen';
     final vehicleId = license['vehicleId']?.toString();
@@ -771,8 +771,8 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
               ),
               if (canManage) ...[
                 const SizedBox(height: 20),
-                // Föraren bjuds in med e-post och loggar in med bara den
-                // (fleet/driver_login.py). Ingen kod att läsa upp.
+                // Föraren bjuds in med e-post, väljer lösenord via mejlet och
+                // loggar in med det (fleet/driver_invites.py).
                 FilledButton.icon(
                   style: FilledButton.styleFrom(
                     backgroundColor: TbColors.taxi,

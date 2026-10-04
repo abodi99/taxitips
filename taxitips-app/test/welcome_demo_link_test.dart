@@ -13,7 +13,7 @@ void main() {
   testWidgets('startskärmen länkar till demon i webbläsaren', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
-        home: WelcomeScreen(onLogin: () {}, onSignup: () {}, onDriver: () {}),
+        home: WelcomeScreen(onLogin: () {}, onSignup: () {}),
       ),
     );
     expect(find.text('Se demon på webben'), findsOneWidget);

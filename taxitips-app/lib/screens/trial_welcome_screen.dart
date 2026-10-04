@@ -537,8 +537,8 @@ class _StepsPage extends StatelessWidget {
           title: 'Bjud in förare med e-post',
           text:
               'Öppna bilen och tryck på "Bjud in förare med e-post". '
-              'Föraren trycker på "Jag är förare" i appen och skriver '
-              'koden som kommer i mejlet.',
+              'Föraren får ett mejl, väljer ett lösenord och loggar in i '
+              'appen med e-post och lösenord.',
         ),
       ],
     );

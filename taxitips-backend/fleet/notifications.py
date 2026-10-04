@@ -233,8 +233,8 @@ def trial_started(company_id, to_address: str, trial) -> OutboxMessage | None:
             + _TRIAL_SCOPE
             + "\nSå kommer ni igång:\n"
             "1. Bjud in förarna med e-post: tryck på bilen i appen (Inställningar) eller "
-            "under Bilar i kundportalen. Föraren trycker \"Jag är förare\" i appen och "
-            "skriver bara sin e-post -- bilen och länen har ni redan valt.\n"
+            "under Bilar i kundportalen. Föraren får ett mejl, väljer ett lösenord och "
+            "loggar in i appen med e-post och lösenord -- bilen och länen har ni redan valt.\n"
             "2. Kör ni själva: \"Kör bilen själv med den här telefonen\".\n\n"
             "För att fortsätta efter provet: bekräfta bilarna och spara kort i kundportalen. "
             "Då dras första betalningen automatiskt när provet tar slut. Utan sparat kort "
@@ -364,17 +364,26 @@ def device_blocked(company_id, approval) -> OutboxMessage | None:
     )
 
 
-def driver_invite(invite, *, company_name: str, plate: str) -> OutboxMessage | None:
+def driver_invite(invite, *, company_name: str, plate: str, link: str = "") -> OutboxMessage | None:
     """
     Förarens inbjudan (fleet/driver_invites.py). Enkel svenska, tre steg:
     föraren kan vara ny i Sverige och har aldrig sett appen.
 
-    Ingen länk och inget lösenord: föraren skriver sin e-post i appen och får
-    en kod i ett eget mejl (fleet/driver_login.py). Varje utskick får en egen
-    rad (`send_count` i nyckeln): "Skicka igen" ger ett nytt mejl.
+    Föraren väljer ett lösenord via länken och loggar sedan in i appen med
+    e-post och lösenord, som ägare och kontor gör. Utan länk (Supabase Auth
+    svarade inte) hänvisar mejlet till "Glömt lösenord?" i appen, som ger en
+    likadan länk. Varje utskick får en egen rad (`send_count` i nyckeln):
+    "Skicka igen" ger ett nytt mejl med en ny länk.
     """
     who = company_name or "Ditt taxibolag"
     car = f" för bilen {plate}" if plate else ""
+    if link:
+        step_one = f"1. Välj ett lösenord här:\n{link}\n"
+    else:
+        step_one = (
+            "1. Öppna appen, tryck \"Logga in\" och sedan \"Glömt lösenord?\". "
+            f"Skriv {invite.email} så får du en länk där du väljer lösenord.\n"
+        )
     return queue(
         category="driver_invite", company_id=invite.company_id, to_address=invite.email,
         subject=f"{who} bjuder in dig till Taxi Tips",
@@ -383,15 +392,19 @@ def driver_invite(invite, *, company_name: str, plate: str) -> OutboxMessage | N
             f"{who} har bjudit in dig till Taxi Tips{car}. "
             "Taxi Tips visar var det finns folk som behöver taxi just nu.\n\n"
             "Så kommer du igång:\n"
-            "1. Hämta appen Taxi Tips i App Store eller Google Play.\n"
-            "2. Öppna appen och tryck \"Jag är förare\".\n"
-            f"3. Skriv {invite.email}. Du får en kod i ett nytt mejl – skriv in den i appen.\n\n"
-            "Bilen och länen har din chef redan valt. Du behöver inget lösenord.\n\n"
-            "Inbjudan gäller i sju dagar. Väntade du dig inte det här mejlet kan du "
+            + step_one
+            + "2. Hämta appen Taxi Tips i App Store eller Google Play.\n"
+            f"3. Öppna appen, tryck \"Logga in\" och skriv {invite.email} och ditt lösenord.\n\n"
+            "Bilen och länen har din chef redan valt.\n\n"
+            "Länken fungerar en gång och inbjudan gäller i sju dagar. Har länken gått ut: "
+            "tryck \"Glömt lösenord?\" i appen. Väntade du dig inte det här mejlet kan du "
             "strunta i det.\n"
             + _SIGNATURE
         ),
-        payload={"inviteId": str(invite.id), "kind": "driver_invite"},
+        payload={
+            "inviteId": str(invite.id), "kind": "driver_invite",
+            **({"button": {"url": link, "label": "Välj lösenord"}} if link else {}),
+        },
         key_parts=(invite.id, invite.send_count),
     )
 

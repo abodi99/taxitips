@@ -2,13 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:taxitips_app/api_client.dart';
-import 'package:taxitips_app/screens/driver_login_screen.dart';
 import 'package:taxitips_app/screens/login_screen.dart';
 import 'package:taxitips_app/screens/welcome_screen.dart';
 
-/// Startsidan är EN inloggning för förare, ägare och kontor -- servern avgör
-/// rollen. Koden, nytt företag och demon är länkar, inte konkurrerande vägar.
-/// Inget här pratar med servern.
+/// EN inloggning med e-post och lösenord för förare, ägare och kontor --
+/// servern avgör rollen (ägarens beslut 2026-10-04). Ingen kod i mejlet, inget
+/// rollval. Inget här pratar med servern.
 void main() {
   Future<({List<String> taps})> pump(WidgetTester tester) async {
     final taps = <String>[];
@@ -74,41 +73,30 @@ void main() {
     expect(r.taps, ['signup', 'back']);
   });
 
-  testWidgets('välkomstskärmen: förare, ägare eller registrera', (tester) async {
+  testWidgets('förare ser hur de loggar in efter inbjudan', (tester) async {
+    await pump(tester);
+    expect(find.textContaining('För förare, ägare och kontor'), findsOneWidget);
+    expect(find.textContaining('länken i inbjudan'), findsOneWidget);
+    expect(find.textContaining('bara e-post'), findsNothing);
+  });
+
+  testWidgets('välkomstskärmen: logga in eller registrera, inget rollval', (
+    tester,
+  ) async {
     final taps = <String>[];
     await tester.pumpWidget(
       MaterialApp(
         home: WelcomeScreen(
           onLogin: () => taps.add('login'),
           onSignup: () => taps.add('signup'),
-          onDriver: () => taps.add('driver'),
         ),
       ),
     );
-    await tester.tap(find.text('Jag är förare'));
-    await tester.tap(find.text('Logga in som ägare eller kontor'));
+    expect(find.text('Jag är förare'), findsNothing);
+    expect(find.textContaining('För förare, ägare och kontor'), findsOneWidget);
+    await tester.tap(find.text('Logga in'));
     await tester.tap(find.text('Registrera företag'));
-    expect(taps, ['driver', 'login', 'signup']);
+    expect(taps, ['login', 'signup']);
     expect(find.textContaining('kod'), findsNothing);
-  });
-
-  testWidgets('föraren: bara e-post, inget lösenord', (tester) async {
-    await tester.pumpWidget(
-      MaterialApp(
-        home: DriverLoginScreen(
-          api: ApiClient(supabaseUrl: 'http://localhost', supabaseAnonKey: 'x'),
-          onDone: () {},
-          onBack: () {},
-        ),
-      ),
-    );
-    expect(find.text('Jag är förare'), findsOneWidget);
-    expect(find.widgetWithText(TextField, 'E-post'), findsOneWidget);
-    expect(find.textContaining('Lösenord'), findsNothing);
-    // Utan giltig e-post skickas ingen kod.
-    await tester.tap(find.text('Skicka kod'));
-    await tester.pump();
-    expect(find.textContaining('Skriv din e-post'), findsOneWidget);
-    expect(find.widgetWithText(TextField, 'Kod (6 siffror)'), findsNothing);
   });
 }

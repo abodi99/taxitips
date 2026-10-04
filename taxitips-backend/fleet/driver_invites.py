@@ -1,26 +1,24 @@
 """
 Förarinbjudan med e-post: chefen bjuder in förarens e-post till en bil, och
-föraren loggar in med bara sin e-post. Ingen kod att läsa upp, inget lösenord.
+föraren väljer ett lösenord och loggar in i appen med e-post och lösenord --
+precis som ägare och kontor (ägarens beslut 2026-10-04).
 
-Flödet (sedan 2026-10-03):
+Flödet:
 
 1. **Chefen** (MANAGE_DEVICES, eller personal i admin) bjuder in en adress
    för en bestämd bil. Bilen och dess län bestäms här, inte av föraren.
-   Mejlet säger: hämta appen, tryck "Jag är förare", skriv din e-post.
-2. **Föraren** skriver sin e-post i appen och får en sexsiffrig kod i ett
-   eget mejl (fleet/driver_login.py). Koden bevisar att personen kommer åt
-   inkorgen; utan den kunde vem som helst ta förarens bil.
-3. **Servern** löser in inbjudan med `claim_invite` -- samma väg som förut:
-   en telefon per företag, ominstallation ersätter, licensens län, risksignal,
-   revision och provets start (`pairing.approve_device`).
+2. **Mejlet** har en länk där föraren väljer lösenord (forare.html, en
+   Supabase-länk av typen invite eller, för ett befintligt konto, recovery).
+   Kontot skapas av länken; dess id sparas på inbjudan.
+3. **Föraren** loggar in i appen med e-post och lösenord. Appen ser att
+   kontot inte är en ägare och löser in inbjudan med
+   `POST /api/fleet/driver-invites/claim`, som kör `claim_invite` -- en
+   telefon per företag, ominstallation ersätter, licensens län, risksignal,
+   revision och provets start (`pairing.approve_device`). Loggar föraren in
+   igen (ny telefon, utloggad) får hen tillbaka bilen.
 
-Förarens konto i Supabase Auth skapas av servern vid första inloggningen och
-är förarens identitet (telefonbyten räknas per konto). Föraren loggar aldrig
-in där själv.
-
-**Äldre klienter.** `POST /api/fleet/driver-invites/claim` med en
-Supabase-inloggning (lösenordsvägen) finns kvar tills de gamla apparna är
-borta; det är samma `claim_invite`.
+**Äldre appar** loggade in med en kod i mejlet (fleet/driver_login.py). Den
+vägen finns kvar tills de apparna är uppdaterade.
 """
 
 from __future__ import annotations
@@ -61,11 +59,7 @@ def normalize_email(value) -> str:
 
 
 def enabled() -> bool:
-    """
-    Inbjudan med e-post fungerar alltid: mejlet har ingen länk, och föraren
-    loggar in med en kod i mejlet (fleet/driver_login.py). Finns kvar för
-    klienterna som frågar.
-    """
+    """Inbjudan med e-post fungerar alltid. Finns kvar för klienterna som frågar."""
     return True
 
 
@@ -73,14 +67,37 @@ def _redirect_url() -> str:
     return getattr(settings, "FLEET_DRIVER_INVITE_REDIRECT", "") or "https://taxitips.se/forare"
 
 
+def _password_link(invite: DriverInvite) -> str:
+    """
+    Länken där föraren väljer lösenord. Skapar kontot i Supabase Auth (eller
+    ger en recovery-länk för ett konto som redan finns) och sparar dess id på
+    inbjudan, så att bara det kontot kan lösa in den. Tom sträng utan Supabase
+    Auth (lokalt) eller om anropet fallerar: mejlet hänvisar då till "Glömt
+    lösenord?" i appen.
+    """
+    from fleet import auth_admin
+
+    if not auth_admin.configured():
+        return ""
+    try:
+        link = auth_admin.invite_link(invite.email, _redirect_url())
+    except auth_admin.AuthAdminError as exc:
+        log.warning("driver_invites: ingen lösenordslänk för inbjudan %s: %s", invite.id, exc)
+        return ""
+    if link.user_id and not invite.auth_user_id:
+        DriverInvite.objects.filter(id=invite.id).update(auth_user_id=link.user_id)
+    return link.url
+
+
 def _send(invite: DriverInvite, now) -> DriverInvite:
-    """Nytt mejl till föraren: hämta appen och skriv din e-post. Ingen länk."""
+    """Nytt mejl till föraren: välj lösenord, hämta appen, logga in."""
     send_count = invite.send_count + 1
     DriverInvite.objects.filter(id=invite.id).update(send_count=send_count, last_sent_at=now)
+    link = _password_link(invite)
     invite.refresh_from_db()
     company = Company.objects.filter(id=invite.company_id).first()
     notifications.driver_invite(
-        invite, company_name=company.name if company else "", plate=invite.vehicle.plate,
+        invite, company_name=company.name if company else "", plate=invite.vehicle.plate, link=link,
     )
     return invite
 

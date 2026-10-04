@@ -74,20 +74,21 @@ class LaunchFlowTests(FleetTestCase):
         self.assertNotIn("betal", overview["features"]["lockedMessage"].lower())
         self.assertEqual(car["countyChanges"]["remaining"], 2)
 
-        # 2. Ägaren bjuder in föraren med e-post till bilen. Mejlet har ingen länk.
+        # 2. Ägaren bjuder in föraren med e-post till bilen.
         self.ok(self.call("post", "/api/fleet/driver-invites", {
             "email": "anna@forare.test", "licenseId": car["licenseId"], "label": "Anna",
         }, user=owner, email="agare@nyataxi.test"))
         invite_mail = OutboxMessage.objects.get(category="driver_invite")
-        self.assertIn("Jag är förare", invite_mail.body)
+        self.assertIn("Logga in", invite_mail.body)
+        self.assertIn("lösenord", invite_mail.body)
 
-        # 3. Föraren skriver bara sin e-post och koden från mejlet.
-        self.ok(self.call("post", "/api/fleet/driver-login/start", {"email": "anna@forare.test"}))
-        code = OutboxMessage.objects.get(category="driver_login_code").payload["code"]
-        paired = self.ok(self.call("post", "/api/fleet/driver-login/verify", {
-            "email": "anna@forare.test", "code": code, "installation_id": "install-anna-0001",
-            "platform": "android",
-        }))
+        # 3. Föraren väljer lösenord via länken (forare.html) och loggar in i appen
+        #    med e-post och lösenord; appen löser in inbjudan med inloggningen.
+        driver_user = DriverInvite.objects.get().auth_user_id
+        self.assertIsNotNone(driver_user)
+        paired = self.ok(self.call("post", "/api/fleet/driver-invites/claim", {
+            "installation_id": "install-anna-0001", "platform": "android",
+        }, user=driver_user, email="anna@forare.test"))
         secret = paired["deviceToken"]
         self.assertEqual(DriverInvite.objects.get().status, DriverInvite.Status.CONSUMED)
 

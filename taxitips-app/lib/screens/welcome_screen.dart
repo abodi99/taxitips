@@ -14,14 +14,11 @@ class WelcomeScreen extends StatelessWidget {
     super.key,
     required this.onLogin,
     required this.onSignup,
-    required this.onDriver,
   });
 
+  /// Förare, ägare och kontor: samma inloggning med e-post och lösenord.
   final VoidCallback onLogin;
   final VoidCallback onSignup;
-
-  /// Föraren: bara e-post, chefen har redan bjudit in (DriverLoginScreen).
-  final VoidCallback onDriver;
 
   /// Demon finns på webben (taxitips.se/demo): samma slags tips på en
   /// Sverigekarta, utan konto.
@@ -107,7 +104,7 @@ class WelcomeScreen extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                               FilledButton(
-                                onPressed: onDriver,
+                                onPressed: onLogin,
                                 style: FilledButton.styleFrom(
                                   backgroundColor: TbColors.taxi,
                                   foregroundColor: TbColors.ink,
@@ -117,33 +114,22 @@ class WelcomeScreen extends StatelessWidget {
                                   ),
                                 ),
                                 child: const Text(
-                                  'Jag är förare',
+                                  'Logga in',
                                   style: TextStyle(
                                     fontSize: 17,
                                     fontWeight: FontWeight.w800,
                                   ),
                                 ),
                               ),
-                              const SizedBox(height: 12),
-                              OutlinedButton(
-                                onPressed: onLogin,
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor: TbColors.foam,
-                                  side: const BorderSide(
-                                    color: Colors.white54,
-                                    width: 1.5,
-                                  ),
-                                  minimumSize: const Size.fromHeight(56),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(14),
-                                  ),
-                                ),
-                                child: const Text(
-                                  'Logga in som ägare eller kontor',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
-                                  ),
+                              const SizedBox(height: 8),
+                              const Text(
+                                'För förare, ägare och kontor. Förare: '
+                                'använd e-posten från inbjudan och lösenordet du valde.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: Colors.white70,
+                                  fontSize: 14,
+                                  height: 1.35,
                                 ),
                               ),
                               const SizedBox(height: 12),

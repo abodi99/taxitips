@@ -1,5 +1,9 @@
 """
-Förarens inloggning med bara e-post.
+Förarens inloggning med bara e-post -- ÄLDRE APPAR.
+
+Sedan 2026-10-04 loggar förare in med e-post och lösenord, som ägare
+(fleet/driver_invites.py). Den här vägen finns kvar för appversioner som redan
+ligger på förarnas telefoner, och kan tas bort när de är uppdaterade.
 
 Chefen bjuder in förarens e-post till en bil (fleet/driver_invites.py) och
 bestämmer därmed bil och län. Föraren skriver sin e-post i appen och får en

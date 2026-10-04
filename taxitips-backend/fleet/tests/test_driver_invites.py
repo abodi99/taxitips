@@ -82,6 +82,27 @@ class DriverInviteTests(FleetTestCase):
 
     # --- skapa ---------------------------------------------------------------
 
+    def test_without_supabase_auth_the_mail_points_to_forgot_password(self):
+        with override_settings(SUPABASE_SERVICE_ROLE_KEY=""):
+            self.assertEqual(self.invite().status_code, 200)
+        self.link.assert_not_called()
+        mail = OutboxMessage.objects.get(category="driver_invite")
+        self.assertIn("Glömt lösenord?", mail.body)
+        self.assertNotIn("button", mail.payload)
+
+    def test_the_password_login_claims_the_car(self):
+        """Föraren loggar in med e-post och lösenord; appen löser in inbjudan."""
+        self.invite()
+        response = self.claim()
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertTrue(response.json()["deviceToken"])
+        self.assertEqual(DriverInvite.objects.get().status, DriverInvite.Status.CONSUMED)
+
+    def test_another_account_cannot_take_the_invite(self):
+        self.invite()
+        response = self.claim(user=str(uuid.uuid4()))
+        self.assertEqual(response.status_code, 404)
+
     def test_the_owner_invites_a_driver_and_an_email_is_queued(self):
         response = self.invite("Anna@Forare.TEST")
         self.assertEqual(response.status_code, 200, response.content)
@@ -95,15 +116,19 @@ class DriverInviteTests(FleetTestCase):
         self.assertAlmostEqual(
             (invite.expires_at - timezone.now()).total_seconds(), 7 * 86400, delta=60
         )
-        # Ingen länk och inget konto förrän föraren loggar in (fleet/driver_login.py).
-        self.link.assert_not_called()
-        self.assertIsNone(invite.auth_user_id)
+        # Ägarens beslut 2026-10-04: föraren väljer lösenord via länken och
+        # loggar in i appen med e-post och lösenord. Länken skapar kontot, och
+        # bara det kontot kan lösa in inbjudan.
+        self.link.assert_called_once_with(DRIVER_EMAIL, "https://taxitips.se/forare")
+        self.assertEqual(str(invite.auth_user_id), self.driver_user)
 
         mail = OutboxMessage.objects.get(category="driver_invite")
         self.assertEqual(mail.to_address, DRIVER_EMAIL)
-        self.assertNotIn("https://", mail.body.split("Frågor?")[0])
-        self.assertIn("Jag är förare", mail.body)
-        self.assertIn("inget lösenord", mail.body)
+        self.assertIn("https://auth.test/verify", mail.body)
+        self.assertIn("Välj ett lösenord", mail.body)
+        self.assertIn("Logga in", mail.body)
+        self.assertNotIn("Jag är förare", mail.body)
+        self.assertEqual(mail.payload["button"]["label"], "Välj lösenord")
         self.assertIn("EPO123", mail.body)
         # Utan avsändare skickas inget -- raden väntar.
         self.assertEqual(mail.status, OutboxMessage.Status.PENDING)

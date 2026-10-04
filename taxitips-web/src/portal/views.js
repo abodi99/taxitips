@@ -287,9 +287,9 @@ function pendingInvites(row, canManage) {
 }
 
 /**
- * En ny förare bjuds in med e-post till den här bilen. Föraren skriver bara
- * sin e-post i appen och får en kod i mejlet (fleet/driver_login.py). Ingen
- * kod att läsa upp: bilen och länen bestäms här.
+ * En ny förare bjuds in med e-post till den här bilen. Föraren väljer
+ * lösenord via länken i mejlet och loggar in i appen med e-post och lösenord
+ * (fleet/driver_invites.py). Bilen och länen bestäms här.
  */
 function connectDriver(row) {
   const ids = `data-license="${esc(row.licenseId)}" data-vehicle="${esc(row.vehicleId)}"
@@ -297,8 +297,8 @@ function connectDriver(row) {
   const key = esc(row.licenseId);
   return `<form class="invite-form" ${ids}>
       <h3>Bjud in förare med e-post</h3>
-      <p class="muted">Föraren får ett mejl, öppnar appen, trycker <b>Jag är förare</b> och skriver
-      sin e-post. Då kopplas telefonen till den här bilen, med bilens län. Inget lösenord behövs.</p>
+      <p class="muted">Föraren får ett mejl och väljer ett lösenord. Sedan loggar föraren in i appen
+      med e-post och lösenord, och telefonen kopplas till den här bilen, med bilens län.</p>
       <label for="invite-email-${key}">Förarens e-post</label>
       <input id="invite-email-${key}" name="email" type="email" required
         autocomplete="off" inputmode="email" placeholder="namn@exempel.se" />

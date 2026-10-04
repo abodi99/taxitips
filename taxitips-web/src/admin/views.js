@@ -853,8 +853,8 @@ function carsCard(d, config, pending = null) {
   return `
     <div class="card">
       <h2>Bilar <span class="muted">(${esc(open.length)})</span></h2>
-      <p class="muted">Bjud in föraren med e-post till en bil. Föraren trycker <b>Jag är förare</b> i appen,
-        skriver sin e-post och får en kod i mejlet. Bilen och länen bestäms här – föraren väljer inget.</p>
+      <p class="muted">Bjud in föraren med e-post till en bil. Föraren får ett mejl, väljer ett lösenord och
+        loggar in i appen med e-post och lösenord. Bilen och länen bestäms här – föraren väljer inget.</p>
       ${open.length ? open.map((l) => {
         const trial = l.status === "trial";
         const extras = l.extraCounties ?? [];
