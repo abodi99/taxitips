@@ -55,7 +55,8 @@ class AiClientTests(TestCase):
         transport = fake()
         with patch.object(ai_client, "transport", transport):
             ai_client.generate("gate", "p", Verdict, model=thresholds.AI_MODEL_GATE)
-        self.assertEqual(transport.calls[0]["model"], "gemini-3.8-flash")
+        self.assertEqual(transport.calls[0]["model"], thresholds.AI_MODEL_GATE)
+        self.assertNotIn("latest", thresholds.AI_MODEL_GATE)
         self.assertNotIn("latest", thresholds.AI_MODEL_EXTRACT)
 
     def test_a_failure_is_logged_and_raised(self):

@@ -35,7 +35,11 @@ AI_RAISE_CAP = 55
 # byter modell -- och pris -- utan att något här ändras. Kontrollerat mot
 # ai.google.dev/gemini-api/docs/models 2026-10-04.
 AI_MODEL_EXTRACT = "gemini-3.5-flash-lite"  # läsa fritext: billigast som räcker
-AI_MODEL_GATE = "gemini-3.8-flash"  # andra bedömningen före en notis
+# Andra bedömningen före en notis och nattrapporten. Också Flash-Lite: mot facit
+# (eval_ai 2026-10-04) läste den rätt händelse i 56 av 56 texter, och på
+# gratisnivån gick bara 10 av 38 anrop till gemini-3.8-flash igenom (429).
+# Byt till "gemini-3.8-flash" först när fakturering är på och eval_ai visar en vinst.
+AI_MODEL_GATE = "gemini-3.5-flash-lite"
 # Pris i USD per miljon tokens (in, ut), ai.google.dev/gemini-api/docs/pricing
 # 2026-10-04. 3.8 Flash har introduktionspris t.o.m. 2026-12-31; därefter 1,50/7,50.
 AI_PRICE_USD_PER_MTOK = {
