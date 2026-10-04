@@ -47,6 +47,10 @@ void main() {
         'Ditt företags administratör hanterar medlemskapet på webben.',
       );
       expect(kNotInTrialNote, '$kNotInTrial $kMembershipOnWeb');
+      expect(
+        kBillingOnWeb,
+        'Fakturor och medlemskap hanteras av företagets administratör på webben.',
+      );
     });
   });
 
@@ -120,7 +124,15 @@ void main() {
       };
       final users = <String>{};
       source().forEach((path, lines) {
-        if (lines.any((l) => l.contains('launchUrl('))) users.add(path);
+        // launchUrlString och den äldre launch() är samma sak med en sträng.
+        if (lines.any(
+          (l) =>
+              l.contains('launchUrl(') ||
+              l.contains('launchUrlString(') ||
+              RegExp(r'(^|[^\w.])launch\(').hasMatch(l),
+        )) {
+          users.add(path);
+        }
       });
       expect(users.difference(allowed), isEmpty);
     });

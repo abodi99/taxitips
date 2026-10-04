@@ -39,10 +39,13 @@ android {
     }
 
     defaultConfig {
-        // TODO: Specify your own unique Application ID (https://developer.android.com/studio/build/application-id.html).
+        // Paketnamnet i Google Play och i Firebase (google-services.json). Byts
+        // aldrig: en ny id är en ny app i butiken.
         applicationId = "se.taxitips.app"
-        // You can update the following values to match your application needs.
-        // For more information, see: https://flutter.dev/to/review-gradle-config.
+        // Flutter 3.44: minSdk 24, targetSdk 36 (Google Play kräver minst 35 för
+        // nya appar och uppdateringar). Versionen läses ur pubspec.yaml
+        // (`version: 1.0.1+2` -> versionName 1.0.1, versionCode 2). Höj
+        // byggnumret före varje uppladdning: Play tar aldrig samma versionCode två gånger.
         minSdk = maxOf(flutter.minSdkVersion, 23)
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
@@ -63,10 +66,25 @@ android {
 
     buildTypes {
         release {
+            // Uppladdningsnyckeln (android/key.properties + keystore/, aldrig i
+            // git). Google Play signerar om med appens signeringsnyckel (Play App
+            // Signing). Utan key.properties signeras releasebygget med
+            // debugnyckeln -- duger för en test-APK, men Play avvisar det.
             signingConfig = if (keystorePropertiesFile.exists()) {
                 signingConfigs.getByName("release")
             } else {
+                logger.warn(
+                    "VARNING: android/key.properties saknas -- releasebygget signeras " +
+                        "med debugnyckeln och kan inte laddas upp till Google Play."
+                )
                 signingConfigs.getByName("debug")
+            }
+            // R8 (minify + resurskrympning) slås på av Flutters Gradle-plugin för
+            // release. Pluginen och Firebase har egna keep-regler. Symboltabellen
+            // för den inbyggda koden följer med appbunten, så att Play Console kan
+            // läsa krascher i Flutter-motorn.
+            ndk {
+                debugSymbolLevel = "SYMBOL_TABLE"
             }
         }
     }

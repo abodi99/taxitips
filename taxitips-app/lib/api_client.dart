@@ -212,6 +212,8 @@ class ApiClient {
       // Allow UI to boot; screens will surface config errors.
     }
     final prefs = await SharedPreferences.getInstance();
+    // Äldre versioner sparade lösenordet i klartext här. Bort vid start.
+    if (prefs.containsKey(_passwordKey)) await prefs.remove(_passwordKey);
     // Hemligheten läses ur säker lagring; finns den bara på den gamla platsen
     // flyttas den dit i samma anrop.
     deviceToken = await credentials.read();
@@ -274,18 +276,20 @@ class ApiClient {
     await clearDevice();
   }
 
+  /// Senast använda e-post, för att fylla i formuläret igen. Lösenordet
+  /// sparas inte: shared_preferences är en klartextfil i appens datakatalog,
+  /// och Supabase-sessionen håller redan inloggningen vid liv. Ett lösenord
+  /// som en äldre version lagt där tas bort här.
   Future<({String? email, String? password})> loadSavedCredentials() async {
     final prefs = await SharedPreferences.getInstance();
-    return (
-      email: prefs.getString(_emailKey),
-      password: prefs.getString(_passwordKey),
-    );
+    if (prefs.containsKey(_passwordKey)) await prefs.remove(_passwordKey);
+    return (email: prefs.getString(_emailKey), password: null);
   }
 
   Future<void> saveCredentials(String email, String password) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_emailKey, email);
-    await prefs.setString(_passwordKey, password);
+    await prefs.remove(_passwordKey);
   }
 
   Future<({String? email, String? password})> loadDevTestLogin() async {
@@ -724,6 +728,57 @@ class ApiClient {
   /// betalda perioden ut (fleet/ownership.py:close_account).
   Future<Map<String, dynamic>> closeCompanyAccount() =>
       _owner('company/close', {});
+
+  /// Webbplatsen, där integritetspolicyn och villkoren ligger
+  /// (`$webUrl/privacy.html`, `$webUrl/terms.html`). Inte [baseUrl]: det är
+  /// Supabase (api.taxitips.se), som svarar 401 på de sökvägarna.
+  static const webUrl = 'https://taxitips.se';
+
+  /// Radera mitt konto (Apple 5.1.1(v)): POST /api/fleet/account/delete,
+  /// reglerna i fleet/account_deletion.py.
+  ///
+  /// Bär både den inloggade sessionen och telefonens förarnyckel när de
+  /// finns: ägaren raderar sitt konto och kopplar loss telefonen hen kört
+  /// med, föraren (som saknar session i appen) raderar sitt förarkonto och
+  /// telefonens koppling. Vägrar servern -- enda ägaren med ett medlemskap
+  /// som förnyas -- kastas ApiException med serverns förklaring och inget
+  /// rörs här. Lyckas det glömmer telefonen allt om kontot.
+  Future<Map<String, dynamic>> deleteMyAccount() =>
+      _reported('delete_account', () async {
+        await ensureInitialized();
+        final backend = _backend;
+        if (backend == null) {
+          throw ApiException(
+            503,
+            'Det går inte att radera kontot just nu. Försök igen senare.',
+          );
+        }
+        final access = _accessToken;
+        final device = deviceToken;
+        if (access == null && (device == null || device.isEmpty)) {
+          throw ApiException(401, 'Logga in för att fortsätta.');
+        }
+        final result = await backend.deleteAccount(
+          accessToken: access,
+          deviceToken: device,
+        );
+        await _forgetAccountLocally();
+        return result;
+      });
+
+  /// Efter en radering: sessionen, telefonens nyckel, sparad e-post, en
+  /// registrering som väntade och körområdet. Installations-id:t ligger kvar
+  /// (det är telefonens, inte personens).
+  Future<void> _forgetAccountLocally() async {
+    await leaveAll();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_emailKey);
+    await prefs.remove(_passwordKey);
+    await prefs.remove(_pendingRegistrationKey);
+    try {
+      await clearLocalAreaFilter();
+    } catch (_) {}
+  }
 
   String _randomJoinCode() {
     const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';

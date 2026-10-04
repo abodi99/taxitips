@@ -29,6 +29,8 @@ class TaxiTipsConfig {
   static bool get usesDjangoApi => apiBaseUrl.isNotEmpty;
 
   /// Den interaktiva demon på webben. Appen har ingen egen demo längre --
-  /// startskärmen öppnar den här sidan i telefonens webbläsare.
-  static const demoUrl = 'https://taxitips.se/demo';
+  /// startskärmen öppnar den här sidan i telefonens webbläsare. `app=1`
+  /// döljer demons knappar till registrering och kontakt (src/demo/main.js):
+  /// appen leder inte vidare till något köp (membership_copy.dart).
+  static const demoUrl = 'https://taxitips.se/demo?app=1';
 }

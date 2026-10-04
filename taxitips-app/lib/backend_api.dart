@@ -682,6 +682,24 @@ class BackendApi {
     return _decode(res, 'supportSend');
   }
 
+  /// Radera mitt konto (POST /api/fleet/account/delete). Ägarens session
+  /// och/eller förarens telefon; servern avgör vad som raderas
+  /// (fleet/account_deletion.py). `confirm` skickas först när användaren
+  /// bekräftat i appen.
+  Future<Map<String, dynamic>> deleteAccount({
+    String? deviceToken,
+    String? accessToken,
+  }) async {
+    final res = await _client
+        .post(
+          Uri.parse('$baseUrl/api/fleet/account/delete'),
+          headers: _headers(deviceToken: deviceToken, accessToken: accessToken),
+          body: jsonEncode(const {'confirm': 'radera'}),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'deleteAccount');
+  }
+
   /// Felrapporten (lib/client_log.dart -> POST /api/client-log). Kort
   /// tidsgräns och inget svar att läsa: rapporten får aldrig hålla uppe något.
   Future<void> clientLog(

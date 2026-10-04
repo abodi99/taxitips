@@ -28,6 +28,8 @@
 		<string>$(FLUTTER_BUILD_NUMBER)</string>
 		<key>NSLocationWhenInUseUsageDescription</key>
 		<string>TaxiTips använder din plats medan du använder appen för att visa hur långt det är till varje tips. Positionen avrundas och sparas inte. Du kan välja körområde i stället för att dela plats.</string>
+		<key>ITSAppUsesNonExemptEncryption</key>
+		<false/>
 		<key>LSRequiresIPhoneOS</key>
 		<true/>
 		<key>UIApplicationSceneManifest</key>

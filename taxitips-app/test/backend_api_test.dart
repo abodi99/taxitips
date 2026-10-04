@@ -330,6 +330,42 @@ void main() {
     expect(seen.last.headers.containsKey('Authorization'), isFalse);
   });
 
+  test('radera mitt konto bär bekräftelsen och båda bevisen', () async {
+    final api = BackendApi(
+      baseUrl: 'http://localhost:8000',
+      client: respond({'ok': true, 'deleted': true, 'accountsDeleted': 1}),
+    );
+    final result = await api.deleteAccount(
+      deviceToken: 'dev-1',
+      accessToken: 'jwt-1',
+    );
+    expect(result['deleted'], isTrue);
+    expect(seen.single.method, 'POST');
+    expect(seen.single.url.path, '/api/fleet/account/delete');
+    expect(seen.single.headers['X-Device-Token'], 'dev-1');
+    expect(seen.single.headers['Authorization'], 'Bearer jwt-1');
+    expect(jsonDecode(seen.single.body), {'confirm': 'radera'});
+  });
+
+  test('radera mitt konto: serverns nej når fram med skälet', () async {
+    final api = BackendApi(
+      baseUrl: 'http://localhost:8000',
+      client: respond({
+        'ok': false,
+        'reason': 'sole_owner_active_subscription',
+        'message': 'Du är enda ägaren. Avsluta företagskontot först.',
+      }, status: 409),
+    );
+    await expectLater(
+      api.deleteAccount(accessToken: 'jwt-1'),
+      throwsA(
+        isA<ApiException>()
+            .having((e) => e.status, 'status', 409)
+            .having((e) => e.reason, 'reason', 'sole_owner_active_subscription'),
+      ),
+    );
+  });
+
   test('ägarens vägar bär inloggningen, aldrig en förartoken', () async {
     final api = BackendApi(
       baseUrl: 'http://localhost:8000',

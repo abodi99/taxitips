@@ -44,18 +44,15 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
-  static const _prefillEnabled = bool.fromEnvironment(
-    'ENABLE_TEST_LOGIN',
-    defaultValue: kDebugMode,
-  );
-  static const _prefillEmail = String.fromEnvironment(
-    'PREFILL_EMAIL',
-    defaultValue: 'agare@malmotaxi.se',
-  );
-  static const _prefillPassword = String.fromEnvironment(
-    'PREFILL_PASSWORD',
-    defaultValue: 'taxitips123',
-  );
+  // Förifyllt testkonto, BARA i debugbyggen och bara när det skickas in vid
+  // bygget: `flutter run --dart-define=PREFILL_EMAIL=… --dart-define=PREFILL_PASSWORD=…`
+  // (konton ur `manage.py seed_local_demo`, se DEV.md). Inga standardvärden:
+  // en adress eller ett lösenord här följde med i varje byggd app, även den i
+  // butikerna. `kDebugMode` är en konstant, så releasebygget saknar grenen.
+  static const _prefillEnabled =
+      kDebugMode && bool.fromEnvironment('ENABLE_TEST_LOGIN', defaultValue: true);
+  static const _prefillEmail = String.fromEnvironment('PREFILL_EMAIL');
+  static const _prefillPassword = String.fromEnvironment('PREFILL_PASSWORD');
 
   final _email = TextEditingController();
   final _password = TextEditingController();
@@ -68,7 +65,7 @@ class _LoginScreenState extends State<LoginScreen> {
   @override
   void initState() {
     super.initState();
-    if (_prefillEnabled) {
+    if (_prefillEnabled && _prefillEmail.isNotEmpty) {
       _email.text = _prefillEmail;
       _password.text = _prefillPassword;
     }

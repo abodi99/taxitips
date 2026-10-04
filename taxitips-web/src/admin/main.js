@@ -507,15 +507,20 @@ el.loginForm?.addEventListener("submit", async (event) => {
 
 /**
  * Lokal debug-inloggning. Vite sätter `import.meta.env.DEV` bara under
- * `npm run dev` — hela blocket (knapp + lösenord) plockas bort i prod-bygget.
+ * `npm run dev` — hela blocket (knapp + lösenord) plockas bort i prod-bygget,
+ * och platsen för knappen skapas här i stället för att stå i admin.html, så att
+ * produktionens HTML inte ens har ett tomt `#devLogin`.
  * Kontot skapas lokalt: admin@taxitips.local / taxitips-admin-dev + StaffRole.
  */
 if (import.meta.env.DEV) {
   const DEV_EMAIL = "admin@taxitips.local";
   const DEV_PASSWORD = "taxitips-admin-dev";
-  const mount = document.getElementById("devLogin");
-  if (mount) {
-    mount.hidden = false;
+  const anchor = document.getElementById("magicSent");
+  const mount = document.createElement("div");
+  mount.id = "devLogin";
+  mount.className = "dev-login";
+  anchor?.after(mount);
+  if (anchor) {
     mount.innerHTML = `
       <p class="muted"><b>Lokal utveckling</b></p>
       <button id="devLoginBtn" class="btn btn-outline btn-block" type="button">

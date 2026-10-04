@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api_client.dart';
+import '../membership_copy.dart';
 import '../net_status.dart';
 import '../signal_kinds.dart' show countyShort;
 import '../theme.dart';
@@ -162,9 +163,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (ok == true) _showSnack('Lösenord bytt');
   }
 
+  /// Integritetspolicyn och villkoren på taxitips.se. Förr byggdes länken på
+  /// `api.baseUrl` (Supabase, api.taxitips.se), som svarar 401 på sidorna.
   Future<void> _openLegal(String path) async {
-    final base = widget.api.baseUrl.replaceAll(RegExp(r'/$'), '');
-    final uri = Uri.parse('$base$path');
+    final uri = Uri.parse('${ApiClient.webUrl}$path');
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
@@ -480,9 +482,136 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onData: () => showDataInfoDialog(context),
                     onCloseAccount: _isOffice ? _closeAccount : null,
                   ),
+                  // Radera mitt konto: allra sist, se _AccountDeletionFooter.
+                  if (_isOffice || _isDevice)
+                    _AccountDeletionFooter(onDelete: _deleteAccount),
                 ],
               ),
             ),
+    );
+  }
+
+  // --- Radera mitt konto (Apple 5.1.1(v)) ---------------------------------
+  //
+  // Ägare och förare raderar sitt eget konto här. "Avsluta företagskontot"
+  // ovan stoppar bara förnyelsen. Reglerna (enda ägaren med ett medlemskap som
+  // förnyas får ett nej med förklaring) bor på servern:
+  // taxitips-backend/fleet/account_deletion.py.
+
+  Future<void> _deleteAccount() async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Radera ditt konto?'),
+        content: Text(
+          _isOffice
+              ? 'Ditt konto och din inloggning tas bort för gott. Telefoner du '
+                    'kört med kopplas från bilen. Är du ensam ägare avslutas ett '
+                    'pågående prov. Det går inte att ångra.'
+              : 'Ditt förarkonto tas bort och telefonen kopplas från bilen. '
+                    'Din chef kan bjuda in dig igen. Det går inte att ångra.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Avbryt'),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: TbColors.danger),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Radera'),
+          ),
+        ],
+      ),
+    );
+    if (ok != true || !mounted) return;
+
+    final navigator = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    unawaited(
+      showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (_) => const PopScope(
+          canPop: false,
+          child: Center(
+            child: CircularProgressIndicator(color: TbColors.taxi),
+          ),
+        ),
+      ),
+    );
+    Map<String, dynamic>? result;
+    Object? error;
+    try {
+      result = await widget.api.deleteMyAccount();
+    } catch (e) {
+      error = e;
+    }
+    navigator.pop();
+    if (!mounted) return;
+
+    if (error != null) {
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Kontot raderades inte'),
+          content: Text(_cleanError(error!)),
+          actions: [
+            FilledButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(
+          result?['message']?.toString() ?? 'Ditt konto är raderat.',
+        ),
+        backgroundColor: TbColors.live,
+      ),
+    );
+    // Telefonen har redan glömt kontot (ApiClient.deleteMyAccount). Tillbaka
+    // till startskärmen.
+    final leave = widget.onLeftDevice ?? widget.onLogout;
+    leave?.call();
+  }
+}
+
+/// Längst ner i Inställningarna: var fakturor och medlemskap sköts (neutral
+/// text, ingen länk -- membership_copy.dart) och "Radera mitt konto".
+class _AccountDeletionFooter extends StatelessWidget {
+  const _AccountDeletionFooter({required this.onDelete});
+
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: 16),
+      child: Column(
+        children: [
+          const Text(
+            kBillingOnWeb,
+            textAlign: TextAlign.center,
+            style: TextStyle(color: TbColors.muted, fontSize: 13, height: 1.35),
+          ),
+          const SizedBox(height: 8),
+          TextButton(
+            onPressed: onDelete,
+            style: TextButton.styleFrom(
+              foregroundColor: TbColors.danger,
+              minimumSize: const Size(0, 44),
+              textStyle: const TextStyle(fontSize: 14),
+            ),
+            child: const Text('Radera mitt konto'),
+          ),
+        ],
+      ),
     );
   }
 }

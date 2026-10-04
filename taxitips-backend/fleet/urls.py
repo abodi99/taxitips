@@ -60,6 +60,8 @@ urlpatterns = [
     path("ownership/transfer", api.transfer_ownership),
     path("ownership/<uuid:transfer_id>/accept", api.accept_ownership),
     path("company/close", api.close_account),
+    # Radera mitt konto (Apple 5.1.1(v)): inloggat konto ELLER förarens telefon.
+    path("account/delete", api.delete_own_account),
     path("company/details", api.update_company_details),
     path("company/contracting-party", api.change_contracting_party),
     # Plattformens granskning
