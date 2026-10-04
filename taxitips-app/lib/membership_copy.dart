@@ -21,6 +21,11 @@ const kNotInTrial = 'Ingår inte i provet.';
 const kMembershipOnWeb =
     'Ditt företags administratör hanterar medlemskapet på webben.';
 
+/// Raden om fakturor och medlemskap i Inställningar (ägare). Ingen länk, ingen
+/// knapp, inget pris: bara vem som sköter det.
+const kInvoicesOnWeb =
+    'Fakturor och medlemskap hanteras av företagets administratör på webben.';
+
 /// Båda meningarna: det som visas där något är låst.
 const kNotInTrialNote = '$kNotInTrial $kMembershipOnWeb';
 

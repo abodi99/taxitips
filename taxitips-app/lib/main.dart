@@ -126,9 +126,15 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
       // FCM-permission får inte blockera boot (hänger ofta på webben).
       unawaited(registerForPush(widget.api));
     }
-    // Första starten utan konto: introduktionen före välkomstskärmen.
-    if (_route == AppRoute.welcome && !await OnboardingScreen.seen()) {
-      _route = AppRoute.onboarding;
+    // Första starten utan konto: introduktionen före välkomstskärmen, en
+    // gång efter installationen. Startar appen i något annat läge (en
+    // inloggning som redan finns, en inbjudan, en registreringslänk) är
+    // introduktionen avklarad: den ska inte dyka upp först när föraren loggat
+    // ut och startar om. Huvudskärmens guidade genomgång tar över.
+    if (_route == AppRoute.welcome) {
+      if (!await OnboardingScreen.seen()) _route = AppRoute.onboarding;
+    } else {
+      unawaited(OnboardingScreen.markSeen());
     }
     if (mounted) setState(() => _booting = false);
   }
@@ -167,6 +173,8 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
   }
 
   void _goShell() {
+    // Inloggad: introduktionen är avklarad, också när den hoppades över.
+    unawaited(OnboardingScreen.markSeen());
     setState(() {
       _route = AppRoute.shell;
       _invite = null;
@@ -345,18 +353,24 @@ class _AppShellState extends State<_AppShell> {
   /// Förarskärmen läser om när Inställningarna stängs (nytt län, ny bil).
   final _driverRefresh = ValueNotifier<int>(0);
 
+  /// "Visa genomgången igen" i Inställningar: förarskärmen startar den guidade
+  /// genomgången när Inställningarna stängts.
+  final _driverTour = ValueNotifier<int>(0);
+
   @override
   void dispose() {
     _driverRefresh.dispose();
+    _driverTour.dispose();
     super.dispose();
   }
 
   Future<void> _openSettings(BuildContext context) async {
     final tokenBefore = widget.api.deviceToken;
-    await Navigator.of(context).push(
-      MaterialPageRoute<void>(
+    final showTour = await Navigator.of(context).push<bool>(
+      MaterialPageRoute<bool>(
         builder: (_) => SettingsScreen(
           api: widget.api,
+          onShowTour: () => Navigator.of(context).pop(true),
           // Stäng inställningarna först: de låg annars kvar ovanpå
           // inloggningen, halvt utloggade.
           onLogout: () {
@@ -375,6 +389,12 @@ class _AppShellState extends State<_AppShell> {
     } else if (mounted) {
       _driverRefresh.value++;
     }
+    // Efter bilden ovan: en ny förarskärm (ny bil) hinner då lyssna först.
+    if (showTour == true && mounted) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _driverTour.value++;
+      });
+    }
   }
 
   @override
@@ -386,6 +406,7 @@ class _AppShellState extends State<_AppShell> {
         onLeftDevice: widget.onLeftDevice,
         onOpenSettings: () => _openSettings(context),
         refresh: _driverRefresh,
+        tourRequest: _driverTour,
       ),
     );
   }

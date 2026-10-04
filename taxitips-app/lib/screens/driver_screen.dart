@@ -28,6 +28,8 @@ import '../widgets/brand_icons.dart';
 import '../followed_events.dart';
 import '../signal_kinds.dart';
 import '../widgets/category_bar.dart';
+import '../widgets/driver_tour.dart';
+import '../widgets/guided_tour.dart';
 import '../widgets/map_legend_sheet.dart';
 import '../widgets/signal_card.dart';
 import '../widgets/signal_map.dart';
@@ -43,6 +45,7 @@ class DriverScreen extends StatefulWidget {
     this.onLeftDevice,
     this.onOpenSettings,
     this.refresh,
+    this.tourRequest,
   });
 
   final ApiClient api;
@@ -55,6 +58,10 @@ class DriverScreen extends StatefulWidget {
   /// när Inställningarna stängs efter ett länbyte. Annars syntes det nya
   /// länet först vid nästa uppdatering, upp till en minut senare.
   final Listenable? refresh;
+
+  /// Signal om att visa den guidade genomgången igen ("Visa genomgången igen"
+  /// i Inställningar). Första gången startar den av sig själv.
+  final Listenable? tourRequest;
 
   @override
   State<DriverScreen> createState() => _DriverScreenState();
@@ -79,6 +86,14 @@ class _DriverScreenState extends State<DriverScreen>
   // DraggableScrollableSheet till initialChildSize varje setState →
   // listan "går alltid ner" var 30:e sekund.
   final _sheetController = DraggableScrollableController();
+
+  // Den guidade genomgången (widgets/guided_tour.dart): elementen den pekar
+  // på, den pågående genomgången och väntan på att skärmen är redo.
+  final _tourKeys = DriverTourKeys();
+  TourController? _tour;
+  Timer? _tourTimer;
+  ScrollController? _sheetScroll;
+  ModalRoute<dynamic>? _route;
 
   /// Aktuell sheet-höjd (0–1) — FAB ska sitta ovanför, inte mitt i sheetet.
   double _sheetExtent = 0.40;
@@ -501,6 +516,7 @@ class _DriverScreenState extends State<DriverScreen>
     _pushSub = foregroundMessages.listen(_onForegroundPush);
     _openedSub = openedMessageSignals.listen((_) => _openFromNotification());
     widget.refresh?.addListener(_onRefreshRequested);
+    widget.tourRequest?.addListener(_onTourRequested);
     _bootstrap();
     // Kallstart från en notis: meddelandet kom innan skärmen fanns.
     WidgetsBinding.instance.addPostFrameCallback(
@@ -602,6 +618,13 @@ class _DriverScreenState extends State<DriverScreen>
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Vilken skärm vi ligger på: genomgången väntar tills inget ligger ovanpå.
+    _route = ModalRoute.of(context);
+  }
+
+  @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     // Ingen hämtning i bakgrunden: en telefon i fickan ska inte fråga servern
     // varje minut. Tillbaka i förgrunden hämtas direkt.
@@ -638,6 +661,9 @@ class _DriverScreenState extends State<DriverScreen>
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     widget.refresh?.removeListener(_onRefreshRequested);
+    widget.tourRequest?.removeListener(_onTourRequested);
+    _tourTimer?.cancel();
+    _tour?.dismiss();
     _pushSub?.cancel();
     _openedSub?.cancel();
     _timer?.cancel();
@@ -678,6 +704,72 @@ class _DriverScreenState extends State<DriverScreen>
     await _load();
     _schedulePoll();
     _scheduleFerryPoll();
+    // Första gången appen används: visa runt, när listan hunnit laddas.
+    if (mounted && !await GuidedTour.seen()) _scheduleTour();
+  }
+
+  // --- Den guidade genomgången -------------------------------------------
+
+  void _onTourRequested() {
+    if (mounted) _scheduleTour();
+  }
+
+  /// Startar genomgången så fort skärmen är redo: ingen koppling pågår och
+  /// inget ligger ovanpå (inställningarna som just stängdes, ett tipsblad).
+  /// Ligger något kvar över en lång stund startar den inte alls -- då har den
+  /// inte heller sparats som sedd, och kommer nästa gång.
+  void _scheduleTour() {
+    _tourTimer?.cancel();
+    var tries = 0;
+    _tourTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      final ready = !_claiming && (_route?.isCurrent ?? true) && _tour == null;
+      if (!ready && ++tries < 40) return;
+      timer.cancel();
+      if (ready) unawaited(_startTour());
+    });
+  }
+
+  Future<void> _startTour() async {
+    // Samma utgångsläge för alla steg: listan på sin vanliga höjd och överst,
+    // så att kartknapparna syns och det första tipset ligger i bild.
+    await _expandSheet(0.42);
+    final scroll = _sheetScroll;
+    if (scroll != null && scroll.hasClients) scroll.jumpTo(0);
+    await WidgetsBinding.instance.endOfFrame;
+    if (!mounted || _tour != null) return;
+    final owner = widget.api.sessionToken != null;
+    final tour = GuidedTour.start(
+      context,
+      role: owner ? 'owner' : 'driver',
+      steps: driverTourSteps(
+        keys: _tourKeys,
+        owner: owner,
+        mapArea: _tourMapArea,
+      ),
+    );
+    if (tour == null) return;
+    _tour = tour;
+    unawaited(
+      tour.done.then((_) {
+        if (identical(_tour, tour)) _tour = null;
+      }),
+    );
+  }
+
+  /// Kartan mellan kategoriraden och listan -- det som syns av den.
+  Rect? _tourMapArea() {
+    final bar = tourRectOfKey(_tourKeys.categories);
+    if (bar == null) return null;
+    final size = MediaQuery.sizeOf(context);
+    final top = bar.bottom + 8;
+    final bottom = size.height * (1 - _sheetExtent) - 8;
+    // Under en bråkdel av skärmen finns ingen karta att peka på.
+    if (bottom - top < 120) return null;
+    return Rect.fromLTRB(12, top, size.width - 12, bottom);
   }
 
   /// Hämtar GPS. Returnerar null vid lycka, annars ett kort felmeddelande.
@@ -1036,7 +1128,7 @@ class _DriverScreenState extends State<DriverScreen>
         child: TextButton.icon(
           style: TextButton.styleFrom(
             foregroundColor: TbColors.skiffer,
-            minimumSize: const Size(0, 44),
+            minimumSize: const Size(0, 48),
             textStyle: const TextStyle(
               fontSize: 14,
               fontWeight: FontWeight.w700,
@@ -2680,6 +2772,7 @@ class _DriverScreenState extends State<DriverScreen>
                                             const SizedBox(width: 48),
                                           if (widget.onOpenSettings != null)
                                             IconButton(
+                                              key: _tourKeys.settings,
                                               icon: Badge(
                                                 isLabelVisible:
                                                     _supportUnread > 0,
@@ -2766,6 +2859,7 @@ class _DriverScreenState extends State<DriverScreen>
                           ),
                           const SizedBox(height: 8),
                           CategoryBar(
+                            key: _tourKeys.categories,
                             selected: _category,
                             counts: _categoryCounts,
                             followedCount: _followedCount,
@@ -2798,6 +2892,7 @@ class _DriverScreenState extends State<DriverScreen>
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Badge(
+                              key: _tourKeys.filter,
                               isLabelVisible: _filtersActive,
                               smallSize: 12,
                               backgroundColor: TbColors.taxiDeep,
@@ -2875,6 +2970,7 @@ class _DriverScreenState extends State<DriverScreen>
                       snapSizes: const [0.15, 0.42, 0.9],
                       shouldCloseOnMinExtent: false,
                       builder: (context, scrollController) {
+                        _sheetScroll = scrollController;
                         return Material(
                           color: TbColors.vit,
                           elevation: 16,
@@ -2967,6 +3063,7 @@ class _DriverScreenState extends State<DriverScreen>
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
       child: Row(
+        key: _tourKeys.list,
         children: [
           Icon(
             _category == 'followed'
@@ -3024,25 +3121,29 @@ class _DriverScreenState extends State<DriverScreen>
                     ),
                   ),
               ],
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(_sortIcon, size: 20, color: TbColors.midnatt),
-                    const SizedBox(width: 4),
-                    Text(
-                      _sortLabel,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
+              child: ConstrainedBox(
+                // Tryckytan minst 48 hög.
+                constraints: const BoxConstraints(minHeight: 48),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(_sortIcon, size: 20, color: TbColors.midnatt),
+                      const SizedBox(width: 4),
+                      Text(
+                        _sortLabel,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          color: TbColors.midnatt,
+                        ),
+                      ),
+                      const Icon(
+                        Icons.arrow_drop_down_rounded,
                         color: TbColors.midnatt,
                       ),
-                    ),
-                    const Icon(
-                      Icons.arrow_drop_down_rounded,
-                      color: TbColors.midnatt,
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -3174,18 +3275,26 @@ class _DriverScreenState extends State<DriverScreen>
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 10),
       child: child,
     );
-    Widget tipCard(Map<String, dynamic> a) => pad(
-      SignalCard(
-        alert: a,
-        onTap: () {
-          _focusOpportunity(a);
-          _openAlertDetail(a);
-        },
-        onToggleFollow: widget.api.supportsFavorites
-            ? (v) => _toggleFavorite(a, v)
-            : null,
-      ),
-    );
+    // Det första kortet bär genomgångens nyckel (bara ett kort får den).
+    var firstCard = true;
+    Widget tipCard(Map<String, dynamic> a) {
+      final key = firstCard ? _tourKeys.firstCard : null;
+      firstCard = false;
+      return pad(
+        SignalCard(
+          key: key,
+          alert: a,
+          onTap: () {
+            _focusOpportunity(a);
+            _openAlertDetail(a);
+          },
+          onToggleFollow: widget.api.supportsFavorites
+              ? (v) => _toggleFavorite(a, v)
+              : null,
+        ),
+      );
+    }
+
     Widget eventCard(Map<String, dynamic> e) => pad(
       EventCard(
         event: e,

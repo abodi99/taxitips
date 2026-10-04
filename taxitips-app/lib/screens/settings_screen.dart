@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api_client.dart';
+import '../membership_copy.dart';
 import '../net_status.dart';
 import '../signal_kinds.dart' show countyShort;
 import '../theme.dart';
@@ -14,6 +15,7 @@ import '../widgets/notify_prefs_sheet.dart';
 import '../widgets/password_visibility.dart';
 import '../widgets/settings_ui.dart';
 import '../widgets/vehicle_session_sheet.dart';
+import 'onboarding_screen.dart';
 import 'support_chat_screen.dart';
 import 'trial_welcome_screen.dart';
 
@@ -23,11 +25,16 @@ class SettingsScreen extends StatefulWidget {
     required this.api,
     this.onLogout,
     this.onLeftDevice,
+    this.onShowTour,
   });
 
   final ApiClient api;
   final VoidCallback? onLogout;
   final VoidCallback? onLeftDevice;
+
+  /// "Visa genomgången igen": stänger Inställningarna och startar den guidade
+  /// genomgången på startsidan. Utan den visas ingen rad (ingen död knapp).
+  final VoidCallback? onShowTour;
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -299,6 +306,216 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  // ── Grupperna ──────────────────────────────────────────────────────────
+  //
+  // Varje grupp har en kort rubrik och en rad om vad man kan göra där. Ordning:
+  // företaget (ägare), telefonen, notiser, konto, hjälp. Längst ner kommer
+  // [_Footer]; något nytt som hör hemma sist (t.ex. radera kontot) läggs före
+  // den, som en egen grupp.
+
+  /// Företaget och bilarna, för ägare. Fakturor och medlemskap sköts på
+  /// webben av företagets administratör: en neutral rad, ingen länk, ingen
+  /// knapp (membership_copy.dart; Apples och Googles regler).
+  List<Widget> _companySection() => [
+    const SettingsSectionHeader(
+      title: 'Företaget och bilarna',
+      description: 'Se företaget, lägg till bilar och bjud in förare.',
+    ),
+    CompanySettingsPanel(
+      key: ValueKey(_companyPanelEpoch),
+      api: widget.api,
+      // Nytt län: översikten "Den här telefonen" visar det direkt.
+      onChanged: () => unawaited(_loadCounties()),
+    ),
+    const SizedBox(height: 12),
+    const SettingsGroup(
+      children: [
+        SettingsNoteRow(
+          icon: Icons.receipt_long_outlined,
+          text: kInvoicesOnWeb,
+        ),
+      ],
+    ),
+    const SizedBox(height: 28),
+  ];
+
+  /// Telefonen man håller i: bilen och länen. Inget telefonnamn -- det är
+  /// kontot man loggar in med som syns.
+  List<Widget> _phoneSection() {
+    final hasCar = _hasCars || _currentPlate != null;
+    if (!hasCar && _licenseCountyLabels.isEmpty) return const [];
+    return [
+      SettingsSectionHeader(
+        title: 'Den här telefonen',
+        description: _isOffice || _companyName == null
+            ? 'Bilen du kör och länen du får tips från.'
+            : 'Bilen du kör och länen du får tips från. Företag: $_companyName.',
+      ),
+      if (_licenseCountyLabels.isNotEmpty) ...[
+        _CountiesOverview(
+          licenseLabels: _licenseCountyLabels,
+          activeLabels: _activeCountyLabels,
+          onOpenFilter: _openNotify,
+        ),
+        const SizedBox(height: 12),
+      ],
+      if (hasCar)
+        SettingsGroup(
+          children: [
+            SettingsNavRow(
+              icon: Icons.local_taxi_outlined,
+              title: _currentPlate ?? 'Välj bil',
+              subtitle: _currentPlate == null
+                  ? 'Ingen bil vald'
+                  : 'Bilen du kör',
+              onTap: _chooseCar,
+            ),
+          ],
+        ),
+      const SizedBox(height: 28),
+    ];
+  }
+
+  List<Widget> _notifySection() => [
+    const SettingsSectionHeader(
+      title: 'Notiser',
+      description: 'Välj när telefonen ska säga till om ett starkt tips.',
+    ),
+    SettingsGroup(
+      children: [
+        SettingsNavRow(
+          icon: BrandIcons.notification(size: 24, color: TbColors.muted),
+          title: 'Notiser',
+          subtitle: _activeCountyLabels.isNotEmpty
+              ? 'Filter: ${_activeCountyLabels.join(', ')}'
+              : (_licenseCountyLabels.isEmpty ? null : 'Alla dina län'),
+          onTap: _openNotify,
+        ),
+        SettingsNavRow(
+          icon: Icons.history,
+          title: 'Notishistorik',
+          subtitle: 'Notiser du har fått',
+          onTap: _openNotificationLog,
+        ),
+      ],
+    ),
+    const SizedBox(height: 28),
+  ];
+
+  /// Kontot: ägaren byter e-post och lösenord och loggar ut; en förare utan
+  /// eget konto kopplar från telefonen.
+  List<Widget> _accountSection() {
+    if (_isOffice) {
+      return [
+        const SettingsSectionHeader(
+          title: 'Konto',
+          description: 'Byt e-post eller lösenord, eller logga ut.',
+        ),
+        SettingsGroup(
+          children: [
+            SettingsEditRow(
+              icon: Icons.email_outlined,
+              title: 'E-post',
+              value: _email.text.isEmpty ? '—' : _email.text,
+              onTap: _editEmail,
+            ),
+            SettingsEditRow(
+              icon: Icons.lock_outline,
+              title: 'Lösenord',
+              value: '••••••••',
+              onTap: _editPassword,
+            ),
+            if (widget.onLogout != null)
+              SettingsNavRow(
+                icon: Icons.logout,
+                title: 'Logga ut',
+                trailingIcon: Icons.chevron_right,
+                onTap: widget.onLogout!,
+              ),
+          ],
+        ),
+        const SizedBox(height: 28),
+      ];
+    }
+    if (_isDevice) {
+      return [
+        const SettingsSectionHeader(
+          title: 'Konto',
+          description:
+              'Koppla från telefonen om du slutar köra eller byter telefon.',
+        ),
+        SettingsGroup(
+          children: [
+            SettingsNavRow(
+              icon: Icons.link_off,
+              iconColor: TbColors.danger,
+              title: 'Koppla från telefonen',
+              titleColor: TbColors.danger,
+              onTap: _leaveDevice,
+            ),
+          ],
+        ),
+        const SizedBox(height: 28),
+      ];
+    }
+    return const [];
+  }
+
+  /// Hjälp: hur appen fungerar, genomgången igen och chatten.
+  List<Widget> _helpSection() {
+    final canChat = widget.api.canUseSupport;
+    return [
+      const SettingsSectionHeader(
+        title: 'Hjälp',
+        description: 'Se hur appen fungerar, eller skriv till oss.',
+      ),
+      SettingsGroup(
+        children: [
+          // Ägaren ser välkomsten till provet igen; föraren introduktionen.
+          SettingsNavRow(
+            icon: Icons.help_outline,
+            iconColor: TbColors.taxiDeep,
+            title: 'Så fungerar Taxi Tips',
+            subtitle: _isOffice
+                ? 'Provet, bilar och förare'
+                : 'Fyra korta sidor',
+            onTap: () => _isOffice
+                ? TrialWelcomeScreen.openFromSettings(context, widget.api)
+                : OnboardingScreen.openFromSettings(context),
+          ),
+          // Stänger Inställningarna; startsidan visar genomgången.
+          if (widget.onShowTour != null)
+            SettingsNavRow(
+              icon: Icons.tour_outlined,
+              iconColor: TbColors.taxiDeep,
+              title: 'Visa genomgången igen',
+              subtitle: 'Visar var du trycker på startsidan',
+              onTap: widget.onShowTour!,
+            ),
+          if (canChat)
+            SettingsNavRow(
+              icon: Icons.chat_bubble_outline,
+              iconColor: TbColors.taxiDeep,
+              title: 'Chatta med oss',
+              subtitle: _supportUnread > 0
+                  ? (_supportUnread == 1
+                        ? 'Ett nytt svar'
+                        : '$_supportUnread nya svar')
+                  : null,
+              trailing: _supportUnread > 0
+                  ? Badge.count(
+                      count: _supportUnread,
+                      backgroundColor: TbColors.danger,
+                    )
+                  : null,
+              onTap: _openSupportChat,
+            ),
+        ],
+      ),
+      const SizedBox(height: 28),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -325,148 +542,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 16),
                   ],
 
-                  // Företaget och bilarna (ägaren).
-                  if (_isOffice) ...[
-                    CompanySettingsPanel(
-                      key: ValueKey(_companyPanelEpoch),
-                      api: widget.api,
-                      // Nytt län: översikten "Den här telefonen" visar det direkt.
-                      onChanged: () => unawaited(_loadCounties()),
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
-                  // Telefonen man håller i: bilen och notiserna. Inget
-                  // telefonnamn -- det är kontot man loggar in med som syns.
-                  if (_isDevice) ...[
-                    SettingsGroupLabel(
-                      _isOffice || _companyName == null
-                          ? 'Den här telefonen'
-                          : 'Den här telefonen · $_companyName',
-                    ),
-                    if (_licenseCountyLabels.isNotEmpty) ...[
-                      _CountiesOverview(
-                        licenseLabels: _licenseCountyLabels,
-                        activeLabels: _activeCountyLabels,
-                        onOpenFilter: _openNotify,
-                      ),
-                      const SizedBox(height: 12),
-                    ],
-                    SettingsGroup(
-                      children: [
-                        if (_hasCars || _currentPlate != null)
-                          SettingsNavRow(
-                            icon: Icons.local_taxi_outlined,
-                            title: _currentPlate ?? 'Välj bil',
-                            subtitle: _currentPlate == null
-                                ? 'Ingen bil vald'
-                                : 'Bilen du kör',
-                            onTap: _chooseCar,
-                          ),
-                        SettingsNavRow(
-                          icon: BrandIcons.notification(
-                            size: 24,
-                            color: TbColors.muted,
-                          ),
-                          title: 'Notiser',
-                          subtitle: _activeCountyLabels.isNotEmpty
-                              ? 'Filter: ${_activeCountyLabels.join(', ')}'
-                              : (_licenseCountyLabels.isEmpty
-                                    ? null
-                                    : 'Alla dina län'),
-                          onTap: _openNotify,
-                        ),
-                        SettingsNavRow(
-                          icon: Icons.history,
-                          title: 'Notishistorik',
-                          onTap: _openNotificationLog,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
-                  if (widget.api.canUseSupport || _isOffice) ...[
-                    SettingsGroup(
-                      children: [
-                        // Välkomsten till provet igen (ägaren, som såg den
-                        // efter registreringen).
-                        if (_isOffice)
-                          SettingsNavRow(
-                            icon: Icons.help_outline,
-                            iconColor: TbColors.taxiDeep,
-                            title: 'Så fungerar Taxi Tips',
-                            subtitle: 'Provet, bilar och förare',
-                            onTap: () => TrialWelcomeScreen.openFromSettings(
-                              context,
-                              widget.api,
-                            ),
-                          ),
-                        if (widget.api.canUseSupport)
-                          SettingsNavRow(
-                            icon: Icons.chat_bubble_outline,
-                            iconColor: TbColors.taxiDeep,
-                            title: 'Chatta med oss',
-                            subtitle: _supportUnread > 0
-                                ? (_supportUnread == 1
-                                      ? 'Ett nytt svar'
-                                      : '$_supportUnread nya svar')
-                                : null,
-                            trailing: _supportUnread > 0
-                                ? Badge.count(
-                                    count: _supportUnread,
-                                    backgroundColor: TbColors.danger,
-                                  )
-                                : null,
-                            onTap: _openSupportChat,
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
-                  if (_isOffice) ...[
-                    const SettingsGroupLabel('Konto'),
-                    SettingsGroup(
-                      children: [
-                        SettingsEditRow(
-                          icon: Icons.email_outlined,
-                          title: 'E-post',
-                          value: _email.text.isEmpty ? '—' : _email.text,
-                          onTap: _editEmail,
-                        ),
-                        SettingsEditRow(
-                          icon: Icons.lock_outline,
-                          title: 'Lösenord',
-                          value: '••••••••',
-                          onTap: _editPassword,
-                        ),
-                        if (widget.onLogout != null)
-                          SettingsNavRow(
-                            icon: Icons.logout,
-                            title: 'Logga ut',
-                            trailingIcon: Icons.chevron_right,
-                            onTap: widget.onLogout!,
-                          ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                  ],
-
-                  if (_isDevice && !_isOffice) ...[
-                    SettingsGroup(
-                      children: [
-                        SettingsNavRow(
-                          icon: Icons.link_off,
-                          iconColor: TbColors.danger,
-                          title: 'Koppla från telefonen',
-                          titleColor: TbColors.danger,
-                          onTap: _leaveDevice,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 24),
-                  ],
+                  if (_isOffice) ..._companySection(),
+                  if (_isDevice) ..._phoneSection(),
+                  if (_isDevice) ..._notifySection(),
+                  ..._accountSection(),
+                  if (_isOffice || _isDevice) ..._helpSection(),
 
                   if (!_isOffice && !_isDevice)
                     const Padding(
@@ -511,7 +591,7 @@ class _Footer extends StatelessWidget {
           style: TextButton.styleFrom(
             foregroundColor: color ?? TbColors.muted,
             padding: const EdgeInsets.symmetric(horizontal: 8),
-            minimumSize: const Size(0, 36),
+            minimumSize: const Size(48, 48),
             textStyle: const TextStyle(fontSize: 13),
           ),
           child: Text(text),
