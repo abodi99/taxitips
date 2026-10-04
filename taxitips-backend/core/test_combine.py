@@ -142,10 +142,12 @@ class FeedTests(ApiTestCase):
 
     def test_one_train_is_one_row_in_the_driver_list(self):
         now = timezone.now()
+        # Samma tågdag för alla stationer, även när testet körs nära midnatt.
+        day = f"{timezone.localtime(now):%Y-%m-%d}"
         for station, minutes, lat in (("Lund C", -10, 55.7056), ("Hjärup", 4, 55.6707), ("Burlöv", 12, 55.6370)):
             departure = now + dt.timedelta(minutes=minutes)
             opportunity(
-                external_id=f"tvr:{station[:3]}:1234:{timezone.localtime(departure):%Y-%m-%dT%H:%M}:00.000+02:00",
+                external_id=f"tvr:{station[:3]}:1234:{day}T{timezone.localtime(departure):%H:%M}:00.000+02:00",
                 title=f"Pågatåg 1234 är inställt från {station}", demand_score=70, mode="train",
                 places=[station], lat=lat, lon=13.10, departure_at=departure,
                 start_time=departure - dt.timedelta(minutes=1), end_time=departure + dt.timedelta(minutes=30),
