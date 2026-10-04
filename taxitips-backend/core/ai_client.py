@@ -87,7 +87,7 @@ def spend(now=None) -> dict:
     }
 
 
-def unavailable_reason(now=None) -> str | None:
+def unavailable_reason(now=None, purpose: str = "") -> str | None:
     """Varför AI:n inte får användas just nu, eller None."""
     if getattr(settings, "TAXITIPS_AI", "on") == "off":
         return "avstängd (TAXITIPS_AI=off)"
@@ -96,8 +96,13 @@ def unavailable_reason(now=None) -> str | None:
     last_minute = AiCall.objects.filter(
         created_at__gte=(now or timezone.now()) - timedelta(seconds=60),
     ).count()
-    if last_minute >= thresholds.AI_MAX_CALLS_PER_MINUTE:
-        return f"minuttaket nått ({thresholds.AI_MAX_CALLS_PER_MINUTE} anrop per minut)"
+    # Grinden före en notis är det enda tidskritiska anropet: de sista platserna
+    # i minuten är hennes, så att besked och granskning aldrig tränger undan den.
+    cap = thresholds.AI_MAX_CALLS_PER_MINUTE
+    if purpose != "gate":
+        cap -= thresholds.AI_GATE_RESERVED_PER_MINUTE
+    if last_minute >= cap:
+        return f"minuttaket nått ({cap} anrop per minut för {purpose or 'det här'})"
     used = spend(now)
     if used["callsToday"] >= thresholds.AI_DAILY_CALL_CAP:
         return f"dagstaket nått ({thresholds.AI_DAILY_CALL_CAP} anrop)"
@@ -165,7 +170,7 @@ def generate(
     Ett anrop, mot schemat. Kastar AiUnavailable när AI:n inte får användas,
     annars modellens eget undantag vid fel -- båda loggas, ingen av dem tyst.
     """
-    reason = unavailable_reason()
+    reason = unavailable_reason(purpose=purpose)
     if reason:
         raise AiUnavailable(reason)
     model = model or thresholds.AI_MODEL_EXTRACT

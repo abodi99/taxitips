@@ -622,3 +622,5 @@ AI_BRIEF_MAX_PER_RUN = 30
 # och stötar -- granskningen tar 40 tips, beskeden 30 -- slog i taket direkt.
 # Det som inte hinner med i en körning tas i nästa. Med betald nivå kan taket höjas.
 AI_MAX_CALLS_PER_MINUTE = 12
+# Av dem hålls så många fria för grinden före en notis (core/ai_gate.py).
+AI_GATE_RESERVED_PER_MINUTE = 3

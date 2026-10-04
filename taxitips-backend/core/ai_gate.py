@@ -78,7 +78,7 @@ def screen(rows: list, now=None) -> tuple[list, dict]:
                 opportunity, cached.facts, reclassify=False,
                 reuse_assessment=cached if cached.opportunity_id == opportunity.id else None,
             )
-        elif ai_client.unavailable_reason():
+        elif ai_client.unavailable_reason(purpose="gate"):
             stats["failOpen"] += 1
             passed.append(opportunity)
             continue

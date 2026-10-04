@@ -128,6 +128,7 @@ class MinuteCapTests(TestCase):
     def test_a_burst_waits_for_the_next_minute(self):
         with patch.object(ai_client, "api_key", return_value="test-key"), \
                 patch.object(thresholds, "AI_MAX_CALLS_PER_MINUTE", 2), \
+                patch.object(thresholds, "AI_GATE_RESERVED_PER_MINUTE", 0), \
                 patch.object(ai_client, "transport", fake()):
             ai_client.generate("brief", "p", Verdict)
             ai_client.generate("brief", "p", Verdict)
@@ -140,5 +141,24 @@ class MinuteCapTests(TestCase):
 
         AiCall.objects.update(created_at=timezone.now() - timedelta(seconds=61))
         with patch.object(ai_client, "api_key", return_value="test-key"), \
-                patch.object(thresholds, "AI_MAX_CALLS_PER_MINUTE", 2):
+                patch.object(thresholds, "AI_MAX_CALLS_PER_MINUTE", 2), \
+                patch.object(thresholds, "AI_GATE_RESERVED_PER_MINUTE", 0):
             self.assertIsNone(ai_client.unavailable_reason())
+
+
+@override_settings(TAXITIPS_AI="on")
+class GateReserveTests(TestCase):
+    def test_briefs_leave_room_for_the_gate(self):
+        with patch.object(ai_client, "api_key", return_value="test-key"), \
+                patch.object(thresholds, "AI_MAX_CALLS_PER_MINUTE", 4), \
+                patch.object(thresholds, "AI_GATE_RESERVED_PER_MINUTE", 2), \
+                patch.object(ai_client, "transport", fake()):
+            ai_client.generate("brief", "p", Verdict)
+            ai_client.generate("brief", "p", Verdict)
+            with self.assertRaises(ai_client.AiUnavailable):
+                ai_client.generate("brief", "p", Verdict)
+            # Grinden har sina reserverade platser kvar.
+            ai_client.generate("gate", "p", Verdict)
+            ai_client.generate("gate", "p", Verdict)
+            with self.assertRaises(ai_client.AiUnavailable):
+                ai_client.generate("gate", "p", Verdict)
