@@ -406,6 +406,112 @@ class PushCycleTests(SupabaseCompanyMixin, TestCase):
         self.assertNotIn(" om ", body)
 
 
+def train_stop(station: str, train: str = "13311", day: str = "2026-10-04", clock: str = "08:20") -> Opportunity:
+    """Ett inställt tågs tips vid en station, med järnvägens id-form."""
+    return opportunity(
+        external_id=f"tvr:{station}:{train}:{day}T{clock}:00.000+02:00",
+        title=f"Västtågen {train} {clock} är inställt från {station}",
+        demand_score=76,
+    )
+
+
+class TrainGroupTests(SupabaseCompanyMixin, TestCase):
+    """
+    Ett inställt tåg blir ett tips per station när pollfönstret flyttar sig.
+    Mätt 2026-10-04: Västtågen 13311 gav nio notiser, en per station. Föraren
+    ska väckas en gång per tåg.
+    """
+
+    def setUp(self):
+        self.sent = []
+
+        def sender(*, token, title, body, data, collapse_key=None, **_):
+            self.sent.append({"token": token, "title": title, "collapse_key": collapse_key})
+            return {"ok": True}
+
+        self.sender = sender
+        self.device = FakeDevice()
+
+    def run_cycle(self, devices=None):
+        from unittest.mock import patch
+
+        with patch.object(notify, "_devices", return_value=devices or [self.device]):
+            return notify.run_push_cycle(sender=self.sender)
+
+    def test_group_key_is_train_and_day_for_rail_only(self):
+        first = notify.group_key(train_stop("Lnå"))
+        self.assertEqual(first, notify.group_key(train_stop("Äsr", clock="08:24")))
+        self.assertEqual(first, "train:13311:2026-10-04")
+        self.assertIsNone(notify.group_key(opportunity(external_id="sl:14050001987991375")))
+        self.assertIsNone(notify.group_key(opportunity(external_id="vt:RT3064306")))
+
+    def test_stations_of_the_same_train_in_one_cycle_give_one_push(self):
+        stops = [train_stop("Lnå"), train_stop("Äsr", clock="08:24"), train_stop("Öäg", clock="08:27")]
+        result = self.run_cycle()
+        self.assertEqual(result["sent"], 1)
+        self.assertEqual(PushDelivery.objects.count(), 1)
+        # Alla stationer har haft sin notisstund: ingen av dem väcker någon senare.
+        for stop in stops:
+            stop.refresh_from_db()
+            self.assertIsNotNone(stop.notified_at)
+
+    def test_the_next_station_in_a_later_cycle_wakes_nobody(self):
+        train_stop("Lnå")
+        self.run_cycle()
+        self.sent.clear()
+
+        later = train_stop("Äsr", clock="08:24")
+        result = self.run_cycle()
+        self.assertEqual(result["sent"], 0)
+        self.assertEqual(self.sent, [])
+        later.refresh_from_db()
+        self.assertIsNotNone(later.notified_at)
+
+    def test_the_same_train_number_another_day_is_a_new_event(self):
+        train_stop("Lnå")
+        self.run_cycle()
+        train_stop("Lnå", day="2026-10-05")
+        self.assertEqual(self.run_cycle()["sent"], 1)
+
+    def test_another_driver_still_gets_the_train(self):
+        train_stop("Lnå")
+        self.run_cycle()
+        other = FakeDevice(label="Andra bilen")
+        train_stop("Äsr", clock="08:24")
+        self.sent.clear()
+        result = self.run_cycle([self.device, other])
+        self.assertEqual(result["sent"], 1)
+        self.assertEqual(self.sent[0]["token"], other.push_token)
+
+    def test_a_push_that_never_arrived_does_not_count(self):
+        train_stop("Lnå")
+        self.run_cycle()
+        PushDelivery.objects.update(status=PushDelivery.Status.EXPIRED)
+        train_stop("Äsr", clock="08:24")
+        self.assertEqual(self.run_cycle()["sent"], 1)
+
+    def test_tips_without_a_group_are_untouched(self):
+        opportunity()
+        opportunity()
+        self.assertEqual(self.run_cycle()["sent"], 2)
+
+    def test_the_phone_replaces_the_notification_for_the_same_train(self):
+        train_stop("Lnå")
+        self.run_cycle()
+        self.assertEqual(self.sent[0]["collapse_key"], notify.collapse_key("train:13311:2026-10-04"))
+
+    def test_dry_run_explains_the_skipped_station(self):
+        from unittest.mock import patch
+
+        train_stop("Lnå")
+        self.run_cycle()
+        train_stop("Äsr", clock="08:24")
+        with patch.object(notify, "_devices", return_value=[self.device]):
+            plan = notify.plan_cycle()
+        self.assertEqual([r["reason"] for r in plan[0]["rejected"]], ["same_group"])
+        self.assertIn("same_group", notify.REASONS)
+
+
 class NotifyPrefsApiTests(TestCase):
     """Katalogerna serveras från ETT ställe -- appen och sändaren ska inte
     kunna ha olika uppfattning om vilka typer som finns."""

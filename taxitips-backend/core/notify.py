@@ -564,6 +564,7 @@ REASONS: dict[str, str] = {
     "city_not_chosen": "tipset nämner ingen av förarens valda orter",
     "near_driver": "föraren är i tjänst och tipset ligger inom radien från förarens ruta",
     "too_far_from_driver": "föraren är i tjänst och tipset ligger utanför radien från förarens ruta",
+    "same_group": "föraren har redan fått en notis om samma händelse (samma tåg samma dag)",
 }
 
 
@@ -770,7 +771,28 @@ def snapshot_of(opportunity) -> dict:
         "area_codes": list(opportunity.area_codes or []),
         "start_time": opportunity.start_time.isoformat() if opportunity.start_time else None,
         "end_time": opportunity.end_time.isoformat() if opportunity.end_time else None,
+        # Händelsen tipset hör till (samma tåg samma dag), så att nästa station
+        # längs linjen inte väcker samma förare igen. Se group_key.
+        "group": group_key(opportunity),
     }
+
+
+def group_key(opportunity) -> str | None:
+    """
+    Händelsen ett tips hör till, när flera tips är samma händelse.
+
+    Ett inställt tåg blir ett tips per station: pollfönstret flyttar sig, och
+    nästa station längs linjen blir tågets "första inställda stopp"
+    (core/sources/trafikverket_rail.py). Mätt 2026-10-04: Västtågen 13311 gav
+    nio notiser på en halvtimme, en per station. Järnvägens id är
+    `tvr:{station}:{tåg}:{avgångstid}`, så tåget och dagen är händelsen och
+    stationen bara var den syns. Övriga källor har ingen gemensam nyckel och
+    notifieras som förut, ett tips i taget.
+    """
+    parts = str(getattr(opportunity, "external_id", "") or "").split(":", 3)
+    if len(parts) == 4 and parts[0] == "tvr" and parts[2] and len(parts[3]) >= 10:
+        return f"train:{parts[2]}:{parts[3][:10]}"
+    return None
 
 
 # --- Cykeln --------------------------------------------------------------
@@ -954,15 +976,23 @@ def plan_cycle(now=None, require_token: bool = False) -> list[dict]:
     rounds = [(o, False, devices) for o in candidates(now=now)]
     if weak_devices:
         rounds += [(o, True, weak_devices) for o in weak_candidates(now=now)]
+    grouped = _grouped(devices, [o for o, _w, _t in rounds], now)
     for opportunity, weak_round, targets in rounds:
         recipients, rejected = [], []
+        group = group_key(opportunity)
         for device in targets:
+            if group and (str(device.id), group) in grouped:
+                rejected.append({"device_id": str(device.id), "label": device.label, "reason": "same_group"})
+                continue
             match = decide(
                 device.notify_prefs, opportunity, on_duty.get(str(device.id)),
                 now=now, recent=_recent_for(counts, device),
             )
             entry = {"device_id": str(device.id), "label": device.label, "reason": match.reason}
             (recipients if match.ok else rejected).append(entry)
+            if match.ok and group:
+                # Som _enqueue: nästa station av samma tåg i samma cykel går inte.
+                grouped.add((str(device.id), group))
         plan.append(
             {
                 "opportunity_id": str(opportunity.id),
@@ -991,6 +1021,17 @@ PUSH_RETRY_BACKOFF = (timedelta(seconds=30), timedelta(minutes=2), timedelta(min
 # worker som dödas mitt i en sändning lämnar raden så; efter lånet skickas den
 # igen, och collapse key gör att telefonen visar den en gång.
 SEND_LEASE = timedelta(minutes=5)
+# Hur länge en notis om en händelse (group_key) räcker för föraren. Ett inställt
+# tåg rullar ner längs linjen på en dryg timme; sex timmar täcker det med marginal
+# utan att nästa dags tåg med samma nummer -- som har en annan nyckel -- berörs.
+PUSH_GROUP_WINDOW = timedelta(hours=6)
+# Leveranser som når, eller kan nå, telefonen. En notis som aldrig kom fram
+# (utgången, misslyckad, undertryckt) har inte berättat något för föraren.
+_DELIVERED_OR_ON_ITS_WAY = (
+    PushDelivery.Status.PENDING,
+    PushDelivery.Status.SENDING,
+    PushDelivery.Status.SENT,
+)
 SEND_BATCH = 500
 
 
@@ -1114,17 +1155,40 @@ def _queue_one(device, opportunity, *, now, title, body, snapshot, expires) -> b
     return created
 
 
+def _grouped(devices, rows, now) -> set[tuple[str, str]]:
+    """
+    (enhet, händelse) som redan har en notis på väg eller framme inom
+    PUSH_GROUP_WINDOW. EN fråga för hela cykeln, inte en per enhet och tips.
+    """
+    keys = sorted({key for key in (group_key(o) for o in rows) if key})
+    if not keys or not devices:
+        return set()
+    return {
+        (str(device_id), key)
+        for device_id, key in PushDelivery.objects.filter(
+            device_id__in=[d.id for d in devices],
+            created_at__gte=now - PUSH_GROUP_WINDOW,
+            status__in=_DELIVERED_OR_ON_ITS_WAY,
+            snapshot__group__in=keys,
+        ).values_list("device_id", "snapshot__group")
+    }
+
+
 def _enqueue(rows, devices, now, counts=None) -> int:
     queued = 0
     counts = counts if counts is not None else _recent_counts(devices, now)
     on_duty = presence_rules.fresh([d.id for d in devices], now)
+    grouped = _grouped(devices, rows, now)
     for opportunity in rows:
         title = push_title(opportunity)
         body = push_body(opportunity)
         snapshot = snapshot_of(opportunity)
+        group = snapshot["group"]
         expires = _expires(opportunity, now)
         with transaction.atomic():
             for device in devices:
+                if group and (str(device.id), group) in grouped:
+                    continue
                 match = decide(
                     device.notify_prefs, opportunity, on_duty.get(str(device.id)),
                     now=now, recent=_recent_for(counts, device),
@@ -1138,6 +1202,8 @@ def _enqueue(rows, devices, now, counts=None) -> int:
                 ):
                     queued += 1
                     _tally(counts, device, match.weak)
+                    if group:
+                        grouped.add((str(device.id), group))
             # notified_at sätts oavsett hur många som matchade -- även noll.
             # Tipset har passerat sin notisstund; att lämna det omarkerat hade
             # gjort att en förare som ändrar sina inställningar i morgon får en
@@ -1165,13 +1231,17 @@ def _enqueue_weak(rows, devices, now, counts) -> int:
             opportunity_external_id__in=[o.external_id for o in rows],
         ).values_list("device_id", "opportunity_external_id")
     }
+    grouped = _grouped(devices, rows, now)
     for opportunity in rows:
         title = push_title(opportunity)
         body = push_body(opportunity)
         snapshot = {**snapshot_of(opportunity), "weak": True}
+        group = snapshot["group"]
         expires = _expires(opportunity, now)
         for device in devices:
             if (str(device.id), opportunity.external_id) in already:
+                continue
+            if group and (str(device.id), group) in grouped:
                 continue
             match = decide(
                 device.notify_prefs, opportunity, on_duty.get(str(device.id)),
@@ -1187,6 +1257,8 @@ def _enqueue_weak(rows, devices, now, counts) -> int:
             ):
                 queued += 1
                 _tally(counts, device, True)
+                if group:
+                    grouped.add((str(device.id), group))
     return queued
 
 
@@ -1252,7 +1324,8 @@ def _send_due(sender, devices, now) -> Counter:
                     "severity_tier": snapshot.get("severity_tier") or "",
                     "demand_score": snapshot.get("demand_score") or 0,
                 },
-                collapse_key=collapse_key(delivery.opportunity_external_id),
+                # Samma händelse ersätter den förra notisen på telefonen.
+                collapse_key=collapse_key(snapshot.get("group") or delivery.opportunity_external_id),
                 ttl_seconds=int((delivery.expires_at - now).total_seconds()) if delivery.expires_at else None,
             )
         except Exception as exc:  # en enhets fel stoppar aldrig batchen
