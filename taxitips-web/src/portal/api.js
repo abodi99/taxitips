@@ -104,6 +104,11 @@ export const api = {
   /** Byt län på en provbil direkt (kostar inget, räknas mot månadens två byten). */
   setTrialCounty: (licenseId, base) =>
     request(`/api/fleet/trial/vehicles/${licenseId}/county`, { method: "POST", body: { base } }),
+  /** Notiserna för företagets telefoner och standarden för nya (fleet/notify_api.py). */
+  notifySettings: () => request("/api/fleet/notify-settings"),
+  setDeviceNotify: (deviceId, body) =>
+    request(`/api/fleet/devices/${deviceId}/notify-prefs`, { method: "POST", body }),
+  setNotifyDefault: (body) => request("/api/fleet/notify-default", { method: "POST", body }),
   members: () => request("/api/fleet/members"),
   inviteMember: (email, role) =>
     request("/api/fleet/members/invite", { method: "POST", body: { email, role } }),

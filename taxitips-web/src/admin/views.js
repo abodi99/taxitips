@@ -4,6 +4,7 @@ import {
   quoteBox, redemptionsCard, registryBlock, trialExtendBlock,
 } from "./sales.js";
 import { crmNotesCard } from "./crm.js";
+import { notifyCard } from "../notify_editor.js";
 
 /**
  * Adminwebbens vyer, som rena funktioner från data till HTML.
@@ -438,6 +439,10 @@ function tabBilar(d, config, pending) {
       ${addCarsBlock(d, config)}
     </details>` : ""}
     ${phonesCard(d, config)}
+    ${d.notify ? notifyCard({ ...d.notify, canManage: !!config?.canSell }, {
+      countyNames: Object.fromEntries((d.notify.countyCatalog ?? []).map((c) => [c.code, c.name])),
+      title: "Notiser per telefon",
+    }) : ""}
     ${companyChangesCard(d, config)}
   `;
 }
@@ -639,6 +644,8 @@ const AUDIT = {
   admin_pending_change_undone: "Väntande ändring ångrad",
   admin_subscription_changed: "Åtkomst ändrad för hand",
   admin_test_push: "Testnotis skickad",
+  admin_device_notify_prefs_changed: "Notiser ändrade på telefon (support)",
+  admin_company_notify_default_changed: "Standard för notiser ändrad (support)",
   admin_trial_counties_set: "Provbilens län ändrade",
   admin_vehicle_changed: "Regnr bytt",
   admin_vehicle_released: "Bilen frigjord",
@@ -655,6 +662,8 @@ const AUDIT = {
   device_approved: "Telefon godkänd",
   device_blocked: "Telefon spärrad",
   device_renamed: "Telefon omdöpt",
+  device_notify_prefs_changed: "Notiser ändrade på telefon",
+  company_notify_default_changed: "Standard för notiser ändrad",
   driver_invite_claimed: "Förarinbjudan använd",
   driver_invite_resent: "Förarinbjudan skickad igen",
   driver_invite_revoked: "Förarinbjudan återkallad",

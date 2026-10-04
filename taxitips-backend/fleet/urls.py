@@ -8,9 +8,13 @@ att se på sökvägen vilken sorts bevis som krävs.
 
 from django.urls import path
 
-from fleet import api
+from fleet import api, notify_api
 
 urlpatterns = [
+    # Notiserna för företagets telefoner (fleet/notify_settings.py)
+    path("notify-settings", notify_api.notify_settings_view),
+    path("notify-default", notify_api.notify_default),
+    path("devices/<uuid:device_id>/notify-prefs", notify_api.device_notify_prefs),
     # Förarens telefon
     path("pair", api.pair),
     path("me", api.driver_status),

@@ -109,6 +109,10 @@ const LEVEL_LABEL = { all: "Alla", medium: "Medel+", high: "Bara starka" };
 
 function prefsLine(p) {
   if (!p) return "";
+  // Serverns rad (core/notify_prefs.summary): läget plus det som avviker.
+  if (p.summary) {
+    return p.counties?.length ? `${p.summary} · Län: ${p.counties.join(", ")}` : p.summary;
+  }
   const bits = [];
   if (p.notificationsOff) bits.push("Notiser av");
   if (p.pausedUntil) bits.push(`Paus till ${dateTime(p.pausedUntil)}`);

@@ -33,6 +33,8 @@ from django.views.decorators.gzip import gzip_page
 from django.views.decorators.http import require_GET, require_POST
 
 from core import areas, notify, thresholds
+# Alias: `notify_prefs` är vyn nedan.
+from core import notify_prefs as notify_prefs_rules
 from core.alternatives import travel_options
 from core.coverage import county_catalog, uncovered_counties
 from core.entitlement import entitlement_for_request, verify_supabase_jwt
@@ -1249,6 +1251,8 @@ def notify_prefs(request):
     """
     GET  /api/notify-prefs   -- inställningarna plus katalogerna att välja ur
     POST /api/notify-prefs   -- {"enabled":, "types": {...}, "regions": [], "cities": []}
+                                plus `preset`, `weak`, `quietHours`, `maxPerHour`
+                                (core/notify_prefs.py)
 
     Katalogerna (händelsetyper och län) serveras härifrån av samma skäl som
     tröskelvärdena: de fanns i två kopior i två språk -- notifyTypeCatalog i
@@ -1303,6 +1307,9 @@ def notify_prefs(request):
         # `licensedCountiesUnrestricted` = bolaget är inte på licensmodellen än.
         "licensedCounties": sorted(getattr(ent, "counties", ()) or ()),
         "licensedCountiesUnrestricted": bool(getattr(ent, "unrestricted", True)),
+        # Färdiga lägen, taken per timme och typkatalogen med `weakOnly`
+        # (core/notify_prefs.py). Samma som portalen och adminwebben får.
+        **notify_prefs_rules.catalogs(),
     }
 
     if device is None:
@@ -1331,6 +1338,8 @@ def notify_prefs(request):
             # Länen som gäller för notisbeslutet: sparade län, annars de gamla
             # marknadsvalen översatta. Tom lista = inget körområde.
             "counties": areas.device_counties(stored),
+            # Läget inställningarna motsvarar (Rekommenderat, Tyst ...), eller "custom".
+            "preset": notify_prefs_rules.preset_of(stored, entitled=catalogs["licensedCounties"]),
             **catalogs,
         })
 
@@ -1341,69 +1350,20 @@ def notify_prefs(request):
 
     from billing.models import Device
 
-    current = dict(device.notify_prefs) if isinstance(device.notify_prefs, dict) else {}
-    if "enabled" in body:
-        current["enabled"] = body["enabled"] is not False
-    if isinstance(body.get("types"), dict):
-        known = {t["id"] for t in notify.TYPE_CATALOG}
-        # Bara kända typer sparas. En okänd nyckel är antingen ett stavfel
-        # eller en klient från framtiden, och båda ska synas som att den
-        # inte fastnade -- inte ligga kvar och se ut som en inställning.
-        current["types"] = {
-            k: v is True for k, v in body["types"].items() if k in known
-        }
-    if isinstance(body.get("regions"), list):
-        known = {r["key"] for r in notify.region_catalog()}
-        current["regions"] = [str(r) for r in body["regions"] if str(r) in known]
-    if isinstance(body.get("counties"), list):
-        counties = {str(c) for c in body["counties"] if str(c) in areas.COUNTY_NAMES}
-        if not getattr(ent, "unrestricted", True):
-            # Bara län licensen omfattar. Ett annat län hade sett ut som ett val
-            # men aldrig gett en enda notis (fleet/push_gate.py släpper inte igenom det).
-            counties &= set(getattr(ent, "counties", ()) or ())
-        current["counties"] = sorted(counties)
-    if isinstance(body.get("categories"), dict):
-        current["categories"] = {
-            k: v is not False for k, v in body["categories"].items() if k in {c["id"] for c in notify.CATEGORY_CATALOG}
-        }
-    if "minLevel" in body:
-        level = str(body.get("minLevel") or "all")
-        current["minLevel"] = level if level in notify.LEVELS else "all"
-    if "pauseHours" in body:
-        # Pausen räknas på servern, från serverns klocka: en telefon med fel tid
-        # ska inte kunna pausa i ett år eller "pausa" bakåt i tiden.
-        try:
-            hours = float(body.get("pauseHours") or 0)
-        except (TypeError, ValueError):
-            hours = 0
-        if hours > 0:
-            hours = min(hours, notify.MAX_PAUSE_HOURS)
-            current["pausedUntil"] = (timezone.now() + timedelta(hours=hours)).isoformat()
-        else:
-            current.pop("pausedUntil", None)
-    if isinstance(body.get("municipalities"), list):
-        current["municipalities"] = areas.device_municipalities({"municipalities": body["municipalities"]})
-    if isinstance(body.get("cities"), list):
-        current["cities"] = [str(c) for c in body["cities"] if str(c).strip()][:50]
-    # Orter som inte hör till något valt län rensas bort. Annars kunde en
-    # förare välja Skåne, kryssa Malmö, byta till Stockholm -- och fortfarande
-    # ha Malmö kvar i prefs utan att UI:t visar det.
-    allowed_cities = {
-        c
-        for key in current.get("regions") or []
-        if key != "rail"
-        for c in notify.cities_by_region().get(key, [])
-    }
-    if allowed_cities:
-        current["cities"] = [
-            c for c in (current.get("cities") or []) if c in allowed_cities
-        ][:50]
-    elif current.get("regions"):
-        # Bara "rail" valt, eller län utan orter -- ortfiltret har ingen mening.
-        current["cities"] = []
-
+    # Samma validering som kundportalen och adminwebben (core/notify_prefs.py):
+    # bara kända nycklar, och bara län licensen omfattar -- ett annat län hade
+    # sett ut som ett val men aldrig gett en enda notis (fleet/push_gate.py).
+    current = notify_prefs_rules.apply_update(
+        device.notify_prefs, body,
+        entitled=getattr(ent, "counties", ()) or (),
+        restricted=not getattr(ent, "unrestricted", True),
+    )
     Device.objects.filter(id=device.id).update(notify_prefs=current)
-    return _json(request, {"ok": True, "prefs": current, "counties": areas.device_counties(current), **catalogs})
+    return _json(request, {
+        "ok": True, "prefs": current, "counties": areas.device_counties(current),
+        "preset": notify_prefs_rules.preset_of(current, entitled=catalogs["licensedCounties"]),
+        **catalogs,
+    })
 
 
 @csrf_exempt

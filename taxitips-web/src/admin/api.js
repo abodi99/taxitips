@@ -95,6 +95,11 @@ export const admin = {
     }),
   testPush: (id) =>
     request(`/api/admin/companies/${id}/test-push`, { method: "POST", body: {} }),
+  // Notiserna för kundens telefoner (fleet/admin_notify.py). Ändra kräver ADMIN_SELL och loggas.
+  setDeviceNotify: (companyId, deviceId, body) =>
+    request(`/api/admin/companies/${companyId}/devices/${deviceId}/notify-prefs`, { method: "POST", body }),
+  setNotifyDefault: (companyId, body) =>
+    request(`/api/admin/companies/${companyId}/notify-default`, { method: "POST", body }),
   blockPhone: (approvalId, reason) =>
     request(`/api/admin/approvals/${approvalId}/block`, {
       method: "POST",

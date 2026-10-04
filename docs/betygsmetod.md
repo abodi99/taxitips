@@ -58,6 +58,11 @@ styrka, område, paus).
 I praktiken: hela linjen står still, sista avgången, eller ett glapp där
 omständigheterna gör läget Starkt.
 
+Det är läget **Rekommenderat** (`core/notify_prefs.py`), som nya telefoner har. En
+förare som själv valt **svagare tips** (`weak`) får dessutom tips under golvet, men
+aldrig Övrigt, avslutade tips eller tips med ersättningstrafik, och högst
+`NOTIFY_WEAK_MAX_PER_HOUR` (3) i timmen.
+
 ---
 
 ## 4. Läget per källa

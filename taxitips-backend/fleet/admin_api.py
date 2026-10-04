@@ -381,6 +381,15 @@ def company_detail(request, company_id):
          "counties": (d.notify_prefs or {}).get("counties", [])}
         for d in Device.objects.filter(company_id=company.id).order_by("-last_seen_at")[:50]
     ]
+    # Notisinställningarna per telefon och företagets standard, för fliken Bilar
+    # och förare (fleet/admin_notify.py ändrar). Ett fel här får inte fälla sidan.
+    from fleet import notify_settings
+
+    try:
+        notify = notify_settings.overview(company.id, now=now)
+    except Exception:
+        log.exception("admin: notisinställningarna gick inte att läsa för %s", company.id)
+        notify = None
     from fleet import accounts
 
     member_rows = list(CompanyMember.objects.filter(company_id=company.id))
@@ -453,6 +462,7 @@ def company_detail(request, company_id):
         ],
         "licenses": licenses,
         "devices": devices,
+        "notify": notify,
         # Förarinbjudningar med e-post som inte lösts in, per bil i vyn.
         "driverInvites": {
             "enabled": driver_invites.enabled(),

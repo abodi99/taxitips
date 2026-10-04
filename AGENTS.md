@@ -194,7 +194,16 @@ Förarkartan i appen (ombyggd 2026-09-21, för förare med begränsad svenska):
   gång. Ett väghinder har inget "Kör dit" och ingen "Fick körning?".
 * **Notisregler per förare** (`core/notify.decide`): kategorier, lägsta nivå (alla / medel+ /
   bara starka) och paus i högst 24 h, satt på serverns klocka. Skälen `paused`,
-  `category_off:<kategori>` och `below_level` i `REASONS`.
+  `category_off:<kategori>` och `below_level` i `REASONS`. Sedan 2026-10-04 också
+  tysta timmar (`quietHours`, svensk tid, prövas även strax före sändningen), eget tak
+  per timme (`maxPerHour`) och **svagare tips** som eget val (`weak`, av som standard:
+  tips under golvet men aldrig Övrigt, avslutat eller med ersättningstrafik, högst
+  `NOTIFY_WEAK_MAX_PER_HOUR` i timmen, rör inte `notified_at`). Färdiga lägen
+  (Rekommenderat, Bara de starkaste, Allt i mina län, Tyst) och valideringen för alla
+  tre skrivvägar: `core/notify_prefs.py`. Kundens admin ändrar per telefon och sätter
+  företagets standard för nya telefoner i portalen (`/api/fleet/notify-settings`,
+  `fleet/notify_settings.py`, tabellen `fleet_company_notify_default`, migration
+  `fleet/0022`); personalen samma sak på kundsidan (`fleet/admin_notify.py`, loggas).
 * **Favoriternas `owner_key` är `device:<uuid>`**, aldrig telefonens råa token (migration
   `core/0025`).
 * **Kör dit** (`navigation.dart`) öppnar telefonens navigering (`google.navigation:` på

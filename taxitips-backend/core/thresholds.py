@@ -70,6 +70,27 @@ NOTIFY_WORTHY_TIERS = frozenset(
     {"line_paused", "vehicle_cancelled", "road_accident_or_closure"}
 )
 
+# Svaga notiser: förarens EGET val, av som standard (core/notify.py, `weak`).
+# Golvet och mängden ovan gäller alla och ändras inte av det; den som slår på
+# valet får dessutom tips under golvet och utanför mängden -- men aldrig
+# "Övrigt", aldrig ett avslutat tips och aldrig ett där källan skrivit ut
+# ersättningstrafik (invariant 12: bussen går redan, det är en bomresa).
+#
+# Taket per timme är spärren mot spam. Svaga tips är de flesta tipsen -- utan
+# poänggolvet var ~64% av notiserna "en buss är sen" (mätningen ovan) -- och en
+# telefon som piper var femte minut stängs av helt, och då missar föraren de
+# starka också. Tre i timmen är högst en var tjugonde minut i snitt, ungefär en
+# körning mellan två. De starka räknas inte mot taket: ett svagt tips får aldrig
+# tränga undan ett starkt.
+NOTIFY_WEAK_MAX_PER_HOUR = 3
+# Bara tips som dykt upp de senaste minuterna. Annars hade föraren som slår på
+# valet fått hela eftermiddagens förseningar på en gång, och en svag signal som
+# är en timme gammal är inte längre en signal. Minst en pollrunda per källa.
+NOTIFY_WEAK_FRESH_MINUTES = 15
+# Förarens eget tak för ALLA notiser (`maxPerHour`), om hen vill ha ett. Tomt =
+# inget tak, som förut. Få val med avsikt: en förare ska välja på en sekund.
+NOTIFY_MAX_PER_HOUR_CHOICES = (2, 4, 6)
+
 
 # ---------------------------------------------------------------------------
 # Flyg (Swedavia FlightInfo v2)

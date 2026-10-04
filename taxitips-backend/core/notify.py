@@ -40,6 +40,23 @@ Samma princip som fcmPush.js kom fram till, med länsfiltret tillagt: utan
 det var ortsvalet det enda geografiska filtret som fanns, och det matchade
 alltså inte på 61% av datan.
 
+Förarens egna val ovanpå grindarna (2026-10-03)
+-----------------------------------------------
+Allt i `devices.notify_prefs` (JSON, ingen migrering). Ett fält som saknas
+betyder "som förut", så en telefon som aldrig rört inställningarna beter sig
+exakt som innan fälten fanns:
+
+* `quietHours` {"from": 1, "to": 6} -- inga notiser de timmarna (svensk tid),
+  varje natt. Prövas både när notisen köas och strax före sändningen.
+* `maxPerHour` -- förarens tak för alla notiser, räknat på köade notiser den
+  senaste timmen. Tomt = inget tak.
+* `weak` -- föraren vill OCKSÅ ha svaga tips. Grind 1 släpper då igenom tips
+  under golvet (se `weak_eligible` och thresholds.NOTIFY_WEAK_*), med ett eget
+  tak per timme. Av som standard; "Rekommenderat" har det av.
+
+Färdiga lägen (Rekommenderat, Bara de starkaste, Allt i mina län, Tyst) och
+valideringen av det klienten skickar bor i core/notify_prefs.py.
+
 Kastar aldrig
 -------------
 `run_push_cycle()` och allt den kallar fångar sina egna fel. En trasig
@@ -114,26 +131,33 @@ TYPE_CATALOG: list[dict] = [
         "help": "Påverkar mest bilister som redan sitter i bil, men värt att veta om.",
         "defaultOn": True,
     },
+    # `weak`: kan ge notis när föraren slagit på svagare tips -- och då är typen
+    # PÅ tills föraren stänger av den (`type_enabled(..., weak=True)`).
     {
         "id": "line_delayed",
         "label": "Förseningar",
         "short": "Linjen kör, men försenad",
-        "help": "Svag signal — syns i listan, men väcker aldrig telefonen.",
+        "help": "Svag signal. Ger bara notis om du slagit på svagare tips.",
         "defaultOn": False,
+        "weak": True,
     },
     {
         "id": "vehicle_delayed",
         "label": "Enstaka avgång försenad",
         "short": "En avgång är sen",
-        "help": "Svag signal — syns i listan, men väcker aldrig telefonen.",
+        "help": "Svag signal. Ger bara notis om du slagit på svagare tips.",
         "defaultOn": False,
+        "weak": True,
     },
+    # Inte `weak`: köer och vägarbeten når aldrig listan (bara olyckor gör det,
+    # thresholds.ROAD_SHOWN_CONDITIONS), så ett reglage för dem hade varit dött.
     {
         "id": "road_work_or_queue",
         "label": "Vägarbete eller köbildning",
         "short": "Vägtrafik",
-        "help": "Sällan en taxisignal — syns i listan, men väcker aldrig telefonen.",
+        "help": "Sällan en taxisignal — syns inte i listan och väcker aldrig telefonen.",
         "defaultOn": False,
+        "weak": False,
     },
 ]
 
@@ -206,12 +230,126 @@ def paused_until(prefs: dict | None):
     return parsed
 
 
+_STOCKHOLM = ZoneInfo("Europe/Stockholm")
+
+
+def quiet_hours(prefs: dict | None) -> tuple[int, int] | None:
+    """
+    Tysta timmar som (från, till) i hela timmar, svensk tid. None = inga.
+
+    Halvöppet intervall som får korsa midnatt: (1, 6) är 01:00-05:59, (22, 6)
+    är 22:00-05:59. Samma från och till är inget intervall -- ett "dygnet runt"
+    hade varit en avstängning som inte ser ut som en, och den finns redan
+    (`enabled`). Ett trasigt värde är inga tysta timmar, inte tystnad.
+    """
+    raw = (prefs or {}).get("quietHours") if isinstance(prefs, dict) else None
+    if not isinstance(raw, dict):
+        return None
+    try:
+        start, end = int(raw.get("from")), int(raw.get("to"))
+    except (TypeError, ValueError):
+        return None
+    if not (0 <= start <= 23 and 0 <= end <= 23) or start == end:
+        return None
+    return start, end
+
+
+def in_quiet_hours(prefs: dict | None, now=None) -> bool:
+    window = quiet_hours(prefs)
+    if window is None:
+        return False
+    hour = (now or timezone.now()).astimezone(_STOCKHOLM).hour
+    start, end = window
+    if start < end:
+        return start <= hour < end
+    return hour >= start or hour < end
+
+
+def weak_enabled(prefs: dict | None) -> bool:
+    """Har föraren valt att OCKSÅ få svaga tips? Bara ett uttryckligt ja räknas."""
+    return isinstance(prefs, dict) and prefs.get("weak") is True
+
+
+def max_per_hour(prefs: dict | None) -> int | None:
+    """Förarens tak för alla notiser per timme, eller None."""
+    raw = (prefs or {}).get("maxPerHour") if isinstance(prefs, dict) else None
+    try:
+        value = int(raw)
+    except (TypeError, ValueError):
+        return None
+    return value if value > 0 else None
+
+
+def silenced(prefs: dict | None, now=None) -> str | None:
+    """
+    Har föraren tystat telefonen just nu, oavsett tips? Skälet, eller None.
+
+    Samma tre skäl som i decide(), i samma ordning. Prövas igen strax före
+    sändningen (_send_due): en paus eller natt som börjat medan notisen låg i
+    kön ska gälla -- annars väcks föraren 01:00 av något som köades 00:59.
+    """
+    prefs = prefs if isinstance(prefs, dict) else {}
+    now = now or timezone.now()
+    if prefs.get("enabled") is False:
+        return "notifications_off"
+    pause = paused_until(prefs)
+    if pause is not None and pause > now:
+        return "paused"
+    if in_quiet_hours(prefs, now):
+        return "quiet_hours"
+    return None
+
+
+def weak_eligible(opportunity, now=None) -> bool:
+    """
+    Får tipset gå som en SVAG notis till den som valt det?
+
+    Bara tips föraren också hittar i listan (core/api.feed_for), så att en notis
+    aldrig gäller något som listan sedan döljer:
+
+    * aldrig "Övrigt" (`ignore`) och aldrig poäng 0,
+    * aldrig avslutat eller långt fram (FEED_HORIZON_HOURS),
+    * aldrig undertryckt av personalen,
+    * väghändelser bara när de visas (olyckor, thresholds.road_shown),
+    * aldrig med angiven ersättningstrafik (invariant 12: bussen går redan).
+    """
+    now = now or timezone.now()
+    if getattr(opportunity, "severity_tier", None) in (None, "", "ignore"):
+        return False
+    if (getattr(opportunity, "demand_score", 0) or 0) <= 0:
+        return False
+    end = getattr(opportunity, "end_time", None)
+    if end is None or end <= now:
+        return False
+    start = getattr(opportunity, "start_time", None)
+    if start is not None and start > now + timedelta(hours=thresholds.FEED_HORIZON_HOURS):
+        return False
+    if getattr(opportunity, "suppressed_at", None) is not None:
+        return False
+    if getattr(opportunity, "has_alternative", False):
+        return False
+    if getattr(opportunity, "kind", None) == "road" and not thresholds.road_shown(
+        getattr(opportunity, "rule_id", None)
+    ):
+        return False
+    return True
+
+
 def type_catalog() -> list[dict]:
-    """Katalogen med en ärlig markering av vad som faktiskt kan pushas."""
-    return [
-        {**t, "notifiable": t["id"] in thresholds.NOTIFY_WORTHY_TIERS}
-        for t in TYPE_CATALOG
-    ]
+    """
+    Katalogen med en ärlig markering av vad som faktiskt kan pushas:
+    `notifiable` = kan ge notis för alla, `weakOnly` = bara för den som slagit
+    på svagare tips. En typ som är ingetdera visas inte som ett val i appen.
+    """
+    rows = []
+    for t in TYPE_CATALOG:
+        notifiable = t["id"] in thresholds.NOTIFY_WORTHY_TIERS
+        rows.append({
+            **t,
+            "notifiable": notifiable,
+            "weakOnly": not notifiable and bool(t.get("weak")),
+        })
+    return rows
 
 
 def default_prefs() -> dict:
@@ -221,6 +359,7 @@ def default_prefs() -> dict:
         "types": {t["id"]: t["defaultOn"] for t in TYPE_CATALOG},
         "regions": [],
         "cities": [],
+        "weak": False,
     }
 
 
@@ -238,7 +377,7 @@ def cities_by_region() -> dict[str, list[str]]:
 # --- Grind 2 och 3: förarens egna val ------------------------------------
 
 
-def type_enabled(types: dict | None, severity_tier: str | None) -> bool:
+def type_enabled(types: dict | None, severity_tier: str | None, weak: bool = False) -> bool:
     """
     Har föraren slagit på den här händelsetypen?
 
@@ -247,9 +386,16 @@ def type_enabled(types: dict | None, severity_tier: str | None) -> bool:
     börjat med noll notiser -- inklusive för den allvarligaste typen -- utan
     att någonsin ha tryckt på något. Samma semantik som NotifyPrefsSheet
     visar i appen, så reglaget och verkligheten säger samma sak.
+
+    `weak=True` (en svag notis till den som valt svagare tips): en typ som
+    saknas är PÅ. Valet betyder "ge mig de svaga också", och förseningarna är
+    just de svaga; en förare som uttryckligen stängt av en typ har fortfarande
+    sista ordet.
     """
     if isinstance(types, dict) and severity_tier in types:
         return types[severity_tier] is True
+    if weak:
+        return True
     return severity_tier in _DEFAULT_ON
 
 
@@ -390,6 +536,8 @@ class Match:
 
     ok: bool
     reason: str
+    # Släpptes igenom (eller prövades) som en svag notis, för den som valt det.
+    weak: bool = False
 
     def __bool__(self) -> bool:
         return self.ok
@@ -404,6 +552,9 @@ REASONS: dict[str, str] = {
     "ai_only": "bara språkmodellens höjning gör tipset notisvärt, inte regelverket",
     "notifications_off": "föraren har stängt av notiser",
     "paused": "föraren har pausat notiserna en stund",
+    "quiet_hours": "föraren har tysta timmar just nu",
+    "hourly_limit": "föraren har redan fått så många notiser den här timmen som hen valt",
+    "weak_hourly_limit": "föraren har redan fått så många svaga notiser den här timmen som taket tillåter",
     "category_off": "föraren har stängt av notiser för den här kategorin",
     "below_level": "tipset är svagare än den nivå föraren valt för notiser",
     "type_off": "föraren har stängt av den här händelsetypen",
@@ -416,7 +567,7 @@ REASONS: dict[str, str] = {
 }
 
 
-def decide(prefs: dict | None, opportunity, presence=None) -> Match:
+def decide(prefs: dict | None, opportunity, presence=None, *, now=None, recent=None) -> Match:
     """
     Ska den här enheten få den här notisen? Det enda notisbeslutet.
 
@@ -424,9 +575,13 @@ def decide(prefs: dict | None, opportunity, presence=None) -> Match:
 
     1. `not_notify_worthy` -- thresholds.is_notify_worthy. Anroparen filtrerar
        redan i SQL (candidates), men kontrollen står kvar som skyddsräcke.
-    2. `notifications_off`, `paused` (en tidsbegränsad paus), `category_off:<kategori>`
-       (Tåg & buss, Väg, Flyg, Färja) och `below_level` (föraren vill bara ha
-       starka eller medel och uppåt)
+       Har föraren valt svagare tips (`weak`) och tipset klarar `weak_eligible`
+       går det vidare som en SVAG notis (`Match.weak`) i stället för att fällas
+       här; alla grindar nedan gäller den också.
+    2. `notifications_off`, `paused` (en tidsbegränsad paus), `quiet_hours`,
+       `category_off:<kategori>` (Tåg & buss, Väg, Flyg, Färja) och `below_level`
+       (föraren vill bara ha starka eller medel och uppåt -- för de svaga är det
+       hur svaga)
     3. `type_off:<tier>`
     4. `no_area` -- inget körområde valt. Ingen rikstäckande standardnotis: en
        förare som inte sagt var hen kör väcks inte av något i andra änden av
@@ -441,51 +596,70 @@ def decide(prefs: dict | None, opportunity, presence=None) -> Match:
     ersätter rutan steg 4-7: tipset måste ha koordinater (`unplaced_tip`) och ligga
     inom presence.RADIUS_KM från rutans mitt (`near_driver`, annars
     `too_far_from_driver`). Utan gällande ruta räknas notisen på körområdet.
+
+    Sist taken per timme, när anroparen räknat dem (`recent` = (alla, svaga)
+    köade notiser den senaste timmen för enheten): `hourly_limit` för förarens
+    eget `maxPerHour`, `weak_hourly_limit` för thresholds.NOTIFY_WEAK_MAX_PER_HOUR.
+    Sist med avsikt: bara en notis som annars hade skickats ska räknas mot taket.
     """
-    if not thresholds.is_notify_worthy(
+    now = now or timezone.now()
+    prefs = prefs if isinstance(prefs, dict) else {}
+    weak = False
+    worthy = thresholds.is_notify_worthy(
         getattr(opportunity, "severity_tier", None),
         getattr(opportunity, "demand_score", 0),
         getattr(opportunity, "has_alternative", False),
         level=level_of(opportunity),
-    ):
-        return Match(False, "not_notify_worthy")
-    if getattr(opportunity, "ai_adjusted_at", None) is not None:
-        # Modellen fick höja tipset i listan, men en notis kräver regelverkets egen
-        # bedömning. Nästa pollrunda skriver regelvärdena och tar bort markeringen.
-        return Match(False, "ai_only")
+    )
+    ai_raised = getattr(opportunity, "ai_adjusted_at", None) is not None
+    if not worthy or ai_raised:
+        # Modellen får höja ett tips i listan, men en vanlig notis kräver
+        # regelverkets egen bedömning (`ai_only`). Nästa pollrunda skriver
+        # regelvärdena och tar bort markeringen. Som svag notis räcker det att
+        # tipset finns i listan -- där spelar poängen ingen roll.
+        reason = "ai_only" if worthy else "not_notify_worthy"
+        if not (weak_enabled(prefs) and weak_eligible(opportunity, now)):
+            return Match(False, reason)
+        weak = True
 
-    prefs = prefs if isinstance(prefs, dict) else {}
-    if prefs.get("enabled") is False:
-        return Match(False, "notifications_off")
-    pause = paused_until(prefs)
-    if pause is not None and pause > timezone.now():
-        return Match(False, "paused")
+    quiet = silenced(prefs, now)
+    if quiet:
+        return Match(False, quiet, weak)
     category = category_of(opportunity)
     if not category_enabled(prefs.get("categories"), category):
-        return Match(False, f"category_off:{category}")
+        return Match(False, f"category_off:{category}", weak)
     if not level_allows(prefs.get("minLevel"), level_of(opportunity)):
-        return Match(False, "below_level")
-    if not type_enabled(prefs.get("types"), opportunity.severity_tier):
-        return Match(False, f"type_off:{opportunity.severity_tier}")
+        return Match(False, "below_level", weak)
+    if not type_enabled(prefs.get("types"), opportunity.severity_tier, weak=weak):
+        return Match(False, f"type_off:{opportunity.severity_tier}", weak)
     if presence is not None:
         lat, lon = getattr(opportunity, "lat", None), getattr(opportunity, "lon", None)
         if lat is None or lon is None:
-            return Match(False, "unplaced_tip")
+            return Match(False, "unplaced_tip", weak)
         if presence_rules.distance_km(presence, lat, lon) > presence_rules.RADIUS_KM:
-            return Match(False, "too_far_from_driver")
-        return Match(True, "near_driver")
-    # Län och kommuner i samma lista; en vald kommun ersätter sitt län.
-    area = areas.device_area_codes(prefs)
-    if not area:
-        return Match(False, "no_area")
-    tip_area = tip_area_codes(opportunity)
-    if not tip_area:
-        return Match(False, "unplaced_tip")
-    if not set(tip_area) & set(area):
-        return Match(False, "outside_area")
-    if not places_match_cities(opportunity.places, prefs.get("cities")):
-        return Match(False, "city_not_chosen")
-    return Match(True, "match")
+            return Match(False, "too_far_from_driver", weak)
+        verdict = Match(True, "near_driver", weak)
+    else:
+        # Län och kommuner i samma lista; en vald kommun ersätter sitt län.
+        area = areas.device_area_codes(prefs)
+        if not area:
+            return Match(False, "no_area", weak)
+        tip_area = tip_area_codes(opportunity)
+        if not tip_area:
+            return Match(False, "unplaced_tip", weak)
+        if not set(tip_area) & set(area):
+            return Match(False, "outside_area", weak)
+        if not places_match_cities(opportunity.places, prefs.get("cities")):
+            return Match(False, "city_not_chosen", weak)
+        verdict = Match(True, "match", weak)
+    if recent is not None:
+        total, weak_sent = recent
+        cap = max_per_hour(prefs)
+        if cap is not None and total >= cap:
+            return Match(False, "hourly_limit", weak)
+        if weak and weak_sent >= thresholds.NOTIFY_WEAK_MAX_PER_HOUR:
+            return Match(False, "weak_hourly_limit", weak)
+    return verdict
 
 
 def tip_area_codes(opportunity) -> list[str]:
@@ -637,7 +811,54 @@ def candidates(now=None, limit: int = 200) -> list[Opportunity]:
     )
 
 
-def _devices(require_token: bool = True):
+def weak_candidates(now=None, limit: int = 200) -> list[Opportunity]:
+    """
+    Tips som kan gå som SVAG notis till den som valt det: nya (de senaste
+    NOTIFY_WEAK_FRESH_MINUTES), synliga i listan och inte notisvärda för alla.
+
+    `notified_at` används inte här och skrivs inte av den här vägen: den är
+    notisstunden för ALLA, och ett svagt tips som senare blir starkt ska då få
+    sin vanliga notis. Dubbletter stoppas i stället av leveransnyckeln (enhet,
+    tips) i push_delivery, och ett tips som redan haft sin notisstund
+    (notified_at satt) skickas aldrig som svagt i efterhand.
+
+    SQL-filtret får bara vara vidare än `weak_eligible`, aldrig snävare --
+    decide() fäller det slutliga avgörandet per enhet.
+    """
+    from django.db.models import Q
+
+    now = now or timezone.now()
+    rows = (
+        Opportunity.objects.filter(
+            notified_at__isnull=True,
+            suppressed_at__isnull=True,
+            end_time__gt=now,
+            demand_score__gt=0,
+            has_alternative=False,
+            computed_at__gte=now - timedelta(minutes=thresholds.NOTIFY_WEAK_FRESH_MINUTES),
+        )
+        .exclude(severity_tier="ignore")
+        .filter(
+            Q(start_time__isnull=True)
+            | Q(start_time__lte=now + timedelta(hours=thresholds.FEED_HORIZON_HOURS))
+        )
+        .order_by("-demand_score")[:limit]
+    )
+    out = []
+    for o in rows:
+        if not weak_eligible(o, now):
+            continue
+        worthy = thresholds.is_notify_worthy(
+            o.severity_tier, o.demand_score, o.has_alternative, level=level_of(o),
+        )
+        if worthy and o.ai_adjusted_at is None:
+            # Den vanliga vägen tar det (candidates) -- inte två gånger.
+            continue
+        out.append(o)
+    return out
+
+
+def _devices(require_token: bool = True, weak_only: bool = False):
     """
     Enheter som får ta emot notiser. Importeras lokalt: billing-modellerna
     pekar på Supabase-ägda tabeller, och core ska kunna importeras utan dem
@@ -647,6 +868,9 @@ def _devices(require_token: bool = True):
     urvalslogiken utan att skicka något -- lokalt har ingen enhet en
     FCM-token, och utan den flaggan hade varje lokal körning svarat
     "0 notiser" oavsett hur rätt allting annat var.
+
+    `weak_only=True`: bara telefoner som valt svagare tips. En cykel med bara
+    svaga kandidater ska inte läsa varje telefon i landet var 30:e sekund.
     """
     from billing.models import Company, Device
 
@@ -660,9 +884,53 @@ def _devices(require_token: bool = True):
     # core/entitlement.py gör för läsvägen -- den hade annars funnits på
     # ett ställe och saknats på det andra.
     rows = Device.objects.all()
+    if weak_only:
+        rows = rows.filter(notify_prefs__weak=True)
     if require_token:
         rows = rows.exclude(push_token__isnull=True).exclude(push_token="")
     return [d for d in rows if d.company_id in active]
+
+
+def _has_cap(prefs) -> bool:
+    return weak_enabled(prefs) or max_per_hour(prefs) is not None
+
+
+def _recent_counts(devices, now) -> dict[str, list[int]]:
+    """
+    Köade notiser den senaste timmen per enhet: [alla, svaga]. En fråga per
+    cykel, och bara när någon telefon har ett tak att räkna mot. Räknas på
+    köade rader, inte skickade: det är köandet taket ska hålla emot, och en
+    notis som sedan inte nådde fram har ändå tagit en plats.
+    """
+    from django.db.models import Count, Q
+
+    counts: dict[str, list[int]] = {str(d.id): [0, 0] for d in devices}
+    ids = [d.id for d in devices if _has_cap(d.notify_prefs)]
+    if not ids:
+        return counts
+    rows = (
+        PushDelivery.objects.filter(device_id__in=ids, created_at__gte=now - timedelta(hours=1))
+        .values("device_id")
+        .annotate(total=Count("id"), weak=Count("id", filter=Q(snapshot__weak=True)))
+    )
+    for row in rows:
+        counts[str(row["device_id"])] = [row["total"], row["weak"]]
+    return counts
+
+
+def _recent_for(counts, device):
+    """(alla, svaga) för decide(), eller None när enheten inte har något tak."""
+    if not _has_cap(device.notify_prefs):
+        return None
+    total, weak = counts.get(str(device.id), (0, 0))
+    return total, weak
+
+
+def _tally(counts, device, weak: bool) -> None:
+    row = counts.setdefault(str(device.id), [0, 0])
+    row[0] += 1
+    if weak:
+        row[1] += 1
 
 
 def plan_cycle(now=None, require_token: bool = False) -> list[dict]:
@@ -671,18 +939,28 @@ def plan_cycle(now=None, require_token: bool = False) -> list[dict]:
 
     Finns för `manage.py push_cycle --dry-run` och för att en notis som
     uteblev ska gå att förklara utan att läsa loggar: varje enhet får sitt
-    `reason` med, även när svaret är nej.
+    `reason` med, även när svaret är nej. Svaga kandidater, prövade mot
+    telefonerna som valt dem, står med `weak: true`.
     """
+    now = now or timezone.now()
     plan = []
     # Utan token-kravet som standard: en torrkörning ska svara på "vem hade
     # matchat?", och lokalt har ingen enhet en FCM-token. Ett tomt svar hade
     # sett ut som att filtren var fel, inte som att telefonerna saknas.
     devices = _devices(require_token=require_token)
-    on_duty = presence_rules.fresh([d.id for d in devices], now or timezone.now())
-    for opportunity in candidates(now=now):
+    on_duty = presence_rules.fresh([d.id for d in devices], now)
+    counts = _recent_counts(devices, now)
+    weak_devices = [d for d in devices if weak_enabled(d.notify_prefs)]
+    rounds = [(o, False, devices) for o in candidates(now=now)]
+    if weak_devices:
+        rounds += [(o, True, weak_devices) for o in weak_candidates(now=now)]
+    for opportunity, weak_round, targets in rounds:
         recipients, rejected = [], []
-        for device in devices:
-            match = decide(device.notify_prefs, opportunity, on_duty.get(str(device.id)))
+        for device in targets:
+            match = decide(
+                device.notify_prefs, opportunity, on_duty.get(str(device.id)),
+                now=now, recent=_recent_for(counts, device),
+            )
             entry = {"device_id": str(device.id), "label": device.label, "reason": match.reason}
             (recipients if match.ok else rejected).append(entry)
         plan.append(
@@ -695,6 +973,7 @@ def plan_cycle(now=None, require_token: bool = False) -> list[dict]:
                 "severity_tier": opportunity.severity_tier,
                 "region": opportunity.region,
                 "places": opportunity.places,
+                "weak": weak_round,
                 "recipients": recipients,
                 "rejected": rejected,
             }
@@ -724,7 +1003,9 @@ def run_push_cycle(now=None, sender=None, simulate: bool = False) -> dict:
     1. **Köa.** Varje ny kandidat prövas mot varje enhet med decide(). En träff
        blir en rad med status `pending`; unikheten (enhet, tips) är
        leveransnyckeln, så en cykel som körs två gånger köar inget dubbelt.
-       Därefter sätts `notified_at`, oavsett hur många som matchade.
+       Därefter sätts `notified_at`, oavsett hur många som matchade. Sedan de
+       svaga kandidaterna, bara mot telefoner som valt dem (weak_candidates);
+       de rör inte `notified_at`.
     2. **Skicka.** Mogna rader tas med ett lån (`sending`) och skickas.
        Tillfälliga fel försöks igen med växande väntan inom notisens
        livslängd; en död token nollas; det som inte hunnit fram före
@@ -740,7 +1021,8 @@ def run_push_cycle(now=None, sender=None, simulate: bool = False) -> dict:
     now = now or timezone.now()
     rows = candidates(now=now)
     has_due = _due(now).exists()
-    if not rows and not has_due:
+    weak_rows = weak_candidates(now=now)
+    if not rows and not has_due and not weak_rows:
         return {"sent": 0, "candidates": 0}
 
     if simulate and sender is None:
@@ -749,7 +1031,14 @@ def run_push_cycle(now=None, sender=None, simulate: bool = False) -> dict:
 
         sender = simulated_sender
 
-    devices = _devices(require_token=not simulate)
+    if rows or has_due:
+        devices = _devices(require_token=not simulate)
+    else:
+        # Bara svaga kandidater: bara telefonerna som valt dem behöver läsas.
+        devices = _devices(require_token=not simulate, weak_only=True)
+    weak_devices = [d for d in devices if weak_enabled(d.notify_prefs)]
+    if not rows and not has_due and not weak_devices:
+        return {"sent": 0, "candidates": 0}
     if not devices and not has_due:
         # Inga enheter att skicka till. Tipsen lämnas OMARKERADE: markerade
         # hade den första föraren som installerar appen tyst gått miste om
@@ -773,15 +1062,21 @@ def run_push_cycle(now=None, sender=None, simulate: bool = False) -> dict:
 
         sender = fcm_sender
 
-    queued = _enqueue(rows, devices, now) if devices else 0
-    counts = _send_due(sender, devices, now)
+    counts = _recent_counts(devices, now) if devices else {}
+    queued = _enqueue(rows, devices, now, counts) if devices and rows else 0
+    weak_queued = (
+        _enqueue_weak(weak_rows, weak_devices, now, counts) if weak_devices and weak_rows else 0
+    )
+    sent = _send_due(sender, devices, now)
     return {
-        "sent": counts["sent"],
-        "failed": counts["failed"],
-        "retrying": counts["retry"],
-        "expired": counts["expired"],
-        "queued": queued,
+        "sent": sent["sent"],
+        "failed": sent["failed"],
+        "retrying": sent["retry"],
+        "expired": sent["expired"],
+        "queued": queued + weak_queued,
+        "weakQueued": weak_queued,
         "candidates": len(rows),
+        "weakCandidates": len(weak_rows),
         "devices": len(devices),
     }
 
@@ -793,36 +1088,56 @@ def _due(now):
     )
 
 
-def _enqueue(rows, devices, now) -> int:
+def _expires(opportunity, now):
+    expires = now + PUSH_TTL
+    if opportunity.end_time and opportunity.end_time < expires:
+        expires = opportunity.end_time
+    return expires
+
+
+def _queue_one(device, opportunity, *, now, title, body, snapshot, expires) -> bool:
+    _, created = PushDelivery.objects.get_or_create(
+        device_id=device.id,
+        opportunity_external_id=opportunity.external_id,
+        defaults={
+            "opportunity": opportunity,
+            "device_token": device.token or "",
+            "title": title,
+            "body": body,
+            "snapshot": snapshot,
+            "ok": False,
+            "status": PushDelivery.Status.PENDING,
+            "next_attempt_at": now,
+            "expires_at": expires,
+        },
+    )
+    return created
+
+
+def _enqueue(rows, devices, now, counts=None) -> int:
     queued = 0
+    counts = counts if counts is not None else _recent_counts(devices, now)
     on_duty = presence_rules.fresh([d.id for d in devices], now)
     for opportunity in rows:
         title = push_title(opportunity)
         body = push_body(opportunity)
         snapshot = snapshot_of(opportunity)
-        expires = now + PUSH_TTL
-        if opportunity.end_time and opportunity.end_time < expires:
-            expires = opportunity.end_time
+        expires = _expires(opportunity, now)
         with transaction.atomic():
             for device in devices:
-                if not decide(device.notify_prefs, opportunity, on_duty.get(str(device.id))):
-                    continue
-                _, created = PushDelivery.objects.get_or_create(
-                    device_id=device.id,
-                    opportunity_external_id=opportunity.external_id,
-                    defaults={
-                        "opportunity": opportunity,
-                        "device_token": device.token or "",
-                        "title": title,
-                        "body": body,
-                        "snapshot": snapshot,
-                        "ok": False,
-                        "status": PushDelivery.Status.PENDING,
-                        "next_attempt_at": now,
-                        "expires_at": expires,
-                    },
+                match = decide(
+                    device.notify_prefs, opportunity, on_duty.get(str(device.id)),
+                    now=now, recent=_recent_for(counts, device),
                 )
-                queued += created
+                if not match:
+                    continue
+                if _queue_one(
+                    device, opportunity, now=now, title=title, body=body,
+                    snapshot={**snapshot, "weak": True} if match.weak else snapshot,
+                    expires=expires,
+                ):
+                    queued += 1
+                    _tally(counts, device, match.weak)
             # notified_at sätts oavsett hur många som matchade -- även noll.
             # Tipset har passerat sin notisstund; att lämna det omarkerat hade
             # gjort att en förare som ändrar sina inställningar i morgon får en
@@ -831,6 +1146,47 @@ def _enqueue(rows, devices, now) -> int:
             # update(), aldrig save(): save() skriver hela raden och skulle
             # skriva över det pipelinen just räknat fram. Se repository.py.
             Opportunity.objects.filter(pk=opportunity.pk).update(notified_at=now)
+    return queued
+
+
+def _enqueue_weak(rows, devices, now, counts) -> int:
+    """
+    De svaga kandidaterna, bara till telefoner som valt dem. Rör aldrig
+    `notified_at` (se weak_candidates). Ett tips prövas i varje cykel så länge
+    det är nytt; leveranser som redan finns hoppas över med EN fråga, inte en
+    per telefon och tips.
+    """
+    queued = 0
+    on_duty = presence_rules.fresh([d.id for d in devices], now)
+    already = {
+        (str(device_id), external_id)
+        for device_id, external_id in PushDelivery.objects.filter(
+            device_id__in=[d.id for d in devices],
+            opportunity_external_id__in=[o.external_id for o in rows],
+        ).values_list("device_id", "opportunity_external_id")
+    }
+    for opportunity in rows:
+        title = push_title(opportunity)
+        body = push_body(opportunity)
+        snapshot = {**snapshot_of(opportunity), "weak": True}
+        expires = _expires(opportunity, now)
+        for device in devices:
+            if (str(device.id), opportunity.external_id) in already:
+                continue
+            match = decide(
+                device.notify_prefs, opportunity, on_duty.get(str(device.id)),
+                now=now, recent=_recent_for(counts, device),
+            )
+            # Bara svaga träffar här: ett tips som är notisvärt för alla tas av
+            # den vanliga vägen, med notified_at.
+            if not match or not match.weak:
+                continue
+            if _queue_one(
+                device, opportunity, now=now, title=title, body=body,
+                snapshot=snapshot, expires=expires,
+            ):
+                queued += 1
+                _tally(counts, device, True)
     return queued
 
 
@@ -861,6 +1217,14 @@ def _send_due(sender, devices, now) -> Counter:
             # Enheten har ingen token längre, eller bolaget är inte aktivt.
             _finish(delivery, PushDelivery.Status.FAILED, error="enheten tar inte längre emot notiser")
             counts["failed"] += 1
+            continue
+
+        # Förarens tystnad gäller också i det här ögonblicket: en paus, en
+        # avstängning eller tysta timmar som börjat medan notisen låg i kön.
+        quiet = silenced(device.notify_prefs, now)
+        if quiet:
+            _finish(delivery, PushDelivery.Status.SUPPRESSED, error=f"föraren har tystat notiserna: {quiet}")
+            counts["suppressed"] += 1
             continue
 
         # Mottagaren kontrolleras HÄR, inte bara när notisen köades. Mellan de
@@ -968,4 +1332,10 @@ __all__ = [
     "snapshot_of",
     "type_catalog",
     "type_enabled",
+    "in_quiet_hours",
+    "quiet_hours",
+    "silenced",
+    "weak_candidates",
+    "weak_eligible",
+    "weak_enabled",
 ]

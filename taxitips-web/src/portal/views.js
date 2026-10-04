@@ -1,4 +1,5 @@
 import { COUNTIES, countyName, date, dateTime, money } from "./api.js";
+import { notifyCard } from "../notify_editor.js";
 
 /**
  * Portalens fem vyer, som rena funktioner från data till HTML.
@@ -384,7 +385,7 @@ function bulkResult(result) {
     </div>`;
 }
 
-export function bilar(data, bulkInviteResult = null) {
+export function bilar(data, bulkInviteResult = null, notify = null) {
   const canManage = (data.permissions ?? []).includes("manage_devices");
   const rows = data.licenses ?? [];
 
@@ -451,6 +452,7 @@ export function bilar(data, bulkInviteResult = null) {
       </div>`,
       )
       .join("")}
+    ${notifyCard(notify, { countyNames: COUNTIES })}
   `;
 }
 

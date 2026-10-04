@@ -4,6 +4,7 @@ import { setupPasswordToggles } from "../password_toggle.js";
 import { ApiError, COUNTIES, api, countyName, supabase } from "./api.js";
 import * as views from "./views.js";
 import { quoteHtml } from "./views.js";
+import { notifyBody } from "../notify_editor.js";
 
 /**
  * Portalens sammanhållning: inloggning, vyval och åtgärder.
@@ -40,6 +41,7 @@ setupPasswordToggles(el.login ?? document);
 
 let state = {
   view: "oversikt", data: null, orders: null, members: null, bulkInvite: null, pricing: null,
+  notify: null,
 };
 
 // Inbjudningsmejlet (fleet/notifications.py:member_invite) loggar in direkt
@@ -154,6 +156,10 @@ async function refresh() {
       // Listan är en extra: företagssidan ska visas även om den inte svarar.
       state.members = await api.members().catch(() => null);
     }
+    if (state.view === "bilar") {
+      // Samma sak med notiserna: bilarna visas även om de inte svarar.
+      state.notify = await api.notifySettings().catch(() => null);
+    }
   } catch (error) {
     showError(error);
     return;
@@ -211,7 +217,7 @@ function render() {
   if (!data) return;
   const html = {
     oversikt: () => views.oversikt(data),
-    bilar: () => views.bilar(data, state.bulkInvite),
+    bilar: () => views.bilar(data, state.bulkInvite, state.notify),
     lan: () => views.lan(data),
     abonnemang: () => views.abonnemang(data, state.orders?.orders ?? [], state.pricing),
     foretag: () => views.foretag(data, state.members),
@@ -399,6 +405,7 @@ for (const tab of el.tabs) {
     tab.setAttribute("aria-selected", "true");
     state.view = tab.dataset.view;
     if (state.view === "foretag") state.members = await api.members().catch(() => null);
+    if (state.view === "bilar") state.notify = await api.notifySettings().catch(() => null);
     if (state.view === "abonnemang" && !state.orders) {
       try {
         state.orders = await api.orders();
@@ -415,6 +422,11 @@ for (const tab of el.tabs) {
 
 el.view.addEventListener("submit", async (event) => {
   const form = event.target;
+  if (form.classList.contains("notify-form")) {
+    event.preventDefault();
+    await saveNotify(form, event.submitter);
+    return;
+  }
   if (form.id === "contactForm" || form.id === "billingForm") {
     event.preventDefault();
     await saveDetails(form);
@@ -458,6 +470,37 @@ el.view.addEventListener("submit", async (event) => {
     showError(error);
   }
 });
+
+/** Notiserna för en telefon eller företagets standard (src/notify_editor.js). */
+async function saveNotify(form, submitter) {
+  clearError();
+  const body = notifyBody(form, submitter);
+  if (!body) {
+    showError(new ApiError(400, "Välj ett läge först.", "preset_required"));
+    return;
+  }
+  const buttons = form.querySelectorAll('button[type="submit"]');
+  for (const b of buttons) b.disabled = true;
+  try {
+    if (form.dataset.target === "default") {
+      const result = await api.setNotifyDefault(body);
+      showNotice(
+        result.phonesChanged
+          ? `Standarden är sparad och gäller nu ${result.phonesChanged} telefon(er).`
+          : "Standarden är sparad. Nya telefoner får den när de kopplas till en bil.",
+      );
+    } else {
+      await api.setDeviceNotify(form.dataset.device, body);
+      showNotice("Notiserna är ändrade på telefonen.");
+    }
+    state.notify = await api.notifySettings().catch(() => state.notify);
+    render();
+  } catch (error) {
+    showError(error);
+  } finally {
+    for (const b of buttons) b.disabled = false;
+  }
+}
 
 /** Bjud in en förare med e-post. Servern skapar kontot och skickar mejlet. */
 async function inviteDriver(form) {

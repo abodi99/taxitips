@@ -19,6 +19,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from billing.models import Company, CompanyMember, Device
+from core import notify_prefs
 from core.api import _json
 from core.models import OpportunityFeedback, OpportunityFavorite, OpportunityReport, PushDelivery
 from fleet import accounts
@@ -89,6 +90,8 @@ def _prefs_summary(prefs) -> dict:
             or prefs.get("enabled") is False
             or prefs.get("notificationsEnabled") is False
         ),
+        # Läget och det som avviker, i en rad (core/notify_prefs.py).
+        "summary": notify_prefs.summary(prefs),
     }
 
 

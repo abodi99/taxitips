@@ -10,7 +10,7 @@ from fleet import (
     admin_accounts, admin_activity, admin_api, admin_app_version, admin_crm, admin_followup, admin_sales,
     admin_status, admin_support, admin_tip_reports, admin_vehicles,
 )
-from fleet import admin_dashboard
+from fleet import admin_dashboard, admin_notify
 
 urlpatterns = [
     path("overview", admin_api.overview),
@@ -78,6 +78,13 @@ urlpatterns = [
     path("companies/<uuid:company_id>/subscription", admin_api.set_subscription),
     path("companies/<uuid:company_id>/pairing-code", admin_api.issue_code),
     path("companies/<uuid:company_id>/test-push", admin_api.test_push),
+    # Notiserna för kundens telefoner (fleet/admin_notify.py)
+    path("companies/<uuid:company_id>/notify-settings", admin_notify.company_notify_settings),
+    path("companies/<uuid:company_id>/notify-default", admin_notify.company_notify_default),
+    path(
+        "companies/<uuid:company_id>/devices/<uuid:device_id>/notify-prefs",
+        admin_notify.device_notify_prefs,
+    ),
     path("approvals/<uuid:approval_id>/block", admin_api.block_approval),
     path("approvals/<uuid:approval_id>/label", admin_api.rename_approval),
     path("licenses/<uuid:license_id>/release", admin_api.release_license),
