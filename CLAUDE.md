@@ -107,6 +107,15 @@ Subagents are not free — each runs in its own context window. Use them for gen
 
 ---
 
+## Flutter rules (official, github.com/flutter/agent-plugins/tree/main/rules)
+
+The official Flutter rules repository contains one rule, `flutter-hot-reload`, copied here verbatim in substance. It needs the Dart MCP server (`dart mcp-server`, tools `dtd`/`list_running_apps`, `hot_reload`, `hot_restart`). It is **not connected** in this project yet; add it with `claude mcp add dart -- dart mcp-server` when you want it. Until then the rule cannot run and is skipped.
+
+**Proactive Flutter Hot Reload** — whenever you edit a `.dart` file under `taxitips-app/lib/`:
+1. **Skip** for files outside `lib/` (`test/`, `integration_test/`, `benchmark/`, `test_driver/`, `example/`) and for changes that only touch comments, docstrings or whitespace.
+2. **Discover & connect** to running app instances with the Dart MCP server's `dtd` tool (or `list_running_apps` / `vm_service`).
+3. **Reload**: run `hot_reload` right after UI changes (widgets, `build` methods, simple methods). Run `hot_restart` when fundamental logic, state initialisation (`initState`), global/static state or `main()` changed.
+
 ## Local dev → push workflow
 
 1. `supabase start` — local Supabase mirrors the Coolify instance (same Postgres/Auth/PostgREST versions).
