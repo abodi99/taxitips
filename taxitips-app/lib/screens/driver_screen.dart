@@ -13,7 +13,10 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../analytics.dart';
 import '../api_client.dart';
+import '../config.dart';
 import '../feed_cache.dart';
+import '../follow_up.dart';
+import '../widgets/follow_up_card.dart';
 import '../membership_copy.dart';
 import '../net_status.dart';
 import '../widgets/offline_banner.dart';
@@ -76,6 +79,8 @@ class _DriverScreenState extends State<DriverScreen>
   Map<String, dynamic>? _data;
   String? _error;
   String? _status;
+  // "Hur gick det?" för ett tips föraren körde mot (follow_up.dart).
+  FollowUp? _followUp;
   Timer? _timer;
   // Nätet är nere (inte ett serverfel): tipsen som syns är då gamla och
   // märks så. `_retryTimer` försöker igen med växande väntetid.
@@ -915,6 +920,7 @@ class _DriverScreenState extends State<DriverScreen>
       unawaited(FeedCache.save(data));
       // Nätet är tillbaka: skicka svar som köats medan det var nere.
       unawaited(widget.api.flushPendingFeedback());
+      unawaited(_checkFollowUp());
       // Färjor och evenemang i samma område; ett fel där får inte dölja tipsen.
       unawaited(_loadFerries());
       unawaited(_loadEvents());
@@ -1009,6 +1015,19 @@ class _DriverScreenState extends State<DriverScreen>
       _counties.isEmpty ? null : (_counties.toList()..sort());
   List<String>? get _municipalityParam =>
       _municipalities.isEmpty ? null : (_municipalities.toList()..sort());
+
+  /// Frågar efter varje laddning: en fråga mognar medan appen står öppen.
+  Future<void> _checkFollowUp() async {
+    if (!TaxiTipsConfig.usesDjangoApi) return;
+    final due = await FollowUps.due();
+    if (!mounted || due?.id == _followUp?.id) return;
+    setState(() => _followUp = due);
+  }
+
+  void _closeFollowUp(String id) {
+    unawaited(FollowUps.done(id));
+    if (mounted && _followUp?.id == id) setState(() => _followUp = null);
+  }
 
   Future<void> _loadFerries() async {
     try {
@@ -2852,6 +2871,15 @@ class _DriverScreenState extends State<DriverScreen>
                                   _Notice(
                                     icon: Icons.info_outline,
                                     text: _status!,
+                                  ),
+                                ],
+                                if (_followUp != null) ...[
+                                  const SizedBox(height: 8),
+                                  FollowUpCard(
+                                    key: ValueKey(_followUp!.id),
+                                    api: widget.api,
+                                    followUp: _followUp!,
+                                    onDone: _closeFollowUp,
                                   ),
                                 ],
                               ],

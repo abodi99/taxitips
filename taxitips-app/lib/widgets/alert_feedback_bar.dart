@@ -31,10 +31,14 @@ class AlertFeedbackBar extends StatefulWidget {
     super.key,
     required this.api,
     required this.opportunityId,
+    this.onAnswered,
   });
 
   final ApiClient api;
   final String opportunityId;
+
+  /// Anropas när ett svar sparats (skickat eller köat), inte vid ångra.
+  final VoidCallback? onAnswered;
 
   /// Tester bygger utan API_BASE_URL och skulle aldrig se knapparna.
   @visibleForTesting
@@ -86,6 +90,7 @@ class _AlertFeedbackBarState extends State<AlertFeedbackBar> {
       _busy = false;
       if (ok) {
         _queued = res['queued'] == true;
+        if (next != null) widget.onAnswered?.call();
       } else {
         // Sagt rakt ut. Ett svar som inte kom fram ska inte se ut som ett
         // som gjorde det -- det var precis så den gamla vägen kunde vara

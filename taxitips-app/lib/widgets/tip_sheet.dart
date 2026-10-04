@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../config.dart';
+import '../follow_up.dart';
 import '../navigation.dart';
 import '../severity_labels.dart';
 import '../signal_kinds.dart';
@@ -89,6 +91,19 @@ class _TipSheetBodyState extends State<TipSheetBody> {
   void dispose() {
     _timer?.cancel();
     super.dispose();
+  }
+
+  /// Föraren kör mot tipset: 🚕 till backend, och frågan "hur gick det?"
+  /// en halvtimme senare (follow_up.dart). Ingenting av det syns nu.
+  void _drivingTo(Map<String, dynamic> alert) {
+    unawaited(FollowUps.remember(alert));
+    unawaited(
+      widget.api.submitAlertFeedback(
+        alert['id'].toString(),
+        false,
+        verdict: 'heading',
+      ),
+    );
   }
 
   @override
@@ -212,6 +227,9 @@ class _TipSheetBodyState extends State<TipSheetBody> {
               distanceKm: widget.distanceKm,
               onToggleFavorite: widget.onToggleFavorite,
               bottomInset: inset,
+              onDriving: ended || !hasId || !TaxiTipsConfig.usesDjangoApi
+                  ? null
+                  : () => _drivingTo(a),
             ),
         ],
       ),
@@ -1038,6 +1056,7 @@ class _ActionBar extends StatefulWidget {
     required this.distanceKm,
     required this.onToggleFavorite,
     required this.bottomInset,
+    this.onDriving,
   });
 
   final Map<String, dynamic> alert;
@@ -1046,6 +1065,9 @@ class _ActionBar extends StatefulWidget {
   final double? distanceKm;
   final Future<void> Function(bool favorite)? onToggleFavorite;
   final double bottomInset;
+
+  /// Navigeringen öppnades mot tipset. `null` för ett avslutat tips.
+  final VoidCallback? onDriving;
 
   @override
   State<_ActionBar> createState() => _ActionBarState();
@@ -1081,6 +1103,7 @@ class _ActionBarState extends State<_ActionBar> {
     final lon = (widget.alert['lon'] as num?)?.toDouble();
     if (lat == null || lon == null) return;
     final ok = await openNavigation(lat, lon);
+    if (ok) widget.onDriving?.call();
     if (!ok && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Kunde inte öppna navigeringen.')),
