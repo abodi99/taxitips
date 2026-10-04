@@ -312,14 +312,11 @@ def apply_cached(opportunity: Opportunity, *, reclassify: bool = True) -> RailAs
     Används bl.a. direkt efter ingest.write() så att en granskad rad inte
     tappar sin bedömning mellan 90s-poll och 5m-review_uncertain.
     """
-    cached = (
-        RailAssessment.objects.filter(cache_key=normalize_key(opportunity))
-        .order_by("-created_at")
-        .first()
-    )
+    key = normalize_key(opportunity)
+    cached = RailAssessment.objects.filter(cache_key=key).order_by("-created_at").first()
     if not cached:
         return None
-    reuse = cached if cached.opportunity_id == opportunity.id else None
+    reuse = _own_row(opportunity, key, cached)
     if cached.facts:
         # Räknas om från faktan: en ändrad regel slår igenom utan nytt anrop.
         return apply_facts(opportunity, cached.facts, reclassify=reclassify, reuse_assessment=reuse)
@@ -333,8 +330,34 @@ def apply_cached(opportunity: Opportunity, *, reclassify: bool = True) -> RailAs
         severity_tier=cached_tier,
         has_alternative=cached_alt,
         mode=cached_mode,
-        reuse_assessment=cached if cached.opportunity_id == opportunity.id else None,
+        reuse_assessment=reuse,
     )
+
+
+def _own_row(opportunity: Opportunity, key: str, cached: RailAssessment) -> RailAssessment | None:
+    """
+    Tipsets egen rad för nyckeln, i takt med nyckelns senaste bedömning.
+
+    Utan den pendlade två tips med samma text: A tog B:s rad som "senaste" och
+    skrev en ny, varpå B tog A:s och skrev en ny -- varje pollrunda. Mätt
+    2026-10-04: 51 rader på en timme för 9 tips. Nu skriver varje tips en rad
+    en gång och uppdaterar den sedan.
+    """
+    if cached.opportunity_id == opportunity.id:
+        return cached
+    own = (
+        RailAssessment.objects.filter(cache_key=key, opportunity=opportunity)
+        .order_by("-created_at")
+        .first()
+    )
+    if own is None:
+        return None
+    fields = ("rule_score", "model_score", "final_score", "verdict", "model_name", "facts")
+    if any(getattr(own, f) != getattr(cached, f) for f in fields):
+        RailAssessment.objects.filter(pk=own.pk).update(**{f: getattr(cached, f) for f in fields})
+        for f in fields:
+            setattr(own, f, getattr(cached, f))
+    return own
 
 
 def review(

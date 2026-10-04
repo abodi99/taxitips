@@ -128,3 +128,31 @@ class ReviewWithFactsTests(TestCase):
         self.assertIsNone(review(o, lambda prompt: "inget json här", facts=True))
         o.refresh_from_db()
         self.assertEqual(o.demand_score, 38)
+
+
+class CacheRowTests(TestCase):
+    def test_two_tips_with_the_same_text_do_not_write_rows_every_poll(self):
+        # Mätt 2026-10-04: 51 rader på en timme för 9 tips.
+        a = make("sl:a")
+        b = make("sl:b")
+        review(a, lambda prompt: answer(event_type="single_departure"), facts=True)
+        for _poll in range(5):
+            for external_id in ("sl:a", "sl:b"):
+                tip = make(external_id)
+                apply_cached(tip)
+        self.assertEqual(RailAssessment.objects.count(), 2)
+        b.refresh_from_db()
+        self.assertEqual(b.demand_score, 20)
+
+    def test_a_tips_own_row_follows_the_latest_reading(self):
+        a = make("sl:a")
+        b = make("sl:b")
+        review(a, lambda prompt: answer(event_type="single_departure"), facts=True)
+        apply_cached(make("sl:b"))
+        # En ny läsning av samma text (t.ex. --force) blir nyckelns senaste.
+        review(make("sl:a"), lambda prompt: answer(event_type="partial_route"), facts=True, bypass_cache=True)
+        apply_cached(make("sl:b"))
+        own = RailAssessment.objects.filter(opportunity=b).get()
+        self.assertEqual(own.facts["event_type"], "partial_route")
+        b.refresh_from_db()
+        self.assertEqual(b.demand_score, PARTIAL_ROUTE_SCORE)
