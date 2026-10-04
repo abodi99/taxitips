@@ -278,7 +278,7 @@ def _facts_prompt_for(opportunity: Opportunity) -> str:
     )
 
 
-def _apply_facts(
+def apply_facts(
     opportunity: Opportunity,
     facts: dict,
     *,
@@ -322,7 +322,7 @@ def apply_cached(opportunity: Opportunity, *, reclassify: bool = True) -> RailAs
     reuse = cached if cached.opportunity_id == opportunity.id else None
     if cached.facts:
         # Räknas om från faktan: en ändrad regel slår igenom utan nytt anrop.
-        return _apply_facts(opportunity, cached.facts, reclassify=reclassify, reuse_assessment=reuse)
+        return apply_facts(opportunity, cached.facts, reclassify=reclassify, reuse_assessment=reuse)
     base_model, cached_tier, cached_alt, cached_mode = _decode_model_meta(cached.model_name)
     return _apply(
         opportunity,
@@ -403,7 +403,7 @@ def _review_facts(opportunity: Opportunity, call_model, *, reclassify: bool) -> 
     except Exception as exc:
         log.warning("genkit: faktaanrop misslyckades, behåller regelpoäng: %s", exc)
         return None
-    return _apply_facts(opportunity, parsed.model_dump(), reclassify=reclassify)
+    return apply_facts(opportunity, parsed.model_dump(), reclassify=reclassify)
 
 
 def _parse(

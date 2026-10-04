@@ -604,3 +604,11 @@ FEED_CONTEXT_LIMIT = 300
 # 2026-09-21: 1 800 samtidiga i Skåne, Halland och Västra Götaland. Taket
 # skyddar telefonen om Trafikverket skulle skicka ett helt land på en gång.
 FEED_CONTEXT_FULL_LIMIT = 3000
+
+# Andra bedömningen före en notis (core/ai_gate.py). Gäller notiskandidater från
+# regler som själva säger att de är osäkra (rule_id *.ambiguous): 91 notiser på en
+# vecka 2026-10-04, bland dem "Västtågen 7239 inställt" med 35 min till nästa tåg.
+# Högst så många anrop per pushcykel (var 30:e sekund); resten väntar en cykel.
+AI_GATE_MAX_PER_CYCLE = 5
+# Tidsgräns per anrop. Fem anrop ryms med god marginal i pushtaskens 100 s.
+AI_GATE_TIMEOUT_S = 8.0

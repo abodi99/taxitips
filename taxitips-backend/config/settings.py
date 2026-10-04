@@ -10,6 +10,7 @@ webhook-vyn och pipeline-vyn.
 
 from pathlib import Path
 import os
+import sys
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -335,7 +336,12 @@ CELERY_BEAT_SCHEDULE = {
 
 # All AI av utan deploy: TAXITIPS_AI=off i Coolify och en omstart. Reglerna
 # gäller då ensamma, som när modellen inte svarar (core/ai_client.py).
-TAXITIPS_AI = os.environ.get("TAXITIPS_AI", "on").strip().lower()
+# Under `manage.py test` är den av som standard: backendens .env bär en riktig
+# nyckel, och ett test får aldrig kosta pengar eller bero på nätet. Testerna av
+# AI-vägen slår på den uttryckligen och byter ut transporten.
+TAXITIPS_AI = os.environ.get(
+    "TAXITIPS_AI", "off" if sys.argv[1:2] == ["test"] else "on"
+).strip().lower()
 
 # Stäng av enskilda beat-poster, t.ex. lokalt:
 #   TAXITIPS_BEAT_DISABLE=push-cycle,review-uncertain

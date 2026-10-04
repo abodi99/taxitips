@@ -1086,6 +1086,14 @@ def run_push_cycle(now=None, sender=None, simulate: bool = False) -> dict:
 
         sender = fcm_sender
 
+    gate = {}
+    if devices and rows:
+        # Osäkra regler (*.ambiguous) läses av den bättre modellen innan någon
+        # väcks; grinden får bara stoppa, och släpper igenom om AI:n inte svarar.
+        from core import ai_gate
+
+        rows, gate = ai_gate.screen(rows, now)
+
     counts = _recent_counts(devices, now) if devices else {}
     queued = _enqueue(rows, devices, now, counts) if devices and rows else 0
     weak_queued = (
@@ -1102,6 +1110,7 @@ def run_push_cycle(now=None, sender=None, simulate: bool = False) -> dict:
         "candidates": len(rows),
         "weakCandidates": len(weak_rows),
         "devices": len(devices),
+        **({"aiGate": gate} if gate.get("gated") else {}),
     }
 
 

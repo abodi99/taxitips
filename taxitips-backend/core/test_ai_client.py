@@ -34,6 +34,7 @@ def fake(output=None, tokens_in=1000, tokens_out=100, error=None):
     return transport
 
 
+@override_settings(TAXITIPS_AI="on")
 class AiClientTests(TestCase):
     def setUp(self):
         patcher = patch.object(ai_client, "api_key", return_value="test-key")
