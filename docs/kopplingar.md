@@ -27,9 +27,18 @@ och `CELERY_TASK_ALWAYS_EAGER=1`. Kör med `./.venv/bin/python manage.py …`.
   sviten var grön 2026-10-04 (1338 tester).
 - **Testdatabasen**: Djangos testrunner skapar `test_postgres` i samma Postgres.
 
-**Webben** (`taxitips-web/`): `.env` har `VITE_SUPABASE_URL=http://127.0.0.1:54321`
-och `VITE_API_BASE_URL=http://127.0.0.1:8000`. Kör med `npm run dev` (Vite, 5173).
-Standardvärdet i `src/config.js` är `https://api.taxitips.se`, när variabeln saknas.
+**Webben** (`taxitips-web/`): kör med `npm run dev` (Vite, `http://127.0.0.1:5173`).
+
+- **Mot produktion (vanligast för portal/admin-UI):** `.env.local` med
+  `VITE_SUPABASE_URL=https://api.taxitips.se`, produktionens anon-nyckel och
+  `VITE_API_BASE_URL=https://backend.taxitips.se`. Backendens
+  `APP_API_ALLOWED_ORIGINS` måste innehålla `http://127.0.0.1:5173` och
+  `http://localhost:5173`.
+- **Full lokal stack:** `.env` med `VITE_SUPABASE_URL=http://127.0.0.1:54321`
+  och `VITE_API_BASE_URL=http://127.0.0.1:8000`, plus `supabase start` och
+  Django på :8000. Ta bort `.env.local` så den inte vinner över `.env`.
+  Standardvärdet i `src/config.js` (när variablerna saknas) är
+  `https://api.taxitips.se` + `https://backend.taxitips.se`.
 
 **Appen** (`taxitips-app/`): `dart_defines.local.json` (gitignorerad) har
 `API_BASE_URL`, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `CARTO_KEY` och

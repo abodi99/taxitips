@@ -25,7 +25,9 @@ const el = {
   loginError: document.getElementById("loginError"),
   app: document.getElementById("app"),
   view: document.getElementById("view"),
-  tabs: document.querySelectorAll(".tab"),
+  tabs: document.querySelectorAll(".tabs-primary .tab"),
+  moreToggle: document.getElementById("moreToggle"),
+  moreMenu: document.getElementById("moreMenu"),
   whoami: document.getElementById("whoami"),
   logout: document.getElementById("logout"),
   globalError: document.getElementById("globalError"),
@@ -36,6 +38,49 @@ const el = {
   loginSubmit: document.getElementById("loginSubmit"),
   magicSent: document.getElementById("magicSent"),
 };
+
+/** Primärvyer i flikraden. `lan` finns kvar som alias → bilar. */
+const ALL_VIEWS = new Set(["oversikt", "bilar", "abonnemang", "foretag"]);
+
+function normalizeView(name) {
+  if (name === "lan") return "bilar";
+  return ALL_VIEWS.has(name) ? name : "oversikt";
+}
+
+function closeMoreMenu() {
+  if (!el.moreMenu || !el.moreToggle) return;
+  el.moreMenu.hidden = true;
+  el.moreToggle.setAttribute("aria-expanded", "false");
+  el.moreToggle.classList.toggle("is-active", state.view === "foretag");
+}
+
+function markActiveTab(view) {
+  const active = normalizeView(view);
+  for (const tab of el.tabs) {
+    tab.setAttribute("aria-selected", tab.dataset.view === active ? "true" : "false");
+  }
+  if (el.moreToggle) {
+    el.moreToggle.classList.toggle("is-active", active === "foretag");
+    el.moreToggle.setAttribute("aria-current", active === "foretag" ? "page" : "false");
+  }
+}
+
+async function showView(view) {
+  state.view = normalizeView(view);
+  markActiveTab(state.view);
+  closeMoreMenu();
+  if (state.view === "foretag") state.members = await api.members().catch(() => null);
+  if (state.view === "bilar") state.notify = await api.notifySettings().catch(() => null);
+  if (state.view === "abonnemang" && !state.orders) {
+    try {
+      state.orders = await api.orders();
+    } catch (error) {
+      showError(error);
+    }
+  }
+  render();
+  if (state.view === "abonnemang") loadPricing();
+}
 
 setupPasswordToggles(el.login ?? document);
 
@@ -221,10 +266,11 @@ async function loadPricing() {
 function render() {
   const data = state.data;
   if (!data) return;
+  state.view = normalizeView(state.view);
+  markActiveTab(state.view);
   const html = {
     oversikt: () => views.oversikt(data),
     bilar: () => views.bilar(data, state.bulkInvite, state.notify),
-    lan: () => views.lan(data),
     abonnemang: () => views.abonnemang(data, state.orders?.orders ?? [], state.pricing),
     foretag: () => views.foretag(data, state.members),
   }[state.view];
@@ -406,23 +452,34 @@ el.logout?.addEventListener("click", async () => {
 /* --- Vyval -------------------------------------------------------------- */
 
 for (const tab of el.tabs) {
-  tab.addEventListener("click", async () => {
-    for (const other of el.tabs) other.setAttribute("aria-selected", "false");
-    tab.setAttribute("aria-selected", "true");
-    state.view = tab.dataset.view;
-    if (state.view === "foretag") state.members = await api.members().catch(() => null);
-    if (state.view === "bilar") state.notify = await api.notifySettings().catch(() => null);
-    if (state.view === "abonnemang" && !state.orders) {
-      try {
-        state.orders = await api.orders();
-      } catch (error) {
-        showError(error);
-      }
-    }
-    render();
-    if (state.view === "abonnemang") loadPricing();
+  tab.addEventListener("click", () => {
+    showView(tab.dataset.view);
   });
 }
+
+el.moreToggle?.addEventListener("click", (event) => {
+  event.stopPropagation();
+  if (!el.moreMenu) return;
+  const open = el.moreMenu.hidden;
+  el.moreMenu.hidden = !open;
+  el.moreToggle.setAttribute("aria-expanded", open ? "true" : "false");
+});
+
+el.moreMenu?.addEventListener("click", (event) => {
+  const item = event.target.closest("[data-view]");
+  if (!item) return;
+  showView(item.dataset.view);
+});
+
+document.addEventListener("click", (event) => {
+  if (!el.moreMenu || el.moreMenu.hidden) return;
+  if (event.target.closest(".tab-more")) return;
+  closeMoreMenu();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeMoreMenu();
+});
 
 /* --- Åtgärder ----------------------------------------------------------- */
 
@@ -452,7 +509,7 @@ el.view.addEventListener("submit", async (event) => {
     }
     return;
   }
-  if (form.classList.contains("invite-form")) {
+  if (form.id === "singleInviteForm" || form.classList.contains("invite-form")) {
     event.preventDefault();
     await inviteDriver(form);
     return;
@@ -519,13 +576,25 @@ async function inviteDriver(form) {
     form.querySelector('[name="email"]')?.focus();
     return;
   }
+  // Primärformen kan ha bilväljare; per-bil-formen sätter data-attribut.
+  let licenseId = String(data.get("licenseId") ?? form.dataset.license ?? "").trim();
+  let vehicleId = String(data.get("vehicleId") ?? form.dataset.vehicle ?? "").trim();
+  const carSelect = form.querySelector("#invite-car");
+  if (carSelect) {
+    licenseId = carSelect.value;
+    vehicleId = carSelect.selectedOptions[0]?.dataset.vehicle || "";
+  }
+  if (!licenseId) {
+    showError(new ApiError(400, "Välj vilken bil föraren ska köra.", "license_required"));
+    return;
+  }
   button.disabled = true;
   try {
     await api.inviteDriver({
       email,
       label: String(data.get("label") ?? "").trim(),
-      licenseId: form.dataset.license,
-      vehicleId: form.dataset.vehicle,
+      licenseId,
+      vehicleId: vehicleId || undefined,
     });
     await refresh();
     showNotice(
@@ -644,6 +713,12 @@ async function saveDetails(form) {
 }
 
 el.view.addEventListener("click", async (event) => {
+  const goto = event.target.closest("[data-goto]");
+  if (goto) {
+    event.preventDefault();
+    await showView(goto.dataset.goto);
+    return;
+  }
   const button = event.target.closest("button[data-action]");
   if (!button) return;
   clearError();

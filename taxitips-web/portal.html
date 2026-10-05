@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Taxi Tips — Kundportal</title>
-  <meta name="description" content="Hantera bilar, telefoner, län och abonnemang." />
+  <meta name="description" content="Hantera bilar, telefoner och abonnemang." />
   <meta name="robots" content="noindex" />
   <link rel="icon" href="/favicon.ico" sizes="any" />
   <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
@@ -76,12 +76,12 @@
       <aside class="auth-panel" aria-label="Om kundportalen">
         <p class="auth-panel-title">Kundportalen</p>
         <p class="auth-panel-lead">Här sköter kontoret bilarna, förarnas
-          telefoner, länen och abonnemanget.</p>
+          telefoner och abonnemanget.</p>
         <ul class="auth-points">
           <li data-icon="drivers"><strong>Bilar och förare</strong>
             <span>Bjud in förare med e-post. De loggar in i appen.</span></li>
           <li data-icon="map-pin"><strong>Län per bil</strong>
-            <span>Varje bil har ett baslän. Fler län läggs till per bil.</span></li>
+            <span>Varje bil har ett baslän. Extra län läggs till under Bilar.</span></li>
           <li data-icon="office"><strong>Abonnemang och fakturor</strong>
             <span>Provet, medlemskapet, kortet och kvittona på ett ställe.</span></li>
         </ul>
@@ -89,14 +89,22 @@
       </aside>
     </section>
 
-    <!-- Portalen -->
+    <!-- Portalen. Primära flikar: Översikt → Bilar → Abonnemang.
+         Företag (och övrigt) ligger under Mer, så att nyckelvägen syns först. -->
     <div id="app" hidden>
-      <nav class="tabs" role="tablist" aria-label="Portalens vyer">
-        <button class="tab" role="tab" data-view="oversikt" aria-selected="true">Översikt</button>
-        <button class="tab" role="tab" data-view="bilar" aria-selected="false">Bilar och telefoner</button>
-        <button class="tab" role="tab" data-view="lan" aria-selected="false">Län och filter</button>
-        <button class="tab" role="tab" data-view="abonnemang" aria-selected="false">Abonnemang och fakturor</button>
-        <button class="tab" role="tab" data-view="foretag" aria-selected="false">Företag och uppgifter</button>
+      <nav class="tabs" aria-label="Portalens vyer">
+        <div class="tabs-primary" role="tablist">
+          <button class="tab" role="tab" data-view="oversikt" aria-selected="true">Hem</button>
+          <button class="tab" role="tab" data-view="bilar" aria-selected="false">Bilar</button>
+          <button class="tab" role="tab" data-view="abonnemang" aria-selected="false">Abonnemang</button>
+        </div>
+        <div class="tab-more">
+          <button class="tab tab-more-toggle" type="button" id="moreToggle"
+            aria-expanded="false" aria-controls="moreMenu" aria-haspopup="true">Mer</button>
+          <div id="moreMenu" class="tab-more-menu" role="menu" hidden>
+            <button type="button" role="menuitem" data-view="foretag">Företag och uppgifter</button>
+          </div>
+        </div>
       </nav>
 
       <p id="globalError" class="error" role="alert" hidden></p>

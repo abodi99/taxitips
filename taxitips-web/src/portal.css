@@ -561,12 +561,25 @@ a.btn {
 
 .tabs {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.4rem;
-  margin: 1rem 0 1.25rem;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin: 0.75rem 0 1.25rem;
+}
+.tabs-primary {
+  display: flex;
+  gap: 0.35rem;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  min-width: 0;
+  flex: 1;
+}
+.tabs-primary::-webkit-scrollbar {
+  display: none;
 }
 .tab {
-  padding: 0.5rem 0.9rem;
+  padding: 0.45rem 0.85rem;
   border-radius: var(--radius-pill);
   border: 1px solid var(--line-strong);
   background: var(--vit);
@@ -574,11 +587,301 @@ a.btn {
   font-weight: 600;
   cursor: pointer;
   min-height: 44px;
+  white-space: nowrap;
+  flex: none;
 }
-.tab[aria-selected="true"] {
+.tab[aria-selected="true"],
+.tab-more-toggle.is-active {
   background: var(--midnatt);
   color: var(--vit);
   border-color: var(--midnatt);
+}
+.tab-more {
+  position: relative;
+  flex: none;
+}
+.tab-more-menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 0.35rem);
+  min-width: 12rem;
+  background: var(--vit);
+  border: 1px solid var(--line-strong);
+  border-radius: 12px;
+  box-shadow: 0 8px 24px rgba(20, 33, 61, 0.12);
+  padding: 0.35rem;
+  z-index: 20;
+}
+.tab-more-menu button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  padding: 0.7rem 0.85rem;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--ink);
+  min-height: 44px;
+}
+.tab-more-menu button:hover,
+.tab-more-menu button:focus-visible {
+  background: var(--ljusgra);
+}
+
+.btn-sm {
+  min-height: 36px;
+  padding: 0.35rem 0.75rem;
+  font-size: 0.9rem;
+}
+
+/* Provperiod: synlig räknare ovanför Fortsätt-kortet */
+.trial-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1.25rem;
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 1rem;
+  background: var(--midnatt);
+  color: var(--vit);
+  border-radius: var(--radius);
+}
+.trial-banner-text {
+  display: grid;
+  gap: 0.15rem;
+  min-width: 0;
+}
+.trial-banner-text b {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+}
+.trial-banner-text span {
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 0.95rem;
+}
+.trial-banner .btn-primary {
+  background: var(--guld);
+  color: var(--midnatt);
+  border-color: var(--guld);
+}
+.trial-banner .btn-row {
+  margin: 0;
+}
+
+/* Guided "Kom igång" på Översikt */
+.journey-steps {
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+  display: grid;
+  gap: 0.75rem;
+}
+.journey-step {
+  display: flex;
+  gap: 0.75rem;
+  align-items: flex-start;
+  padding: 0.75rem 0.85rem;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--ljusgra);
+}
+.journey-step.is-current {
+  background: var(--vit);
+  border-color: var(--midnatt);
+}
+.journey-step.is-done {
+  opacity: 0.72;
+}
+.journey-step.is-blocked {
+  opacity: 0.55;
+}
+.journey-mark {
+  width: 1.1rem;
+  height: 1.1rem;
+  margin-top: 0.2rem;
+  border-radius: 50%;
+  border: 2px solid var(--line-strong);
+  flex: none;
+  background: var(--vit);
+}
+.journey-step.is-done .journey-mark {
+  border-color: var(--ok);
+  background: var(--ok);
+  box-shadow: inset 0 0 0 3px var(--vit);
+}
+.journey-step.is-current .journey-mark {
+  border-color: var(--guld);
+  background: var(--guld);
+}
+.journey-body {
+  display: grid;
+  gap: 0.2rem;
+  min-width: 0;
+  flex: 1;
+}
+.journey-body .btn {
+  justify-self: start;
+  margin-top: 0.35rem;
+}
+.journey-done {
+  border-color: rgba(31, 138, 91, 0.35);
+}
+
+.status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.5rem;
+  padding: 0.85rem 1rem;
+  margin-bottom: 1rem;
+  background: var(--vit);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.status-strip > div {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 5rem;
+}
+.status-strip b {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+}
+.trial-line {
+  margin: 0 0 1rem;
+}
+
+.car-list,
+.phone-list,
+.simple-list,
+.order-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.car-list > li,
+.phone-list > li,
+.order-list > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem 1rem;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.car-list > li:last-child,
+.phone-list > li:last-child,
+.order-list > li:last-child {
+  border-bottom: 0;
+}
+.car-list > li > div:first-child,
+.phone-list > li > div:first-child {
+  display: grid;
+  gap: 0.1rem;
+  min-width: 0;
+}
+.car-list-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 0.75rem;
+  align-items: center;
+}
+.simple-list > li {
+  padding: 0.45rem 0;
+  border-bottom: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.75rem;
+}
+.simple-list > li:last-child {
+  border-bottom: 0;
+}
+.order-amounts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.85rem;
+  align-items: center;
+}
+
+.kv-list {
+  margin: 0;
+  display: grid;
+  gap: 0.55rem;
+}
+.kv-list > div {
+  display: grid;
+  grid-template-columns: minmax(7rem, 11rem) 1fr;
+  gap: 0.35rem 1rem;
+  align-items: baseline;
+}
+.kv-list dt {
+  margin: 0;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.kv-list dd {
+  margin: 0;
+}
+@media (max-width: 420px) {
+  .kv-list > div {
+    grid-template-columns: 1fr;
+    gap: 0.1rem;
+  }
+}
+
+/* Progressive disclosure: bulk invite, län, notiser, sällan använda åtgärder */
+.advanced {
+  background: var(--vit);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 0.15rem 1.05rem 0.85rem;
+  margin-bottom: 1rem;
+}
+.advanced > summary {
+  cursor: pointer;
+  font-weight: 600;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  list-style: none;
+  color: var(--ink-soft);
+}
+.advanced > summary::-webkit-details-marker {
+  display: none;
+}
+.advanced > summary::before {
+  content: "";
+  width: 0.45rem;
+  height: 0.45rem;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(-45deg);
+  margin-right: 0.65rem;
+  transition: transform 0.15s ease;
+}
+.advanced[open] > summary::before {
+  transform: rotate(45deg);
+}
+.advanced[open] > summary {
+  color: var(--ink);
+  margin-bottom: 0.5rem;
+}
+.advanced .card {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  box-shadow: none;
+}
+.county-actions {
+  align-items: stretch;
+}
+.county-actions select {
+  max-width: 16rem;
 }
 
 table {
@@ -659,14 +962,15 @@ th {
 }
 
 .notice {
-  border-left: 4px solid var(--guld);
-  background: var(--vit);
-  border-radius: 0 var(--radius) var(--radius) 0;
+  background: rgba(252, 163, 17, 0.1);
+  border: 1px solid rgba(252, 163, 17, 0.28);
+  border-radius: var(--radius);
   padding: 0.8rem 1rem;
   margin-bottom: 1rem;
 }
 .notice-danger {
-  border-left-color: var(--danger);
+  background: rgba(192, 57, 43, 0.08);
+  border-color: rgba(192, 57, 43, 0.28);
 }
 
 .quote-lines {
@@ -1035,33 +1339,50 @@ th {
   }
 }
 
-/* Förarinbjudan med e-post (Bilar och telefoner). */
+/* Primär en-e-post-inbjudan + statuslista (Bilar). */
+.invite-primary {
+  border: 2px solid var(--midnatt);
+}
+.invite-form-primary {
+  margin-top: 0.75rem;
+  padding-top: 0;
+  border-top: 0;
+}
 .invite-form {
   margin-top: 1rem;
   padding-top: 0.25rem;
   border-top: 1px solid var(--line);
 }
-.invite-list {
+.driver-roster {
   list-style: none;
-  margin: 0.5rem 0 1rem;
+  margin: 0.75rem 0 0;
   padding: 0;
 }
-.invite-list li {
+.driver-roster > li {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 0.5rem 1rem;
-  padding: 0.6rem 0;
+  padding: 0.7rem 0;
   border-bottom: 1px solid var(--line);
 }
-.invite-list li > div:first-child {
+.driver-roster > li:last-child {
+  border-bottom: 0;
+}
+.driver-roster > li > div:first-child {
   display: grid;
-  gap: 0.1rem;
+  gap: 0.15rem;
   min-width: 0;
   overflow-wrap: anywhere;
 }
-.invite-list .btn-row {
+.driver-roster-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.65rem;
+}
+.driver-roster .btn-row {
   margin: 0;
 }
 
@@ -1141,4 +1462,38 @@ th {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.5rem;
+}
+
+/* --- Betala-flödet på mobil -------------------------------------------- */
+/* Primärknappar i "Fortsätt"-kortet och i member-cta: full bredd på mobil
+   för tumvänlig åtkomst en hand. Sekundärknappar staplas under. */
+@media (max-width: 640px) {
+  /* continue-card (Översikt): staplat + fullt bred */
+  .continue-card .btn-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  /* member-cta-act (Abonnemang): alla knappar full bredd */
+  .member-cta-act .btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  /* Notiser med inbäddad betala-knapp (t.ex. past_due) */
+  .notice .btn-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}
+
+/* Akut betalning: CTA-bandet renderas OVAN features/pris i DOM (.is-urgent).
+   Anpassa kantlinjer: ingen överkant (inget element ovanför), men nederkant. */
+.member.is-urgent .member-cta {
+  border-top: none;
+  border-bottom: 1px solid rgba(224, 143, 0, 0.3);
+}
+/* Visuellt avskiljare mellan CTA-bandet och features/pris nedan. */
+.member.is-urgent .member-body {
+  border-top: 1px solid var(--line);
 }

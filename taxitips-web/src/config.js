@@ -81,5 +81,6 @@ export const twenty = {
 export const portal = {
   supabaseUrl: import.meta.env.VITE_SUPABASE_URL || "https://api.taxitips.se",
   supabaseAnonKey: import.meta.env.VITE_SUPABASE_ANON_KEY || "",
-  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || "https://api.taxitips.se",
+  // Fleet-API:t ligger på Django (backend), inte på Supabase Kong (api).
+  apiBaseUrl: import.meta.env.VITE_API_BASE_URL || "https://backend.taxitips.se",
 };
