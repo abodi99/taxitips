@@ -74,8 +74,14 @@ function takeContinueWish() {
 }
 
 function showError(error) {
+  // ApiError = serverns text. TypeError (Failed to fetch) = nät/CORS —
+  // utan det syns bara den generiska raden och felet är omöjligt att felsöka.
   const message =
-    error instanceof ApiError ? error.message : "Något gick fel. Prova igen.";
+    error instanceof ApiError
+      ? error.message
+      : error?.name === "TypeError"
+        ? "Kunde inte nå servern. Prova igen om en stund."
+        : "Något gick fel. Prova igen.";
   el.globalError.textContent = message;
   el.globalError.hidden = false;
 }
