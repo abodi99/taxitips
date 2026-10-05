@@ -258,6 +258,10 @@ button.kpi:hover {
 .table-scroll {
   overflow-x: auto;
 }
+/* Absolut "Mer"-meny klipps annars av overflow-x (blir även overflow-y: auto). */
+.table-scroll:has(.more-menu[open]) {
+  overflow: visible;
+}
 
 .row-link {
   cursor: pointer;
@@ -712,28 +716,77 @@ details.danger-zone h3:first-of-type {
 
 .more-menu {
   position: relative;
+  display: inline-block;
+  flex: 0 0 auto;
+  align-self: center;
 }
 .more-menu > summary {
   list-style: none;
+  display: inline-flex;
+  cursor: pointer;
+  user-select: none;
 }
-.more-menu > summary::-webkit-details-marker {
+.more-menu > summary::-webkit-details-marker,
+.more-menu > summary::marker {
   display: none;
+  content: "";
+}
+.more-menu[open] {
+  z-index: 40;
+}
+tr:has(.more-menu[open]) {
+  position: relative;
+  z-index: 3;
 }
 .more-items {
   position: absolute;
+  top: calc(100% + 0.3rem);
   right: 0;
-  z-index: 5;
+  left: auto;
+  z-index: 40;
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 0.35rem;
-  min-width: 200px;
-  margin-top: 0.3rem;
+  min-width: min(260px, calc(100vw - 2rem));
+  margin: 0;
   padding: 0.5rem;
   background: var(--vit);
   border: 1px solid var(--line-strong);
   border-radius: 10px;
   box-shadow: 0 8px 24px rgba(20, 33, 61, 0.12);
+}
+.more-items .btn {
+  justify-content: flex-start;
+  text-align: left;
+  white-space: normal;
+  height: auto;
+  min-height: 40px;
+  width: 100%;
+}
+/* Åtgärdskolumnen i kundkortets kontotabell — inte portal.css .btn-row-marginal. */
+td .btn-row {
+  margin-top: 0;
+  justify-content: flex-end;
+  align-items: center;
+}
+@media (max-width: 640px) {
+  /* Mobil: tabellen är kort-layout; expandera menyn i flödet i stället för absolut. */
+  td .btn-row:has(.more-menu[open]) {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .more-menu[open] {
+    display: block;
+    width: 100%;
+  }
+  .more-items {
+    position: static;
+    min-width: 0;
+    width: 100%;
+    margin-top: 0.35rem;
+    box-shadow: none;
+  }
 }
 code.break {
   word-break: break-all;

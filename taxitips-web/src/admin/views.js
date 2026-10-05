@@ -790,15 +790,17 @@ function membersCard(d, config) {
             <td data-label="Status">${m.blocked
               ? `<span class="pill pill-danger">Spärrad</span><div class="muted">${esc(m.blocked.reason)}</div>`
               : m.status === "active" ? '<span class="pill pill-ok">Aktiv</span>' : '<span class="pill">Avstängd här</span>'}</td>
-            <td data-label="">${manage ? `<div class="btn-row">
+            <td data-label="" class="actions-cell">${manage ? `<div class="btn-row">
               ${m.email && !m.blocked ? `<button class="btn btn-primary btn-small" data-action="member-login-link" data-user="${esc(m.userId)}">Skapa inloggningslänk</button>` : ""}
-              <details class="more-menu"><summary class="btn btn-quiet btn-small">Mer</summary><div class="more-items">
+              <details class="more-menu">
+                <summary class="btn btn-quiet btn-small" aria-label="Fler åtgärder">Mer</summary>
+                <div class="more-items" role="menu">
                 ${Object.entries(ROLE_CHOICES).filter(([r]) => r !== m.role).map(([r, label]) =>
-                  `<button class="btn btn-quiet btn-small" data-action="member-role" data-user="${esc(m.userId)}" data-role="${r}">Byt roll: ${esc(label)}</button>`).join("")}
+                  `<button type="button" class="btn btn-quiet btn-small" role="menuitem" data-action="member-role" data-user="${esc(m.userId)}" data-role="${r}">Byt roll: ${esc(label)}</button>`).join("")}
                 ${m.status === "active"
-                  ? `<button class="btn btn-quiet btn-small" data-action="member-status" data-user="${esc(m.userId)}" data-status="disabled">Stäng av i företaget</button>`
-                  : `<button class="btn btn-quiet btn-small" data-action="member-status" data-user="${esc(m.userId)}" data-status="active">Aktivera i företaget</button>`}
-                ${m.blocked ? "" : `<button class="btn btn-danger btn-small" data-action="block-user" data-user="${esc(m.userId)}"
+                  ? `<button type="button" class="btn btn-quiet btn-small" role="menuitem" data-action="member-status" data-user="${esc(m.userId)}" data-status="disabled">Stäng av i företaget</button>`
+                  : `<button type="button" class="btn btn-quiet btn-small" role="menuitem" data-action="member-status" data-user="${esc(m.userId)}" data-status="active">Aktivera i företaget</button>`}
+                ${m.blocked ? "" : `<button type="button" class="btn btn-danger btn-small" role="menuitem" data-action="block-user" data-user="${esc(m.userId)}"
                   data-email="${esc(m.email)}">Spärra kontot överallt</button>`}
               </div></details>
             </div>` : ""}</td>
