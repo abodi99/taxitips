@@ -8,11 +8,13 @@ antingen ger en kund gratis åtkomst eller debiterar någon två gånger.
 from __future__ import annotations
 
 from datetime import timedelta
+from unittest import mock
 
 from django.utils import timezone
 
-from fleet import access, licensing, orders, pricing
+from fleet import access, commerce, licensing, orders, pricing, stripe_sync
 from fleet.models import (
+    AuditEvent,
     License,
     LicenseCounty,
     Order,
@@ -421,3 +423,232 @@ class IntroContinuityTests(FleetTestCase):
         )
         subscription.refresh_from_db()
         self.assertEqual(subscription.intro_ends_at, original_end)
+
+
+class ReuseUnpaidOrderTests(FleetTestCase):
+    """
+    §11: en avbruten betalning är samma korg. Nästa försök ska ge tillbaka
+    samma order -- inte en ny rad i portalen.
+
+    Prod hade tre identiska obetalda `add_license`-ordrar för samma bolag
+    (15:06, 19:01, 19:20): kunden avbröt betalningen i Stripe och försökte
+    igen, och idempotensnyckeln bär minuten, så varje försök blev en egen
+    order. Portalen visade en trave "väntar på betalning" för samma ändring.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.data = self.full_setup(county="12")
+        self.company = self.data["company"]
+        self.license = self.data["license"]
+
+    def _plan(self, *, now=None):
+        return orders.plan_change(
+            self.company.id,
+            add_counties=[{"licenseId": str(self.license.id), "county": "01"}],
+            now=now,
+        )
+
+    def test_a_new_attempt_the_next_minute_reuses_the_unpaid_order(self):
+        plan = self._plan()
+        first = orders.create_order(self.company.id, plan)
+        self.assertEqual(first.status, Order.Status.PENDING_PAYMENT)
+
+        # Fem minuter senare är idempotensnyckeln en annan, så det är bara
+        # återanvändningen som kan ge samma order tillbaka.
+        later = timezone.now() + timedelta(minutes=5)
+        with mock.patch("fleet.orders.timezone.now", return_value=later):
+            second = orders.create_order(self.company.id, plan)
+
+        self.assertEqual(str(first.id), str(second.id))
+        self.assertEqual(Order.objects.filter(company_id=self.company.id).count(), 1)
+        # Ordern skapades EN gång: revisionsloggen ska visa beställningen, inte
+        # varje avbrutet försök (och portalen ska visa en betallänk, inte tre).
+        self.assertEqual(
+            AuditEvent.objects.filter(action="order_created", subject_id=first.id).count(), 1
+        )
+
+    def test_a_changed_amount_is_a_new_order(self):
+        # Samma ändring, men proportioneringen -- och därmed beloppet -- har
+        # ändrats. Att återanvända den gamla ordern hade debiterat fel summa,
+        # så beloppet måste vara identiskt för att en order får återanvändas.
+        first_plan = self._plan()
+        first = orders.create_order(self.company.id, first_plan)
+
+        later = timezone.now() + timedelta(minutes=5)
+        # Planen räknas tio dygn in i perioden (annat belopp), men klockan som
+        # create_order ser är fem minuter fram -- åldersfönstret är alltså inte
+        # det som avgör, utan beloppet.
+        second_plan = self._plan(now=later + timedelta(days=10))
+        self.assertNotEqual(first_plan.quote.now.total_ore, second_plan.quote.now.total_ore)
+        with mock.patch("fleet.orders.timezone.now", return_value=later):
+            second = orders.create_order(self.company.id, second_plan)
+
+        self.assertNotEqual(str(first.id), str(second.id))
+        self.assertEqual(Order.objects.filter(company_id=self.company.id).count(), 2)
+
+    def test_an_unpaid_order_older_than_a_day_is_not_reused(self):
+        # En order från en tidigare period eller ett tidigare pris är inte
+        # samma korg och ska inte tyst återuppstå.
+        plan = self._plan()
+        first = orders.create_order(self.company.id, plan)
+        later = timezone.now() + timedelta(minutes=5)
+        Order.objects.filter(id=first.id).update(
+            created_at=later - orders.REUSE_PENDING_WITHIN - timedelta(minutes=1)
+        )
+
+        with mock.patch("fleet.orders.timezone.now", return_value=later):
+            second = orders.create_order(self.company.id, plan)
+
+        self.assertNotEqual(str(first.id), str(second.id))
+        self.assertEqual(Order.objects.filter(company_id=self.company.id).count(), 2)
+
+    def test_an_explicit_idempotency_key_is_never_reused(self):
+        # En egen nyckel betyder "just det här försöket" -- anroparen har redan
+        # bestämt vad som är samma beställning.
+        plan = self._plan()
+        first = orders.create_order(self.company.id, plan, idempotency="forsok-1")
+        second = orders.create_order(self.company.id, plan, idempotency="forsok-2")
+
+        self.assertNotEqual(str(first.id), str(second.id))
+        self.assertEqual(Order.objects.filter(company_id=self.company.id).count(), 2)
+
+
+class SupersededPendingOrderTests(FleetTestCase):
+    """
+    §11: en ny obetald order för samma ändring makulerar den äldre.
+
+    Mätt i prod: portalen visade flera "väntar på betalning" för samma korg.
+    Återanvändningen (find_reusable_order) räcker inte, för ett omedelbart
+    tillägg mitt i en löpande period proportioneras per sekund -- två försök en
+    minut isär får olika belopp, och då blir det en ny order varje gång.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.data = self.full_setup(county="12")
+        self.company = self.data["company"]
+        self.license = self.data["license"]
+
+    def _place(self, company=None, license=None, *, now=None, clock=None):
+        """
+        Samma ändring via kundvägen (fleet/commerce.place_order).
+
+        `now` går till prisberäkningen (proportioneringen), `clock` till
+        idempotensnyckeln -- den bär minuten, så ett återförsök "en minut
+        senare" måste flytta klockan för att bli ett nytt försök.
+        """
+        company = company or self.company
+        license = license or self.license
+        plan = orders.plan_change(
+            company.id,
+            add_counties=[{"licenseId": str(license.id), "county": "01"}],
+            now=now,
+        )
+        # Stripe-nyckeln saknas i testmiljön; utan den vägrar place_order en
+        # ändring som kostar något. Själva anropet faller sedan på att klienten
+        # inte finns, vilket är samma läge som "Stripe svarade inte": ordern
+        # ligger kvar som obetald, utan faktura.
+        with mock.patch("fleet.commerce.stripe_sync.available", return_value=True), mock.patch(
+            "fleet.orders.timezone.now", return_value=clock or timezone.now()
+        ):
+            return commerce.place_order(
+                company.id, plan, created_by=self.data["owner"].user_id,
+                actor_kind="customer",
+            )
+
+    def _pending(self):
+        return Order.objects.filter(
+            company_id=self.company.id, status=Order.Status.PENDING_PAYMENT
+        )
+
+    def test_a_new_order_with_another_amount_cancels_the_older(self):
+        first, _ = self._place()
+        self.assertEqual(first.status, Order.Status.PENDING_PAYMENT)
+        self.assertGreater(first.total_now_ore, 0)
+
+        # Tio dygn in i perioden är det mindre kvar att proportionera, alltså ett
+        # annat belopp -- precis det som gjorde att den gamla ordern inte kunde
+        # återanvändas.
+        later = timezone.now() + timedelta(minutes=1)
+        second, _ = self._place(now=later + timedelta(days=10), clock=later)
+
+        self.assertNotEqual(str(first.id), str(second.id))
+        self.assertEqual(second.status, Order.Status.PENDING_PAYMENT)
+        self.assertNotEqual(first.total_now_ore, second.total_now_ore)
+
+        first.refresh_from_db()
+        self.assertEqual(first.status, Order.Status.CANCELED)
+        self.assertIn("ersatt av en nyare beställning", first.failure_reason)
+        # Exakt EN obetald order kvar för samma ändring: den nya.
+        self.assertEqual(list(self._pending().values_list("id", flat=True)), [second.id])
+        self.assertTrue(
+            AuditEvent.objects.filter(action="order_canceled", subject_id=first.id).exists()
+        )
+
+    def test_a_reused_order_is_never_canceled_by_itself(self):
+        """Samma belopp (ingen löpande period): återanvändningen ska stå kvar."""
+        Subscription.objects.filter(company_id=self.company.id).update(
+            current_period_start=None, current_period_end=None
+        )
+        first, _ = self._place()
+        later = timezone.now() + timedelta(minutes=5)
+        second, _ = self._place(clock=later)
+
+        self.assertEqual(str(first.id), str(second.id))
+        second.refresh_from_db()
+        self.assertEqual(second.status, Order.Status.PENDING_PAYMENT)
+
+    def test_a_stripe_failure_while_cancelling_does_not_block_the_new_order(self):
+        first, _ = self._place()
+        # En riktig faktura i Stripe, så att makuleringen faktiskt försöker
+        # makulera något -- det är där felet uppstår.
+        Order.objects.filter(id=first.id).update(stripe_invoice_id="in_supersede_1")
+
+        later = timezone.now() + timedelta(minutes=1)
+        with mock.patch(
+            "fleet.commerce.stripe_sync.void_order_invoice",
+            side_effect=stripe_sync.StripeUnavailable("Stripe svarar inte"),
+        ):
+            second, info = self._place(now=later + timedelta(days=10), clock=later)
+
+        self.assertNotEqual(str(first.id), str(second.id))
+        second.refresh_from_db()
+        self.assertEqual(second.status, Order.Status.PENDING_PAYMENT)
+        # Den gamla ligger kvar obetald -- support får makulera den för hand.
+        first.refresh_from_db()
+        self.assertEqual(first.status, Order.Status.PENDING_PAYMENT)
+        self.assertTrue(
+            AuditEvent.objects.filter(
+                action="order_supersede_failed", subject_id=first.id
+            ).exists()
+        )
+        # Den nya ordern hindrades inte av felet.
+        self.assertIn(second.id, self._pending().values_list("id", flat=True))
+        self.assertIn("stripeError", info)
+
+    def test_a_paid_or_scheduled_order_is_never_touched(self):
+        for status in (Order.Status.PAID, Order.Status.SCHEDULED):
+            with self.subTest(status=status):
+                # Eget bolag per varv: den gamla ordern skrivs om till en status
+                # som inte är obetald och får sedan inte röras alls.
+                data = self.full_setup(county="12", plate=f"SUP{status[:3]}")
+                first, _ = self._place(data["company"], data["license"])
+                Order.objects.filter(id=first.id).update(status=status)
+
+                later = timezone.now() + timedelta(minutes=1)
+                second, _ = self._place(
+                    data["company"], data["license"],
+                    now=later + timedelta(days=10), clock=later,
+                )
+
+                self.assertNotEqual(str(first.id), str(second.id))
+                first.refresh_from_db()
+                self.assertEqual(first.status, status)
+                self.assertFalse(
+                    AuditEvent.objects.filter(
+                        action="order_canceled", subject_id=first.id
+                    ).exists()
+                )
+
+

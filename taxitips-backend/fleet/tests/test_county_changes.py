@@ -10,10 +10,12 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
+from unittest import mock
 from zoneinfo import ZoneInfo
 
 from django.test import Client, override_settings
+from django.utils import timezone
 
 from fleet import county_changes
 from fleet.models import (
@@ -24,6 +26,7 @@ from fleet.models import (
     LicenseCounty,
     Order,
     StaffRole,
+    Subscription,
 )
 from fleet.tests.base import FleetTestCase
 from fleet.tests.test_support import SECRET, jwt
@@ -199,6 +202,44 @@ class PaidCountyChangeTests(_ApiCase):
         self.order(self.base_change("14"))
         Order.objects.filter(kind=Order.Kind.CHANGE_BASE_COUNTY).update(status=Order.Status.FAILED)
         self.assertEqual(county_changes.summary_for(self.license.id)["remaining"], 2)
+
+    def test_a_new_attempt_on_the_same_unpaid_change_does_not_count_again(self):
+        """
+        Ett omedelbart baslänsbyte kostar pengar och blir en obetald order.
+        Kunden avbryter i Stripe och försöker igen: samma order ska komma
+        tillbaka (fleet/orders.py:find_reusable_order) och bytet ska fortfarande
+        räknas EN gång -- även när bilen redan gjort sina två byten den här
+        månaden. Utan återanvändningen i grinden hade återförsöket fått
+        `county_change_limit` för ett byte som redan räknats på den ordern.
+        """
+        # Utan löpande period proportioneras inget: beloppet blir detsamma vid
+        # varje försök, vilket är vad återanvändningen kräver.
+        Subscription.objects.filter(company_id=self.data["company"].id).update(
+            current_period_start=None, current_period_end=None
+        )
+
+        def immediate(county):
+            return {
+                "baseCountyChanges": [
+                    {"licenseId": str(self.license.id), "county": county, "immediate": True}
+                ]
+            }
+
+        with mock.patch("fleet.commerce.stripe_sync.available", return_value=True):
+            first = self.order(immediate("01"))
+            self.assertEqual(first.status_code, 200, first.content)
+            self.assertEqual(first.json()["status"], Order.Status.PENDING_PAYMENT)
+            self.assertEqual(self.order(immediate("14")).status_code, 200)
+            self.assertEqual(county_changes.summary_for(self.license.id)["remaining"], 0)
+
+            later = timezone.now() + timedelta(minutes=5)
+            with mock.patch("fleet.orders.timezone.now", return_value=later):
+                retry = self.order(immediate("01"))
+
+        self.assertEqual(retry.status_code, 200, retry.content)
+        self.assertEqual(retry.json()["orderId"], first.json()["orderId"])
+        self.assertEqual(county_changes.summary_for(self.license.id)["used"], 2)
+        self.assertEqual(CountyChange.objects.filter(order_id=first.json()["orderId"]).count(), 1)
 
 
 @override_settings(SUPABASE_JWT_SECRET=SECRET)

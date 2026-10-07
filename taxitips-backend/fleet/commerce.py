@@ -115,7 +115,60 @@ def place_order(
         # följa med redan nu, annars förnyas det gamla beloppet.
         resync_amount(company_id)
     order.refresh_from_db()
+
+    # Den nya ordern ligger nu i databasen med sin betallänk. Först här går det
+    # att makulera de äldre för samma korg -- och bara dem, aldrig den nya.
+    if order.status == Order.Status.PENDING_PAYMENT:
+        supersede_older_pending_orders(order, actor_user_id=created_by)
+
     return order, info
+
+
+def supersede_older_pending_orders(order: Order, *, actor_user_id) -> list[Order]:
+    """
+    Makulerar bolagets ÄLDRE obetalda ordrar för samma ändring som `order`.
+
+    `find_reusable_order` (fleet/orders.py) räddar bara fallet där beloppet är
+    identiskt. Ett omedelbart tillägg mitt i en löpande period proportioneras
+    per sekund, så två försök en minut isär får olika `total_now_ore` och
+    återanvändningen slår inte till: det blir en NY order. Utan den här regeln
+    låg båda kvar som "väntar på betalning" -- portalen visade en trave för
+    samma korg, och kunden kunde betala den gamla fakturan med ett belopp hen
+    aldrig sett (§6: beloppet visas innan beställningen godkänns), räknat på en
+    period som redan hunnit bli kortare.
+
+    Den nya ordern är redan skapad och får inte rullas tillbaka av något som
+    händer här: ett Stripe-fel vid makuleringen loggas och auditeras, så att
+    support kan makulera fakturan för hand i stället.
+    """
+    older = Order.objects.filter(
+        company_id=order.company_id,
+        kind=order.kind,
+        request=order.request,
+        status=Order.Status.PENDING_PAYMENT,
+    ).exclude(id=order.id)
+
+    canceled = []
+    for old in older:
+        try:
+            cancel_order(
+                old, actor_user_id=actor_user_id,
+                reason="ersatt av en nyare beställning: beloppet ändrades",
+            )
+        except Exception as exc:  # OrderError från Stripe, eller ett nätverksfel
+            log.warning(
+                "fleet.commerce: kunde inte makulera order %s (ersatt av %s): %s",
+                old.id, order.id, exc,
+            )
+            audit.record(
+                "order_supersede_failed", company_id=order.company_id,
+                actor_user_id=actor_user_id, actor_kind="system",
+                subject_type="order", subject_id=old.id,
+                detail={"replacedBy": str(order.id), "error": str(exc)[:300]},
+            )
+            continue
+        canceled.append(old)
+    return canceled
 
 
 def request_payment(order: Order, *, payment: str = PAYMENT_CARD, days_until_due: int = 14) -> str:

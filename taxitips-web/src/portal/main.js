@@ -802,6 +802,13 @@ async function handle(action, ctx) {
 
 /**
  * Under pågående prov: offert → commit (spara kort, debitering vid ends_at).
+ *
+ * Ett enda godkännande räcker: beloppet, moms, totalsumma och datum visas i
+ * bekräftelsen ovan (§6). Frågan "Öppna betalsidan nu?" togs bort -- den kom
+ * efter ett ja och läste som att något gått fel. Navigeringen sker i samma flik
+ * (`location.assign`), för ett `window.open` efter ett await blockeras av
+ * mobilwebbläsaren. Avbryts navigeringen ligger betalsidan kvar som länk i
+ * vyn efter omritningen (views.js, "Öppna betalsidan").
  */
 async function commitTrial(change) {
   const quote = await api.quote(change);
@@ -823,11 +830,11 @@ async function commitTrial(change) {
       "Kortet är redan sparat. Första dragningen sker när provet tar slut.",
     );
   } else if (result.paymentUrl) {
-    const go = confirm(
-      "Öppna Stripes sida och spara kortet nu?\n\n" +
-        "Ingen dragning sker förrän provperioden tar slut.",
-    );
-    if (go) window.open(result.paymentUrl, "_blank", "noopener");
+    state.orders = null;
+    // Omritningen först: navigeringen lämnar sidan.
+    await refresh();
+    window.location.assign(result.paymentUrl);
+    return;
   } else {
     alert(
       "Kunde inte öppna betalsidan." +
@@ -843,6 +850,12 @@ async function commitTrial(change) {
  *
  * Ordningen är regeln, inte en artighet -- §6 kräver att kunden ser kostnad nu,
  * nästa period, moms, totalsumma och datum innan beställningen godkänns.
+ *
+ * Efter godkännandet går färden rakt till betalsidan i samma flik. Den gamla
+ * frågan "Öppna betalsidan nu?" låg efter ett ja och läste som att något gått
+ * fel, och `window.open` efter ett await blockeras av mobilwebbläsaren.
+ * Rättigheterna ges när Stripe bekräftat betalningen, inte när kunden kommer
+ * tillbaka hit.
  */
 /* --- Lägg till medlemskap: ett län ur en lista, inga webbläsar-popupper ----- */
 
@@ -901,9 +914,13 @@ function addMembershipChange() {
 
 /**
  * Visar resultatet av en beställning i sidan -- inte i en webbläsar-popup.
- * Väntar beställningen på betalning ligger betalsidan kvar som en knapp i rutan
- * (inget öppnas av sig självt: mobilen blockerar det, och kunden ska se
- * beloppet först).
+ * Väntar beställningen på betalning skickas kunden vidare till betalsidan i
+ * samma flik, och länken ligger kvar i rutan som reservväg.
+ *
+ * Beloppet visades i steget före (offerten), så ytterligare ett klick mellan
+ * godkännandet och betalsidan läste som att något gått fel. Ett `window.open`
+ * efter ett await blockeras dessutom av mobilwebbläsaren -- `location.assign`
+ * gör det inte.
  */
 async function finishOrder(order, container) {
   state.orders = null;
@@ -911,10 +928,14 @@ async function finishOrder(order, container) {
     container.hidden = false;
     container.innerHTML =
       "<p>Beställningen väntar på betalning. Länen aktiveras när betalningen " +
-      "har gått igenom.</p>" +
-      `<a class="btn btn-primary btn-block" href="${escAttr(order.paymentUrl)}" ` +
-      'target="_blank" rel="noopener">Öppna betalsidan</a>';
+      "har gått igenom. Du skickas vidare till betalsidan — öppnas den inte, " +
+      "använd knappen.</p>" +
+      `<a class="btn btn-primary btn-block" href="${escAttr(order.paymentUrl)}">` +
+      "Öppna betalsidan</a>";
+    // Omritningen först: navigeringen lämnar sidan, så rutan med reservlänken
+    // måste vara ritad innan vi går vidare -- annars ser flödet ut att hänga sig.
     await refresh();
+    window.location.assign(order.paymentUrl);
     return;
   }
   el.addDialog?.close();
@@ -993,13 +1014,12 @@ async function buy(change) {
 
   const order = await api.order(change);
   if (order.status === "pending_payment" && order.paymentUrl) {
-    // Stripes betalsida. Rättigheterna ges när Stripe bekräftat betalningen,
-    // inte när kunden kommer tillbaka hit.
-    const go = confirm(
-      "Beställningen väntar på betalning. Öppna betalsidan nu?\n\n" +
-        "Medlemskapen och länen aktiveras när betalningen har gått igenom.",
-    );
-    if (go) window.open(order.paymentUrl, "_blank", "noopener");
+    // Beställningen är lagd och beloppet är godkänt. Rakt till betalsidan i
+    // samma flik -- reservlänken ligger kvar i rutan bakom.
+    state.orders = null;
+    await refresh();
+    window.location.assign(order.paymentUrl);
+    return;
   } else if (order.status === "pending_payment") {
     alert(
       "Beställningen är registrerad och väntar på betalning. Rättigheterna " +

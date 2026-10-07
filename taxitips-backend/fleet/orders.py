@@ -48,6 +48,12 @@ from fleet.models import (
 # §8: högst sju dagars betalningsfrist vid misslyckad förnyelse.
 GRACE_DAYS = 7
 
+# Hur länge en obetald order är samma korg som ett nytt försök på samma ändring
+# (se `find_reusable_order`). Ett dygn: inom det är det samma avbrutna försök,
+# därefter är det en ny beställning -- en order från en tidigare period eller
+# ett tidigare pris ska inte tyst återuppstå.
+REUSE_PENDING_WITHIN = timedelta(hours=24)
+
 
 class OrderError(Exception):
     def __init__(self, reason: str, message: str, status: int = 400, detail: dict | None = None):
@@ -319,6 +325,55 @@ def idempotency_key(company_id, plan: ChangePlan) -> str:
     return hashlib.sha256(f"{payload}:{minute}".encode()).hexdigest()
 
 
+def find_reusable_order(
+    company_id,
+    plan: ChangePlan,
+    *,
+    price: PriceVersion | None = None,
+    now=None,
+) -> Order | None:
+    """
+    Den öppna obetalda ordern för SAMMA ändring, om det finns en.
+
+    Idempotensnyckeln (`idempotency_key`) bär minuten och fångar alltså bara ett
+    dubbelklick eller ett nätåterförsök inom samma minut. En kund som AVBRÖT
+    betalningen i Stripe och försökte igen nästa minut fick därför en NY order
+    varje gång: prod hade tre identiska obetalda `add_license`-ordrar för samma
+    bolag (15:06, 19:01, 19:20), och portalen visade en trave "väntar på
+    betalning" för samma korg. Samma ändring är samma korg -- en obetald order
+    har inte ändrat några rättigheter (§8) -- så att återanvända den kostar
+    ingenting och ger kunden EN betallänk i stället för en ny rad.
+
+    Bara en order som faktiskt väntar på betalning samlas i portalen: en
+    minskning blir `scheduled` och ett gratistillägg `paid`, och de återanvänds
+    inte. Beloppen och prisversionen måste vara identiska -- en prisändring (ny
+    kvantitet, ny prislista) ska ge en NY order, inte återanvända en med gammalt
+    belopp. Åldersfönstret `REUSE_PENDING_WITHIN` håller en avbruten order från
+    en tidigare period eller ett tidigare pris borta.
+
+    Nyaste först: har kunden flera öppna ordrar för samma korg (från tiden
+    före den här regeln) är den senaste den betallänk kunden senast såg.
+    """
+    if not (plan.immediate and plan.quote.now.total_ore > 0):
+        return None
+    price = price or get_or_create_subscription(company_id).price_version
+    cutoff = (now or timezone.now()) - REUSE_PENDING_WITHIN
+    return (
+        Order.objects.filter(
+            company_id=company_id,
+            kind=plan.kind,
+            request=plan.request,
+            status=Order.Status.PENDING_PAYMENT,
+            total_now_ore=plan.quote.now.total_ore,
+            next_period_total_ore=plan.quote.next_period.total_ore,
+            price_version=price,
+            created_at__gte=cutoff,
+        )
+        .order_by("-created_at")
+        .first()
+    )
+
+
 @transaction.atomic
 def create_order(
     company_id,
@@ -332,6 +387,10 @@ def create_order(
     """
     Skapar beställningen. Ändrar INGA rättigheter -- det gör `apply_order`,
     och bara när betalningen är bekräftad av servern.
+
+    En dubbelklick (samma idempotensnyckel) och ett nytt försök på samma
+    avbrutna betalning (`find_reusable_order`) ger samma rad tillbaka; bara en
+    helt ny ändring blir en ny beställning.
     """
     now = now or timezone.now()
     subscription = get_or_create_subscription(company_id)
@@ -341,6 +400,14 @@ def create_order(
     existing = Order.objects.filter(idempotency_key=key).first()
     if existing is not None:
         return existing
+
+    if not idempotency:
+        # Inte samma minut, men samma ändring: kunden avbröt betalningen och
+        # försökte igen. En egen idempotensnyckel från anroparen betyder "just
+        # det här försöket" -- då letar vi inte efter en gammal order.
+        reusable = find_reusable_order(company_id, plan, price=price, now=now)
+        if reusable is not None:
+            return reusable
 
     status = (
         Order.Status.PENDING_PAYMENT

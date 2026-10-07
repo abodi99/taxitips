@@ -1273,13 +1273,22 @@ def create_order(request):
         # beställer det (fleet/county_changes.py). Kontroll, beställning och
         # bokföring i samma transaktion med licenserna låsta: två flikar som
         # beställer samtidigt ska inte båda se "ett kvar". Samma beställning
-        # igen (dubbelklick, samma idempotensnyckel) är inget nytt byte.
+        # igen är inget nytt byte -- varken en dubbelklick (samma nyckel) eller
+        # ett nytt försök på en avbruten betalning, där `create_order`
+        # återanvänder den obetalda ordern (fleet/orders.py). Utan det sista
+        # hade ett återförsök kunnat få `county_change_limit` för ett byte som
+        # redan räknats på just den ordern.
         key = body.get("idempotency_key") or orders.idempotency_key(principal.company_id, plan)
         with transaction.atomic():
             changes = county_changes.plan_changes(
                 principal.company_id, plan.request["baseCountyChanges"], lock=True,
             )
-            if not Order.objects.filter(idempotency_key=key).exists():
+            already_placed = Order.objects.filter(idempotency_key=key).exists()
+            if not already_placed and not body.get("idempotency_key"):
+                already_placed = (
+                    orders.find_reusable_order(principal.company_id, plan) is not None
+                )
+            if not already_placed:
                 county_changes.assert_plan_allowed(changes)
             order, payment_info = place()
             county_changes.record_plan(changes, order=order, actor_user_id=principal.user_id)
