@@ -51,27 +51,10 @@ class SignupScreenState extends State<SignupScreen> {
   @override
   void initState() {
     super.initState();
-    _prefill();
+    // Ingen förifyllning: en ny registrering börjar med tomma fält. E-posten
+    // som sparades vid en tidigare inloggning hör till inloggningen, inte hit,
+    // och lösenordet sparas aldrig (api_client.saveCredentials).
     _org.addListener(_onOrgChanged);
-  }
-
-  Future<void> _prefill() async {
-    final saved = await widget.api.loadSavedCredentials();
-    final dev = await widget.api.loadDevTestLogin();
-    const defEmail = String.fromEnvironment('PREFILL_EMAIL', defaultValue: '');
-    const defPass = String.fromEnvironment(
-      'PREFILL_PASSWORD',
-      defaultValue: '',
-    );
-    if (!mounted) return;
-    setState(() {
-      _email.text = saved.email?.isNotEmpty == true
-          ? saved.email!
-          : (dev.email ?? (defEmail.isNotEmpty ? defEmail : ''));
-      _password.text = saved.password?.isNotEmpty == true
-          ? saved.password!
-          : (dev.password ?? (defPass.isNotEmpty ? defPass : ''));
-    });
   }
 
   void _onOrgChanged() {

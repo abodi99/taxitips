@@ -68,8 +68,8 @@ function kpi(label, value, { alert = false, view = "" } = {}) {
 
 export const STEPS = [
   { id: "foretag", title: "Företag", todo: "Kontrollera behörighet" },
-  { id: "bilar", title: "Bilar", todo: "Lägg till bilar" },
-  { id: "forare", title: "Förare", todo: "Koppla förare" },
+  { id: "bilar", title: "Medlemskap", todo: "Lägg till medlemskap" },
+  { id: "forare", title: "Förare", todo: "Tilldela konton" },
   { id: "konto", title: "Kundkonto", todo: "Bjud in kundens admin" },
   { id: "betalning", title: "Betalning", todo: "Ordna betalning" },
 ];
@@ -81,7 +81,8 @@ function doneFromRow(c) {
     // Utan profil är det en kund från före självregistreringen: inget att kontrollera.
     foretag: c.verificationStatus === "verified" || !c.verificationStatus,
     bilar: (c.licenses ?? 0) > 0,
-    forare: (c.phones ?? 0) > 0,
+    // Kontobaserat: en plats räknas som bemannad när den är tilldelad ett konto.
+    forare: (c.membershipsAssigned ?? c.phones ?? 0) > 0,
     konto: (c.members ?? 0) > 0,
     betalning: paying,
   };
@@ -94,7 +95,7 @@ function doneFromDetail(d) {
   return {
     foretag: !d.profile || d.profile.verificationStatus === "verified",
     bilar: open.length > 0,
-    forare: open.some((l) => (l.approvals ?? []).some((a) => a.status === "active")),
+    forare: open.some((l) => l.assigned),
     konto: (d.members ?? []).some((m) => m.status === "active"),
     betalning: !!(s && ["active", "past_due"].includes(s.status) && s.hadSuccessfulPayment),
   };
@@ -144,8 +145,8 @@ function attention(c) {
   if (healthyPaid) return null;
   if (c.verificationStatus === "unverified") return { why: "Registrerade sig själv – kontrollera behörigheten", step: "foretag", level: 2 };
   if (c.trial?.status === "active" && days !== null && days <= 3) return { why: `Provet slutar om ${Math.max(days, 0)} dag(ar) – dags att sälja`, step: "betalning", level: 2 };
-  if (c.trial && !c.phones && c.licenses) return { why: "Har bilar men ingen förare kopplad", step: "forare", level: 1 };
-  if (c.trial && !c.licenses) return { why: "Har inga bilar än", step: "bilar", level: 1 };
+  if (c.trial && !(c.membershipsAssigned ?? c.phones) && c.licenses) return { why: "Har medlemskap men inget konto tilldelat", step: "forare", level: 1 };
+  if (c.trial && !c.licenses) return { why: "Har inga medlemskap än", step: "bilar", level: 1 };
   return null;
 }
 
@@ -337,7 +338,7 @@ export function kunder(list, query = "", filter = "alla") {
 
 export const KUND_TABS = [
   { id: "oversikt", title: "Översikt" },
-  { id: "bilar", title: "Bilar och förare" },
+  { id: "bilar", title: "Medlemskap" },
   { id: "konton", title: "Inloggningar" },
   { id: "betalning", title: "Betalning" },
 ];
@@ -376,8 +377,8 @@ function issues(d) {
     const days = Math.ceil((new Date(t.endsAt) - Date.now()) / 86400000);
     if (days <= 3) add(2, `Provet slutar om ${Math.max(days, 0)} dag(ar).`, "betalning", "Betalning");
   }
-  if (!done.bilar) add(1, "Har inga bilar.", "bilar", "Lägg till bilar");
-  else if (!done.forare) add(1, "Ingen förare är kopplad till någon bil.", "bilar", "Koppla förare");
+  if (!done.bilar) add(1, "Har inga medlemskap.", "bilar", "Lägg till medlemskap");
+  else if (!done.forare) add(1, "Inget konto är tilldelat något medlemskap.", "bilar", "Tilldela konton");
   if (!done.konto) add(1, "Ingen kan logga in i kundportalen.", "konton", "Bjud in");
   if (!d.suspension && d.access && !d.access.ok && !list.some((i) => i.level === 3)) {
     add(2, `Får inga tips: ${ACCESS_TEXT[d.access.reason] ?? d.access.reason}.`, "betalning", "Betalning");
@@ -389,11 +390,11 @@ function issues(d) {
 
 /** Vad kunden brukar ringa om, och var det löses. */
 const CALLS = [
-  ["bilar", "Föraren kommer inte in", "Skicka inbjudan igen, frigör bilen, spärra gammal telefon"],
-  ["bilar", "Ny förare eller ny telefon", "Inbjudan med e-post – föraren skriver bara sin e-post"],
+  ["bilar", "Föraren kommer inte in", "Bjud in kontot igen, ta bort och tilldela om"],
+  ["bilar", "Ny förare eller nytt konto", "Bjud in med e-post – personen loggar in i appen och tar platsen"],
   ["konton", "Kommer inte in i portalen", "Inloggningslänk eller ny inbjudan"],
   ["bilar", "Får inga notiser", "Se telefonernas notisläge, skicka testnotis"],
-  ["bilar", "Byta bil, regnr eller län", "Ändras per bil"],
+  ["bilar", "Byta län eller konto", "Ändras per medlemskap"],
   ["betalning", "Faktura och betalning", "Betallänk, kontrollera betalning, förläng"],
   ["betalning", "Vill säga upp", "Till periodens slut eller direkt"],
   ["foretag", "Ändra kontakt eller faktura", "Kontaktperson, adress, fakturamejl"],
@@ -492,8 +493,7 @@ function tabOversikt(d, config, crm, found) {
   const s = d.subscription;
   const t = d.trial;
   const open = (d.licenses ?? []).filter((l) => LICENSE_OPEN.includes(l.status));
-  const drivers = open.reduce((n, l) => n + (l.approvals ?? []).filter((a) => a.status === "active").length, 0);
-  const driving = open.filter((l) => l.activePhone).length;
+  const assigned = open.filter((l) => l.assigned).length;
   const members = (d.members ?? []).filter((m) => m.status === "active" && !m.blocked).length;
   const plan = s && ["active", "past_due"].includes(s.status)
     ? pill(s.status)
@@ -511,12 +511,12 @@ function tabOversikt(d, config, crm, found) {
           <span class="todo-main"><b>${esc(i.text)}</b></span>
           <span class="todo-go">${esc(i.label || "Granskning")} →</span>
         </button></li>`).join("")}</ul>`
-        : '<p class="ok">Inget att åtgärda. Kunden har bilar, förare, inloggning och betalning på plats.</p>'}
+        : '<p class="ok">Inget att åtgärda. Kunden har medlemskap, konton, inloggning och betalning på plats.</p>'}
     </div>
 
     <div class="ktiles">
       ${tile("betalning", "Abonnemang", plan, planSub)}
-      ${tile("bilar", "Bilar", esc(open.length), `${esc(drivers)} förartelefon(er) · ${esc(driving)} kör nu`)}
+      ${tile("bilar", "Medlemskap", esc(open.length), `${esc(assigned)} tilldelade konton`)}
       ${tile("konton", "Inloggningar", esc(members), members ? "ägare och administratörer" : "ingen kan logga in")}
       ${tile("foretag", "Behörighet", d.profile?.verificationStatus ? verificationPill(d.profile.verificationStatus) : '<span class="pill">Äldre kund</span>')}
     </div>
@@ -533,14 +533,14 @@ function tabOversikt(d, config, crm, found) {
   `;
 }
 
-/* --- Bilar och förare --------------------------------------------------- */
+/* --- Medlemskap --------------------------------------------------------- */
 
 function tabBilar(d, config, pending) {
   const open = (d.licenses ?? []).filter((l) => LICENSE_OPEN.includes(l.status));
   return `
-    ${carsCard(d, config, pending)}
+    ${membershipsCard(d, config, pending)}
     ${config?.canSell ? `<details class="card add-cars" ${open.length ? "" : "open"}>
-      <summary><h2>+ Lägg till bilar</h2></summary>
+      <summary><h2>+ Lägg till medlemskap</h2></summary>
       ${addCarsBlock(d, config)}
     </details>` : ""}
     ${phonesCard(d, config)}
@@ -585,7 +585,7 @@ const PENDING_KIND = {
   cancel_subscription: "Uppsägning",
 };
 
-/** Baslän för alla bilar på en gång, och det som väntar på förnyelsen. */
+/** Baslän för alla medlemskap på en gång, och det som väntar på förnyelsen. */
 function companyChangesCard(d, config) {
   if (!config?.canSell) return "";
   const open = (d.licenses ?? []).filter((l) => LICENSE_OPEN.includes(l.status));
@@ -594,26 +594,26 @@ function companyChangesCard(d, config) {
   const canBase = open.length > 1 && (!anyPaid || config.canManage);
   if (!canBase && !pending.length) return "";
   const counties = config?.counties ?? [];
-  const plate = (id) => open.find((l) => l.id === id)?.vehicle ?? "";
+  const subject = (id) => open.find((l) => l.id === id)?.vehicle || "medlemskap";
   const describe = (p) => {
     const pl = p.payload ?? {};
-    if (p.kind === "change_base_county") return `${plate(pl.licenseId)} → ${countyName(pl.county)}`;
-    if (p.kind === "remove_county") return `${countyName(pl.county)} på ${plate(pl.licenseId)}`;
-    if (p.kind === "reduce_licenses") return (pl.licenseIds ?? []).map(plate).filter(Boolean).join(", ");
+    if (p.kind === "change_base_county") return `${subject(pl.licenseId)} → ${countyName(pl.county)}`;
+    if (p.kind === "remove_county") return `${countyName(pl.county)} på ${subject(pl.licenseId)}`;
+    if (p.kind === "reduce_licenses") return (pl.licenseIds ?? []).map(subject).filter(Boolean).join(", ");
     return pl.reason ? `Orsak: ${pl.reason}` : "";
   };
   return `
     <div class="card">
       <h2>Ändringar för hela företaget</h2>
       ${canBase ? `
-      <h3>Byt baslän på alla bilar direkt</h3>
+      <h3>Byt baslän på alla medlemskap direkt</h3>
       <p class="muted">Påverkar inte priset. Ett extra län som blir baslän tas bort. Skälet loggas.</p>
       <div class="county-add">
-        <select id="companyBase" aria-label="Nytt baslän för alla bilar">
+        <select id="companyBase" aria-label="Nytt baslän för alla medlemskap">
           <option value="">Välj län …</option>
           ${counties.map((c) => `<option value="${esc(c.code)}">${esc(c.name)}</option>`).join("")}
         </select>
-        <button class="btn btn-quiet btn-small" data-action="company-base-now">Byt för alla bilar</button>
+        <button class="btn btn-quiet btn-small" data-action="company-base-now">Byt för alla medlemskap</button>
       </div>` : ""}
       ${pending.length ? `<h3>Väntar på förnyelsen</h3><table><thead><tr><th>Ändring</th><th>Gäller från</th><th></th></tr></thead>
         <tbody>${pending.map((p) => `
@@ -661,8 +661,8 @@ function tabBetalning(d, config) {
         ${d.discount ? `<dt>Rabatt</dt><dd>${d.discount.kind === "percent_bp"
           ? `${esc((d.discount.value / 100).toFixed(2))} %` : `${esc(money(d.discount.value))}/mån`}</dd>` : ""}
       </dl>
-      <p class="muted">Fler bilar eller län beställs under
-        <button class="linklike" data-action="kund-tab" data-tab="bilar">Bilar och förare</button>.</p>
+      <p class="muted">Fler medlemskap eller län beställs under
+        <button class="linklike" data-action="kund-tab" data-tab="bilar">Medlemskap</button>.</p>
     </div>
     ${ordersCard(d.orders, config)}
     ${config?.canManage ? `
@@ -882,8 +882,8 @@ function membersCard(d, config) {
   return `
     <div class="card">
       <h2>Vem kan logga in</h2>
-      <p class="muted">Ägare och administratörer i kundportalen och appens adminläge. Förarna bjuds in med
-        e-post under <button class="linklike" data-action="kund-tab" data-tab="bilar">Bilar och förare</button>.</p>
+      <p class="muted">Ägare och administratörer i kundportalen och appens adminläge. Kontona bjuds in med
+        e-post under <button class="linklike" data-action="kund-tab" data-tab="bilar">Medlemskap</button>.</p>
       ${members.length ? `<div class="table-scroll"><table>
         <thead><tr><th>Konto</th><th>Roll</th><th>Status</th><th></th></tr></thead>
         <tbody>${members.map((m) => `
@@ -911,7 +911,7 @@ function membersCard(d, config) {
             </div>` : ""}</td>
           </tr>`).join("")}</tbody></table></div>`
         : '<p class="muted">Ingen kan logga in än. Bjud in kundens ägare nedan.</p>'}
-      <p class="muted small"><b>Ägare</b> gör allt. <b>Bilar och förare</b> sköter bilar, län och förartelefoner.
+      <p class="muted small"><b>Ägare</b> gör allt. <b>Bilar och förare</b> sköter medlemskap, län och konton.
         <b>Ekonomi</b> ser och betalar fakturor.</p>
     </div>`;
 }
@@ -919,20 +919,21 @@ function membersCard(d, config) {
 const LICENSE_OPEN = ["active", "trial", "pending_cancel"];
 
 /**
- * En kort per bil: vem som kör, vilka telefoner som får köra, och vad som
- * går att ändra. Det man gör i ett samtal syns direkt; ändringar av bilen
- * själv (regnr, län, ta bort) ligger under "Ändra bilen".
+ * Ett kort per medlemskap: vilket konto platsen är tilldelad, vilka län som
+ * hör till platsen och vad som går att ändra. Det man gör i ett samtal syns
+ * direkt; ändringar av medlemskapet själv (län, ta bort) ligger under
+ * "Ändra medlemskapets län".
  *
- * Provbilar kostar inget och ändras direkt. En betald bils ändring visas
+ * Provet kostar inget och ändras direkt. Ett betalt medlemskaps ändring visas
  * först som en offert i kortet -- beloppet räknas av serverns prismotor
  * (fleet/pricing.py), aldrig här -- och verkställs när säljaren bekräftat att
  * kunden godkänt. Samma regel som i fleet/admin_vehicles.py.
  */
 /**
- * Kundens länbyten den här månaden (fleet/county_changes.py): två per bil och
- * kalendermånad, även under provet. Personalens egna ändringar räknas inte.
- * När kunden ringer för att hen "inte får byta län" är det här svaret, och
- * knappen ger ett extra byte som kunden sedan gör själv.
+ * Kundens länbyten den här månaden (fleet/county_changes.py): två per
+ * medlemskap och kalendermånad, även under provet. Personalens egna ändringar
+ * räknas inte. När kunden ringer för att hen "inte får byta län" är det här
+ * svaret, och knappen ger ett extra byte som kunden sedan gör själv.
  */
 function countyChangesRow(l, sell) {
   const c = l.countyChanges;
@@ -955,21 +956,21 @@ function countyChangesRow(l, sell) {
 function membershipRow(l, sell) {
   if (!LICENSE_OPEN.includes(l.status)) return "";
   const who = l.assigneeEmail
-    ? `väntar på ${esc(l.assigneeEmail)}`
+    ? `väntar på ${esc(l.assigneeEmail)} (hen loggar in i appen)`
     : l.assigneeUserId
-      ? "ett konto"
+      ? (l.assigneeResolvedEmail ? esc(l.assigneeResolvedEmail) : "ett konto")
       : "ingen än";
   return `<div class="driving ${l.assigned ? "on" : ""}">
-      <span><b>Medlemskap:</b> ${who}
-        <span class="muted">tilldelas ett konto, inte en bil</span></span>
+      <span><b>Konto:</b> ${who}
+        <span class="muted">platsen används av kontot i appen</span></span>
       ${
         sell
-          ? `<button class="btn btn-quiet btn-small" data-action="membership-assign"
-               data-license="${esc(l.id)}" data-plate="${esc(l.vehicle)}">${l.assigned ? "Byt konto" : "Tilldela konto"}</button>
+          ? `<button class="btn btn-primary btn-small" data-action="membership-assign"
+               data-license="${esc(l.id)}" data-plate="${esc(l.vehicle)}">${l.assigned ? "Byt konto" : "Bjud in konto"}</button>
              ${
                l.assigned
                  ? `<button class="btn btn-quiet btn-small" data-action="membership-unassign"
-                      data-license="${esc(l.id)}" data-plate="${esc(l.vehicle)}">Ta bort</button>`
+                      data-license="${esc(l.id)}" data-plate="${esc(l.vehicle)}">Ta bort tilldelning</button>`
                  : ""
              }`
           : ""
@@ -977,7 +978,7 @@ function membershipRow(l, sell) {
     </div>`;
 }
 
-function carsCard(d, config, pending = null) {
+function membershipsCard(d, config, pending = null) {
   const all = d.licenses ?? [];
   const open = all.filter((l) => LICENSE_OPEN.includes(l.status));
   const closed = all.length - open.length;
@@ -986,28 +987,25 @@ function carsCard(d, config, pending = null) {
   const counties = config?.counties ?? [];
   const extraPrice = money(config?.price?.extraCountyOre);
   const name = (code) => countyName(code);
-  const invites = d.driverInvites?.invites ?? [];
   return `
     <div class="card">
-      <h2>Bilar <span class="muted">(${esc(open.length)})</span></h2>
-      <p class="muted">Bjud in föraren med e-post till en bil. Föraren får ett mejl, väljer ett lösenord och
-        loggar in i appen med e-post och lösenord. Bilen och länen bestäms här – föraren väljer inget.</p>
-      ${open.length ? open.map((l) => {
+      <h2>Medlemskap <span class="muted">(${esc(open.length)})</span></h2>
+      <p class="muted">Varje plats tilldelas ett <b>konto</b>, inte en bil. Bjud in med e-post:
+        personen loggar in i appen och tar platsen där. Länen väljs per medlemskap.</p>
+      ${open.length ? open.map((l, i) => {
         const trial = l.status === "trial";
         const extras = l.extraCounties ?? [];
         const free = counties.filter((c) => !(l.counties ?? []).includes(c.code) && c.code !== l.baseCounty);
         const mine = pending?.licenseId === l.id ? pending : null;
-        const phones = (l.approvals ?? []).filter((a) => a.status === "active");
-        const waiting = invites.filter((i) => i.licenseId === l.id);
         const data = `data-license="${esc(l.id)}" data-base="${esc(l.baseCounty)}" data-extras="${esc(extras.join(","))}" data-plate="${esc(l.vehicle)}" data-trial="${trial ? "1" : ""}"`;
         return `
         <div class="car ${mine ? "car-pending" : ""}">
           <div class="car-head">
-            <b class="plate">${esc(l.vehicle || "—")}</b> ${pill(l.status)}
+            <b class="plate">${esc(l.vehicle || `Medlemskap ${i + 1}`)}</b> ${pill(l.status)}
             ${l.assignmentKind === "temporary" ? '<span class="pill pill-warn">Ersättningsbil</span>' : ""}
           </div>
-          <div class="county-chips" aria-label="Län för ${esc(l.vehicle)}">
-            <span class="county-chip base" title="Ingår i bilens pris">${esc(name(l.baseCounty))} <small>baslän</small></span>
+          <div class="county-chips" aria-label="Län">
+            <span class="county-chip base" title="Ingår i medlemskapets pris">${esc(name(l.baseCounty))} <small>baslän</small></span>
             ${extras.map((c) => `<span class="county-chip">${esc(name(c))}
               ${sell ? `<button class="chip-x" data-action="county-remove" data-county="${esc(c)}" ${data}
                 aria-label="Ta bort ${esc(name(c))}" title="Ta bort ${esc(name(c))}">✕</button>` : ""}</span>`).join("")}
@@ -1015,38 +1013,11 @@ function carsCard(d, config, pending = null) {
           </div>
           ${countyChangesRow(l, sell)}
           ${membershipRow(l, sell)}
-          ${l.status === "pending_cancel" ? `<p class="muted">Bilen avslutas vid nästa förnyelse${l.endsAt ? ` (${esc(date(l.endsAt))})` : ""}.</p>` : ""}
-
-          <div class="driving ${l.activePhone ? "on" : ""}">
-            ${l.activePhone
-              ? `<span><b>Kör nu:</b> ${esc(l.activePhone.label)} <span class="muted">sedan ${esc(dateTime(l.activePhone.since))}</span></span>
-                 ${sell ? `<button class="btn btn-quiet btn-small" data-action="car-release" ${data}
-                   data-holder="${esc(l.activePhone.label)}" title="Avslutar passet. Telefonen får fortfarande köra bilen.">Frigör bilen</button>` : ""}`
-              : '<span class="muted">Ingen kör bilen just nu.</span>'}
-          </div>
-
-          <div class="car-drivers">
-            ${phones.map((a) => `
-              <div class="driver-row"><span>📱 <b>${esc(a.label || "Telefon")}</b> <span class="muted">godkänd ${esc(date(a.approvedAt))}</span></span>
-                ${sell ? `<button class="btn btn-quiet btn-small" data-action="phone-rename" data-approval="${esc(a.id)}" data-label="${esc(a.label)}">Byt namn</button>` : ""}
-                ${manage ? `<button class="btn btn-quiet btn-small" data-action="block" data-approval="${esc(a.id)}" data-label="${esc(a.label)}">Spärra</button>` : ""}
-              </div>`).join("")}
-            ${waiting.map((i) => `
-              <div class="driver-row"><span>✉️ ${esc(i.email)} <span class="muted">${i.expired ? "inbjudan har gått ut" : `inbjuden, gäller till ${esc(date(i.expiresAt))}`}</span></span>
-                ${sell ? `<button class="btn btn-quiet btn-small" data-action="driver-invite-resend" data-invite="${esc(i.inviteId)}">Skicka igen</button>
-                  <button class="btn btn-quiet btn-small" data-action="driver-invite-revoke" data-invite="${esc(i.inviteId)}" data-email="${esc(i.email)}">Återkalla</button>` : ""}
-              </div>`).join("")}
-            ${!phones.length && !waiting.length ? '<span class="muted">Ingen förare kopplad.</span>' : ""}
-          </div>
-
-          ${sell && l.status !== "pending_cancel" ? `
-          <div class="btn-row">
-            <button class="btn btn-primary btn-small" data-action="driver-invite" ${data}>+ Bjud in förare</button>
-          </div>` : ""}
+          ${l.status === "pending_cancel" ? `<p class="muted">Medlemskapet avslutas vid nästa förnyelse${l.endsAt ? ` (${esc(date(l.endsAt))})` : ""}.</p>` : ""}
 
           ${sell ? `
           <details class="car-edit" ${mine ? "open" : ""}>
-            <summary>Ändra bilen</summary>
+            <summary>Ändra medlemskapets län</summary>
             <div class="car-actions">
               ${l.status !== "pending_cancel" ? `
               <div class="county-add">
@@ -1067,8 +1038,7 @@ function carsCard(d, config, pending = null) {
                   title="Byter direkt i stället för vid förnyelsen. Påverkar inte priset.">Byt nu</button>` : ""}
               </div>` : ""}
               <div class="btn-row">
-                <button class="btn btn-quiet btn-small" data-action="car-plate-ask" ${data}>Byt regnr</button>
-                ${l.status !== "pending_cancel" ? `<button class="btn btn-danger btn-small" data-action="car-remove" ${data}>Ta bort bilen</button>` : ""}
+                ${l.status !== "pending_cancel" ? `<button class="btn btn-danger btn-small" data-action="car-remove" ${data}>Ta bort medlemskapet</button>` : ""}
               </div>
             </div>
           </details>` : ""}
@@ -1086,8 +1056,8 @@ function carsCard(d, config, pending = null) {
             </div>
           </div>` : ""}
         </div>`;
-      }).join("") : '<p class="muted">Inga bilar än. Lägg till nedan.</p>'}
-      ${closed ? `<p class="muted">${esc(closed)} borttagen/borttagna bil(ar) visas inte.</p>` : ""}
+      }).join("") : '<p class="muted">Inga medlemskap än. Lägg till nedan.</p>'}
+      ${closed ? `<p class="muted">${esc(closed)} avslutat medlemskap visas inte.</p>` : ""}
     </div>`;
 }
 

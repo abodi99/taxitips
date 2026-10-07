@@ -73,22 +73,27 @@
   <!--
     Hit skickar Supabase den som tryckt på bekräftelselänken i mejlet
     (appens emailRedirectTo). E-posten är redan bekräftad när sidan visas --
-    Supabase gör det innan omdirigeringen. Sidan loggar INTE in någon: koden i
-    adressen hör till telefonen som registrerade sig, och företaget skapas där
-    vid första inloggningen (fleet/registration.py).
+    Supabase gör det innan omdirigeringen. Sessionens token ligger i adressen:
+    i fragmentet (#access_token=...) för den implicita flödet, eller som
+    ?code=... när PKCE är på. Sidan skickar den vidare till appen via
+    taxitips://auth-callback, där Supabase Flutter SDK tar sessionen
+    (getSessionFromUrl) och loggar in användaren -- inget lösenord lagras.
+    Företaget skapas i appen vid completePendingRegistration
+    (fleet/registration.py).
   -->
   <main class="portal-main">
     <section id="ok" class="card confirm">
       <div class="mark" aria-hidden="true">✓</div>
       <h1>E-postadressen är bekräftad</h1>
-      <p class="muted">Tack! Nu är kontot klart. Du kan använda det i appen och på webben.</p>
+      <p class="muted">Du är inloggad. Öppna appen för att fortsätta.</p>
+      <a id="openApp" class="btn btn-primary btn-block btn-lg" href="taxitips://auth-callback">Öppna i Taxi Tips-appen</a>
+      <p class="muted">I appen är du redan inloggad – du behöver inte skriva något lösenord.</p>
       <div class="choices">
         <div class="choice">
-          <h2>I appen</h2>
+          <h2>Öppnas inte appen?</h2>
           <ol>
-            <li>Öppna <b>Taxi Tips</b>-appen.</li>
-            <li>Tryck <b>Logga in som administratör</b>.</li>
-            <li>Skriv din e-post och ditt lösenord.</li>
+            <li>Kontrollera att <b>Taxi Tips</b>-appen är installerad.</li>
+            <li>Öppna appen manuellt och tryck <b>Logga in som administratör</b>.</li>
           </ol>
         </div>
         <div class="choice">
@@ -112,10 +117,15 @@
   </main>
 
   <script>
-    // Supabase lägger felet i query eller hash (#error=...&error_description=...).
+    // Supabase lägger sessionens token (eller felet) i adressen: i fragmentet
+    // (#access_token=...) för den implicita flödet, eller som ?code=... när
+    // PKCE är på. Vi skickar den vidare till appen via taxitips://auth-callback,
+    // där Supabase Flutter SDK tar sessionen och loggar in användaren.
     (function () {
+      var search = window.location.search;
+      var hash = window.location.hash;
       var params = new URLSearchParams(
-        window.location.search.slice(1) + "&" + window.location.hash.replace(/^#/, "")
+        search.slice(1) + "&" + hash.replace(/^#/, "")
       );
       var error = params.get("error") || params.get("error_code");
       if (error) {
@@ -123,9 +133,16 @@
         document.getElementById("failed").hidden = false;
         var detail = params.get("error_description");
         if (detail) document.getElementById("failedDetail").textContent = detail.replace(/\+/g, " ");
+      } else {
+        // Samma token-sträng som Supabase redan lade i adressen, men till appens
+        // djup-länk. getSessionFromUrl läser antingen query (?code=) eller
+        // fragmentet (#access_token=...).
+        document.getElementById("openApp").href =
+          "taxitips://auth-callback" + search + hash;
       }
-      // Koden och eventuella token ska inte ligga kvar i adressfältet eller historiken.
-      if (window.location.search || window.location.hash) {
+      // Koden och eventuella token ska inte ligga kvar i adressfältet eller
+      // historiken när länken väl är byggd.
+      if (search || hash) {
         history.replaceState(null, "", window.location.pathname);
       }
     })();

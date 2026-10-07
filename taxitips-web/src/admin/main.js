@@ -850,7 +850,7 @@ el.view.addEventListener("submit", async (event) => {
         state.companyTab = "bilar";
         state.view = "kunder";
         setTab("kunder");
-        flash("Företaget är upplagt. Lägg till bilarna.");
+        flash("Företaget är upplagt. Lägg till medlemskapen.");
         break;
       }
       case "crmNoteForm": {
@@ -1114,24 +1114,24 @@ async function act(action, ds) {
 
     case "membership-assign": {
       const email = prompt(
-        `Kontot som ska få platsen på ${ds.plate}? Skriv kontots e-post.\n\n` +
+        `Kontot som ska få ${memberLabel(ds)}? Skriv kontots e-post.\n\n` +
           "Är adressen känd binds platsen direkt; annars väntar den tills personen loggar in i appen.",
       );
       if (!email?.trim()) return;
       await admin.assignMembership(ds.license, { email: email.trim() });
-      flash(`Platsen på ${ds.plate} tilldelas ${email.trim()}.`);
+      flash(`${memberLabel(ds)} tilldelas ${email.trim()}.`);
       return render();
     }
 
     case "membership-unassign": {
       if (
         !confirm(
-          `Ta bort tilldelningen på ${ds.plate}? Platsen är kvar men ingen telefon använder den.`,
+          `Ta bort tilldelningen på ${memberLabel(ds)}? Platsen är kvar men inget konto använder den.`,
         )
       )
         return;
       await admin.unassignMembership(ds.license);
-      flash(`Tilldelningen på ${ds.plate} är borttagen.`);
+      flash(`Tilldelningen på ${memberLabel(ds)} är borttagen.`);
       return render();
     }
 
@@ -1181,7 +1181,7 @@ async function act(action, ds) {
     case "member-role": {
       const what = {
         company_owner: "ägare. Ägaren kan beställa, säga upp och hantera inloggningar",
-        fleet_admin: "Bilar och förare. Hen sköter bilar, län och förartelefoner men inte betalning",
+        fleet_admin: "Bilar och förare. Hen sköter medlemskap, län och konton men inte betalning",
         finance: "Ekonomi. Hen ser och betalar fakturor men ändrar inte bilar eller förare",
       }[ds.role];
       if (!confirm(`Ändra rollen till ${what}?`)) return;
@@ -1428,7 +1428,7 @@ async function act(action, ds) {
 
     case "county-change-allow": {
       const note = prompt(
-        `Tillåt ett extra länbyte för ${ds.plate || "bilen"} den här månaden?\n\n` +
+        `Tillåt ett extra länbyte för ${memberLabel(ds)} den här månaden?\n\n` +
           "Anteckning (valfritt, syns i revisionen):",
       );
       if (note === null) return;
@@ -1724,7 +1724,7 @@ async function salesAction(action, ds) {
           (result.plannedDays ? ` (${result.plannedDays} dagar)` : "") +
           ". " +
           (result.endsAt ? "" : "Det startar när första telefonen ansluts. ") +
-          "Bjud in förarna under Bilar och förare.",
+          "Bjud in kontona under Medlemskap.",
       );
       return render();
     }
@@ -1803,7 +1803,7 @@ async function salesAction(action, ds) {
       return quotedOrder({ addCounties: [{ licenseId: ds.license, county }] });
     }
 
-    /* --- Bilens län och borttagning (Bilar-steget) --- */
+    /* --- Medlemskapets län och borttagning (Medlemskap-steget) --- */
 
     case "county-add": {
       const county = document.querySelector(`[data-add-county="${ds.license}"]`)?.value;
@@ -1811,23 +1811,23 @@ async function salesAction(action, ds) {
       if (ds.trial) {
         const extras = [...splitList(ds.extras), county];
         await admin.setTrialCounties(ds.license, ds.base, extras);
-        flash(`${countyLabel(county)} är tillagt på ${ds.plate}. Gratis under provet.`);
+        flash(`${countyLabel(county)} är tillagt på ${memberLabel(ds)}. Gratis under provet.`);
         return render();
       }
       return prepareChange(ds.license, { addCounties: [{ licenseId: ds.license, county }] },
-        `Lägg till ${countyLabel(county)} på ${ds.plate}`);
+        `Lägg till ${countyLabel(county)} på ${memberLabel(ds)}`);
     }
 
     case "county-remove": {
       if (ds.trial) {
-        if (!confirm(`Ta bort ${countyLabel(ds.county)} från ${ds.plate}?`)) return;
+        if (!confirm(`Ta bort ${countyLabel(ds.county)} från ${memberLabel(ds)}?`)) return;
         const extras = splitList(ds.extras).filter((c) => c !== ds.county);
         await admin.setTrialCounties(ds.license, ds.base, extras);
-        flash(`${countyLabel(ds.county)} är borttaget från ${ds.plate}.`);
+        flash(`${countyLabel(ds.county)} är borttaget från ${memberLabel(ds)}.`);
         return render();
       }
       return prepareChange(ds.license, { removeCounties: [{ licenseId: ds.license, county: ds.county }] },
-        `Ta bort ${countyLabel(ds.county)} från ${ds.plate} vid nästa förnyelse`);
+        `Ta bort ${countyLabel(ds.county)} från ${memberLabel(ds)} vid nästa förnyelse`);
     }
 
     case "base-change": {
@@ -1836,23 +1836,23 @@ async function salesAction(action, ds) {
       if (ds.trial) {
         const extras = splitList(ds.extras).filter((c) => c !== county);
         await admin.setTrialCounties(ds.license, county, extras);
-        flash(`${ds.plate} har nu ${countyLabel(county)} som baslän.`);
+        flash(`${memberLabel(ds)} har nu ${countyLabel(county)} som baslän.`);
         return render();
       }
       return prepareChange(ds.license, { baseCountyChanges: [{ licenseId: ds.license, county }] },
-        `Byt baslän på ${ds.plate} till ${countyLabel(county)} vid nästa förnyelse`);
+        `Byt baslän på ${memberLabel(ds)} till ${countyLabel(county)} vid nästa förnyelse`);
     }
 
     case "base-change-now": {
       const county = document.querySelector(`[data-base-for="${ds.license}"]`)?.value;
       if (!county) throw new ApiError(400, "Välj det nya baslänet i listan först.", "county_required");
       const reason = prompt(
-        `Byt baslän på ${ds.plate} till ${countyLabel(county)} DIREKT, i stället för vid förnyelsen.\n\n` +
+        `Byt baslän på ${memberLabel(ds)} till ${countyLabel(county)} DIREKT, i stället för vid förnyelsen.\n\n` +
           "Påverkar inte priset. Ange ett skäl (sparas i loggen):",
       );
       if (!reason) return;
       await admin.setBaseCountyNow(ds.license, county, reason);
-      flash(`${ds.plate} har nu ${countyLabel(county)} som baslän.`);
+      flash(`${memberLabel(ds)} har nu ${countyLabel(county)} som baslän.`);
       return render();
     }
 
@@ -1860,12 +1860,12 @@ async function salesAction(action, ds) {
       const county = document.getElementById("companyBase")?.value;
       if (!county) throw new ApiError(400, "Välj det nya baslänet i listan först.", "county_required");
       const reason = prompt(
-        `Byt baslän till ${countyLabel(county)} på ALLA företagets bilar, direkt.\n\n` +
+        `Byt baslän till ${countyLabel(county)} på ALLA företagets medlemskap, direkt.\n\n` +
           "Påverkar inte priset. Ange ett skäl (sparas i loggen):",
       );
       if (!reason) return;
       const result = await admin.setCompanyBaseCounty(state.companyId, county, reason);
-      flash(`${result.changed} bil(ar) har nu ${countyLabel(county)} som baslän.`);
+      flash(`${result.changed} medlemskap har nu ${countyLabel(county)} som baslän.`);
       return render();
     }
 
@@ -1887,22 +1887,22 @@ async function salesAction(action, ds) {
 
     case "car-remove": {
       if (ds.trial) {
-        const reason = prompt(`Ta bort provbilen ${ds.plate}? Förarna i bilen förlorar åtkomsten direkt.\n\nSkäl:`);
+        const reason = prompt(`Ta bort provmedlemskapet ${memberLabel(ds)}? Kontot förlorar åtkomsten direkt.\n\nSkäl:`);
         if (!reason) return;
         await admin.removeLicense(ds.license, reason);
-        flash(`${ds.plate} är borttagen.`);
+        flash(`${memberLabel(ds)} är borttagen.`);
         return render();
       }
       return prepareChange(ds.license, { cancelLicenseIds: [ds.license] },
-        `Avsluta ${ds.plate} vid nästa förnyelse – ingen mer debitering för bilen`, { allowNow: true });
+        `Avsluta ${memberLabel(ds)} vid nästa förnyelse – ingen mer debitering för medlemskapet`, { allowNow: true });
     }
 
     case "car-remove-now": {
-      const reason = prompt(`Ta bort ${ds.plate} NU? Förarna förlorar åtkomsten direkt. Ingen återbetalning görs automatiskt.\n\nSkäl:`);
+      const reason = prompt(`Ta bort ${memberLabel(ds)} NU? Kontot förlorar åtkomsten direkt. Ingen återbetalning görs automatiskt.\n\nSkäl:`);
       if (!reason) return;
       await admin.removeLicense(ds.license, reason);
       state.pending = null;
-      flash(`${ds.plate} är borttagen.`);
+      flash(`${memberLabel(ds)} är borttagen.`);
       return render();
     }
 
@@ -2097,6 +2097,11 @@ function splitList(value) {
 
 function countyLabel(code) {
   return (state.config?.counties ?? []).find((c) => c.code === code)?.name ?? code;
+}
+
+/** Kortets rubrik i bekräftelser: regnr när det finns, annars "medlemskapet". */
+function memberLabel(ds) {
+  return ds.plate || "medlemskapet";
 }
 
 /**

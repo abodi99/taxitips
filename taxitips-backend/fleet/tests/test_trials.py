@@ -96,7 +96,7 @@ class TrialClockTests(FleetTestCase):
             source=Trial.Source.SELF_SIGNUP,
         )
 
-    def test_the_clock_starts_at_the_first_phone_activation_not_at_signup(self):
+    def test_creating_a_trial_leaves_it_pending_until_started(self):
         self.assertEqual(self.trial.status, Trial.Status.PENDING)
         self.assertIsNone(self.trial.started_at)
 

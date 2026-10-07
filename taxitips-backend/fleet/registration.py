@@ -154,7 +154,12 @@ def register(
         specs = sales._vehicle_specs(vehicles or [])
         if specs:
             sales._add_trial_vehicles(trial, specs, actor_user_id=user_id, now=now)
-        message = f"Provperioden på {trials.TRIAL_DAYS} dagar startar när den första telefonen kopplas."
+        # Provet startar direkt efter e-postbekräftelsen, inte vid första
+        # telefonen: kunden har redan väntat på bekräftelselänken. Att dessutom
+        # vänta på att telefonerna delas ut skapade bara supportärenden om
+        # förlängning. start_trial är atomiskt och idempotent.
+        trial = trials.start_trial(trial, now=now)
+        message = f"Provperioden på {trials.TRIAL_DAYS} dagar har startat."
     else:
         message = f"{check.message} Kontakta TaxiTips för att komma igång."
 

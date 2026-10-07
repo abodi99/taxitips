@@ -96,13 +96,12 @@ class _MembershipCountyScreenState extends State<MembershipCountyScreen> {
       final result = widget.licenseId != null && widget.licenseId!.isNotEmpty
           ? await widget.api.setMembershipCounty(widget.licenseId!, code)
           : await widget.api.chooseTrialCounty(code);
-      // Ta platsen i appen på en gång, så flödet använder den direkt. Ett fel
-      // här är inte kritiskt; nästa start försöker igen.
+      // Ta platsen i appen på en gång, så flödet använder den direkt. Länen är
+      // redan sparade (steget är idempotent), så ett fel här visas i stället
+      // för att sväljas -- ett nytt försök byter bara län igen.
       final member = result['membership'];
       final licenseId = member is Map ? member['licenseId']?.toString() : null;
-      try {
-        await widget.api.startMembershipSession(licenseId: licenseId);
-      } catch (_) {}
+      await widget.api.startMembershipSession(licenseId: licenseId);
       if (!mounted) return;
       widget.onDone();
     } catch (e) {

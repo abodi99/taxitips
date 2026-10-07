@@ -240,6 +240,18 @@ def companies(request):
             status__in=[License.Status.ACTIVE, License.Status.PENDING_CANCEL, License.Status.TRIAL],
         ).values("company_id").annotate(n=Count("id"))
     }
+    # Kontobaserat medlemskap (2026-10): hur många öppna platser som redan är
+    # tilldelade ett konto (direkt eller via en väntande e-post). Steget "Förare"
+    # i Hem/Kunder är kontobaserat nu, inte en räkning av godkända telefoner.
+    assigned_membership_counts = {
+        row["company_id"]: row["n"]
+        for row in License.objects.filter(
+            company_id__in=ids,
+            status__in=[License.Status.ACTIVE, License.Status.PENDING_CANCEL, License.Status.TRIAL],
+        )
+        .filter(Q(assignee_user_id__isnull=False) | ~Q(assignee_email=""))
+        .values("company_id").annotate(n=Count("id"))
+    }
     device_counts = {
         row["company_id"]: row["n"]
         for row in Device.objects.filter(company_id__in=ids)
@@ -298,6 +310,7 @@ def companies(request):
             "createdAt": _iso(company.created_at),
             "verificationStatus": verification.get(company.id, ""),
             "phones": phone_counts.get(company.id, 0),
+            "membershipsAssigned": assigned_membership_counts.get(company.id, 0),
             "members": member_counts.get(company.id, 0),
             "unpaidOrders": unpaid_orders.get(company.id, 0),
             "hadPayment": bool(sub and sub.had_successful_payment),
@@ -327,7 +340,7 @@ def _company_or_404(company_id) -> Company:
 def company_detail(request, company_id):
     """GET /api/admin/companies/<id> -- allt om ett bolag, för en support-fråga."""
     # admin_sales importerar härifrån; åt andra hållet går det bara i funktionen.
-    from fleet import admin_sales as admin_sales_rows
+    from fleet import accounts, admin_sales as admin_sales_rows
 
     _staff(request, Perm.ADMIN_VIEW)
     now = timezone.now()
@@ -337,8 +350,11 @@ def company_detail(request, company_id):
     window = access.company_window(company.id, now)
 
     license_rows = list(License.objects.filter(company_id=company.id).order_by("-created_at"))
-    # Länbyten kvar den här månaden per bil (fleet/county_changes.py).
+    # Länbyten kvar den här månaden per medlemskap (fleet/county_changes.py).
     county_change_rows = county_changes.summaries_for([lic.id for lic in license_rows], now=now)
+    # Kontots e-postadress när tilldelningen redan är bunden till ett konto --
+    # adminvyn visar då vem medlemskapet faktiskt tillhör, inte bara ett id.
+    assignee_emails = accounts.emails_for([lic.assignee_user_id for lic in license_rows])
     licenses = []
     for lic in license_rows:
         serving = sessions.current_vehicle(lic)
@@ -355,6 +371,7 @@ def company_detail(request, company_id):
             # Kontobaserat medlemskap (2026-10): vem som håller platsen.
             "assigneeUserId": str(lic.assignee_user_id) if lic.assignee_user_id else None,
             "assigneeEmail": lic.assignee_email,
+            "assigneeResolvedEmail": assignee_emails.get(str(lic.assignee_user_id), ""),
             "assigned": bool(lic.assignee_user_id or lic.assignee_email),
             "assignedAt": _iso(lic.assigned_at),
             "counties": list(access.license_counties(lic.id, now)),
@@ -386,8 +403,8 @@ def company_detail(request, company_id):
          "counties": (d.notify_prefs or {}).get("counties", [])}
         for d in Device.objects.filter(company_id=company.id).order_by("-last_seen_at")[:50]
     ]
-    # Notisinställningarna per telefon och företagets standard, för fliken Bilar
-    # och förare (fleet/admin_notify.py ändrar). Ett fel här får inte fälla sidan.
+    # Notisinställningarna per telefon och företagets standard, för fliken
+    # Medlemskap (fleet/admin_notify.py ändrar). Ett fel får inte fälla sidan.
     from fleet import notify_settings
 
     try:
@@ -395,7 +412,6 @@ def company_detail(request, company_id):
     except Exception:
         log.exception("admin: notisinställningarna gick inte att läsa för %s", company.id)
         notify = None
-    from fleet import accounts
 
     member_rows = list(CompanyMember.objects.filter(company_id=company.id))
     emails = accounts.emails_for([m.user_id for m in member_rows])

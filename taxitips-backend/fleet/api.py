@@ -202,7 +202,13 @@ def pair(request):
 
 
 def _start_trial_on_first_phone(company_id) -> None:
-    """Provet startar vid FÖRSTA telefonaktiveringen, inte vid registreringen."""
+    """Startar ett väntande prov vid första aktiveringen.
+
+    Självregistreringen startar numera provet direkt vid e-postbekräftelsen
+    (fleet/registration.py), så den vägen har redan en aktiv period här. Kvar
+    är prov som en säljare lagt upp (fleet/sales.py) -- de startar fortfarande
+    vid första telefonen/sessionen.
+    """
     trial = trials.active_trial(company_id)
     if trial is not None and trial.status == Trial.Status.PENDING:
         trials.start_trial(trial)

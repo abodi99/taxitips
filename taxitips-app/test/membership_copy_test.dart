@@ -57,8 +57,16 @@ void main() {
         kPortalAccountSubtitle,
         'Öppnar kundportalen på webben: bilar, fakturor och medlemmar.',
       );
+      expect(
+        kAccountOnPortal,
+        'E-post och lösenord hanteras i kundportalen på webben (portal.taxitips.se).',
+      );
       // Portaltexterna får inte låta som köp-CTA.
-      for (final text in [kPortalAccountTitle, kPortalAccountSubtitle]) {
+      for (final text in [
+        kPortalAccountTitle,
+        kPortalAccountSubtitle,
+        kAccountOnPortal,
+      ]) {
         expect(text.toLowerCase(), isNot(contains('prenumer')));
         expect(text.toLowerCase(), isNot(contains('köp')));
         expect(text.toLowerCase(), isNot(contains('betala')));

@@ -11,11 +11,8 @@ import '../signal_kinds.dart' show countyShort;
 import '../theme.dart';
 import '../widgets/brand_icons.dart';
 import '../widgets/company_settings_panel.dart';
-import '../widgets/notification_log_sheet.dart';
 import '../widgets/notify_prefs_sheet.dart';
-import '../widgets/password_visibility.dart';
 import '../widgets/settings_ui.dart';
-import '../widgets/vehicle_session_sheet.dart';
 import 'onboarding_screen.dart';
 import 'support_chat_screen.dart';
 import 'trial_welcome_screen.dart';
@@ -47,13 +44,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
   int _companyPanelEpoch = 0;
   int _supportUnread = 0;
 
-  // Office
-  final _email = TextEditingController();
-
-  // Driver
+  // Konto/medlemskap (kontobaserad vy, 2026-10): e-postadressen är en
+  // upplysning -- den redigeras i kundportalen, inte i appen.
+  String? _accountEmail;
   String? _companyName;
-  String? _currentPlate;
-  bool _hasCars = false;
 
   /// Licensens län (rättighet), visningsnamn i kort form.
   List<String> _licenseCountyLabels = const [];
@@ -72,7 +66,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   @override
   void dispose() {
-    _email.dispose();
     super.dispose();
   }
 
@@ -99,24 +92,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     try {
       if (_isOffice) {
         // Företaget och bilarna läser panelen själv (GET /api/fleet/company).
-        _email.text = widget.api.currentUserEmail ?? '';
+        _accountEmail = widget.api.currentUserEmail ?? '';
       }
       if (_isDevice) {
-        // fleetStatus (= /api/fleet/me) är sanningen för parkopplade telefoner.
-        // getDeviceMe faller tillbaka dit; fel här ska inte blockera hela sidan
-        // (ägare som också kört bilen själv ska fortfarande se företaget).
+        // fleetStatus (= /api/fleet/me) ger företagsnamnet till medlemskapets
+        // beskrivning. Fordonen läses inte längre: platsen tilldelas kontot,
+        // inte en bil (kontobaserat medlemskap, 2026-10). Fel här ska inte
+        // blockera hela sidan.
         try {
           final status = await widget.api.fleetStatus();
           final company = status['company'] is Map
               ? Map<String, dynamic>.from(status['company'] as Map)
               : <String, dynamic>{};
           _companyName = company['name']?.toString();
-          final vehicles = ((status['vehicles'] as List?) ?? const [])
-              .whereType<Map>()
-              .toList();
-          _hasCars = vehicles.isNotEmpty;
-          final mine = vehicles.where((v) => v['isMine'] == true);
-          _currentPlate = mine.isEmpty ? null : mine.first['plate']?.toString();
         } catch (e) {
           debugPrint('SettingsScreen device load: $e');
         }
@@ -147,27 +135,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
         backgroundColor: isError ? TbColors.danger : TbColors.live,
       ),
     );
-  }
-
-  Future<void> _editEmail() async {
-    final ok = await showDialog<dynamic>(
-      context: context,
-      builder: (_) =>
-          _EmailChangeDialog(api: widget.api, currentEmail: _email.text),
-    );
-    if (ok is String && mounted) {
-      setState(() => _email.text = ok);
-      _showSnack('E-post uppdaterad');
-    }
-  }
-
-  Future<void> _editPassword() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (_) =>
-          _PasswordChangeDialog(api: widget.api, email: _email.text),
-    );
-    if (ok == true) _showSnack('Lösenord bytt');
   }
 
   /// Integritetspolicyn och villkoren på taxitips.se. Förr byggdes länken på
@@ -244,23 +211,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  Future<void> _openNotificationLog() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: TbColors.foam,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (ctx) => NotificationLogSheet(api: widget.api),
-    );
-  }
-
-  Future<void> _chooseCar() async {
-    final changed = await VehicleSessionSheet.show(context, widget.api);
-    if (changed) await _load();
-  }
-
   Future<void> _closeAccount() async {
     final ok = await showDialog<bool>(
       context: context,
@@ -297,7 +247,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // ── Grupperna ──────────────────────────────────────────────────────────
   //
   // Varje grupp har en kort rubrik och en rad om vad man kan göra där. Ordning:
-  // företaget (ägare), telefonen, notiser, konto, hjälp. Längst ner kommer
+  // företaget (ägare), medlemskapet, notiser, konto, hjälp. Längst ner kommer
   // [_Footer]; något nytt som hör hemma sist (t.ex. radera kontot) läggs före
   // den, som en egen grupp.
 
@@ -311,7 +261,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     CompanySettingsPanel(
       key: ValueKey(_companyPanelEpoch),
       api: widget.api,
-      // Nytt län: översikten "Den här telefonen" visar det direkt.
+      // Nytt län: medlemskapsöversikten visar det direkt.
       onChanged: () => unawaited(_loadCounties()),
     ),
     const SizedBox(height: 12),
@@ -329,17 +279,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
     const SizedBox(height: 28),
   ];
 
-  /// Telefonen man håller i: bilen och länen. Inget telefonnamn -- det är
-  /// kontot man loggar in med som syns.
-  List<Widget> _phoneSection() {
-    final hasCar = _hasCars || _currentPlate != null;
-    if (!hasCar && _licenseCountyLabels.isEmpty) return const [];
+  /// Medlemskapet och kontot man kör med -- kontobaserad vy (2026-10).
+  /// Platsen tilldelas kontot, inte en bil, så ingen "Välj bil"-rad behövs.
+  /// Länen kommer från medlemskapet (samma lista som körområdet).
+  List<Widget> _membershipSection() {
+    final hasEmail = (_accountEmail?.isNotEmpty ?? false);
+    if (_licenseCountyLabels.isEmpty && !hasEmail) return const [];
     return [
       SettingsSectionHeader(
-        title: 'Den här telefonen',
-        description: _isOffice || _companyName == null
-            ? 'Bilen du kör och länen du får tips från.'
-            : 'Bilen du kör och länen du får tips från. Företag: $_companyName.',
+        title: 'Medlemskap',
+        description: _companyName == null
+            ? 'Platsen du kör med och länen du får tips från.'
+            : 'Platsen du kör med och länen du får tips från. Företag: $_companyName.',
       ),
       if (_licenseCountyLabels.isNotEmpty) ...[
         _CountiesOverview(
@@ -349,16 +300,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
         ),
         const SizedBox(height: 12),
       ],
-      if (hasCar)
+      if (hasEmail)
         SettingsGroup(
           children: [
-            SettingsNavRow(
-              icon: Icons.local_taxi_outlined,
-              title: _currentPlate ?? 'Välj bil',
-              subtitle: _currentPlate == null
-                  ? 'Ingen bil vald'
-                  : 'Bilen du kör',
-              onTap: _chooseCar,
+            SettingsInfoRow(
+              icon: Icons.person_outline,
+              title: 'Inloggad som',
+              value: _accountEmail!,
             ),
           ],
         ),
@@ -381,41 +329,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
               : (_licenseCountyLabels.isEmpty ? null : 'Alla dina län'),
           onTap: _openNotify,
         ),
-        SettingsNavRow(
-          icon: Icons.history,
-          title: 'Notishistorik',
-          subtitle: 'Notiser du har fått',
-          onTap: _openNotificationLog,
-        ),
       ],
     ),
     const SizedBox(height: 28),
   ];
 
-  /// Kontot: ägaren byter e-post och lösenord och loggar ut; en förare som bara
-  /// har en telefon (utan eget konto) kan logga ut. Att koppla bort telefonen
-  /// finns inte längre (2026-10-07): byte sker genom att logga in på en annan
-  /// telefon, och servern tillåter ett byte per kalendermånad.
+  /// Kontot: e-post och lösenord sköts i kundportalen, inte i appen; här loggar
+  /// man ut. En förare som bara har en telefon (utan eget konto) kan logga ut.
+  /// Att koppla bort telefonen finns inte längre (2026-10-07): byte sker genom
+  /// att logga in på en annan telefon, och servern tillåter ett byte per
+  /// kalendermånad.
   List<Widget> _accountSection() {
     if (_isOffice) {
       return [
         const SettingsSectionHeader(
           title: 'Konto',
-          description: 'Byt e-post eller lösenord, eller logga ut.',
+          description: 'E-post och lösenord hanteras i kundportalen på webben.',
         ),
         SettingsGroup(
           children: [
-            SettingsEditRow(
-              icon: Icons.email_outlined,
-              title: 'E-post',
-              value: _email.text.isEmpty ? '—' : _email.text,
-              onTap: _editEmail,
-            ),
-            SettingsEditRow(
-              icon: Icons.lock_outline,
-              title: 'Lösenord',
-              value: '••••••••',
-              onTap: _editPassword,
+            const SettingsNoteRow(
+              icon: Icons.open_in_browser,
+              text: kAccountOnPortal,
             ),
             if (widget.onLogout != null)
               SettingsNavRow(
@@ -536,7 +471,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   ],
 
                   if (_isOffice) ..._companySection(),
-                  if (_isDevice) ..._phoneSection(),
+                  if (_isDevice) ..._membershipSection(),
                   if (_isDevice) ..._notifySection(),
                   ..._accountSection(),
                   if (_isOffice || _isDevice) ..._helpSection(),
@@ -752,317 +687,8 @@ class _Footer extends StatelessWidget {
   }
 }
 
-class _EmailChangeDialog extends StatefulWidget {
-  const _EmailChangeDialog({required this.api, required this.currentEmail});
-
-  final ApiClient api;
-  final String currentEmail;
-
-  @override
-  State<_EmailChangeDialog> createState() => _EmailChangeDialogState();
-}
-
-class _EmailChangeDialogState extends State<_EmailChangeDialog> {
-  late final TextEditingController _oldEmail;
-  final _newEmail = TextEditingController();
-  final _code = TextEditingController();
-  bool _codeSent = false;
-  bool _busy = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _oldEmail = TextEditingController(text: widget.currentEmail);
-  }
-
-  @override
-  void dispose() {
-    _oldEmail.dispose();
-    _newEmail.dispose();
-    _code.dispose();
-    super.dispose();
-  }
-
-  Future<void> _sendCode() async {
-    final email = _oldEmail.text.trim();
-    if (email.isEmpty) {
-      setState(() => _error = 'Din gamla e-postadress saknas.');
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await widget.api.sendEmailChangeCode(email);
-      if (!mounted) return;
-      setState(() {
-        _codeSent = true;
-        _busy = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _error = netAwareText(e);
-      });
-    }
-  }
-
-  Future<void> _submit() async {
-    if (_code.text.trim().isEmpty || _newEmail.text.trim().isEmpty) {
-      setState(() => _error = 'Fyll i verifieringskod och ny e-postadress.');
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await widget.api.changeEmailWithCode(
-        oldEmail: _oldEmail.text,
-        code: _code.text,
-        newEmail: _newEmail.text,
-      );
-      if (mounted) {
-        Navigator.of(context).pop(_newEmail.text.trim().toLowerCase());
-      }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _error = netAwareText(e);
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Byt e-post'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _oldEmail,
-              readOnly: true,
-              decoration: const InputDecoration(labelText: 'Nuvarande e-post'),
-            ),
-            const SizedBox(height: 8),
-            if (!_codeSent)
-              FilledButton.icon(
-                onPressed: _busy ? null : _sendCode,
-                icon: const Icon(Icons.mail_outline),
-                label: Text(
-                  _busy ? 'Skickar…' : 'Skicka kod till gammal e-post',
-                ),
-              )
-            else ...[
-              const Text('Verifiera först koden från din gamla e-post.'),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _code,
-                autofocus: true,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Verifieringskod'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _newEmail,
-                keyboardType: TextInputType.emailAddress,
-                decoration: const InputDecoration(labelText: 'Ny e-post'),
-              ),
-            ],
-            if (_error != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                _error!,
-                style: const TextStyle(
-                  color: TbColors.danger,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Avbryt'),
-        ),
-        if (_codeSent)
-          FilledButton(
-            onPressed: _busy ? null : _submit,
-            child: Text(_busy ? 'Byter…' : 'Byt e-post'),
-          ),
-      ],
-    );
-  }
-}
-
-class _PasswordChangeDialog extends StatefulWidget {
-  const _PasswordChangeDialog({required this.api, required this.email});
-
-  final ApiClient api;
-  final String email;
-
-  @override
-  State<_PasswordChangeDialog> createState() => _PasswordChangeDialogState();
-}
-
-class _PasswordChangeDialogState extends State<_PasswordChangeDialog> {
-  late final TextEditingController _email;
-  final _code = TextEditingController();
-  final _newPassword = TextEditingController();
-  bool _codeSent = false;
-  bool _busy = false;
-  bool _hidePassword = true;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-    _email = TextEditingController(text: widget.email);
-  }
-
-  @override
-  void dispose() {
-    _email.dispose();
-    _code.dispose();
-    _newPassword.dispose();
-    super.dispose();
-  }
-
-  Future<void> _sendCode() async {
-    final email = _email.text.trim();
-    if (email.isEmpty) {
-      setState(() => _error = 'Fyll i e-postadressen.');
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await widget.api.sendPasswordCode(email);
-      if (!mounted) return;
-      setState(() {
-        _codeSent = true;
-        _busy = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _error = netAwareText(e);
-      });
-    }
-  }
-
-  Future<void> _submit() async {
-    if (_code.text.trim().isEmpty || _newPassword.text.isEmpty) {
-      setState(() => _error = 'Fyll i kod och nytt lösenord.');
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-    });
-    try {
-      await widget.api.changePasswordWithCode(
-        email: _email.text,
-        code: _code.text,
-        newPassword: _newPassword.text,
-      );
-      if (mounted) Navigator.of(context).pop(true);
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _busy = false;
-        _error = netAwareText(e);
-      });
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      title: const Text('Byt lösenord'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _email,
-              enabled: !_codeSent && !_busy,
-              keyboardType: TextInputType.emailAddress,
-              autofocus: !_codeSent,
-              decoration: const InputDecoration(labelText: 'E-postadress'),
-            ),
-            const SizedBox(height: 8),
-            if (!_codeSent)
-              FilledButton.icon(
-                onPressed: _busy ? null : _sendCode,
-                icon: const Icon(Icons.mail_outline),
-                label: Text(_busy ? 'Skickar…' : 'Skicka verifieringskod'),
-              )
-            else ...[
-              const Text('En verifieringskod har skickats till din e-post.'),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _code,
-                autofocus: true,
-                keyboardType: TextInputType.number,
-                decoration: const InputDecoration(labelText: 'Verifieringskod'),
-              ),
-              const SizedBox(height: 8),
-              TextField(
-                controller: _newPassword,
-                obscureText: _hidePassword,
-                decoration: InputDecoration(
-                  labelText: 'Nytt lösenord (minst 8)',
-                  suffixIcon: PasswordVisibilityButton(
-                    hidden: _hidePassword,
-                    onToggle: () =>
-                        setState(() => _hidePassword = !_hidePassword),
-                  ),
-                ),
-              ),
-            ],
-            if (_error != null) ...[
-              const SizedBox(height: 8),
-              Text(
-                _error!,
-                style: const TextStyle(
-                  color: TbColors.danger,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _busy ? null : () => Navigator.of(context).pop(false),
-          child: const Text('Avbryt'),
-        ),
-        if (_codeSent)
-          FilledButton(
-            onPressed: _busy ? null : _submit,
-            child: Text(_busy ? 'Byter…' : 'Byt lösenord'),
-          ),
-      ],
-    );
-  }
-}
-
-/// Översikt över bilens län — det man har rätt till, och om filtret smalnar av.
+/// Översikt över medlemskapets län — det man har rätt till, och om filtret
+/// smalnar av.
 class _CountiesOverview extends StatelessWidget {
   const _CountiesOverview({
     required this.licenseLabels,

@@ -55,7 +55,7 @@ void main() {
     );
     for (final title in [
       'Företaget och bilarna',
-      'Den här telefonen',
+      'Medlemskap',
       'Notiser',
       'Konto',
       'Hjälp',
@@ -73,6 +73,13 @@ void main() {
       find.ancestor(of: portal, matching: find.byType(ListTile)),
       findsOneWidget,
     );
+    // E-post och lösenord redigeras inte i appen -- bara en hänvisning till
+    // kundportalen (portal.taxitips.se), ingen länk eller köpväg.
+    final accountNote = find.text(kAccountOnPortal);
+    await reveal(tester, accountNote);
+    expect(accountNote, findsOneWidget);
+    expect(find.text('E-post'), findsNothing);
+    expect(find.text('Lösenord'), findsNothing);
     // Ingen rå URL i UI, och ingen köpformulering.
     expect(find.textContaining('http'), findsNothing);
     expect(find.textContaining('prenumer'), findsNothing);
@@ -87,11 +94,15 @@ void main() {
     expect(find.text('Företaget och bilarna'), findsNothing);
     expect(find.text(kPortalAccountTitle), findsNothing);
     expect(find.text(kInvoicesOnWeb), findsNothing);
-    for (final title in ['Den här telefonen', 'Notiser', 'Konto', 'Hjälp']) {
+    for (final title in ['Medlemskap', 'Notiser', 'Konto', 'Hjälp']) {
       final f = find.widgetWithText(SettingsSectionHeader, title);
       await reveal(tester, f);
       expect(f, findsOneWidget, reason: title);
     }
+    // Kontobaserad vy: ingen bil att välja och ingen notishistorik-rad.
+    expect(find.text('Välj bil'), findsNothing);
+    expect(find.text('Bilen du kör'), findsNothing);
+    expect(find.text('Notishistorik'), findsNothing);
     // Neutral fakturatext längst ner, utan länk.
     final note = find.text(kBillingOnWeb);
     await reveal(tester, note);

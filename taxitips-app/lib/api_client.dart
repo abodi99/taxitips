@@ -311,9 +311,9 @@ class ApiClient {
 
   Future<bool> _signInWithOAuth(OAuthProvider provider) async {
     await ensureInitialized();
-    // On mobile the browser returns via a deep link; on web Supabase uses its
-    // configured site URL and the page reloads with a fresh session.
-    final redirectTo = kIsWeb ? null : 'taxitips://auth-callback';
+    // I mobilen kommer webbläsaren tillbaka via en djup-länk; på webben använder
+    // Supabase sin konfigurerade site URL och sidan laddas om med en ny session.
+    final redirectTo = kIsWeb ? null : authCallbackUrl;
     final ok = await _sb.auth.signInWithOAuth(provider, redirectTo: redirectTo);
     final session = _sb.auth.currentSession;
     if (session != null) {
@@ -322,7 +322,11 @@ class ApiClient {
     return ok;
   }
 
-  /// Completes a session that was established by an OAuth redirect (mobile).
+  /// Slutför en session som Supabase redan etablerat via en djup-länk: OAuth i
+  /// mobilen, eller bekräftelselänken i mejlet (taxitips-web/bekraftad.html
+  /// skickar sessionen tillbaka till appen via [authCallbackUrl]). `onSignedIn`
+  /// kopplas i main.dart till _afterLogin, som i sin tur kör
+  /// completePendingRegistration när det finns en väntande registrering.
   void listenForAuthSignIn(void Function() onSignedIn) {
     _sb.auth.onAuthStateChange.listen((state) {
       // Inloggningen avgör rollen själv (signIn): en förare löser in inbjudan
@@ -464,9 +468,17 @@ class ApiClient {
   Future<Map<String, dynamic>> revokeDriverInvite(String inviteId) =>
       _owner('driver-invites/$inviteId/revoke', {});
 
-  /// Dit bekräftelselänken i mejlet leder: en sida som säger att e-posten är
-  /// bekräftad och att nästa steg är att logga in i appen. Samma värd som
-  /// Supabases SITE_URL, så den godtas utan en egen rad i tillåtelselistan.
+  /// Appens djup-länk för auth-återhopp (Supabase redirect_to). Samma värde i
+  /// AndroidManifest.xml (intent-filter) och Info.plist (CFBundleURLTypes).
+  /// Supabase Flutter SDK lyssnar på den och tar sessionen ur URL:en
+  /// (getSessionFromUrl), varpå auth state-listenern nedan loggar in användaren.
+  static const authCallbackUrl = 'taxitips://auth-callback';
+
+  /// Dit bekräftelselänken i mejlet leder. Sidan (taxitips-web/bekraftad.html)
+  /// läser sessionens token ur URL:en och skickar vidare till appen via
+  /// [authCallbackUrl], så att användaren hamnar i appen och är inloggad utan
+  /// att skriva något lösenord. Samma värd som Supabases SITE_URL, så den
+  /// godtas utan en egen rad i tillåtelselistan.
   static const _confirmedPage = 'https://taxitips.se/bekraftad';
 
   /// Registrering: konto i Supabase Auth, sedan företaget på servern
@@ -567,8 +579,8 @@ class ApiClient {
 
   /// Nytt bekräftelsemejl när det första inte kom fram (skräppost, fel adress).
   /// Registreringen bekräftas med länken i mejlet ({{ .ConfirmationURL }}, som
-  /// går till _confirmedPage); kontot och företaget görs klart vid inloggning
-  /// (completePendingRegistration).
+  /// går till _confirmedPage). Sidan skickar sessionen tillbaka till appen via
+  /// djup-länken, och completePendingRegistration slutför företaget.
   Future<void> resendConfirmation(String email) async {
     await ensureInitialized();
     await _sb.auth.resend(

@@ -332,8 +332,10 @@ class RegistrationTests(_Base):
         trial = Trial.objects.get(company_id=company.id)
         self.assertFalse(trial.requires_payment_method)
         self.assertEqual(body["trial"]["vehiclesUsed"], 1)
-        # Provklockan har inte startat: första telefonen startar den.
-        self.assertIsNone(trial.started_at)
+        # Provklockan startar direkt efter e-postbekräftelsen, inte vid första
+        # telefonen.
+        self.assertEqual(trial.status, Trial.Status.ACTIVE)
+        self.assertIsNotNone(trial.started_at)
 
     def test_registering_twice_returns_the_same_company(self):
         user = str(uuid.uuid4())
@@ -447,8 +449,8 @@ class TrialVehicleTests(_Base):
         self.assertEqual(refused.json()["reason"], "trial_vehicle_limit")
         overview = self.call("get", "/api/fleet/company", user).json()
         self.assertEqual(len(overview["licenses"]), 1)
-        # Provbilarna finns, men provet har inte startat: ingen telefon än.
-        self.assertFalse(overview["access"]["ok"])
+        # Provet startade direkt vid registreringen, så åtkomsten är öppen.
+        self.assertTrue(overview["access"]["ok"], overview["access"])
 
 
 @override_settings(SUPABASE_JWT_SECRET=SECRET)

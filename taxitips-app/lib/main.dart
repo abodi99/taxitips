@@ -9,6 +9,7 @@ import 'api_client.dart';
 import 'client_info.dart';
 import 'client_log.dart';
 import 'crashlytics.dart';
+import 'net_status.dart';
 import 'performance_monitoring.dart';
 import 'push_service.dart';
 import 'remote_config_service.dart';
@@ -69,6 +70,7 @@ enum AppRoute {
   membershipCounty,
   shell,
   driverInvite,
+  loginError,
 }
 
 class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
@@ -78,6 +80,8 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
   // förare). Null = ett nytt prov utan plats ännu.
   Map<String, dynamic>? _membership;
   bool _booting = true;
+  // Felmeddelande när inloggning/registrering inte kunde slutföras.
+  String? _loginError;
 
   @override
   void initState() {
@@ -146,12 +150,26 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
   /// klart innan appen visas, och medlemskapet tas (eller länen väljs).
   ///
   /// Blev företaget registrerat just nu (länken i mejlet, sedan inloggning)
-  /// får ägaren välkomsten till provet, precis som efter koden i appen.
+  /// får ägaren alltid länvalet och välkomsten till provet, innan appen öppnas.
   Future<void> _afterLogin() async {
+    final Map<String, dynamic>? registered;
     try {
-      await widget.api.completePendingRegistration();
-    } catch (_) {}
+      registered = await widget.api.completePendingRegistration();
+    } catch (e) {
+      _showLoginError(friendlyError(e));
+      return;
+    }
     if (!mounted) return;
+    // Registrerades företaget just nu är nästa steg alltid länvalet -- oavsett
+    // vad medlemskapsanropen nedan råkar svara under en ostadig uppkoppling.
+    if (registered != null && registered['created'] == true) {
+      _membership = null;
+      setState(() {
+        _route = AppRoute.membershipCounty;
+        _invite = null;
+      });
+      return;
+    }
     await _enterApp();
   }
 
@@ -164,54 +182,88 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
   ///    bekräfta med kod, tillbaka i appen och välj län").
   /// 3. Allt annat: rakt in i appen, som förut.
   Future<void> _enterApp() async {
+    Map<String, dynamic> m;
     try {
-      final m = await widget.api.memberships();
-      final list = (m['memberships'] as List?) ?? const [];
-      if (list.isNotEmpty) {
-        final activeId = m['activeLicenseId']?.toString();
-        Map<String, dynamic>? chosen;
-        for (final row in list) {
-          if (row is Map &&
-              activeId != null &&
-              row['licenseId']?.toString() == activeId) {
-            chosen = Map<String, dynamic>.from(row);
-            break;
-          }
+      m = await widget.api.memberships();
+    } catch (e) {
+      _showLoginError(friendlyError(e));
+      return;
+    }
+    final list = (m['memberships'] as List?) ?? const [];
+    if (list.isNotEmpty) {
+      final activeId = m['activeLicenseId']?.toString();
+      Map<String, dynamic>? chosen;
+      for (final row in list) {
+        if (row is Map &&
+            activeId != null &&
+            row['licenseId']?.toString() == activeId) {
+          chosen = Map<String, dynamic>.from(row);
+          break;
         }
-        chosen ??= Map<String, dynamic>.from(list.first as Map);
-        if (((chosen['counties'] as List?) ?? const []).isEmpty) {
-          if (!mounted) return;
-          _membership = chosen;
-          setState(() {
-            _route = AppRoute.membershipCounty;
-            _invite = null;
-          });
-          return;
-        }
-        try {
-          await widget.api.startMembershipSession(
-            licenseId: chosen['licenseId']?.toString(),
-          );
-        } catch (_) {}
-        _goShell();
-        return;
       }
-    } catch (_) {}
-    try {
-      final data = await widget.api.fleetCompany();
-      final trial = data['trial'];
-      final licenses = (data['licenses'] as List?) ?? const [];
-      if (trial is Map && trial['status'] == 'pending' && licenses.isEmpty) {
+      chosen ??= Map<String, dynamic>.from(list.first as Map);
+      if (((chosen['counties'] as List?) ?? const []).isEmpty) {
         if (!mounted) return;
-        _membership = null;
+        _membership = chosen;
         setState(() {
           _route = AppRoute.membershipCounty;
           _invite = null;
         });
         return;
       }
-    } catch (_) {}
+      try {
+        await widget.api.startMembershipSession(
+          licenseId: chosen['licenseId']?.toString(),
+        );
+      } catch (e) {
+        _showLoginError(friendlyError(e));
+        return;
+      }
+      _goShell();
+      return;
+    }
+
+    Map<String, dynamic> data;
+    try {
+      data = await widget.api.fleetCompany();
+    } catch (e) {
+      _showLoginError(friendlyError(e));
+      return;
+    }
+    final trial = data['trial'];
+    final licenses = (data['licenses'] as List?) ?? const [];
+    // Provet är numera aktivt redan efter e-postbekräftelsen (inte bara
+    // `pending`), men platsen saknas tills ägaren valt län i appen.
+    final trialOpen =
+        trial is Map && (trial['status'] == 'pending' || trial['status'] == 'active');
+    if (trialOpen && licenses.isEmpty) {
+      if (!mounted) return;
+      _membership = null;
+      setState(() {
+        _route = AppRoute.membershipCounty;
+        _invite = null;
+      });
+      return;
+    }
     _goShell();
+  }
+
+  void _showLoginError(String message) {
+    if (!mounted) return;
+    setState(() {
+      _loginError = message;
+      _route = AppRoute.loginError;
+      _invite = null;
+    });
+  }
+
+  Future<void> _logoutToLogin() async {
+    await widget.api.leaveAll();
+    if (!mounted) return;
+    setState(() {
+      _loginError = null;
+      _route = AppRoute.login;
+    });
   }
 
   /// Ett nytt företag är registrerat: välkomsten till provet, en gång. Är den
@@ -232,6 +284,7 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
     // Inloggad: introduktionen är avklarad, också när den hoppades över.
     unawaited(OnboardingScreen.markSeen());
     setState(() {
+      _loginError = null;
       _route = AppRoute.shell;
       _invite = null;
     });
@@ -348,6 +401,11 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
                 inviteToken: _invite,
                 onBack: _goShell,
               ),
+              AppRoute.loginError => _LoginErrorScreen(
+                message: _loginError ?? 'Något gick fel.',
+                onRetry: () => unawaited(_afterLogin()),
+                onLogout: () => unawaited(_logoutToLogin()),
+              ),
             },
     );
   }
@@ -380,6 +438,77 @@ class _SplashScreen extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Ett fel under inloggning/registrering som inte får sväljas: serverns text,
+/// ett nytt försök och en utväg tillbaka till inloggningen.
+class _LoginErrorScreen extends StatelessWidget {
+  const _LoginErrorScreen({
+    required this.message,
+    required this.onRetry,
+    required this.onLogout,
+  });
+
+  final String message;
+  final VoidCallback onRetry;
+  final VoidCallback onLogout;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: TbColors.navy,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              const Spacer(),
+              const Icon(
+                Icons.error_outline_rounded,
+                color: TbColors.taxi,
+                size: 56,
+              ),
+              const SizedBox(height: 20),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 17,
+                  height: 1.4,
+                ),
+              ),
+              const Spacer(),
+              FilledButton(
+                onPressed: onRetry,
+                style: FilledButton.styleFrom(
+                  backgroundColor: TbColors.taxi,
+                  foregroundColor: TbColors.ink,
+                  minimumSize: const Size.fromHeight(54),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                ),
+                child: const Text(
+                  'Försök igen',
+                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                ),
+              ),
+              const SizedBox(height: 12),
+              TextButton(
+                onPressed: onLogout,
+                child: const Text(
+                  'Logga ut',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );

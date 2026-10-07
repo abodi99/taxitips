@@ -56,14 +56,16 @@ class LaunchFlowTests(FleetTestCase):
     def test_a_new_customer_from_registration_to_a_driver_with_tips(self):
         owner = str(uuid.uuid4())
 
-        # 1. Ägaren registrerar företaget med en bil i Skåne. Provet väntar på första telefonen.
+        # 1. Ägaren registrerar företaget med en bil i Skåne. Provet startar
+        #    direkt efter e-postbekräftelsen.
         reg = self.ok(self.call("post", "/api/fleet/register", {
             "orgNumber": "5560360793", "companyName": "Nya Taxi AB", "contactName": "Ali",
             "contactPhone": "070-812 34 91", "vehicles": [{"plate": "ABC123", "baseCounty": "12"}],
         }, user=owner, email="agare@nyataxi.test"), status=201)
         company_id = reg["companyId"]
         trial = Trial.objects.get(company_id=company_id)
-        self.assertIsNone(trial.started_at)
+        self.assertEqual(trial.status, Trial.Status.ACTIVE)
+        self.assertIsNotNone(trial.started_at)
 
         overview = self.ok(self.call("get", "/api/fleet/company", user=owner, email="agare@nyataxi.test"))
         car = next(row for row in overview["licenses"] if row["vehicle"] == "ABC123")
@@ -92,8 +94,10 @@ class LaunchFlowTests(FleetTestCase):
         secret = paired["deviceToken"]
         self.assertEqual(DriverInvite.objects.get().status, DriverInvite.Status.CONSUMED)
 
-        # 4. Första telefonen startade provet.
+        # 4. Provet är redan igång (startade vid registreringen); inget att
+        #    vänta på från första telefonen.
         trial.refresh_from_db()
+        self.assertEqual(trial.status, Trial.Status.ACTIVE)
         self.assertIsNotNone(trial.started_at)
 
         # 5. Föraren kör bilen och får tips i bilens län -- och bara där.
