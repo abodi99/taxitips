@@ -74,7 +74,13 @@ class Command(BaseCommand):
         )
         if not options["all"]:
             qs = qs.filter(confidence="low")
-        uncertain = list(qs.order_by("-demand_score")[: options["limit"]])
+        # Negativ cache: ett tips vars anrop nyss misslyckades väntar ut sin
+        # backoff (ai_client.retry_allowed) i stället för att ta en plats i
+        # varje körning. Ett misslyckat anrop lämnar `confidence=low` orört,
+        # och utan det här valdes samma tips om var femte minut hela dygnet.
+        ranked = list(qs.order_by("-demand_score")[: options["limit"] * 3])
+        allowed = ai_client.retry_allowed("extract", [o.external_id for o in ranked], now)
+        uncertain = [o for o in ranked if o.external_id in allowed][: options["limit"]]
 
         if not uncertain:
             self.stdout.write(

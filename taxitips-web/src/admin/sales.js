@@ -33,7 +33,7 @@ const ORDER_STATUS = {
 
 const ORDER_KIND = {
   initial: "Första beställning",
-  add_license: "Nya bilar",
+  add_license: "Nya medlemskap",
   add_county: "Extra län",
   change_base_county: "Byte av baslän",
   reduce: "Minskning",
@@ -112,8 +112,8 @@ export function nyKund(config, lookup = null, orgValue = "", pipelineLead = null
   return `
     <div class="card">
       <h2>Ny kund</h2>
-      <p class="muted">Börja med organisationsnumret. Finns bolaget redan öppnar
-        du det i stället; ett bolag får bara finnas en gång.</p>
+      <p class="muted">Organisationsnummer först. Finns bolaget öppnar du det.
+        Därefter lägger du medlemskap och tar betalt på kundsidan — samma platser som i appen och portalen.</p>
       <form id="lookupForm" class="toolbar">
         <label class="visually-hidden" for="orgLookup">Organisationsnummer</label>
         <input id="orgLookup" name="orgNumber" value="${esc(orgValue)}" placeholder="556677-8899" inputmode="numeric" required />
@@ -237,7 +237,7 @@ export function quoteBox(q) {
       <div class="quote-line quote-total"><span>Att betala nu</span><b>${esc(money(q.now?.totalOre))}</b></div>
       <p class="muted">Därefter <b>${esc(money(q.nextPeriod?.totalOre))}</b> per månad inkl. moms
         (${esc(money(q.nextPeriod?.amountOre))} exkl.)${q.effectiveAt ? `, från ${esc(date(q.effectiveAt))}` : ""}.
-        ${q.licenses ? `Bilar: ${esc(q.licenses.before)} → ${esc(q.licenses.after)}.` : ""}</p>
+        ${q.licenses ? `Platser: ${esc(q.licenses.before)} → ${esc(q.licenses.after)}.` : ""}</p>
     </div>`;
 }
 
@@ -246,7 +246,11 @@ export function quoteBox(q) {
  * av dem -- tidigare låg alla på samma sida och det gick att gå vilse.
  */
 
-/** Bilar och förare: lägg till bilar som prov, med kupong eller som beställning. Kortet runt läggs av vyn. */
+/**
+ * Säljsteget på kundsidan: lägg till platser (samma sak som portalen kallar
+ * medlemskap), räkna pris och ta betalt. Inga regnr -- platsen hör till ett
+ * konto, precis som i appen.
+ */
 export function addCarsBlock(d, config) {
   if (!config?.canSell) return "";
   const counties = config.counties ?? [];
@@ -255,53 +259,64 @@ export function addCarsBlock(d, config) {
   const trialOpen = d.trial && ["pending", "active"].includes(d.trial.status);
   const payOption = (value) =>
     `<option value="${value}" ${value === "stripe_card" ? "selected" : ""}>${esc(PAYMENT_LABEL[value])}</option>`;
+  const maxTrial = Number(config.trial?.vehicleLimit ?? 3);
   return `
-    <div id="salesPanel">
-      <p class="muted">Pris per bil ${esc(money(config.price?.baseOre))}
-        (${esc(money(config.price?.volumeOre))} från ${esc(config.price?.volumeThreshold)} bilar),
-        extra län ${esc(money(config.price?.extraCountyOre))} per bil och månad, exkl. moms.</p>
-      <div id="pkgRows">${vehicleRow(counties, 0)}</div>
-      <div class="btn-row">
-        <button class="btn btn-quiet" type="button" data-action="pkg-add-row">+ En bil till</button>
+    <div class="card" id="salesPanel">
+      <h2>Lägg till medlemskap</h2>
+      <p class="muted">${esc(money(config.price?.baseOre))} per plats och månad exkl. moms
+        (${esc(money(config.price?.volumeOre))} från ${esc(config.price?.volumeThreshold)} platser).
+        Extra län ${esc(money(config.price?.extraCountyOre))}.</p>
+      <div class="pack-seats">
+        <label>Antal<input id="pkgCount" type="number" min="1" max="50" value="1" /></label>
+        <label>Baslän<select id="pkgCounty">
+          <option value="">Välj län …</option>
+          ${countyOptions(counties, "")}
+        </select></label>
       </div>
+      <details class="pack-extras">
+        <summary>Extra län på de här platserna</summary>
+        <div class="county-grid">${counties.map((c) => `
+          <label class="check"><input type="checkbox" name="pkgExtra" value="${esc(c.code)}" /> ${esc(c.name)}</label>`).join("")}</div>
+      </details>
 
-      <div class="start-grid">
-        ${!paying ? `
-        <div class="start-option">
-          <h4>${trialOpen ? "Lägg till i provet" : "Starta gratis prov"}</h4>
-          <p class="muted">${esc(config.trial?.days ?? 7)} dagar, högst ${esc(config.trial?.vehicleLimit)} bilar.
-            Startar när första telefonen kopplas. Kostar inget. Behöver kunden mer tid: förläng provet
-            under Betalning.</p>
-          <button class="btn btn-primary" type="button" data-action="pkg-trial">
-            ${trialOpen ? "Lägg till provbilar" : "Starta prov"}</button>
-        </div>` : ""}
+      ${!paying ? `
+      <div class="pack-path">
+        <p><b>${trialOpen ? "Lägg till i provet" : "Starta prov"}</b>
+          <span class="muted"> — ${esc(config.trial?.days ?? 7)} dagar, högst ${esc(maxTrial)} platser.
+            Startar när första kontot loggar in i appen. Kostar inget.</span></p>
+        <button class="btn ${paying ? "btn-quiet" : "btn-primary"}" type="button" data-action="pkg-trial">
+          ${trialOpen ? "Lägg till i provet" : "Starta prov"}</button>
+      </div>` : ""}
 
-        <div class="start-option">
-          <h4>Beställ</h4>
-          ${stripeNotice(config)}
-          ${stripeOk ? `
-          <button class="btn btn-quiet" type="button" data-action="pkg-quote">1. Räkna pris</button>
-          <div id="pkgQuote"></div>
+      <div class="pack-path pack-charge">
+        <p><b>Ta betalt</b> <span class="muted">— kortlänk eller Stripe-faktura. Samma belopp som kunden ser.</span></p>
+        ${stripeNotice(config)}
+        ${stripeOk ? `
+        <div class="btn-row">
+          <button class="btn btn-quiet" type="button" data-action="pkg-quote">Räkna pris</button>
+        </div>
+        <div id="pkgQuote"></div>
+        <div class="pack-pay">
           <label>Betalning<select id="pkgPayment">
             ${payOption("stripe_card")}${payOption("stripe_invoice")}
           </select></label>
           <label>Förfallodagar (faktura)<input id="pkgDue" type="number" min="1" max="60" value="14" /></label>
-          <label class="check"><input id="pkgAccepted" type="checkbox" />
-            Kunden har godkänt antal, pris och betalningsdatum</label>
-          <button class="btn btn-primary" type="button" data-action="pkg-order">2. Lägg beställning</button>` : ""}
         </div>
-
-        <div class="start-option">
-          <h4>Kupong</h4>
-          <p class="muted">${paying
-            ? "Gratisdagar: nästa debitering flyttas eller perioden förlängs."
-            : "Tillfällig åtkomst i kupongens antal dagar, för bilarna ovan."}</p>
-          <div class="inline-field">
-            <input id="couponCode" placeholder="KUPONGKOD" autocomplete="off" />
-            <button class="btn btn-quiet" type="button" data-action="pkg-coupon">Lös in</button>
-          </div>
-        </div>
+        <label class="check"><input id="pkgAccepted" type="checkbox" />
+          Kunden har godkänt antal, pris och betalningsdatum</label>
+        <button class="btn ${paying ? "btn-primary" : "btn-quiet"}" type="button" data-action="pkg-order">Skicka betallänk</button>` : ""}
       </div>
+
+      <details class="pack-extras">
+        <summary>Kupong</summary>
+        <p class="muted">${paying
+          ? "Gratisdagar: nästa debitering flyttas eller perioden förlängs."
+          : "Tillfällig åtkomst i kupongens antal dagar, för platserna ovan."}</p>
+        <div class="inline-field">
+          <input id="couponCode" placeholder="KUPONGKOD" autocomplete="off" />
+          <button class="btn btn-quiet" type="button" data-action="pkg-coupon">Lös in</button>
+        </div>
+      </details>
       <div id="pkgResult"></div>
     </div>`;
 }
@@ -336,16 +351,17 @@ export function ownerBlock(d) {
 export function cancelBlock(d, config) {
   if (!config?.canSell) return "";
   const s = d.subscription;
+  if (!s?.cancelAtPeriodEnd && !["active", "trialing", "past_due"].includes(s?.status)) return "";
   return `
     <div class="card">
       <h2>Uppsägning</h2>
       ${s?.cancelAtPeriodEnd ? `
         <p><span class="pill pill-warn">Uppsagt</span> Åtkomsten gäller till ${esc(date(s.accessUntil))}.</p>
         <div class="btn-row"><button class="btn btn-quiet" type="button" data-action="undo-cancel">Ångra uppsägningen</button></div>
-      ` : s && ["active", "trialing", "past_due"].includes(s.status) ? `
+      ` : `
         <p class="muted">Kunden behåller åtkomsten den betalda perioden ut, sedan debiteras inget mer.</p>
         <div class="btn-row"><button class="btn btn-quiet" type="button" data-action="cancel-period">Säg upp till periodens slut</button></div>
-      ` : '<p class="muted">Inget löpande abonnemang att säga upp.</p>'}
+      `}
     </div>`;
 }
 
@@ -395,7 +411,7 @@ export function ordersCard(orders, config) {
   const canSell = !!config?.canSell;
   const stripeOk = !!config?.stripe?.available;
   const visible = (orders ?? []).filter((o) => !["canceled", "failed", "draft"].includes(o.status));
-  if (!visible.length) return `<div class="card"><h2>Beställningar</h2><p class="muted">Inga öppna beställningar.</p></div>`;
+  if (!visible.length) return "";
   return `
     <div class="card">
       <h2>Beställningar</h2>
@@ -404,7 +420,7 @@ export function ordersCard(orders, config) {
         <tr>
           <td data-label="Datum">${esc(date(o.createdAt))}</td>
           <td data-label="Vad">${esc(ORDER_KIND[o.kind] ?? o.kind)}
-            ${o.quantityAfter ? `<div class="muted">${esc(o.quantityAfter)} bilar efter</div>` : ""}
+            ${o.quantityAfter ? `<div class="muted">${esc(o.quantityAfter)} platser efter</div>` : ""}
             ${o.failureReason ? `<div class="muted mono">${esc(o.failureReason)}</div>` : ""}</td>
           <td data-label="Status">${orderPill(o.status)}
             ${o.paidAt ? `<div class="muted">${esc(dateTime(o.paidAt))}</div>` : ""}</td>
@@ -434,42 +450,41 @@ export function trialExtendBlock(d, config) {
     <div class="card">
       <h2>Provperiod</h2>
       <p class="muted">${pending
-        ? `Provet startar vid första telefonen. Planerad längd: ${esc(t.plannedDays ?? config.trial?.days ?? 7)} dagar.`
+        ? `Provet startar när första kontot loggar in i appen. Planerad längd: ${esc(t.plannedDays ?? config.trial?.days ?? 7)} dagar.`
         : `Provet pågår till ${esc(date(t.endsAt))}.`}</p>
       <div class="inline-field">
         <input id="trialExtendDays" type="number" min="1" max="366" value="7" />
         <button class="btn btn-quiet" type="button" data-action="trial-extend">Förläng med dagar</button>
       </div>
-      <p>Bilar i provet: <b>${esc(t.vehicles ?? 0)}</b> av högst <b>${esc(t.vehicleLimit ?? 1)}</b>.
-        <span class="muted">Ett nytt prov har en bil, ett län per bil och tåg &amp; buss.</span></p>
+      <p>Platser i provet: <b>${esc(t.vehicles ?? 0)}</b> av högst <b>${esc(t.vehicleLimit ?? 1)}</b>.
+        <span class="muted">Ett nytt prov har en plats, ett län och tåg &amp; buss.</span></p>
       <div class="inline-field">
-        <label class="visually-hidden" for="trialVehicleLimit">Högst antal bilar i provet</label>
+        <label class="visually-hidden" for="trialVehicleLimit">Högst antal platser i provet</label>
         <input id="trialVehicleLimit" type="number" min="${esc(Math.max(1, t.vehicles ?? 1))}" max="25"
           value="${esc(t.vehicleLimit ?? 1)}" />
-        <button class="btn btn-quiet" type="button" data-action="trial-vehicles">Ändra antal bilar</button>
+        <button class="btn btn-quiet" type="button" data-action="trial-vehicles">Ändra antal platser</button>
       </div>
-      <p class="muted">Skälet sparas i händelseloggen. Gäller bara det här bolagets prov.
-        Fler län på en provbil lägger du till under Bilar och förare.</p>
+      <p class="muted">Skälet sparas i händelseloggen. Extra län på en provplats lägger du till under Medlemskap.</p>
     </div>`;
 }
 
-/** Steg Betalning: månadsrabatt på billicenser (plattformsadmin). */
+/** Steg Betalning: månadsrabatt på medlemskap (plattformsadmin). */
 export function discountBlock(d, config) {
   if (!config?.canManage) return "";
   const active = d.discount;
   const label = active
     ? (active.kind === "percent_bp"
-      ? `${(active.value / 100).toFixed(2)} % på billicenser`
+      ? `${(active.value / 100).toFixed(2)} % på medlemskap`
       : `${money(active.value)} / mån exkl. moms`)
     : null;
   return `
-    <div class="card">
-      <h2>Prisrabatt</h2>
+    <details class="card"${active ? " open" : ""}>
+      <summary>Prisrabatt${active ? ` · ${esc(label)}` : ""}</summary>
       ${active ? `<p><span class="pill pill-ok">Aktiv</span> ${esc(label)}
         ${active.validUntil ? `<span class="muted"> till ${esc(date(active.validUntil))}</span>` : ""}
         ${active.description ? `<span class="muted"> — ${esc(active.description)}</span>` : ""}</p>
         <button class="btn btn-danger" type="button" data-action="discount-clear">Ta bort rabatt</button>` : `
-      <p class="muted">Procent eller fast belopp dras av billicenserna i prismotorn (inte extra län).
+      <p class="muted">Procent eller fast belopp dras av medlemskapen i prismotorn (inte extra län).
         Syns i offerter och MRR.</p>
       <form id="discountForm" class="form-grid">
         <label>Typ<select name="kind">
@@ -481,7 +496,7 @@ export function discountBlock(d, config) {
         <label class="span-2">Anteckning<input name="description" placeholder="Avtal med VD 2026-10-01" /></label>
         <div class="btn-row span-2"><button class="btn btn-primary" type="submit">Spara rabatt</button></div>
       </form>`}
-    </div>`;
+    </details>`;
 }
 
 export function discountBody(form) {

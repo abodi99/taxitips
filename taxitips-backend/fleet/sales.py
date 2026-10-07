@@ -6,7 +6,7 @@ Säljflödet: det en säljare gör i adminwebben under ett samtal med ett taxibo
    (Luhn) och får bara finnas en gång -- ett andra konto för samma bolag hade
    gett ett andra gratisprov och två sanningar om vem som betalar.
 2. **Starten** blir ett av tre:
-   * ett kortfritt prov i 7 dagar med högst tre bilar (en vid självregistrering) (`start_trial`), under
+   * ett kortfritt prov i 7 dagar med högst tre platser (en vid självregistrering) (`start_trial`), under
      samma regler som självregistreringen: ett prov per organisationsnummer
      och 24 månader;
    * en kupong (`redeem_coupon`), se `fleet.models.Coupon`;
@@ -322,37 +322,45 @@ def _vehicle_specs(raw: list) -> list[orders.VehicleSpec]:
 
 def _add_trial_vehicles(trial: Trial, specs: list[orders.VehicleSpec], *, actor_user_id, now) -> list[License]:
     """
-    Provbilar: licens med status `trial`, baslän och de län kunden vill prova.
+    Provplatser: licens med status `trial`, baslän och de län kunden vill prova.
     Länen kostar inget under provet; de följer med bara om kunden beställer
     dem (fleet/orders.py:apply_order).
     """
     if not specs:
-        raise SalesError("vehicles_required", "Lägg till minst en bil.")
+        raise SalesError("vehicles_required", "Lägg till minst en plats.")
     current = trials.trial_vehicle_count(trial)
     if current + len(specs) > trial.vehicle_limit:
         raise SalesError(
             "trial_vehicle_limit",
-            f"Högst {trial.vehicle_limit} bilar ({current} finns redan).",
+            f"Högst {trial.vehicle_limit} medlemskap ({current} finns redan).",
         )
     if trial.source == Trial.Source.SELF_SIGNUP and any(
         c != s.base_county for s in specs for c in s.extra_counties
     ):
         # Provet ska vara en smak (fleet/features.py). Extra län ger en
         # säljare, inte formuläret.
-        raise SalesError("trial_extra_county", "Under provet ingår ett län per bil.")
+        raise SalesError("trial_extra_county", "Under provet ingår ett län per plats.")
     created = []
     for spec in specs:
         licensing.assert_county_available(spec.base_county)
         for county in spec.extra_counties:
             licensing.assert_county_available(county)
-        vehicle = licensing.create_vehicle(
-            company_id=trial.company_id, plate=spec.plate, label=spec.label,
-            actor_user_id=actor_user_id,
-        )
-        license = licensing.create_license(
-            company_id=trial.company_id, vehicle=vehicle, base_county=spec.base_county,
-            status=License.Status.TRIAL, trial=trial, actor_user_id=actor_user_id, now=now,
-        )
+        if spec.plate:
+            vehicle = licensing.create_vehicle(
+                company_id=trial.company_id, plate=spec.plate, label=spec.label,
+                actor_user_id=actor_user_id,
+            )
+            license = licensing.create_license(
+                company_id=trial.company_id, vehicle=vehicle, base_county=spec.base_county,
+                status=License.Status.TRIAL, trial=trial, actor_user_id=actor_user_id, now=now,
+            )
+        else:
+            # Samma som en betald plats utan regnr: medlemskapet hör till ett
+            # konto, inte en bil (portalen och appen, §14).
+            license = licensing.create_membership_license(
+                company_id=trial.company_id, base_county=spec.base_county,
+                status=License.Status.TRIAL, trial=trial, actor_user_id=actor_user_id, now=now,
+            )
         for county in spec.extra_counties:
             if county != spec.base_county:
                 licensing.activate_extra_county(license=license, county_code=county, now=now)
@@ -569,7 +577,7 @@ def _temporary_access(company: Company, coupon: Coupon, specs, *, actor_user_id,
         return trial
 
     if not specs:
-        raise SalesError("vehicles_required", "Lägg till minst en bil för den tillfälliga åtkomsten.")
+        raise SalesError("vehicles_required", "Lägg till minst en plats för den tillfälliga åtkomsten.")
     profile = _profile_or_error(company)
     # Ingen `eligibility`-kontroll: kupongen ÄR beslutet att ge gratisdagar.
     # Raden räknas ändå i provhistoriken, så ett senare självregistrerat prov

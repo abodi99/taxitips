@@ -362,6 +362,19 @@ class Opportunity(models.Model):
         max_length=64, null=True, blank=True,
         help_text="Hash av fälten beskedet skrevs från; ett annat värde betyder att det är inaktuellt.",
     )
+    # AI-domen överlever pollrundan (core/repository.py, core/genkit._apply).
+    # `rule_key` är fingeravtrycket av reglernas värden som insamlingen skrev;
+    # `ai_rule_key` är fingeravtrycket de värdena hade när granskningen
+    # räknade om tipset. Är de lika vid nästa upsert har reglerna inte ändrat
+    # sig, och de AI-satta kolumnerna (poäng, nivå, typ, konfidens, skäl,
+    # platser) behålls i stället för att skrivas över och räknas om igen.
+    # Skiljer de sig har texten eller regeln ändrats, och AI:n får läsa om.
+    rule_key = models.CharField(max_length=40, null=True, blank=True)
+    ai_rule_key = models.CharField(max_length=40, null=True, blank=True)
+    ai_facts = models.JSONField(
+        null=True, blank=True,
+        help_text="Det granskningen läste ut (core/tip_facts.TipFacts) -- förarbeskedets underlag.",
+    )
 
     computed_at = models.DateTimeField(db_default=models.functions.Now())
     updated_at = models.DateTimeField(db_default=models.functions.Now())

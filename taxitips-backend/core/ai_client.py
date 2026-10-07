@@ -19,13 +19,14 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from datetime import timedelta
 from pathlib import Path
 
 from django.conf import settings
-from django.db.models import Count, Sum
+from django.db.models import Count, Q, Sum
 from django.utils import timezone
 from pydantic import BaseModel
 
@@ -70,16 +71,29 @@ def kronor(micro_usd: int) -> float:
 
 
 def spend(now=None) -> dict:
-    """Dagens anrop och månadens kostnad -- budgetens och admins underlag."""
+    """
+    Dagens anrop och månadens kostnad -- budgetens och admins underlag.
+
+    `callsToday` räknar bara anrop som GICK FRAM (`ok=True`). Mätt 2026-10-05:
+    3 488 rader på ett dygn, av dem ~2 500 `[Errno 24] Too many open files`
+    som aldrig lämnade containern -- och dagstaket på 3 000 slog till och
+    stängde granskningen och grinden för resten av dygnet. Ett fel kostar
+    inga tokens och ska inte äta budgeten; felstormen stoppas i stället av
+    minuttaket och felpausen i `unavailable_reason`. Felen syns separat som
+    `failedToday`.
+    """
     now = timezone.localtime(now or timezone.now())
     day_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     month_start = day_start.replace(day=1)
-    today = AiCall.objects.filter(created_at__gte=day_start).aggregate(n=Count("id"))
+    today = AiCall.objects.filter(created_at__gte=day_start).aggregate(
+        n_ok=Count("id", filter=Q(ok=True)), n_failed=Count("id", filter=Q(ok=False)),
+    )
     month = AiCall.objects.filter(created_at__gte=month_start).aggregate(
-        n=Count("id"), cost=Sum("cost_micro_usd"),
+        n=Count("id", filter=Q(ok=True)), cost=Sum("cost_micro_usd"),
     )
     return {
-        "callsToday": today["n"] or 0,
+        "callsToday": today["n_ok"] or 0,
+        "failedToday": today["n_failed"] or 0,
         "callsMonth": month["n"] or 0,
         "costMonthKr": round(kronor(month["cost"] or 0), 2),
         "budgetKr": thresholds.AI_MONTHLY_BUDGET_KR,
@@ -93,22 +107,73 @@ def unavailable_reason(now=None, purpose: str = "") -> str | None:
         return "avstängd (TAXITIPS_AI=off)"
     if not api_key():
         return "GEMINI_API_KEY saknas"
-    last_minute = AiCall.objects.filter(
-        created_at__gte=(now or timezone.now()) - timedelta(seconds=60),
-    ).count()
+    now = now or timezone.now()
+    minute = AiCall.objects.filter(created_at__gte=now - timedelta(seconds=60)).aggregate(
+        n=Count("id"), n_failed=Count("id", filter=Q(ok=False)),
+    )
     # Grinden före en notis är det enda tidskritiska anropet: de sista platserna
     # i minuten är hennes, så att besked och granskning aldrig tränger undan den.
     cap = thresholds.AI_MAX_CALLS_PER_MINUTE
     if purpose != "gate":
         cap -= thresholds.AI_GATE_RESERVED_PER_MINUTE
-    if last_minute >= cap:
+    if (minute["n"] or 0) >= cap:
         return f"minuttaket nått ({cap} anrop per minut för {purpose or 'det här'})"
+    # Felpaus: flera fel i rad på en minut betyder att något är trasigt
+    # (kvoten, nätet, filhandtagen) -- inte att nästa anrop blir annorlunda.
+    # Ett nytt försök kostar bara ytterligare en rad. Gäller alla syften;
+    # grinden släpper igenom på egen hand (fail-open).
+    if (minute["n_failed"] or 0) >= thresholds.AI_FAILURE_PAUSE_COUNT:
+        return f"felpaus ({minute['n_failed']} misslyckade anrop den senaste minuten)"
     used = spend(now)
     if used["callsToday"] >= thresholds.AI_DAILY_CALL_CAP:
         return f"dagstaket nått ({thresholds.AI_DAILY_CALL_CAP} anrop)"
     if used["costMonthKr"] >= thresholds.AI_MONTHLY_BUDGET_KR:
         return f"månadsbudgeten nådd ({thresholds.AI_MONTHLY_BUDGET_KR} kr)"
     return None
+
+
+def retry_allowed(purpose: str, subjects: Sequence[str], now=None) -> set[str]:
+    """
+    Vilka av `subjects` (tipsens external_id) som får anropas igen just nu.
+
+    Den negativa cachen: `ai_call` är redan loggen över varje försök, så den
+    får vara minnet också -- ingen ny kolumn per syfte. För varje ämne räknas
+    felen i rad sedan senaste lyckade anrop; ett ämne väntar
+    AI_RETRY_BACKOFF_MINUTES × 2^(fel−1) efter det senaste felet och ges upp
+    efter AI_RETRY_MAX_ATTEMPTS fel. Ett lyckat anrop nollställer räkningen.
+    Ett ämne utan rader får alltid anropas.
+    """
+    subjects = [s for s in subjects if s]
+    if not subjects:
+        return set()
+    now = now or timezone.now()
+    since = now - timedelta(hours=thresholds.AI_RETRY_WINDOW_HOURS)
+    rows = (
+        AiCall.objects.filter(purpose=purpose, subject__in=subjects, created_at__gte=since)
+        .order_by("created_at")
+        .values_list("subject", "ok", "created_at")
+    )
+    failures: dict[str, int] = {}
+    last_failed: dict[str, object] = {}
+    for subject, ok, created_at in rows:
+        if ok:
+            failures[subject] = 0
+            last_failed.pop(subject, None)
+        else:
+            failures[subject] = failures.get(subject, 0) + 1
+            last_failed[subject] = created_at
+    allowed = set()
+    for subject in subjects:
+        n = failures.get(subject, 0)
+        if n == 0:
+            allowed.add(subject)
+            continue
+        if n >= thresholds.AI_RETRY_MAX_ATTEMPTS:
+            continue
+        wait = timedelta(minutes=thresholds.AI_RETRY_BACKOFF_MINUTES * (2 ** (n - 1)))
+        if last_failed[subject] + wait <= now:
+            allowed.add(subject)
+    return allowed
 
 
 def _genkit(model: str):
@@ -132,6 +197,53 @@ def _genkit(model: str):
     return instance
 
 
+class _Loop:
+    """
+    EN event-loop för hela processen, i en egen tråd.
+
+    `asyncio.run()` per anrop skapade en ny loop varje gång. genkit_google_genai
+    bygger sin HTTP-klient med `loop_local_client(...)` -- cachen nycklas på
+    den körande loopen -- så varje anrop fick en ny klient som aldrig stängdes.
+    I produktion syntes det som `[Errno 24] Too many open files` efter ~1 000
+    anrop (ulimit -n 1024), 2 097 + 2 682 fel på två dygn (2026-10-05/06).
+    Med en loop som lever lika länge som processen träffar cachen, och
+    klienten (och dess anslutningar) återanvänds.
+
+    Loopen skapas lat och per process (`os.getpid()`): Celerys prefork
+    forkar efter import, och en tråd följer inte med över en fork.
+    """
+
+    def __init__(self):
+        self._loop: asyncio.AbstractEventLoop | None = None
+        self._pid: int | None = None
+        self._lock = threading.Lock()
+
+    def get(self) -> asyncio.AbstractEventLoop:
+        with self._lock:
+            if self._loop is None or self._pid != os.getpid() or self._loop.is_closed():
+                loop = asyncio.new_event_loop()
+                thread = threading.Thread(
+                    target=loop.run_forever, name="taxitips-ai-loop", daemon=True,
+                )
+                thread.start()
+                self._loop, self._pid = loop, os.getpid()
+            return self._loop
+
+    def run(self, coro, timeout: float):
+        future = asyncio.run_coroutine_threadsafe(coro, self.get())
+        try:
+            # Marginalen ovanpå modellens egen tidsgräns: wait_for inuti
+            # coroutinen är det som avbryter anropet; den här väntan ska bara
+            # inte hänga om loopen av någon anledning inte svarar.
+            return future.result(timeout + 5)
+        except BaseException:
+            future.cancel()
+            raise
+
+
+_loop = _Loop()
+
+
 def _run(model: str, prompt: str, schema: type[BaseModel], timeout: float):
     ai = _genkit(model)
 
@@ -146,7 +258,7 @@ def _run(model: str, prompt: str, schema: type[BaseModel], timeout: float):
             timeout,
         )
 
-    response = asyncio.run(_call())
+    response = _loop.run(_call(), timeout)
     usage = response.usage
     tokens_in = int(getattr(usage, "input_tokens", 0) or 0)
     tokens_out = int(getattr(usage, "output_tokens", 0) or 0) + int(getattr(usage, "thoughts_tokens", 0) or 0)

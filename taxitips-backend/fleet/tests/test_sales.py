@@ -438,6 +438,17 @@ class SalesTrialTests(SalesTestCase):
         self.assertEqual(len(body["alerts"]), 1)
         self.assertEqual(access.license_counties(license.id), ("13", "14"))
 
+    def test_a_trial_without_plates_creates_membership_seats(self):
+        """Säljpanelen skapar platser utan regnr, samma som portalen."""
+        company = self.new_company()
+        response = self.post(f"/api/admin/companies/{company.id}/trial", {
+            "vehicles": [{"plate": "", "baseCounty": "14", "extraCounties": []}],
+        })
+        self.assertEqual(response.status_code, 200, response.content)
+        license = License.objects.get(company_id=company.id)
+        self.assertEqual(license.status, License.Status.TRIAL)
+        self.assertFalse(license.assignments.filter(ended_at__isnull=True).exists())
+
     def test_the_trial_is_limited_to_three_vehicles(self):
         company = self.new_company()
         response = self.post(f"/api/admin/companies/{company.id}/trial", {

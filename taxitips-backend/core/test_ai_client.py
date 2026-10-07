@@ -88,6 +88,51 @@ class AiClientTests(TestCase):
                 ai_client.generate("extract", "p", Verdict)
         self.assertEqual(AiCall.objects.count(), 2)
 
+    def test_failed_calls_do_not_eat_the_daily_cap(self):
+        """
+        2026-10-05: ~2 500 `Too many open files` på ett dygn, noll tokens, och
+        dagstaket stängde granskningen. Ett fel som aldrig nådde modellen är
+        ingen förbrukning.
+        """
+        for _ in range(5):
+            AiCall.objects.create(purpose="brief", model="x", ok=False, error="EMFILE")
+        with patch.object(thresholds, "AI_DAILY_CALL_CAP", 2), \
+                patch.object(thresholds, "AI_FAILURE_PAUSE_COUNT", 100), \
+                patch.object(thresholds, "AI_MAX_CALLS_PER_MINUTE", 100), \
+                patch.object(ai_client, "transport", fake()):
+            ai_client.generate("extract", "p", Verdict)
+            self.assertEqual(ai_client.spend()["callsToday"], 1)
+            self.assertEqual(ai_client.spend()["failedToday"], 5)
+
+    def test_repeated_failures_pause_the_client_for_a_minute(self):
+        with patch.object(thresholds, "AI_FAILURE_PAUSE_COUNT", 2), \
+                patch.object(thresholds, "AI_MAX_CALLS_PER_MINUTE", 100), \
+                patch.object(ai_client, "transport", fake(error=RuntimeError("429"))):
+            for _ in range(2):
+                with self.assertRaises(RuntimeError):
+                    ai_client.generate("brief", "p", Verdict)
+            with self.assertRaises(ai_client.AiUnavailable) as caught:
+                ai_client.generate("brief", "p", Verdict)
+        self.assertIn("felpaus", str(caught.exception))
+        self.assertEqual(AiCall.objects.count(), 2)
+
+    def test_one_event_loop_serves_every_call(self):
+        """
+        asyncio.run per anrop gav en ny loop -- och en ny, aldrig stängd
+        HTTP-klient i bibliotekets loop-nycklade cache -- per anrop.
+        """
+        loop = ai_client._Loop()
+
+        async def whoami():
+            import asyncio
+
+            return id(asyncio.get_running_loop())
+
+        first = loop.run(whoami(), 5)
+        second = loop.run(whoami(), 5)
+        self.assertEqual(first, second)
+        self.assertEqual(first, id(loop.get()))
+
     def test_the_monthly_budget_stops_calls_before_the_bill_grows(self):
         AiCall.objects.create(purpose="extract", model="x", ok=True, cost_micro_usd=200_000)  # 2 kr
         with patch.object(thresholds, "AI_MONTHLY_BUDGET_KR", 1):

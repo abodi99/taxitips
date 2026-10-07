@@ -248,7 +248,9 @@ String tipHeadline(Map alert) {
     final road = roadConditionLabels[roadCondition(alert)];
     if (road != null) return road;
   }
-  return severityTierLabels[tier] ?? shortWhat(alert);
+  final labeled = severityTierLabel(tier, alert);
+  if (labeled.isNotEmpty) return labeled;
+  return shortWhat(alert);
 }
 
 /// Platsen (hållplats, station, ort). `null` när det bara finns en rubrik att

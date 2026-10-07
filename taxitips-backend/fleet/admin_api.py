@@ -44,6 +44,7 @@ from fleet.models import (
     AccountBlock,
     AuditEvent,
     ChangeReview,
+    CompanyDiscount,
     CompanyProfile,
     DeviceApproval,
     License,
@@ -135,18 +136,67 @@ def _monthly_ore(subscription: Subscription, now) -> int:
     som fakturerar. En andra uträkning här hade kunnat visa en intäkt som
     fakturan inte bär.
     """
-    count = licensing.billable_license_count(subscription.company_id)
-    extras = licensing.extra_county_count(subscription.company_id, now)
-    if not count and not extras:
+    return _mrr_ore([subscription], now)
+
+
+def _mrr_ore(active, now) -> int:
+    """Samma belopp som `_monthly_ore`, för många abonnemang i tre frågor."""
+    ids = [row.company_id for row in active]
+    if not ids:
         return 0
-    quote = pricing.monthly_quote(
-        subscription.price_version,
-        licenses=count,
-        extra_counties=extras,
-        intro=pricing.intro_active(subscription, now),
-        discount=discounts.active_spec(subscription.company_id, now=now),
+    free_by = grants.grant_license_ids_by_company(ids)
+    all_free = {lid for lids in free_by.values() for lid in lids}
+    licenses = License.objects.filter(
+        company_id__in=ids,
+        status__in=[License.Status.ACTIVE, License.Status.PENDING_CANCEL],
     )
-    return quote.amount_ore
+    if all_free:
+        licenses = licenses.exclude(id__in=all_free)
+    license_rows = list(licenses.values("id", "company_id"))
+    counts = {}
+    license_ids = []
+    for row in license_rows:
+        counts[row["company_id"]] = counts.get(row["company_id"], 0) + 1
+        license_ids.append(row["id"])
+    extras = {}
+    if license_ids:
+        extras = {
+            row["license__company_id"]: row["n"]
+            for row in LicenseCounty.objects.filter(
+                license_id__in=license_ids,
+                kind=LicenseCounty.Kind.EXTRA,
+                active_from__lte=now,
+            )
+            .exclude(active_to__lte=now)
+            .values("license__company_id")
+            .annotate(n=Count("id"))
+        }
+    specs = {}
+    for row in CompanyDiscount.objects.filter(
+        company_id__in=ids, is_active=True
+    ).order_by("-created_at"):
+        if row.company_id in specs:
+            continue
+        if row.valid_until and row.valid_until <= now:
+            continue
+        specs[row.company_id] = discounts.DiscountSpec(
+            kind=row.kind, value=row.value, description=row.description or "",
+        )
+    total = 0
+    for subscription in active:
+        count = counts.get(subscription.company_id, 0)
+        extra = extras.get(subscription.company_id, 0)
+        if not count and not extra:
+            continue
+        quote = pricing.monthly_quote(
+            subscription.price_version,
+            licenses=count,
+            extra_counties=extra,
+            intro=pricing.intro_active(subscription, now),
+            discount=specs.get(subscription.company_id),
+        )
+        total += quote.amount_ore
+    return total
 
 
 @require_GET
@@ -156,13 +206,14 @@ def overview(request):
     _staff(request, Perm.ADMIN_VIEW)
     now = timezone.now()
     day_ago = now - timedelta(hours=24)
+    hidden = archive.archived_ids()
 
     subs = Subscription.objects.select_related("price_version")
     by_status = {
         row["status"]: row["n"] for row in subs.values("status").annotate(n=Count("id"))
     }
-    active = subs.filter(status=SubscriptionStatus.ACTIVE)
-    mrr = sum(_monthly_ore(s, now) for s in active)
+    active = list(subs.filter(status=SubscriptionStatus.ACTIVE))
+    mrr = _mrr_ore(active, now)
 
     push = {
         row["status"]: row["n"]
@@ -172,8 +223,8 @@ def overview(request):
 
     return _json(request, {
         "ok": True,
-        "companies": Company.objects.exclude(id__in=archive.archived_ids()).count(),
-        "companiesArchived": len(archive.archived_ids()),
+        "companies": Company.objects.exclude(id__in=hidden).count(),
+        "companiesArchived": len(hidden),
         "subscriptions": by_status,
         "mrrOre": mrr,
         "currency": "SEK",
@@ -290,10 +341,16 @@ def companies(request):
         )
     }
 
+    windows = access.windows_for(
+        ids, now,
+        companies={row.id: row for row in rows},
+        subscriptions=subs,
+        blocked=suspended,
+    )
     out = []
     for company in rows:
         sub = subs.get(company.id)
-        window = access.company_window(company.id, now)
+        window = windows.get(company.id, access.Window(False, "unknown_company"))
         out.append({
             "id": str(company.id),
             "name": company.name,

@@ -26,7 +26,7 @@ const STATUS = {
   past_due: ["pill-danger", "Förfallen"],
   canceled: ["pill-danger", "Avslutad"],
   none: ["", "Inget"],
-  trial: ["pill-warn", "Provbil"],
+  trial: ["pill-warn", "Provplats"],
   pending_cancel: ["pill-warn", "Avslutas"],
   sent: ["pill-ok", "Skickad"],
   failed: ["pill-danger", "Misslyckad"],
@@ -106,7 +106,7 @@ function firstOpen(done) {
 }
 
 const ACCESS_TEXT = {
-  trial_not_started: "provet startar när första telefonen kopplas",
+  trial_not_started: "provet startar när första kontot loggar in i appen",
   trial_ended: "provet är slut",
   company_suspended: "avstängt",
   past_due: "betalningen saknas",
@@ -146,7 +146,7 @@ function attention(c) {
   if (c.verificationStatus === "unverified") return { why: "Registrerade sig själv – kontrollera behörigheten", step: "foretag", level: 2 };
   if (c.trial?.status === "active" && days !== null && days <= 3) return { why: `Provet slutar om ${Math.max(days, 0)} dag(ar) – dags att sälja`, step: "betalning", level: 2 };
   if (c.trial && !(c.membershipsAssigned ?? c.phones) && c.licenses) return { why: "Har medlemskap men inget konto tilldelat", step: "forare", level: 1 };
-  if (c.trial && !c.licenses) return { why: "Har inga medlemskap än", step: "bilar", level: 1 };
+  if (c.trial && !c.licenses) return { why: "Har inga medlemskap än", step: "betalning", level: 1 };
   return null;
 }
 
@@ -331,9 +331,9 @@ export function kunder(list, query = "", filter = "alla") {
 
 /* --- En kund ------------------------------------------------------------
  *
- * Sidan är byggd för ett supportsamtal, inte för onboardingen: Översikt
- * först (läget, vad som är fel, vad kunden brukar ringa om), sedan en flik
- * per ämne. Stegen ovan lever kvar som en lista över vad som saknas.
+ * Fyra flikar, samma ord som i portalen och appen: översikt, medlemskap
+ * (platser och konton), inloggning till portalen, betalning (sälj och
+ * debitering). Manuella undantag ligger under Betalning eller ihopfällda.
  */
 
 export const KUND_TABS = [
@@ -377,7 +377,7 @@ function issues(d) {
     const days = Math.ceil((new Date(t.endsAt) - Date.now()) / 86400000);
     if (days <= 3) add(2, `Provet slutar om ${Math.max(days, 0)} dag(ar).`, "betalning", "Betalning");
   }
-  if (!done.bilar) add(1, "Har inga medlemskap.", "bilar", "Lägg till medlemskap");
+  if (!done.bilar) add(1, "Har inga medlemskap.", "betalning", "Lägg till medlemskap");
   else if (!done.forare) add(1, "Inget konto är tilldelat något medlemskap.", "bilar", "Tilldela konton");
   if (!done.konto) add(1, "Ingen kan logga in i kundportalen.", "konton", "Bjud in");
   if (!d.suspension && d.access && !d.access.ok && !list.some((i) => i.level === 3)) {
@@ -387,18 +387,6 @@ function issues(d) {
   if (reviews) add(1, `${reviews} riskgranskning(ar) väntar.`, "", "");
   return list.sort((a, b) => b.level - a.level);
 }
-
-/** Vad kunden brukar ringa om, och var det löses. */
-const CALLS = [
-  ["bilar", "Föraren kommer inte in", "Bjud in kontot igen, ta bort och tilldela om"],
-  ["bilar", "Ny förare eller nytt konto", "Bjud in med e-post – personen loggar in i appen och tar platsen"],
-  ["konton", "Kommer inte in i portalen", "Inloggningslänk eller ny inbjudan"],
-  ["bilar", "Får inga notiser", "Se telefonernas notisläge, skicka testnotis"],
-  ["bilar", "Byta län eller konto", "Ändras per medlemskap"],
-  ["betalning", "Faktura och betalning", "Betallänk, kontrollera betalning, förläng"],
-  ["betalning", "Vill säga upp", "Till periodens slut eller direkt"],
-  ["foretag", "Ändra kontakt eller faktura", "Kontaktperson, adress, fakturamejl"],
-];
 
 export function kund(d, config = null, tab = "", pending = null, crm = null, loginLink = null) {
   const c = d.company;
@@ -501,7 +489,7 @@ function tabOversikt(d, config, crm, found) {
   const planSub = s?.monthlyOre && ["active", "past_due"].includes(s.status)
     ? `${esc(money(s.monthlyOre))}/mån exkl. moms${s.periodEnd ? ` · betalt till ${esc(date(s.periodEnd))}` : ""}`
     : t?.status === "active" ? `till ${esc(date(t.endsAt))}`
-      : t?.status === "pending" ? "startar vid första telefonen" : "";
+      : t?.status === "pending" ? "startar när första kontot loggar in" : "";
   return `
     <div class="card">
       <h2>Att åtgärda</h2>
@@ -521,14 +509,6 @@ function tabOversikt(d, config, crm, found) {
       ${tile("foretag", "Behörighet", d.profile?.verificationStatus ? verificationPill(d.profile.verificationStatus) : '<span class="pill">Äldre kund</span>')}
     </div>
 
-    <details class="card">
-      <summary>Kunden ringer om …</summary>
-      <div class="calls">${CALLS.map(([tab, title, hint]) => `
-        <button type="button" class="call" data-action="kund-tab" data-tab="${tab}">
-          <b>${esc(title)}</b><span class="muted">${esc(hint)}</span></button>`).join("")}
-      </div>
-    </details>
-
     ${crmNotesCard(crm, config)}
   `;
 }
@@ -536,26 +516,51 @@ function tabOversikt(d, config, crm, found) {
 /* --- Medlemskap --------------------------------------------------------- */
 
 /**
- * Ny plats till ett konto (2026-10): medlemskapet är personbaserat, så en
- * plats skapas utan bil och utan regnr -- bara vem som ska ha den och ett
- * baslän. Betalningen (prov, beställning, kupong) ligger kvar i kortet under.
+ * Bjud in till en ledig plats — samma som i kundportalen. Nya platser köps
+ * under Betalning, de skapas inte gratis här.
  */
-function addMembershipBlock(d, config) {
-  const counties = config?.counties ?? [];
+function membershipLabel(l) {
+  if (l.vehicle) return l.vehicle;
+  return `Medlemskap · ${l.baseCounty ? countyName(l.baseCounty) : "utan län"}`;
+}
+
+function inviteUnassignedBlock(d, config) {
+  if (!config?.canSell) return "";
+  const open = (d.licenses ?? []).filter((l) => LICENSE_OPEN.includes(l.status));
+  const free = open.filter((l) => !l.assigned);
+  if (!free.length) return "";
   return `
     <div class="card">
-      <h2>Ny plats till ett konto</h2>
-      <p class="muted">Medlemskapet hör till en <b>person</b>, inte en bil. Skriv kontots e-post:
-        personen loggar in i appen och tar platsen där. Baslän kan väljas nu eller senare.</p>
+      <h2>Bjud in ett konto</h2>
+      <p class="muted">Personen får platsen på e-posten. När hen loggar in i appen binds kontot
+        — samma väg som i kundportalen.</p>
+      <div class="county-add">
+        <select id="inviteLicense" aria-label="Ledig plats">
+          ${free.map((l) => `<option value="${esc(l.id)}">${esc(membershipLabel(l))}</option>`).join("")}
+        </select>
+        <input id="inviteEmail" type="email" placeholder="namn@bolaget.se" autocomplete="off" />
+        <button class="btn btn-primary btn-small" data-action="membership-invite-free">Bjud in</button>
+      </div>
+    </div>`;
+}
+
+function addMembershipBlock(d, config) {
+  if (!config?.canManage) return "";
+  const counties = config?.counties ?? [];
+  return `
+    <details class="card">
+      <summary>Manuellt: skapa plats utan beställning</summary>
+      <p class="muted">Bara när Stripe inte ska in. Platsen räknas mot nästa faktura om den inte
+        beviljas utan kostnad nedan. Vanliga sälj skapar platser under Betalning.</p>
       <div class="county-add">
         <input id="newMemberEmail" type="email" placeholder="namn@bolaget.se" autocomplete="off" />
         <select id="newMemberCounty" aria-label="Baslän för den nya platsen">
           <option value="">Baslän (valfritt)</option>
           ${counties.map((c) => `<option value="${esc(c.code)}">${esc(c.name)}</option>`).join("")}
         </select>
-        <button class="btn btn-primary btn-small" data-action="membership-create">Skapa plats</button>
+        <button class="btn btn-quiet btn-small" data-action="membership-create">Skapa plats</button>
       </div>
-    </div>`;
+    </details>`;
 }
 
 /**
@@ -567,6 +572,7 @@ function addMembershipBlock(d, config) {
 function grantsCard(d, config) {
   const grants = d.grants ?? [];
   if (!config?.canManage && !grants.length) return "";
+  const active = grants.filter((g) => g.active).length;
   const who = (g) =>
     g.email
       ? `väntar på ${esc(g.email)} (loggar in i appen)`
@@ -576,17 +582,17 @@ function grantsCard(d, config) {
           ? "ett konto"
           : "—";
   return `
-    <div class="card">
-      <h2>Beviljat utan kostnad <span class="muted">(${esc(grants.filter((g) => g.active).length)})</span></h2>
+    <details class="card"${active ? " open" : ""}>
+      <summary>Beviljat utan kostnad <span class="muted">(${esc(active)})</span></summary>
       <p class="muted">Fullt medlemskap utan betalning, till en person. Ingen order, ingen faktura
-        och ingen ändring i Stripe -- platsen räknas inte mot nästa faktura. Skälet loggas.</p>
+        och ingen ändring i Stripe — platsen räknas inte mot nästa faktura. Skälet loggas.</p>
       ${config?.canManage ? `
       <div class="start-option">
         <label>Kontots e-post<input id="grantEmail" type="email" placeholder="namn@bolaget.se" autocomplete="off" /></label>
         <label>Skäl (loggas)<input id="grantReason" placeholder="T.ex. goodwill efter driftstörning" autocomplete="off" /></label>
         <label>Gäller till <span class="muted">(valfritt, tomt = tills vidare)</span>
           <input id="grantEnds" type="date" /></label>
-        <button class="btn btn-primary" data-action="grant-membership">Tilldela fullt medlemskap utan kostnad</button>
+        <button class="btn btn-quiet" data-action="grant-membership">Tilldela utan kostnad</button>
       </div>` : ""}
       ${grants.length ? `<table><thead><tr><th>Konto</th><th>Skäl</th><th>Gäller</th><th></th></tr></thead>
         <tbody>${grants.map((g) => `
@@ -604,25 +610,25 @@ function grantsCard(d, config) {
                   data-grant="${esc(g.id)}" data-who="${esc(g.resolvedEmail || g.email || g.userId)}">Återkalla</button>`
               : ""}</td></tr>`).join("")}
         </tbody></table>` : '<p class="muted">Inga beviljanden.</p>'}
-    </div>`;
+    </details>`;
 }
 
 function tabBilar(d, config, pending) {
-  const open = (d.licenses ?? []).filter((l) => LICENSE_OPEN.includes(l.status));
+  const devices = d.devices ?? [];
+  const notifyHtml = d.notify ? notifyCard({ ...d.notify, canManage: !!config?.canSell }, {
+    countyNames: Object.fromEntries((d.notify.countyCatalog ?? []).map((c) => [c.code, c.name])),
+    title: "Notiser per telefon",
+  }) : "";
   return `
+    ${inviteUnassignedBlock(d, config)}
     ${membershipsCard(d, config, pending)}
-    ${config?.canSell ? addMembershipBlock(d, config) : ""}
-    ${config?.canSell ? `<details class="card add-cars" ${open.length ? "" : "open"}>
-      <summary><h2>+ Lägg till medlemskap</h2></summary>
-      ${addCarsBlock(d, config)}
-    </details>` : ""}
-    ${grantsCard(d, config)}
-    ${phonesCard(d, config)}
-    ${d.notify ? notifyCard({ ...d.notify, canManage: !!config?.canSell }, {
-      countyNames: Object.fromEntries((d.notify.countyCatalog ?? []).map((c) => [c.code, c.name])),
-      title: "Notiser per telefon",
-    }) : ""}
+    ${addMembershipBlock(d, config)}
     ${companyChangesCard(d, config)}
+    <details class="support-fold">
+      <summary>Telefoner och notiser <span class="muted">(${esc(devices.length)})</span></summary>
+      ${phonesCard(d, config)}
+      ${notifyHtml}
+    </details>
   `;
 }
 
@@ -655,7 +661,7 @@ function phonesCard(d, config) {
 const PENDING_KIND = {
   change_base_county: "Byt baslän",
   remove_county: "Ta bort extra län",
-  reduce_licenses: "Avsluta bilar",
+  reduce_licenses: "Avsluta medlemskap",
   cancel_subscription: "Uppsägning",
 };
 
@@ -676,9 +682,7 @@ function companyChangesCard(d, config) {
     if (p.kind === "reduce_licenses") return (pl.licenseIds ?? []).map(subject).filter(Boolean).join(", ");
     return pl.reason ? `Orsak: ${pl.reason}` : "";
   };
-  return `
-    <div class="card">
-      <h2>Ändringar för hela företaget</h2>
+  const body = `
       ${canBase ? `
       <h3>Byt baslän på alla medlemskap direkt</h3>
       <p class="muted">Påverkar inte priset. Ett extra län som blir baslän tas bort. Skälet loggas.</p>
@@ -698,8 +702,10 @@ function companyChangesCard(d, config) {
               ? `<button class="btn btn-quiet btn-small" data-action="pending-undo" data-change="${esc(p.id)}"
                   data-label="${esc(PENDING_KIND[p.kind] ?? p.kind)}">Ångra</button>`
               : p.kind === "cancel_subscription" ? '<span class="muted">Ångras under Betalning</span>' : ""}</td></tr>`).join("")}
-        </tbody></table>` : ""}
-    </div>`;
+        </tbody></table>` : ""}`;
+  return pending.length
+    ? `<div class="card"><h2>Ändringar för hela företaget</h2>${body}</div>`
+    : `<details class="card"><summary>Byt baslän på alla medlemskap</summary>${body}</details>`;
 }
 
 /* --- Inloggningar ------------------------------------------------------- */
@@ -724,42 +730,42 @@ function tabBetalning(d, config) {
   const s = d.subscription;
   const t = d.trial;
   return `
+    ${addCarsBlock(d, config)}
     <div class="card">
-      <h2>Abonnemang</h2>
+      <h2>Just nu</h2>
       <dl class="kv">
         <dt>Läge</dt><dd>${s ? pill(s.status) : "—"}
-          ${t && ["pending", "active"].includes(t.status) ? `<span class="pill pill-warn">Prov ${t.startedAt ? `till ${esc(date(t.endsAt))}` : "startar vid första telefonen"}</span>` : ""}
+          ${t && ["pending", "active"].includes(t.status) ? `<span class="pill pill-warn">Prov ${t.startedAt ? `till ${esc(date(t.endsAt))}` : "startar när första kontot loggar in"}</span>` : ""}
           ${s?.cancelAtPeriodEnd ? '<span class="pill pill-warn">Uppsagt</span>' : ""}</dd>
         ${s?.periodEnd ? `<dt>Betalt till</dt><dd>${esc(date(s.periodEnd))}</dd>` : ""}
         ${s?.monthlyOre ? `<dt>Per månad</dt><dd>${esc(money(s.monthlyOre))} exkl. moms</dd>` : ""}
         ${d.discount ? `<dt>Rabatt</dt><dd>${d.discount.kind === "percent_bp"
           ? `${esc((d.discount.value / 100).toFixed(2))} %` : `${esc(money(d.discount.value))}/mån`}</dd>` : ""}
       </dl>
-      <p class="muted">Fler medlemskap eller län beställs under
-        <button class="linklike" data-action="kund-tab" data-tab="bilar">Medlemskap</button>.</p>
     </div>
     ${ordersCard(d.orders, config)}
+    ${trialExtendBlock(d, config)}
+    ${grantsCard(d, config)}
     ${config?.canManage ? `
-    <div class="card">
-      <h2>Ge åtkomst utan Stripe</h2>
-      <p class="muted">När kunden betalat på annat sätt, eller behöver några dagar till medan en betalning går igenom.
+    <details class="card">
+      <summary>Ge åtkomst utan Stripe</summary>
+      <p class="muted">När kunden behöver några dagar till medan en betalning går igenom.
         Ändrar appens rättigheter, inte Stripe. Skälet loggas.</p>
       <div class="btn-row">
         <button class="btn btn-quiet" data-action="extend" data-days="7">+7 dagar</button>
         <button class="btn btn-quiet" data-action="extend" data-days="30">+30 dagar</button>
       </div>
-    </div>` : ""}
-    ${trialExtendBlock(d, config)}
+    </details>` : ""}
     ${discountBlock(d, config)}
     ${redemptionsCard(d.couponRedemptions)}
     ${cancelBlock(d, config)}
     ${config?.canManage && !["canceled"].includes(d.subscription?.status) ? `
-    <div class="card danger-zone">
-      <h2>Avsluta direkt</h2>
-      <p class="muted">Åtkomsten upphör nu, alla bilar och förarpass avslutas och Stripe slutar debitera.
+    <details class="card danger-zone">
+      <summary>Avsluta direkt</summary>
+      <p class="muted">Åtkomsten upphör nu, alla medlemskap och förarpass avslutas och Stripe slutar debitera.
         Ingen återbetalning görs automatiskt.</p>
       <div class="btn-row"><button class="btn btn-danger" data-action="terminate-now">Avsluta direkt</button></div>
-    </div>` : ""}
+    </details>` : ""}
   `;
 }
 
@@ -811,7 +817,7 @@ const ACTOR = {
 const AUDIT = {
   account_closed: "Kontot avslutades",
   admin_base_county_set: "Baslän bytt direkt",
-  admin_company_base_county_set: "Baslän bytt på alla bilar",
+  admin_company_base_county_set: "Baslän bytt på alla medlemskap",
   admin_company_verification: "Behörighet bedömd",
   admin_device_blocked: "Telefon spärrad",
   admin_driver_invite_resent: "Förarinbjudan skickad igen",
@@ -956,8 +962,8 @@ function membersCard(d, config) {
   return `
     <div class="card">
       <h2>Vem kan logga in</h2>
-      <p class="muted">Ägare och administratörer i kundportalen och appens adminläge. Kontona bjuds in med
-        e-post under <button class="linklike" data-action="kund-tab" data-tab="bilar">Medlemskap</button>.</p>
+      <p class="muted">Ägare och administratörer i kundportalen och appens adminläge. Förarplatser bjuds in
+        under <button class="linklike" data-action="kund-tab" data-tab="bilar">Medlemskap</button>.</p>
       ${members.length ? `<div class="table-scroll"><table>
         <thead><tr><th>Konto</th><th>Roll</th><th>Status</th><th></th></tr></thead>
         <tbody>${members.map((m) => `
@@ -1030,13 +1036,14 @@ function countyChangesRow(l, sell) {
 function membershipRow(l, sell) {
   if (!LICENSE_OPEN.includes(l.status)) return "";
   const who = l.assigneeEmail
-    ? `väntar på ${esc(l.assigneeEmail)} (hen loggar in i appen)`
-    : l.assigneeUserId
-      ? (l.assigneeResolvedEmail ? esc(l.assigneeResolvedEmail) : "ett konto")
-      : "ingen än";
+    ? `väntar på ${esc(l.assigneeEmail)}`
+    : l.assigneeResolvedEmail
+      ? esc(l.assigneeResolvedEmail)
+      : l.assigneeUserId || l.assigned
+        ? "ett konto"
+        : "ingen än";
   return `<div class="driving ${l.assigned ? "on" : ""}">
-      <span><b>Konto:</b> ${who}
-        <span class="muted">platsen används av kontot i appen</span></span>
+      <span><b>Konto:</b> ${who}</span>
       ${
         sell
           ? `<button class="btn btn-primary btn-small" data-action="membership-assign"
@@ -1064,19 +1071,20 @@ function membershipsCard(d, config, pending = null) {
   return `
     <div class="card">
       <h2>Medlemskap <span class="muted">(${esc(open.length)})</span></h2>
-      <p class="muted">Varje plats tilldelas ett <b>konto</b>, inte en bil. Bjud in med e-post:
-        personen loggar in i appen och tar platsen där. Länen väljs per medlemskap.</p>
-      ${open.length ? open.map((l, i) => {
+      <p class="muted">En plats gäller ett konto i ett län, samma som i appen och portalen.
+        Bjud in med e-post — personen loggar in i appen och tar platsen där.</p>
+      ${open.length ? open.map((l) => {
         const trial = l.status === "trial";
         const extras = l.extraCounties ?? [];
         const free = counties.filter((c) => !(l.counties ?? []).includes(c.code) && c.code !== l.baseCounty);
         const mine = pending?.licenseId === l.id ? pending : null;
         const data = `data-license="${esc(l.id)}" data-base="${esc(l.baseCounty)}" data-extras="${esc(extras.join(","))}" data-plate="${esc(l.vehicle)}" data-trial="${trial ? "1" : ""}"`;
+        const title = membershipLabel(l);
         return `
         <div class="car ${mine ? "car-pending" : ""}">
           <div class="car-head">
-            <b class="plate">${esc(l.vehicle || `Medlemskap ${i + 1}`)}</b> ${pill(l.status)}
-            ${l.assignmentKind === "temporary" ? '<span class="pill pill-warn">Ersättningsbil</span>' : ""}
+            <b class="${l.vehicle ? "plate" : "seat-title"}">${esc(title)}</b> ${pill(l.status)}
+            ${l.assignmentKind === "temporary" && l.vehicle ? '<span class="pill pill-warn">Ersättningsbil</span>' : ""}
           </div>
           <div class="county-chips" aria-label="Län">
             <span class="county-chip base" title="Ingår i medlemskapets pris">${esc(name(l.baseCounty))} <small>baslän</small></span>
@@ -1130,7 +1138,7 @@ function membershipsCard(d, config, pending = null) {
             </div>
           </div>` : ""}
         </div>`;
-      }).join("") : '<p class="muted">Inga medlemskap än. Lägg till nedan.</p>'}
+      }).join("") : '<p class="muted">Inga medlemskap än. Lägg till under Betalning.</p>'}
       ${closed ? `<p class="muted">${esc(closed)} avslutat medlemskap visas inte.</p>` : ""}
     </div>`;
 }

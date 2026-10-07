@@ -209,7 +209,9 @@ async function renderView(seq) {
       case "oversikt": {
         const [overview, list, sup, tipRep, crmTasks] = await Promise.all([
           admin.overview(), admin.companies(),
-          // Hem ska fungera även om supporten/CRM inte svarar.
+          // Hem ska fungera även om supporten/CRM inte svarar. Statuspricken
+          // (Stripe-produkt, SMTP, Firebase) hämtas i bakgrunden av
+          // refreshStatus -- den får inte blockera den här sidan.
           admin.supportSummary().catch(() => ({ waiting: 0 })),
           admin.tipReportsSummary().catch(() => ({ open: 0 })),
           admin.crmTasks({ assignee: "all", status: "open" }).catch(() => null),
@@ -846,11 +848,11 @@ el.view.addEventListener("submit", async (event) => {
         state.lookup = null;
         state.lookupOrg = "";
         state.companyId = created.companyId;
-        // Företaget är upplagt och kontrollerat av säljaren: nästa steg är bilarna.
-        state.companyTab = "bilar";
+        // Företaget är upplagt: nästa steg är platser och betalning, samma som i portalen.
+        state.companyTab = "betalning";
         state.view = "kunder";
         setTab("kunder");
-        flash("Företaget är upplagt. Lägg till medlemskapen.");
+        flash("Företaget är upplagt. Lägg till medlemskap och ta betalt, eller starta prov.");
         break;
       }
       case "crmNoteForm": {
@@ -1136,6 +1138,22 @@ async function act(action, ds) {
     }
 
     /* --- Personbaserat medlemskap: ny plats utan bil, och beviljanden --- */
+
+    case "membership-invite-free": {
+      const licenseId = document.getElementById("inviteLicense")?.value;
+      const email = document.getElementById("inviteEmail")?.value.trim();
+      if (!licenseId) {
+        flash("Välj en ledig plats först.");
+        return;
+      }
+      if (!email) {
+        flash("Skriv kontots e-post först.");
+        return;
+      }
+      await admin.assignMembership(licenseId, { email });
+      flash(`Platsen tilldelas ${email}.`);
+      return render();
+    }
 
     case "membership-create": {
       const email = document.getElementById("newMemberEmail")?.value.trim();
@@ -1718,11 +1736,23 @@ function portalUrl() {
 }
 
 function packageChange() {
-  const panel = document.getElementById("salesPanel");
-  const vehicles = panel ? sales.readVehicles(panel) : [];
-  if (!vehicles.length) {
-    throw new ApiError(400, "Fyll i minst ett registreringsnummer.", "vehicles_required");
+  const count = Math.max(0, Number(document.getElementById("pkgCount")?.value || 0));
+  const county = document.getElementById("pkgCounty")?.value || "";
+  if (count < 1) {
+    throw new ApiError(400, "Ange hur många medlemskap.", "vehicles_required");
   }
+  if (!county) {
+    throw new ApiError(400, "Välj baslän.", "county_required");
+  }
+  const extras = [...document.querySelectorAll("#salesPanel [name='pkgExtra']:checked")]
+    .map((el) => el.value)
+    .filter((code) => code && code !== county);
+  const vehicles = Array.from({ length: count }, () => ({
+    plate: "",
+    label: "",
+    baseCounty: county,
+    extraCounties: extras,
+  }));
   return { vehicles, change: { addVehicles: vehicles } };
 }
 
@@ -1775,10 +1805,10 @@ async function salesAction(action, ds) {
       // Provet är alltid 7 dagar (fleet/trials.py); mer tid är en förlängning.
       const result = await admin.startTrial(companyId, vehicles);
       flash(
-        `Provet omfattar nu ${result.vehicles} av högst ${result.vehicleLimit} bilar` +
+        `Provet omfattar nu ${result.vehicles} av högst ${result.vehicleLimit} platser` +
           (result.plannedDays ? ` (${result.plannedDays} dagar)` : "") +
           ". " +
-          (result.endsAt ? "" : "Det startar när första telefonen ansluts. ") +
+          (result.endsAt ? "" : "Det startar när första kontot loggar in i appen. ") +
           "Bjud in kontona under Medlemskap.",
       );
       return render();
@@ -1786,10 +1816,10 @@ async function salesAction(action, ds) {
 
     case "trial-vehicles": {
       const limit = Number(document.getElementById("trialVehicleLimit")?.value || 0);
-      const reason = prompt(`Provet får högst ${limit} ${limit === 1 ? "bil" : "bilar"}.\n\nSkriv varför (sparas i loggen):`);
+      const reason = prompt(`Provet får högst ${limit} ${limit === 1 ? "plats" : "platser"}.\n\nSkriv varför (sparas i loggen):`);
       if (reason === null || !reason.trim()) return;
       const result = await admin.setTrialVehicleLimit(state.companyId, limit, reason.trim());
-      flash(`Provet får nu ha högst ${result.vehicleLimit} ${result.vehicleLimit === 1 ? "bil" : "bilar"}.`);
+      flash(`Provet får nu ha högst ${result.vehicleLimit} ${result.vehicleLimit === 1 ? "plats" : "platser"}.`);
       return render();
     }
 
@@ -1814,7 +1844,13 @@ async function salesAction(action, ds) {
       const code = document.getElementById("couponCode")?.value.trim();
       if (!code) throw new ApiError(400, "Skriv kupongkoden.", "code_required");
       const panel = document.getElementById("salesPanel");
-      const vehicles = panel ? sales.readVehicles(panel) : [];
+      let vehicles = [];
+      try {
+        vehicles = packageChange().vehicles;
+      } catch {
+        // Betalande kund: kupongen flyttar debiteringen. Utan platser
+        // svarar servern om de ändå behövs.
+      }
       const result = await admin.redeemCoupon(companyId, code, vehicles);
       const text = {
         temporary_access: `Tillfällig åtkomst i ${result.days} dagar, till ${result.detail.accessUntil?.slice(0, 10)}.`,
@@ -1830,7 +1866,7 @@ async function salesAction(action, ds) {
       if (state.quotedChange !== JSON.stringify(change)) {
         throw new ApiError(
           400,
-          "Räkna priset först, och läs upp det för kunden. Bilarna har ändrats sedan offerten.",
+          "Räkna priset först, och läs upp det för kunden. Platserna har ändrats sedan offerten.",
           "quote_required",
         );
       }

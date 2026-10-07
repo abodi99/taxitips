@@ -36,12 +36,17 @@ av beviljandet avslutas (`license_created`); en redan köpt plats röras aldrig
 
 from __future__ import annotations
 
+import logging
+
 from django.db import transaction
+from django.db.utils import ProgrammingError
 from django.utils import timezone
 
 from core import areas
 from fleet import audit, licensing, membership
 from fleet.models import License, LicenseCounty, MembershipGrant, MembershipSession
+
+log = logging.getLogger(__name__)
 
 # Skälet i företagets periodfönster (fleet/access.py:company_window).
 WINDOW_REASON = "free_grant"
@@ -71,6 +76,40 @@ def _is_active(grant: MembershipGrant, now) -> bool:
     return True
 
 
+def _safe_grant_list(qs) -> list:
+    """
+    Beviljandetabellen lades till efter koden som läser den. Utan savepoint
+    blir en saknad tabell ett avbrutet postgres-transaktionsfel, och admin
+    Hem (som frågar per bolag) svarar då inte alls.
+    """
+    try:
+        with transaction.atomic():
+            return list(qs)
+    except ProgrammingError:
+        log.warning("fleet.grants: tabellen saknas, behandlar som inget beviljande")
+        return []
+
+
+def active_grants_for(company_ids, now=None) -> dict:
+    """Aktiva beviljanden, ett per bolag, lästa i en fråga."""
+    now = now or timezone.now()
+    ids = [cid for cid in company_ids if cid]
+    if not ids:
+        return {}
+    rows = _safe_grant_list(
+        MembershipGrant.objects.filter(
+            company_id__in=ids, revoked_at__isnull=True
+        ).order_by("-starts_at", "-created_at")
+    )
+    out = {}
+    for grant in rows:
+        if grant.company_id in out:
+            continue
+        if _is_active(grant, now):
+            out[grant.company_id] = grant
+    return out
+
+
 def active_grant(company_id, now=None) -> MembershipGrant | None:
     """
     Beviljandet som öppnar företagets period just nu, om något.
@@ -81,14 +120,7 @@ def active_grant(company_id, now=None) -> MembershipGrant | None:
     """
     if not company_id:
         return None
-    now = now or timezone.now()
-    rows = MembershipGrant.objects.filter(
-        company_id=company_id, revoked_at__isnull=True
-    ).order_by("-starts_at", "-created_at")
-    for grant in rows:
-        if _is_active(grant, now):
-            return grant
-    return None
+    return active_grants_for([company_id], now).get(company_id)
 
 
 def open_grants(company_id) -> list[MembershipGrant]:
@@ -117,12 +149,25 @@ def grant_license_ids(company_id) -> set[str]:
     """
     if not company_id:
         return set()
-    return {
-        str(row)
-        for row in MembershipGrant.objects.filter(
-            company_id=company_id, revoked_at__isnull=True
-        ).values_list("license_id", flat=True)
-    }
+    return grant_license_ids_by_company([company_id]).get(company_id, set())
+
+
+def grant_license_ids_by_company(company_ids) -> dict:
+    """Samma som `grant_license_ids`, för många bolag."""
+    ids = [cid for cid in company_ids if cid]
+    if not ids:
+        return {}
+    rows = _safe_grant_list(
+        MembershipGrant.objects.filter(
+            company_id__in=ids, revoked_at__isnull=True
+        ).values_list("company_id", "license_id")
+    )
+    out = {}
+    for company_id, license_id in rows:
+        if not license_id:
+            continue
+        out.setdefault(company_id, set()).add(str(license_id))
+    return out
 
 
 # ---------------------------------------------------------------------------

@@ -24,8 +24,8 @@ class SettingsGroupLabel extends StatelessWidget {
   }
 }
 
-/// Rubriken för en grupp i Inställningar: ett kort namn och en rad om vad man
-/// kan göra där. Stor nog att läsa i bilen.
+/// Rubriken för en grupp i Inställningar. Kort, i brödtypsnittet — inte en
+/// visningsrubrik. Extra förklaring hör hemma på raden, inte under titeln.
 class SettingsSectionHeader extends StatelessWidget {
   const SettingsSectionHeader({
     super.key,
@@ -39,7 +39,7 @@ class SettingsSectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(4, 0, 4, 12),
+      padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -48,19 +48,21 @@ class SettingsSectionHeader extends StatelessWidget {
             child: Text(
               title,
               style: const TextStyle(
-                fontFamily: kDisplayFont,
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                color: TbColors.ink,
+                fontFamily: kBodyFont,
+                fontSize: 13,
+                fontWeight: FontWeight.w600,
+                color: TbColors.muted,
+                letterSpacing: 0.2,
               ),
             ),
           ),
           if (description.isNotEmpty) ...[
-            const SizedBox(height: 2),
+            const SizedBox(height: 4),
             Text(
               description,
               style: const TextStyle(
-                fontSize: 15,
+                fontFamily: kBodyFont,
+                fontSize: 13,
                 height: 1.35,
                 color: TbColors.muted,
               ),
@@ -113,16 +115,16 @@ class SettingsGroup extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.white,
+      color: TbColors.vit,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(12),
         side: const BorderSide(color: TbColors.line),
       ),
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
           for (var i = 0; i < children.length; i++) ...[
-            if (i > 0) const Divider(height: 1, indent: 52),
+            if (i > 0) const Divider(height: 1, indent: 56),
             children[i],
           ],
         ],
@@ -147,11 +149,10 @@ class SettingsEditRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(icon, color: TbColors.muted),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-      subtitle: Text(value, style: TextStyle(color: Colors.grey.shade700)),
-      trailing: const Icon(Icons.chevron_right),
+    return SettingsNavRow(
+      icon: icon,
+      title: title,
+      subtitle: value,
       onTap: onTap,
     );
   }
@@ -166,6 +167,7 @@ class SettingsNavRow extends StatelessWidget {
     this.subtitle,
     this.trailing,
     this.trailingIcon = Icons.chevron_right,
+    this.showChevron = true,
     this.iconColor,
     this.titleColor,
   });
@@ -176,22 +178,43 @@ class SettingsNavRow extends StatelessWidget {
   final String? subtitle;
   final Widget? trailing;
   final IconData trailingIcon;
+  final bool showChevron;
   final Color? iconColor;
   final Color? titleColor;
   final VoidCallback onTap;
 
+  static const _titleStyle = TextStyle(
+    fontFamily: kBodyFont,
+    fontWeight: FontWeight.w600,
+    fontSize: 16,
+    height: 1.25,
+    color: TbColors.ink,
+  );
+  static const _subtitleStyle = TextStyle(
+    fontFamily: kBodyFont,
+    fontWeight: FontWeight.w400,
+    fontSize: 13,
+    height: 1.35,
+    color: TbColors.muted,
+  );
+
   @override
   Widget build(BuildContext context) {
+    final leading = icon is Widget
+        ? SizedBox(width: 22, height: 22, child: icon as Widget)
+        : Icon(icon as IconData, size: 22, color: iconColor ?? TbColors.muted);
     return ListTile(
-      leading: icon is Widget
-          ? SizedBox(width: 24, height: 24, child: icon)
-          : Icon(icon as IconData, color: iconColor ?? TbColors.muted),
-      title: Text(
-        title,
-        style: TextStyle(fontWeight: FontWeight.w700, color: titleColor),
-      ),
-      subtitle: subtitle == null ? null : Text(subtitle!),
-      trailing: trailing ?? Icon(trailingIcon, size: 20),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      minLeadingWidth: 28,
+      minVerticalPadding: 10,
+      leading: leading,
+      title: Text(title, style: _titleStyle.copyWith(color: titleColor)),
+      subtitle: subtitle == null ? null : Text(subtitle!, style: _subtitleStyle),
+      trailing:
+          trailing ??
+          (showChevron
+              ? Icon(trailingIcon, size: 20, color: TbColors.muted)
+              : null),
       onTap: onTap,
     );
   }
@@ -239,9 +262,30 @@ class SettingsInfoRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: Icon(icon, color: TbColors.muted),
-      title: Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
-      subtitle: Text(value),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+      minLeadingWidth: 28,
+      minVerticalPadding: 10,
+      leading: Icon(icon, size: 22, color: TbColors.muted),
+      title: Text(
+        title,
+        style: const TextStyle(
+          fontFamily: kBodyFont,
+          fontWeight: FontWeight.w600,
+          fontSize: 16,
+          height: 1.25,
+          color: TbColors.ink,
+        ),
+      ),
+      subtitle: Text(
+        value,
+        style: const TextStyle(
+          fontFamily: kBodyFont,
+          fontWeight: FontWeight.w400,
+          fontSize: 13,
+          height: 1.35,
+          color: TbColors.muted,
+        ),
+      ),
     );
   }
 }

@@ -51,9 +51,29 @@ AI_PRICE_FALLBACK = (1.50, 7.50)
 AI_USD_SEK = 10.0
 # Budgeten är 500 kr/mån; spärren slår till vid 400 så att marginalen finns kvar.
 AI_MONTHLY_BUDGET_KR = 400
-# Dagstak på antal anrop: skyddar mot en loop som anropar om och om igen. Mätt
-# 2026-10-04: ~825 unika kollektivtrafiktexter per dygn.
+# Dagstak på antal anrop som GICK FRAM: skyddar mot en loop som anropar om och
+# om igen. Mätt 2026-10-04: ~825 unika kollektivtrafiktexter per dygn. Fel
+# räknas inte (core/ai_client.spend): 2026-10-05 åt ~2 500 felanrop utan en
+# enda token hela taket och stängde granskningen för resten av dygnet.
 AI_DAILY_CALL_CAP = 3000
+# Felpaus: så många misslyckade anrop på en minut och AI:n vilar tills minuten
+# gått. Ett fel som upprepas sex gånger på rad (kvot, nät, filhandtag) blir
+# inte rätt av ett sjunde försök, och varje försök är en rad i ai_call.
+AI_FAILURE_PAUSE_COUNT = 6
+# Negativ cache per tips (core/ai_client.retry_allowed): efter ett misslyckat
+# anrop väntar samma tips minst så här länge, dubblat för varje nytt fel, och
+# efter så här många fel i rad ges det upp tills texten ändras. Mätt
+# 2026-10-07: `brief` gjordes 6,34 gånger per tips (som mest 133) för att ett
+# misslyckat anrop inte lämnade något spår på tipset och det valdes igen två
+# minuter senare. 10, 20, 40 min och sedan stopp.
+AI_RETRY_BACKOFF_MINUTES = 10
+AI_RETRY_MAX_ATTEMPTS = 4
+AI_RETRY_WINDOW_HOURS = 12
+# Besked i pushcykeln (core/notify.py -> briefs.ensure): högst så många anrop
+# per cykel och så lång väntan per anrop. Det som inte hinner går utan besked --
+# notisen väntar aldrig på modellen.
+AI_BRIEF_MAX_PER_CYCLE = 5
+AI_BRIEF_TIMEOUT_S = 8.0
 
 # "Övrigt" (severity_tier ignore) i listan: bara meddelanden som började inom
 # så här många timmar. Långa vägarbeten och avstängningar är ingen nyhet.

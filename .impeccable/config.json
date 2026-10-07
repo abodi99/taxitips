@@ -1,0 +1,29 @@
+{
+  "detector": {
+    "ignoreRules": [],
+    "ignoreFiles": [],
+    "ignoreValues": [
+      {
+        "rule": "side-tab",
+        "value": "*",
+        "files": [
+          "taxitips-web/src/admin.css"
+        ],
+        "createdAt": "2026-10-05T12:02:04.280Z",
+        "reason": "Pre-existing admin accent borders in sales/todo cards; intentional product UI, unrelated to Mer-menu fix"
+      },
+      {
+        "rule": "overused-font",
+        "value": "inter",
+        "createdAt": "2026-10-05T13:39:08.899Z",
+        "reason": "Brand commitment in PRODUCT.md: Inter for body site-wide"
+      },
+      {
+        "rule": "overused-font",
+        "value": "montserrat",
+        "createdAt": "2026-10-05T13:39:08.918Z",
+        "reason": "Brand commitment in PRODUCT.md: Montserrat for display site-wide"
+      }
+    ]
+  }
+}

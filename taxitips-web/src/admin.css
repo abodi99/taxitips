@@ -461,6 +461,53 @@ button.kpi:hover {
   resize: vertical;
 }
 
+.pack-seats,
+.pack-pay {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  gap: 0.75rem;
+  align-items: end;
+  margin: 0.75rem 0;
+}
+.pack-pay {
+  grid-template-columns: minmax(0, 1fr) 8rem;
+}
+.pack-path {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin: 1rem 0 0;
+  padding: 0.9rem 0 0;
+  border-top: 1px solid var(--line);
+}
+.pack-path p {
+  margin: 0;
+  flex: 1;
+  min-width: 12rem;
+}
+.pack-path.pack-charge {
+  display: grid;
+  gap: 0.75rem;
+  align-items: stretch;
+}
+.pack-path.pack-charge > p {
+  flex: none;
+  min-width: 0;
+}
+.pack-extras {
+  margin-top: 0.85rem;
+}
+.pack-extras > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--ink-soft);
+}
+.pack-extras[open] > summary {
+  margin-bottom: 0.5rem;
+}
+
 /* En bilrad: regnr, etikett, baslän, extra län, ta bort. */
 .pkg-row {
   display: grid;
@@ -563,7 +610,9 @@ details.card > summary::-webkit-details-marker {
 
 @media (max-width: 760px) {
   .form-grid,
-  .pkg-row {
+  .pkg-row,
+  .pack-seats,
+  .pack-pay {
     grid-template-columns: 1fr;
   }
 }
@@ -611,6 +660,24 @@ details.card > summary::-webkit-details-marker {
   font-family: var(--font-mono);
   font-size: 1.1rem;
   letter-spacing: 0.04em;
+}
+.seat-title {
+  font-family: var(--font-display);
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+.support-fold {
+  margin: 1rem 0;
+}
+.support-fold > summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: var(--ink-soft);
+  padding: 0.35rem 0;
+}
+.support-fold[open] > summary {
+  margin-bottom: 0.75rem;
+  color: var(--ink);
 }
 .car-drivers {
   margin: 0.6rem 0 0.2rem;

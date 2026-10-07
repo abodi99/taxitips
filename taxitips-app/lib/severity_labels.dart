@@ -36,6 +36,29 @@ const severityTierShortLabels = {
   'ignore': 'Övrigt',
 };
 
+/// Flyg och färja delar `arrival_wave`/`last_arrival` på servern. Etiketten
+/// måste följa tipsets `kind`, annars får en färja i Göteborg "många flyg
+/// landar samtidigt".
+bool _isFerryTip(Map alert) {
+  final kind = alert['kind']?.toString();
+  if (kind == 'ferry') return true;
+  return alert['mode']?.toString() == 'ferry';
+}
+
+String severityTierLabel(String? tier, Map alert) {
+  if (tier == 'arrival_wave') {
+    return _isFerryTip(alert)
+        ? 'Många färjor kommer in samtidigt'
+        : 'Många flyg landar samtidigt';
+  }
+  if (tier == 'last_arrival') {
+    return _isFerryTip(alert)
+        ? 'Sista färjan — inget mer anländer på flera timmar'
+        : 'Sista planet — inget mer landar på flera timmar';
+  }
+  return severityTierLabels[tier] ?? '';
+}
+
 const confidenceLabels = {
   'high': 'Hög — tydligt i källdatan',
   'medium': 'Medel',

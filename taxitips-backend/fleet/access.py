@@ -44,6 +44,7 @@ from django.utils import timezone
 from billing.models import Company, CompanyMember, Device
 from core.entitlement import verify_supabase_jwt
 from fleet.models import (
+    AccountBlock,
     CompanyProfile,
     DeviceApproval,
     DeviceCredential,
@@ -152,21 +153,67 @@ def company_window(company_id, now=None) -> Window:
     finns till just för att betalningen inte ska styra (t.ex. en tvist med
     Stripe medan kunden ändå ska kunna köra).
     """
-    from fleet import accounts
+    return windows_for([company_id], now=now).get(
+        company_id, Window(False, "unknown_company")
+    )
 
-    if accounts.company_block(company_id) is not None:
-        return Window(False, "company_suspended")
+
+def windows_for(company_ids, now=None, *, companies=None, subscriptions=None, blocked=None) -> dict:
+    """
+    Samma svar som `company_window`, för många bolag, utan en fråga per rad.
+
+    Adminwebben Hem/Kunder anropar `company_window` för varje bolag. Det blev
+    spärr + beviljande + abonnemang + några provfrågor per rad, och sidan
+    stod på "Laddar …" tills gunicorn-arbetarna släppte. Här läses samma
+    tabeller en gång.
+    """
+    now = now or timezone.now()
+    ids = [cid for cid in company_ids if cid is not None]
+    if not ids:
+        return {}
 
     from fleet import grants
 
-    grant = grants.active_grant(company_id, now)
-    if grant is not None:
-        return Window(True, grants.WINDOW_REASON, grant.ends_at)
+    if blocked is None:
+        blocked = {
+            str(row.value)
+            for row in AccountBlock.objects.filter(
+                kind=AccountBlock.Kind.COMPANY,
+                lifted_at__isnull=True,
+                value__in=[str(i) for i in ids],
+            )
+        }
+    grant_by = grants.active_grants_for(ids, now)
+    if subscriptions is None:
+        subscriptions = {
+            row.company_id: row
+            for row in Subscription.objects.filter(company_id__in=ids)
+        }
+    trials_by = {}
+    for trial in Trial.objects.filter(company_id__in=ids).order_by("-created_at"):
+        trials_by.setdefault(trial.company_id, []).append(trial)
+    if companies is None:
+        companies = {row.id: row for row in Company.objects.filter(id__in=ids)}
 
-    return _subscription_window(company_id, now)
+    out = {}
+    for cid in ids:
+        if str(cid) in blocked:
+            out[cid] = Window(False, "company_suspended")
+            continue
+        grant = grant_by.get(cid)
+        if grant is not None:
+            out[cid] = Window(True, grants.WINDOW_REASON, grant.ends_at)
+            continue
+        out[cid] = _subscription_window(
+            cid, now,
+            subscription=subscriptions.get(cid),
+            trials=trials_by.get(cid, []),
+            company=companies.get(cid),
+        )
+    return out
 
 
-def _subscription_window(company_id, now=None) -> Window:
+def _subscription_window(company_id, now=None, *, subscription=None, trials=None, company=None) -> Window:
     """
     Har företaget en giltig period just nu?
 
@@ -176,13 +223,18 @@ def _subscription_window(company_id, now=None) -> Window:
     inte förlänga en period.
     """
     now = now or timezone.now()
-    subscription = Subscription.objects.filter(company_id=company_id).first()
+    if subscription is None and trials is None and company is None:
+        subscription = Subscription.objects.filter(company_id=company_id).first()
+    if trials is None:
+        trials = list(
+            Trial.objects.filter(company_id=company_id).order_by("-created_at")
+        )
 
     if subscription is None:
         # Inget abonnemang i den nya modellen: företaget är antingen helt nytt
         # eller ännu inte migrerat. Faller tillbaka på Supabases `companies`,
         # samma regel som core/entitlement.py.
-        return _legacy_company_window(company_id, "legacy_company_status")
+        return _legacy_company_window(company_id, "legacy_company_status", company)
 
     if subscription.status in (SubscriptionStatus.TRIALING, SubscriptionStatus.NONE):
         # Ett pågående prov (eller en kupongs tillfälliga åtkomst) ger en
@@ -190,11 +242,7 @@ def _subscription_window(company_id, now=None) -> Window:
         # abonnemanget till `trialing` när ett prov startar -- provet bor på
         # sin egen rad -- så att bara titta här vid TRIALING hade nekat varje
         # provföretag all data från första minuten.
-        trial = (
-            Trial.objects.filter(company_id=company_id, status=Trial.Status.ACTIVE)
-            .order_by("-created_at")
-            .first()
-        )
+        trial = next((row for row in trials if row.status == Trial.Status.ACTIVE), None)
         if trial and trial.ends_at and trial.ends_at > now:
             return Window(True, "trial", trial.ends_at)
         if subscription.status == SubscriptionStatus.TRIALING:
@@ -204,11 +252,11 @@ def _subscription_window(company_id, now=None) -> Window:
             if subscription.current_period_end and subscription.current_period_end > now:
                 return Window(True, "billing_deferred", subscription.current_period_end)
             return Window(False, "trial_ended")
-        if Trial.objects.filter(company_id=company_id, status=Trial.Status.ENDED).exists():
+        if any(row.status == Trial.Status.ENDED for row in trials):
             return Window(False, "trial_ended")
         # Ett prov som väntar på första telefonen är inte "inget abonnemang":
         # för en ny kund hade det låtit som att registreringen misslyckats.
-        if Trial.objects.filter(company_id=company_id, status=Trial.Status.PENDING).exists():
+        if any(row.status == Trial.Status.PENDING for row in trials):
             return Window(False, "trial_not_started")
         # En orörd rad -- inget prov någonsin, aldrig betald, ingen period --
         # betyder att företaget inte har gått över till den nya modellen. Raden
@@ -221,9 +269,9 @@ def _subscription_window(company_id, now=None) -> Window:
             and not subscription.had_successful_payment
             and subscription.current_period_end is None
             and not subscription.stripe_subscription_id
-            and not Trial.objects.filter(company_id=company_id).exists()
+            and not trials
         ):
-            return _legacy_company_window(company_id, "legacy_company_status")
+            return _legacy_company_window(company_id, "legacy_company_status", company)
         return Window(False, "no_subscription")
 
     if subscription.status == SubscriptionStatus.ACTIVE:
@@ -236,7 +284,7 @@ def _subscription_window(company_id, now=None) -> Window:
             # befintlig kund i samma sekund migreringskommandot kördes, vilket
             # är precis den oannonserade utelåsning uppdraget förbjuder.
             # Bolagets status i Supabase gäller tills perioden är känd.
-            return _legacy_company_window(company_id, "period_unknown")
+            return _legacy_company_window(company_id, "period_unknown", company)
         # Perioden har passerat utan att en förnyelse bokförts. Betalningsfristen
         # gäller bara den som betalat förut (§8).
         if subscription.grace_until and subscription.grace_until > now:
@@ -266,13 +314,13 @@ def _subscription_window(company_id, now=None) -> Window:
 # ---------------------------------------------------------------------------
 
 
-def _legacy_company_window(company_id, reason: str) -> Window:
+def _legacy_company_window(company_id, reason: str, company=None) -> Window:
     """
     Den gamla regeln: bolagets status i Supabase. Används när den nya modellen
     ännu inte vet något -- inget abonnemang alls, eller ett abonnemang utan
     känd period.
     """
-    company = Company.objects.filter(id=company_id).first()
+    company = company or Company.objects.filter(id=company_id).first()
     if company is None:
         return Window(False, "unknown_company")
     if company.status in ("trial", "active") or company.subscription_status == "active":
