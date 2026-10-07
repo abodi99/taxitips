@@ -88,12 +88,20 @@ def _intro_next_period(subscription: Subscription, now) -> bool:
 
 @dataclass
 class VehicleSpec:
-    """En bil som ska få en licens. Baslänet väljs per bil (§5)."""
+    """
+    En plats som ska köpas. Med registreringsnummer blir det en billicens; utan
+    blir det ett KONTOBASERAT medlemskap (§14) -- en licens utan bil. Baslänet
+    väljs alltid per plats, och all län kostar lika mycket.
+    """
 
-    plate: str
-    base_county: str
+    plate: str = ""
+    base_county: str = ""
     label: str = ""
     extra_counties: list[str] = field(default_factory=list)
+    # Vem som håller platsen: kontot som köper (self) eller en annan e-post.
+    # Varken eller = otilldelad, den tilldelas i portalen efteråt.
+    assign_self: bool = False
+    assignee_email: str = ""
 
     def as_dict(self) -> dict:
         return {
@@ -101,6 +109,8 @@ class VehicleSpec:
             "baseCounty": self.base_county,
             "label": self.label,
             "extraCounties": list(self.extra_counties),
+            "assignSelf": self.assign_self,
+            "assigneeEmail": self.assignee_email,
         }
 
 
@@ -433,6 +443,31 @@ def _schedule_reductions(order: Order, *, now) -> None:
 
 
 @transaction.atomic
+def _assign_new_license(license, spec: dict, actor_user_id, now) -> None:
+    """
+    Tilldelar en nyköpt plats till ett konto, om ordern sa vem som ska ha den.
+
+    En e-postadress som ännu inte har ett konto väntar tills personen loggar in
+    (`membership.claim_for_email`), precis som en inbjudan -- den vägen går
+    genom `assign_to_email`. Utan båda fälten är platsen otilldelad och kan
+    tilldelas i portalen efteråt.
+    """
+    email = (spec.get("assigneeEmail") or "").strip()
+    assign_self = spec.get("assignSelf")
+    if not email and not assign_self:
+        return
+    from fleet import membership
+
+    if email:
+        membership.assign_to_email(
+            license=license, email=email, actor_user_id=actor_user_id, now=now
+        )
+    else:
+        membership.assign_to_self(
+            license=license, user_id=actor_user_id, actor_user_id=actor_user_id, now=now
+        )
+
+
 def apply_order(order: Order, *, now=None) -> Order:
     """
     Verkställer en BETALD beställning: skapar bilar och licenser, aktiverar
@@ -463,40 +498,51 @@ def apply_order(order: Order, *, now=None) -> Order:
 
     created_licenses = []
     for spec in request.get("addVehicles", []):
-        vehicle = licensing.create_vehicle(
-            company_id=locked.company_id, plate=spec["plate"],
-            label=spec.get("label", ""), actor_user_id=locked.created_by,
-        )
-        # En provbil som beställs vidare byter status i stället för att få en
-        # andra licens -- annars hade kunden fått betala för två.
-        existing = (
-            License.objects.filter(
-                company_id=locked.company_id, status=License.Status.TRIAL,
-                assignments__vehicle=vehicle, assignments__ended_at__isnull=True,
-            ).first()
-        )
-        if existing is not None:
-            License.objects.filter(id=existing.id).update(status=License.Status.ACTIVE)
-            # Län som provades men inte beställdes följer inte med in i det
-            # betalda: annars hade nästa faktura burit län kunden aldrig
-            # godkänt, eftersom extra län räknas på aktiva licenser.
-            LicenseCounty.objects.filter(
-                license=existing, kind=LicenseCounty.Kind.EXTRA
-            ).exclude(county_code__in=list(spec.get("extraCounties", []))).exclude(
-                active_to__lte=now
-            ).update(active_to=now)
-            existing.refresh_from_db()
-            license = existing
-        else:
-            license = licensing.create_license(
-                company_id=locked.company_id, vehicle=vehicle,
-                base_county=spec["baseCounty"], status=License.Status.ACTIVE,
-                actor_user_id=locked.created_by, now=now,
+        plate = (spec.get("plate") or "").strip()
+        if not plate:
+            # Kontobaserat medlemskap (§14): en plats för ett KONTO, ingen bil.
+            # Portalen köper "ett län" -- man anger inget registreringsnummer,
+            # och platsen hör till kontot tills vidare.
+            license = licensing.create_membership_license(
+                company_id=locked.company_id, base_county=spec.get("baseCounty", ""),
+                status=License.Status.ACTIVE, actor_user_id=locked.created_by, now=now,
             )
+        else:
+            vehicle = licensing.create_vehicle(
+                company_id=locked.company_id, plate=plate,
+                label=spec.get("label", ""), actor_user_id=locked.created_by,
+            )
+            # En provbil som beställs vidare byter status i stället för att få en
+            # andra licens -- annars hade kunden fått betala för två.
+            existing = (
+                License.objects.filter(
+                    company_id=locked.company_id, status=License.Status.TRIAL,
+                    assignments__vehicle=vehicle, assignments__ended_at__isnull=True,
+                ).first()
+            )
+            if existing is not None:
+                License.objects.filter(id=existing.id).update(status=License.Status.ACTIVE)
+                # Län som provades men inte beställdes följer inte med in i det
+                # betalda: annars hade nästa faktura burit län kunden aldrig
+                # godkänt, eftersom extra län räknas på aktiva licenser.
+                LicenseCounty.objects.filter(
+                    license=existing, kind=LicenseCounty.Kind.EXTRA
+                ).exclude(county_code__in=list(spec.get("extraCounties", []))).exclude(
+                    active_to__lte=now
+                ).update(active_to=now)
+                existing.refresh_from_db()
+                license = existing
+            else:
+                license = licensing.create_license(
+                    company_id=locked.company_id, vehicle=vehicle,
+                    base_county=spec.get("baseCounty", ""), status=License.Status.ACTIVE,
+                    actor_user_id=locked.created_by, now=now,
+                )
         for county in spec.get("extraCounties", []):
             licensing.activate_extra_county(
                 license=license, county_code=county, order=locked, now=now
             )
+        _assign_new_license(license, spec, locked.created_by, now)
         created_licenses.append(str(license.id))
 
     for item in request.get("addCounties", []):

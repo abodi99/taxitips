@@ -59,6 +59,8 @@ def _plan(company_id, body: dict) -> orders.ChangePlan:
             plate=str(v.get("plate", "")), base_county=str(v.get("baseCounty", "")),
             label=str(v.get("label", "")),
             extra_counties=[str(c) for c in (v.get("extraCounties") or [])],
+            assign_self=bool(v.get("assignSelf")),
+            assignee_email=str(v.get("assigneeEmail") or "").strip(),
         )
         for v in (body.get("addVehicles") or [])
     ]

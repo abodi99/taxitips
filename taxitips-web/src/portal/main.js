@@ -37,6 +37,15 @@ const el = {
   codeFor: document.getElementById("codeFor"),
   loginSubmit: document.getElementById("loginSubmit"),
   magicSent: document.getElementById("magicSent"),
+  // Lägg till medlemskap (ett län ur en lista + vem som håller platsen).
+  addDialog: document.getElementById("addMembershipDialog"),
+  addForm: document.getElementById("addMembershipForm"),
+  addCounty: document.getElementById("addMembershipCounty"),
+  addEmail: document.getElementById("addMembershipEmail"),
+  addEmailField: document.querySelector(".add-email-field"),
+  addQuote: document.getElementById("addMembershipQuote"),
+  addError: document.getElementById("addMembershipError"),
+  addBuy: document.getElementById("addMembershipBuy"),
 };
 
 /** Primärvyer i flikraden. Äldre fliknamn (bilar, lan) mappas till medlemskap. */
@@ -87,6 +96,8 @@ setupPasswordToggles(el.login ?? document);
 let state = {
   view: "oversikt", data: null, orders: null, members: null, pricing: null,
   notify: null, userId: null,
+  // Lägg till medlemskap: offerten vi visat (steg 1) och om ett köp pågår.
+  addQuote: null, addBusy: false,
 };
 
 // Inbjudningsmejlet (fleet/notifications.py:member_invite) loggar in direkt
@@ -679,16 +690,6 @@ async function handle(action, ctx) {
       showNotice("Platsen ligger på ditt konto.");
       return;
     }
-    case "assign-membership-email": {
-      const email = prompt(
-        "E-post till kontot som ska få platsen. Personen loggar in i appen och tar den där.",
-      );
-      if (!email) return;
-      await api.assignMembership(ctx.license, { mode: "email", email });
-      await refresh();
-      showNotice(`Platsen väntar på ${email}.`);
-      return;
-    }
     case "unassign-membership": {
       if (
         !confirm(
@@ -758,13 +759,10 @@ async function handle(action, ctx) {
       return;
     }
     case "add-license": {
-      const county = prompt("Baslän (SCB-kod, t.ex. 12 för Skåne):");
-      if (!county) return;
-      const plate = prompt("Registreringsnummer för bilen medlemskapet avser (krävs av fakturasystemet):");
-      if (!plate) return;
-      return buy({
-        addVehicles: [{ plate, baseCounty: county, label: "", extraCounties: [] }],
-      });
+      // Ett län ur en lista och vem som håller platsen -- inget
+      // registreringsnummer, inga webbläsar-popupper (se openAddMembership).
+      openAddMembership();
+      return;
     }
     case "cancel": {
       if (
@@ -846,6 +844,143 @@ async function commitTrial(change) {
  * Ordningen är regeln, inte en artighet -- §6 kräver att kunden ser kostnad nu,
  * nästa period, moms, totalsumma och datum innan beställningen godkänns.
  */
+/* --- Lägg till medlemskap: ett län ur en lista, inga webbläsar-popupper ----- */
+
+/** Länen i bokstavsordning, från samma källa som resten av portalen. */
+const COUNTY_OPTIONS = Object.entries(COUNTIES)
+  .map(([code, name]) => ({ code, name }))
+  .sort((a, b) => a.name.localeCompare(b.name, "sv"));
+
+function escAttr(value) {
+  return String(value).replace(
+    /[&<>"']/g,
+    (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c],
+  );
+}
+
+function labelBuy(text) {
+  el.addBuy?.querySelector(".btn-label")?.replaceChildren(text);
+}
+
+function setAddBusy(busy) {
+  if (!el.addBuy) return;
+  el.addBuy.disabled = busy;
+  el.addBuy.classList.toggle("is-busy", busy);
+  el.addBuy.setAttribute("aria-busy", busy ? "true" : "false");
+}
+
+/** Rutan för "Lägg till medlemskap": ett län och vem som håller platsen. */
+function openAddMembership() {
+  if (el.addCounty && !el.addCounty.options.length) {
+    el.addCounty.innerHTML = COUNTY_OPTIONS.map(
+      (c) => `<option value="${escAttr(c.code)}">${escAttr(c.name)}</option>`,
+    ).join("");
+  }
+  el.addForm?.reset();
+  if (el.addEmailField) el.addEmailField.hidden = true;
+  if (el.addQuote) {
+    el.addQuote.hidden = true;
+    el.addQuote.replaceChildren();
+  }
+  if (el.addError) el.addError.hidden = true;
+  labelBuy("Visa pris");
+  state.addQuote = null;
+  el.addDialog?.showModal?.();
+}
+
+/** Ändringen att köpa: ett medlemskap i ett län, kopplat till ett konto. */
+function addMembershipChange() {
+  const byEmail = el.addForm.elements.holder.value === "email";
+  const email = el.addEmail.value.trim();
+  const spec = { baseCounty: el.addCounty.value, label: "", extraCounties: [] };
+  // En plats per konto: antingen kontot som köper, eller en annan e-post.
+  if (byEmail && email) spec.assigneeEmail = email;
+  else spec.assignSelf = true;
+  return { addVehicles: [spec] };
+}
+
+/**
+ * Visar resultatet av en beställning i sidan -- inte i en webbläsar-popup.
+ * Väntar beställningen på betalning ligger betalsidan kvar som en knapp i rutan
+ * (inget öppnas av sig självt: mobilen blockerar det, och kunden ska se
+ * beloppet först).
+ */
+async function finishOrder(order, container) {
+  state.orders = null;
+  if (order.status === "pending_payment" && order.paymentUrl) {
+    container.hidden = false;
+    container.innerHTML =
+      "<p>Beställningen väntar på betalning. Länen aktiveras när betalningen " +
+      "har gått igenom.</p>" +
+      `<a class="btn btn-primary btn-block" href="${escAttr(order.paymentUrl)}" ` +
+      'target="_blank" rel="noopener">Öppna betalsidan</a>';
+    await refresh();
+    return;
+  }
+  el.addDialog?.close();
+  if (order.status === "pending_payment") {
+    showNotice(
+      "Beställningen är registrerad och väntar på betalning." +
+        (order.paymentError?.message ? ` ${order.paymentError.message}` : ""),
+    );
+  } else if (order.status === "scheduled") {
+    showNotice("Ändringen är schemalagd till nästa förnyelse.");
+  } else {
+    showNotice("Medlemskapet är beställt.");
+  }
+  await refresh();
+}
+
+el.addForm?.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  if (state.addBusy) return;
+  if (el.addError) el.addError.hidden = true;
+
+  const byEmail = el.addForm.elements.holder.value === "email";
+  const email = el.addEmail.value.trim();
+  if (!el.addCounty.value) return;
+  if (byEmail && !email) {
+    el.addError.textContent = "Skriv e-postadressen till personen.";
+    el.addError.hidden = false;
+    return;
+  }
+  const change = addMembershipChange();
+
+  state.addBusy = true;
+  setAddBusy(true);
+  try {
+    if (!state.addQuote) {
+      // Steg 1: visa beloppet i rutan. Inget beställs förrän kunden sett det.
+      state.addQuote = await api.quote(change);
+      el.addQuote.innerHTML = quoteHtml(state.addQuote);
+      el.addQuote.hidden = false;
+      labelBuy("Godkänn och skapa");
+      return;
+    }
+    // Steg 2: beloppet är visat. Lägg beställningen.
+    const order = await api.order(change);
+    state.addQuote = null;
+    await finishOrder(order, el.addQuote);
+  } catch (error) {
+    el.addError.textContent =
+      error instanceof ApiError ? error.message : "Kunde inte hämta priset. Prova igen.";
+    el.addError.hidden = false;
+  } finally {
+    state.addBusy = false;
+    setAddBusy(false);
+  }
+});
+
+for (const radio of el.addForm?.elements.holder ?? []) {
+  radio.addEventListener("change", () => {
+    if (el.addEmailField) el.addEmailField.hidden = el.addForm.elements.holder.value !== "email";
+  });
+}
+
+document.addEventListener("click", (event) => {
+  if (event.target.closest("[data-close-dialog]")) el.addDialog?.close();
+});
+
 async function buy(change) {
   const quote = await api.quote(change);
   const summary = document.createElement("div");

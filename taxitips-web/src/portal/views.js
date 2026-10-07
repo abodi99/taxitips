@@ -446,8 +446,9 @@ function membershipOverview(data, rows, userId) {
   const mine = rows.find((r) => userId && String(r.assigneeUserId) === String(userId));
   return `<div class="card membership-overview" aria-labelledby="membershipOverviewTitle">
     <h2 id="membershipOverviewTitle">Medlemskap</h2>
-    <p class="muted">En licens är en plats för ett <b>konto</b>, inte en bil.
-      Den som håller platsen loggar in i appen och tar den där.</p>
+    <p class="muted">En plats gäller ett <b>konto</b> i ett län, inte en bil.
+      Alla län kostar lika mycket. Den som håller platsen loggar in i appen och
+      tar den där.</p>
     <dl class="membership-facts">
       <div><dt>Totalt</dt><dd>${esc(String(rows.length))}</dd></div>
       <div><dt>Betalda</dt><dd>${esc(String(paidCount))}</dd></div>
@@ -538,8 +539,9 @@ function membershipCountyControls(row, opts) {
            </div>`
         : '<p class="muted">Ägaren eller ekonomiansvarig köper extra län eller byter baslän.</p>'
     }
-    <p class="muted">Extra län börjar gälla när tilläggsbetalningen lyckats.
-      Baslänsbyte gäller vid nästa förnyelse. Högst två byten per månad.</p>
+    <p class="muted">Extra län är för <b>samma konto</b> -- en person som vill ha
+      två län. Det börjar gälla när tilläggsbetalningen lyckats. Baslänsbyte
+      gäller vid nästa förnyelse. Högst två byten per månad.</p>
   </details>`;
 }
 
@@ -574,7 +576,6 @@ function membershipSlotCard(row, opts, userId) {
       canAssign
         ? `<div class="btn-row">
              <button class="btn btn-quiet" type="button" data-action="assign-membership-self" data-license="${esc(row.licenseId)}">Tilldela mig</button>
-             <button class="btn btn-quiet" type="button" data-action="assign-membership-email" data-license="${esc(row.licenseId)}">Bjud in konto</button>
              ${assigned ? `<button class="btn btn-quiet" type="button" data-action="unassign-membership" data-license="${esc(row.licenseId)}">Ta bort tilldelning</button>` : ""}
            </div>`
         : ""

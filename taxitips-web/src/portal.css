@@ -961,6 +961,67 @@ th {
   border-radius: 10px;
 }
 
+/* Lägg till medlemskap: byggd för mobilen -- en kolumn och stora tryckytor. */
+.add-membership-dialog {
+  width: min(440px, calc(100vw - 1.5rem));
+}
+.add-membership-dialog h2 {
+  margin-top: 0;
+}
+.add-field {
+  margin-top: 1rem;
+}
+.add-field label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 0.35rem;
+}
+.add-field select,
+.add-field input {
+  width: 100%;
+  padding: 0.75rem 0.85rem;
+  /* 16 px hindrar iOS från att zooma in när fältet får fokus. */
+  font-size: 1rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: #fff;
+}
+.add-holder {
+  margin: 1rem 0 0;
+  padding: 0.85rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+}
+.add-holder legend {
+  font-weight: 600;
+  padding: 0 0.35rem;
+}
+.add-radio {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  /* Tryckyta på minst 44 px, även med handskar. */
+  min-height: 44px;
+}
+.add-radio input {
+  width: 1.25rem;
+  height: 1.25rem;
+}
+.add-quote {
+  margin-top: 1rem;
+  padding: 0.9rem 1rem;
+  background: var(--ljusgra);
+  border-radius: 10px;
+}
+.add-quote .btn {
+  margin-top: 0.75rem;
+}
+.add-membership-dialog .btn-row {
+  margin-top: 1.25rem;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
 .notice {
   background: rgba(252, 163, 17, 0.1);
   border: 1px solid rgba(252, 163, 17, 0.28);

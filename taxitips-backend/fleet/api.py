@@ -1197,6 +1197,10 @@ def _plan_from_body(company_id, body: dict, now=None) -> orders.ChangePlan:
         orders.VehicleSpec(
             plate=v.get("plate", ""), base_county=v.get("baseCounty", ""),
             label=v.get("label", ""), extra_counties=list(v.get("extraCounties") or []),
+            # Ett medlemskap utan registreringsnummer: vem som ska hålla platsen
+            # (kontot som köper, eller en annan e-post) följer med ordern.
+            assign_self=bool(v.get("assignSelf")),
+            assignee_email=(v.get("assigneeEmail") or "").strip(),
         )
         for v in (body.get("addVehicles") or [])
     ]

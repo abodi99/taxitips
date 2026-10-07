@@ -123,6 +123,51 @@
     <form method="dialog"><button class="btn btn-primary">Klar</button></form>
   </dialog>
 
+  <!-- Lägg till medlemskap: ett län ur en lista och vem som håller platsen.
+       Ingen registreringsnummer och inga webbläsar-popupper -- hela flödet
+       (län, konto, pris, betalning) sker i den här rutan, byggd för mobilen. -->
+  <dialog id="addMembershipDialog" class="code-dialog add-membership-dialog"
+    aria-labelledby="addMembershipTitle">
+    <h2 id="addMembershipTitle">Lägg till medlemskap</h2>
+    <p class="muted">Ett medlemskap gäller ett län. Alla län kostar lika mycket.</p>
+
+    <form id="addMembershipForm" novalidate>
+      <div class="add-field">
+        <label for="addMembershipCounty">Län</label>
+        <select id="addMembershipCounty" name="baseCounty" required></select>
+      </div>
+
+      <fieldset class="add-holder">
+        <legend>Vem håller platsen?</legend>
+        <label class="add-radio">
+          <input type="radio" name="holder" value="self" checked />
+          <span>Mitt konto</span>
+        </label>
+        <label class="add-radio">
+          <input type="radio" name="holder" value="email" />
+          <span>Annan person</span>
+        </label>
+      </fieldset>
+
+      <div class="add-field add-email-field" hidden>
+        <label for="addMembershipEmail">E-post till personen</label>
+        <input id="addMembershipEmail" name="email" type="email" inputmode="email"
+          autocomplete="off" autocapitalize="off" spellcheck="false"
+          placeholder="namn@exempel.se" />
+      </div>
+
+      <div id="addMembershipQuote" class="add-quote" hidden></div>
+      <p id="addMembershipError" class="auth-alert" role="alert" hidden></p>
+
+      <div class="btn-row">
+        <button class="btn btn-primary btn-block" type="submit" id="addMembershipBuy">
+          <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Visa pris</span>
+        </button>
+        <button class="btn btn-quiet btn-block" type="button" data-close-dialog>Avbryt</button>
+      </div>
+    </form>
+  </dialog>
+
   <script type="module" src="/src/portal/main.js"></script>
 </body>
 </html>
