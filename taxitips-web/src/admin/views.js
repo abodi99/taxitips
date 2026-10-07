@@ -367,7 +367,7 @@ function issues(d) {
   const list = [];
   const add = (level, text, tab, label) => list.push({ level, text, tab, label });
   if (s?.status === "past_due") add(3, "Betalningen har inte kommit in.", "betalning", "Betalning");
-  const unpaid = (d.orders ?? []).filter((o) => o.status === "pending_payment").length;
+  const unpaid = (d.orders ?? []).filter((o) => o.status === "pending_payment" && !["canceled", "failed"].includes(o.status)).length;
   if (unpaid) add(2, `${unpaid} beställning(ar) väntar på betalning.`, "betalning", "Betalning");
   if (s?.cancelAtPeriodEnd) add(2, `Har sagt upp. Åtkomsten slutar ${date(s.accessUntil)}.`, "betalning", "Betalning");
   if (d.profile?.verificationStatus && d.profile.verificationStatus !== "verified") {

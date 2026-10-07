@@ -1415,7 +1415,7 @@ def list_orders(request):
             "priceVersion": o.price_version_id,
             "termsVersion": o.terms_version,
         }
-        for o in Order.objects.filter(company_id=principal.company_id).order_by("-created_at")[:100]
+        for o in orders.visible_orders(principal.company_id, limit=100)
     ]
     return _json(request, {"ok": True, "orders": rows})
 

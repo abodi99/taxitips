@@ -394,12 +394,13 @@ export function profileBody(form) {
 export function ordersCard(orders, config) {
   const canSell = !!config?.canSell;
   const stripeOk = !!config?.stripe?.available;
-  if (!orders?.length) return `<div class="card"><h2>Beställningar</h2><p class="muted">Inga beställningar.</p></div>`;
+  const visible = (orders ?? []).filter((o) => !["canceled", "failed", "draft"].includes(o.status));
+  if (!visible.length) return `<div class="card"><h2>Beställningar</h2><p class="muted">Inga öppna beställningar.</p></div>`;
   return `
     <div class="card">
       <h2>Beställningar</h2>
       <table><thead><tr><th>Datum</th><th>Vad</th><th>Status</th><th>Nu</th><th>Per månad</th><th></th></tr></thead>
-      <tbody>${orders.map((o) => `
+      <tbody>${visible.map((o) => `
         <tr>
           <td data-label="Datum">${esc(date(o.createdAt))}</td>
           <td data-label="Vad">${esc(ORDER_KIND[o.kind] ?? o.kind)}

@@ -128,6 +128,10 @@ def handle(event_type: str, obj: dict, *, event_created=None, now=None) -> dict:
         return _payment_succeeded(event_type, obj, event_at=event_at, now=now)
     if event_type in ("invoice.payment_failed", "checkout.session.async_payment_failed"):
         return _payment_failed(obj, event_at=event_at, now=now)
+    if event_type in (
+        "invoice.voided", "invoice.marked_uncollectible", "checkout.session.expired",
+    ):
+        return _payment_abandoned(event_type, obj, event_at=event_at, now=now)
     if event_type in ("customer.subscription.updated", "customer.subscription.deleted"):
         return _subscription_changed(event_type, obj, event_at=event_at, now=now)
     return {"handled": False, "reason": "unhandled_event_type"}
@@ -257,6 +261,40 @@ def _resync_amount(company_id) -> None:
         )
 
 
+def _clear_unpaid_stripe_subscription(subscription: Subscription) -> None:
+    """Tar bort referensen till ett Stripe-abonnemang som aldrig blev betalt."""
+    if subscription.had_successful_payment:
+        return
+    Subscription.objects.filter(id=subscription.id, had_successful_payment=False).update(
+        stripe_subscription_id="",
+        status=SubscriptionStatus.NONE,
+        current_period_start=None,
+        current_period_end=None,
+    )
+
+
+def _payment_abandoned(event_type: str, obj: dict, *, event_at, now) -> dict:
+    """
+    Kunden stängde betalsidan eller Stripe makulerade fakturan. Ordern ska
+    försvinna ur listan -- den är inte längre något att betala.
+    """
+    order = _order_for(obj)
+    if order is None:
+        return {"handled": True, "action": "ignored_unknown_order"}
+    if (order.request or {}).get("trial_commit"):
+        return {"handled": True, "action": "ignored_trial_commit"}
+    if order.status not in (Order.Status.PENDING_PAYMENT, Order.Status.DRAFT):
+        return {"handled": True, "action": "already_closed", "order_id": str(order.id)}
+    orders.mark_order_canceled(order, reason=f"stripe_{event_type}", actor_kind="system")
+    subscription = _subscription_for(obj) or Subscription.objects.filter(
+        company_id=order.company_id
+    ).first()
+    if subscription is not None:
+        _clear_unpaid_stripe_subscription(subscription)
+        _touch(subscription, event_at)
+    return {"handled": True, "action": "order_abandoned", "order_id": str(order.id)}
+
+
 def _payment_failed(obj: dict, *, event_at, now) -> dict:
     subscription = _subscription_for(obj)
     if subscription is None:
@@ -289,10 +327,30 @@ def _subscription_changed(event_type: str, obj: dict, *, event_at, now) -> dict:
     if _is_stale(subscription, event_at):
         return {"handled": True, "action": "ignored_out_of_order"}
 
+    remote_status = obj.get("status")
+    # En ofullständig prenumeration som löpte ut är inte en uppsägning: kunden
+    # stängde betalsidan och har aldrig betalat. Att sätta CANCELED här hade
+    # lämnat stripe_subscription_id kvar och nästa köp hade blivit en
+    # engångsfaktura.
+    if remote_status in stripe_sync.DEAD_SUBSCRIPTION_STATUSES and not subscription.had_successful_payment:
+        pending = Order.objects.filter(
+            company_id=subscription.company_id,
+            status__in=[Order.Status.PENDING_PAYMENT, Order.Status.DRAFT],
+        )
+        for order in pending:
+            if (order.request or {}).get("trial_commit"):
+                continue
+            orders.mark_order_canceled(
+                order, reason=f"stripe_{event_type}_{remote_status}", actor_kind="system",
+            )
+        _clear_unpaid_stripe_subscription(subscription)
+        _touch(subscription, event_at)
+        return {"handled": True, "action": "unpaid_subscription_abandoned", "status": remote_status}
+
     status = (
         SubscriptionStatus.CANCELED
         if event_type == "customer.subscription.deleted"
-        else stripe_sync.map_stripe_status(obj.get("status"))
+        else stripe_sync.map_stripe_status(remote_status)
     )
     updates = {"status": status}
 

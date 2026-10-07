@@ -225,7 +225,9 @@ def refresh_payment(order: Order) -> dict:
     }
 
 
-def cancel_order(order: Order, *, actor_user_id, reason: str = "") -> Order:
+def cancel_order(
+    order: Order, *, actor_user_id=None, reason: str = "", actor_kind: str = "sales"
+) -> Order:
     """
     Avbryter en obetald order. Fakturan i Stripe makuleras, så att kunden
     inte kan betala för något som inte längre gäller.
@@ -235,21 +237,49 @@ def cancel_order(order: Order, *, actor_user_id, reason: str = "") -> Order:
             "order_not_cancelable", "Bara obetalda order kan avbrytas.", status=409,
             detail={"status": order.status},
         )
-    if order.stripe_invoice_id:
-        try:
-            stripe_sync.void_order_invoice(order)
-        except Exception as exc:
-            raise _stripe_failure(exc) from exc
-    Order.objects.filter(
-        id=order.id, status__in=[Order.Status.PENDING_PAYMENT, Order.Status.DRAFT]
-    ).update(status=Order.Status.CANCELED, failure_reason=(reason or "canceled")[:500])
-    audit.record(
-        "order_canceled", company_id=order.company_id, actor_user_id=actor_user_id,
-        actor_kind="sales", subject_type="order", subject_id=order.id,
-        detail={"reason": (reason or "")[:300]},
+    if order.stripe_invoice_id or (
+        Subscription.objects.filter(company_id=order.company_id)
+        .exclude(stripe_subscription_id="")
+        .exists()
+        and not (order.request or {}).get("trial_commit")
+    ):
+        stripe_sync.void_order_invoice(order)
+    return orders.mark_order_canceled(
+        order, reason=reason or "canceled", actor_kind=actor_kind,
+        actor_user_id=actor_user_id,
     )
-    order.refresh_from_db()
-    return order
+
+
+def abandon_stale_pending_orders(*, now=None, older_than=None) -> int:
+    """
+    Avbryter obetalda ordrar som kunden lämnat. Stripe stänger en ofullständig
+    prenumeration efter ~23 h; samma horisont som `REUSE_PENDING_WITHIN` så att
+    listan inte visar en död betalsida.
+
+    Prov-commit (kort sparas under Django-provet) lämnas: den ska ligga kvar
+    tills provet tar slut eller kunden avbryter.
+    """
+    now = now or timezone.now()
+    cutoff = now - (older_than or orders.REUSE_PENDING_WITHIN)
+    dropped = 0
+    for order in Order.objects.filter(
+        status=Order.Status.PENDING_PAYMENT, created_at__lte=cutoff,
+    ):
+        if (order.request or {}).get("trial_commit"):
+            continue
+        try:
+            cancel_order(
+                order, actor_kind="system",
+                reason="obetald, avbruten när betalsidan stängdes",
+            )
+        except Exception as exc:
+            log.warning("fleet.commerce: kunde inte makulera Stripe för gammal order %s: %s", order.id, exc)
+            orders.mark_order_canceled(
+                order, reason="obetald, avbruten när betalsidan stängdes",
+                actor_kind="system",
+            )
+        dropped += 1
+    return dropped
 
 
 def resync_amount(company_id) -> dict:

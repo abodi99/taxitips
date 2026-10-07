@@ -54,6 +54,16 @@ GRACE_DAYS = 7
 # ett tidigare pris ska inte tyst återuppstå.
 REUSE_PENDING_WITHIN = timedelta(hours=24)
 
+# Det kunden och adminwebben visar. Avbrutna, misslyckade och utkast ligger
+# kvar i databasen (webhook/avstämning) men ska inte ta plats i listan -- en
+# stängd Stripe-sida skapade annars en evig "väntar på betalning"-rad.
+VISIBLE_ORDER_STATUSES = (
+    Order.Status.PENDING_PAYMENT,
+    Order.Status.PAID,
+    Order.Status.APPLIED,
+    Order.Status.SCHEDULED,
+)
+
 
 class OrderError(Exception):
     def __init__(self, reason: str, message: str, status: int = 400, detail: dict | None = None):
@@ -399,7 +409,16 @@ def create_order(
 
     existing = Order.objects.filter(idempotency_key=key).first()
     if existing is not None:
-        return existing
+        if existing.status in (Order.Status.CANCELED, Order.Status.FAILED):
+            # Unique-nyckeln bär minuten. En avbruten rad med samma nyckel
+            # (webhook som bara satte status, eller ett fönster innan
+            # `mark_order_canceled` nollställde den) får inte blockera nästa
+            # prenumeration.
+            Order.objects.filter(id=existing.id, idempotency_key=key).update(
+                idempotency_key=None,
+            )
+        else:
+            return existing
 
     if not idempotency:
         # Inte samma minut, men samma ändring: kunden avbröt betalningen och
@@ -699,13 +718,54 @@ def mark_order_failed(order: Order, *, reason: str, now=None) -> Order:
     now = now or timezone.now()
     Order.objects.filter(
         id=order.id, status__in=[Order.Status.PENDING_PAYMENT, Order.Status.DRAFT]
-    ).update(status=Order.Status.FAILED, failed_at=now, failure_reason=reason[:500])
+    ).update(
+        status=Order.Status.FAILED,
+        failed_at=now,
+        failure_reason=reason[:500],
+        idempotency_key=None,
+    )
     order.refresh_from_db()
     audit.record(
         "order_failed", company_id=order.company_id, actor_kind="system",
         subject_type="order", subject_id=order.id, detail={"reason": reason[:500]},
     )
     return order
+
+
+def mark_order_canceled(
+    order: Order, *, reason: str = "canceled", actor_kind: str = "system", actor_user_id=None
+) -> Order:
+    """
+    Avbryter en obetald order lokalt. Stripe-makulering sker i
+    `commerce.cancel_order` -- den här gör bara databasen, så webhooken kan
+    spegla en redan avslutad Stripe-session utan att anropa Stripe igen.
+    """
+    updated = Order.objects.filter(
+        id=order.id, status__in=[Order.Status.PENDING_PAYMENT, Order.Status.DRAFT]
+    ).update(
+        status=Order.Status.CANCELED,
+        failure_reason=(reason or "canceled")[:500],
+        # Unique-nyckeln bär minuten: utan att nollställa den hade ett nytt
+        # försök samma minut fått tillbaka den avbrutna raden i stället för
+        # att skapa en ny prenumeration.
+        idempotency_key=None,
+    )
+    order.refresh_from_db()
+    if updated:
+        audit.record(
+            "order_canceled", company_id=order.company_id, actor_kind=actor_kind,
+            actor_user_id=actor_user_id, subject_type="order", subject_id=order.id,
+            detail={"reason": (reason or "")[:300]},
+        )
+    return order
+
+
+def visible_orders(company_id, *, limit: int = 30):
+    """Beställningar som ska synas: obetalda som fortfarande gäller, och verkställda."""
+    return (
+        Order.objects.filter(company_id=company_id, status__in=VISIBLE_ORDER_STATUSES)
+        .order_by("-created_at")[:limit]
+    )
 
 
 # ---------------------------------------------------------------------------

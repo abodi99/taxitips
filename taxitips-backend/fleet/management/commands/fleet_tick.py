@@ -48,7 +48,7 @@ class Command(BaseCommand):
         report = {
             "pending_applied": 0, "trials_ended": 0, "trials_warned": 0,
             "trials_awaiting_charge": 0, "renewals_stopped": 0,
-            "codes_expired": 0, "requests_expired": 0,
+            "codes_expired": 0, "requests_expired": 0, "stale_orders": 0,
         }
 
         # 1) Väntande ändringar. Ett bolag i taget, så att en trasig rad inte
@@ -143,6 +143,19 @@ class Command(BaseCommand):
             if not dry:
                 orders.stop_renewal(subscription, reason="no_grace_after_trial", now=now)
             report["renewals_stopped"] += 1
+
+        # 4b) Obetalda ordrar kunden lämnat (stängd Stripe-sida). Annars
+        # ligger de kvar som "väntar på betalning" tills någon rensar för hand.
+        from fleet import commerce
+
+        if dry:
+            from fleet.models import Order
+            report["stale_orders"] = Order.objects.filter(
+                status=Order.Status.PENDING_PAYMENT,
+                created_at__lte=now - orders.REUSE_PENDING_WITHIN,
+            ).count()
+        else:
+            report["stale_orders"] = commerce.abandon_stale_pending_orders(now=now)
 
         # 5) Städning av kortlivade koder och ansökningar.
         expired_codes = PairingCode.objects.filter(

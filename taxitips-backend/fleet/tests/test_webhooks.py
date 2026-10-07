@@ -97,6 +97,58 @@ class SubscriptionSyncTests(FleetTestCase):
         self.subscription.refresh_from_db()
         self.assertNotEqual(self.subscription.status, SubscriptionStatus.ACTIVE)
 
+    def test_an_expired_incomplete_subscription_is_not_a_cancellation(self):
+        """Kunden stängde betalsidan: ingen uppsägning, nästa köp ska kunna skapa en ny sub."""
+        company = self.make_company()
+        subscription = orders.get_or_create_subscription(company.id)
+        Subscription.objects.filter(id=subscription.id).update(
+            stripe_customer_id="cus_abandoned", stripe_subscription_id="sub_abandoned",
+            status=SubscriptionStatus.NONE, had_successful_payment=False,
+        )
+        plan = orders.plan_change(
+            company.id, add_vehicles=[orders.VehicleSpec(plate="ABC123", base_county="12")],
+        )
+        order = orders.create_order(company.id, plan)
+        result = webhook_events.handle(
+            "customer.subscription.updated",
+            {
+                "object": "subscription", "id": "sub_abandoned", "customer": "cus_abandoned",
+                "status": "incomplete_expired",
+                "metadata": {"company_id": str(company.id), "order_id": str(order.id)},
+            },
+            event_created=_epoch(timezone.now()),
+        )
+        self.assertEqual(result["action"], "unpaid_subscription_abandoned")
+        order.refresh_from_db()
+        subscription.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.CANCELED)
+        self.assertEqual(subscription.stripe_subscription_id, "")
+        self.assertEqual(subscription.status, SubscriptionStatus.NONE)
+        self.assertNotEqual(subscription.status, SubscriptionStatus.CANCELED)
+
+    def test_a_voided_invoice_hides_the_pending_order(self):
+        company = self.make_company()
+        subscription = orders.get_or_create_subscription(company.id)
+        Subscription.objects.filter(id=subscription.id).update(
+            stripe_customer_id="cus_void", had_successful_payment=False,
+        )
+        plan = orders.plan_change(
+            company.id, add_vehicles=[orders.VehicleSpec(plate="ABC123", base_county="12")],
+        )
+        order = orders.create_order(company.id, plan)
+        Order.objects.filter(id=order.id).update(stripe_invoice_id="in_void")
+        result = webhook_events.handle(
+            "invoice.voided",
+            {
+                "object": "invoice", "id": "in_void", "customer": "cus_void",
+                "metadata": {"order_id": str(order.id), "company_id": str(company.id)},
+            },
+            event_created=_epoch(timezone.now()),
+        )
+        self.assertEqual(result["action"], "order_abandoned")
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.CANCELED)
+
 
 class OrderPaymentEventTests(FleetTestCase):
     def setUp(self):

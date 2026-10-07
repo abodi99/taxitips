@@ -1018,9 +1018,10 @@ export function abonnemang(data, orders, pricing = null) {
     <details class="advanced">
       <summary>Mer: beställningar och fakturor</summary>
       ${
-        (orders ?? []).length
+        (orders ?? []).filter((o) => !["canceled", "failed", "draft"].includes(o.status)).length
           ? `<ul class="simple-list order-list">
-             ${orders
+             ${(orders ?? [])
+               .filter((o) => !["canceled", "failed", "draft"].includes(o.status))
                .map(
                  (o) => `<li>
                    <div>

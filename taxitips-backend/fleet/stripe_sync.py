@@ -256,6 +256,17 @@ def package_summary(company_id, *, adding: list[dict] | None = None) -> str:
 
 COLLECTION_METHODS = ("charge_automatically", "send_invoice")
 
+# Ett Stripe-abonnemang i de här lägena tar inte emot nästa betalning. Att
+# lämna `stripe_subscription_id` kvar gjorde att nästa försök blev en
+# engångsfaktura (`charge_order`) i stället för en ny, auto-förnyad
+# prenumeration -- det kunden såg som "engångsbetalning" efter att ha stängt
+# betalsidan.
+DEAD_SUBSCRIPTION_STATUSES = frozenset({"incomplete_expired", "canceled", "unpaid"})
+# Bara de här tar emot en uppgradering. `incomplete` är första betalningen
+# som inte gått igenom -- nästa försök ska skapa en ny prenumeration, inte
+# en engångsfaktura.
+OPEN_SUBSCRIPTION_STATUSES = frozenset({"active", "trialing", "past_due"})
+
 
 def _collection(collection_method: str, days_until_due: int) -> dict:
     """
@@ -473,6 +484,31 @@ def cancel_trial_commit_subscription(subscription: Subscription) -> None:
     )
 
 
+def existing_subscription_is_open(subscription: Subscription) -> bool:
+    """
+    Finns ett levande Stripe-abonnemang att debitera mot (uppgradering),
+    eller ska nästa betalning skapa en ny prenumeration?
+
+    Ett `incomplete_expired` efter en stängd betalsida är inte ett
+    abonnemang -- att tro det leder till engångsfaktura.
+    """
+    if not subscription.stripe_subscription_id:
+        return False
+    stripe = _client()
+    remote = stripe.Subscription.retrieve(subscription.stripe_subscription_id)
+    status = getattr(remote, "status", None) or remote.get("status")
+    if status in OPEN_SUBSCRIPTION_STATUSES:
+        return True
+    if status == "incomplete":
+        try:
+            stripe.Subscription.cancel(subscription.stripe_subscription_id)
+        except Exception:
+            pass
+    Subscription.objects.filter(id=subscription.id).update(stripe_subscription_id="")
+    subscription.stripe_subscription_id = ""
+    return False
+
+
 def collect_order(
     order: Order, *, collection_method: str = "charge_automatically", days_until_due: int = 14
 ) -> str:
@@ -503,8 +539,9 @@ def collect_order(
     company = Company.objects.get(id=order.company_id)
     customer_id = ensure_customer(company, subscription)
     collection = _collection(collection_method, days_until_due)
+    has_open_subscription = existing_subscription_is_open(subscription)
 
-    if not subscription.stripe_subscription_id:
+    if not has_open_subscription:
         created = stripe.Subscription.create(
             customer=customer_id,
             items=_items_from_lines(
@@ -637,21 +674,33 @@ def void_order_invoice(order: Order) -> None:
     driva in det i ett dygn och sedan lämnat ett dött abonnemang kvar.
     """
     stripe = _client()
-    if not order.stripe_invoice_id:
-        return
-    invoice = stripe.Invoice.retrieve(order.stripe_invoice_id)
-    if invoice.status in ("open", "draft"):
-        if invoice.status == "draft":
-            stripe.Invoice.delete(invoice.id)
-        else:
-            stripe.Invoice.void_invoice(invoice.id)
+    invoice = None
+    if order.stripe_invoice_id:
+        try:
+            invoice = stripe.Invoice.retrieve(order.stripe_invoice_id)
+        except Exception:
+            invoice = None
+        if invoice is not None and invoice.status in ("open", "draft"):
+            if invoice.status == "draft":
+                stripe.Invoice.delete(invoice.id)
+            else:
+                stripe.Invoice.void_invoice(invoice.id)
     subscription = Subscription.objects.filter(company_id=order.company_id).first()
-    sub_id = getattr(invoice, "subscription", None)
-    if subscription and sub_id and sub_id == subscription.stripe_subscription_id:
-        remote = stripe.Subscription.retrieve(sub_id)
-        if remote.status in ("incomplete", "incomplete_expired"):
-            if remote.status == "incomplete":
-                stripe.Subscription.cancel(sub_id)
+    sub_id = getattr(invoice, "subscription", None) if invoice is not None else None
+    if not sub_id and subscription:
+        sub_id = subscription.stripe_subscription_id
+    if subscription and sub_id and (
+        not subscription.stripe_subscription_id or sub_id == subscription.stripe_subscription_id
+    ):
+        try:
+            remote = stripe.Subscription.retrieve(sub_id)
+        except Exception:
+            remote = None
+        status = (getattr(remote, "status", None) or remote.get("status")) if remote else ""
+        if status == "incomplete":
+            stripe.Subscription.cancel(sub_id)
+            status = "canceled"
+        if status in DEAD_SUBSCRIPTION_STATUSES or status == "incomplete":
             Subscription.objects.filter(id=subscription.id).update(stripe_subscription_id="")
 
 

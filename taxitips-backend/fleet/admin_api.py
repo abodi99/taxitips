@@ -340,7 +340,7 @@ def _company_or_404(company_id) -> Company:
 def company_detail(request, company_id):
     """GET /api/admin/companies/<id> -- allt om ett bolag, för en support-fråga."""
     # admin_sales importerar härifrån; åt andra hållet går det bara i funktionen.
-    from fleet import accounts, admin_sales as admin_sales_rows
+    from fleet import accounts, admin_sales as admin_sales_rows, orders
 
     _staff(request, Perm.ADMIN_VIEW)
     now = timezone.now()
@@ -499,7 +499,7 @@ def company_detail(request, company_id):
         "members": members,
         "orders": [
             admin_sales_rows._order_row(o)
-            for o in Order.objects.filter(company_id=company.id).order_by("-created_at")[:30]
+            for o in orders.visible_orders(company.id, limit=30)
         ],
         "pendingChanges": [
             {"id": str(p.id), "kind": p.kind, "effectiveAt": _iso(p.effective_at), "payload": p.payload}

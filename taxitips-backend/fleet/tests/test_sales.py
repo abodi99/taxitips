@@ -674,6 +674,46 @@ class OrderTests(SalesTestCase):
         # Ingen licens förrän Stripe säger att fakturan är betald.
         self.assertFalse(License.objects.filter(company_id=company.id).exists())
 
+    def test_an_abandoned_first_attempt_creates_a_new_subscription_not_a_one_off_invoice(self):
+        """Stängd betalsida får inte göra nästa köp till en engångsfaktura."""
+        company = self.new_company()
+        fake = FakeStripe()
+        with stripe_connected(fake):
+            first = self.order(company).json()
+            sub_id = Subscription.objects.get(company_id=company.id).stripe_subscription_id
+            fake.subscriptions[sub_id]["status"] = "incomplete_expired"
+            # Ordern är avbruten (webhook/tick) men Stripe-id:t ligger kvar --
+            # det var så nästa försök blev InvoiceItem i stället för en ny sub.
+            Order.objects.filter(id=first["order"]["id"]).update(status=Order.Status.CANCELED)
+            second = self.order(company).json()
+        self.assertEqual(fake.names().count("Subscription.create"), 2, fake.names())
+        self.assertNotIn("InvoiceItem.create", fake.names())
+        self.assertEqual(second["order"]["status"], "pending_payment")
+        self.assertNotEqual(
+            Subscription.objects.get(company_id=company.id).stripe_subscription_id, sub_id
+        )
+
+    def test_canceled_orders_are_hidden_from_the_customer_and_admin_lists(self):
+        company = self.new_company()
+        owner = self.make_owner(company)
+        fake = FakeStripe()
+        with stripe_connected(fake):
+            first = self.order(company).json()
+            self.post(f"/api/admin/orders/{first['order']['id']}/cancel", {"reason": "Ångrade sig"})
+            second = self.order(company).json()
+        portal = self.client.get(
+            "/api/fleet/orders/list",
+            headers={"authorization": f"Bearer {jwt(str(owner.user_id))}"},
+        ).json()
+        ids = [o["id"] for o in portal["orders"]]
+        self.assertIn(second["order"]["id"], ids)
+        self.assertNotIn(first["order"]["id"], ids)
+        self.assertTrue(all(o["status"] != "canceled" for o in portal["orders"]))
+        admin = self.get(f"/api/admin/companies/{company.id}", user=self.admin_id).json()
+        admin_ids = [o["id"] for o in admin["orders"]]
+        self.assertIn(second["order"]["id"], admin_ids)
+        self.assertNotIn(first["order"]["id"], admin_ids)
+
     def test_a_paid_first_invoice_activates_the_package_for_a_full_month(self):
         company = self.new_company()
         fake = FakeStripe()

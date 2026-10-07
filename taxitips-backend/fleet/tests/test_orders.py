@@ -381,6 +381,23 @@ class GracePeriodTests(FleetTestCase):
         self.assertIsNotNone(self.subscription.renewal_stopped_at)
         self.assertTrue(self.subscription.cancel_at_period_end)
 
+    def test_stale_pending_orders_are_dropped_by_the_hourly_tick(self):
+        company = self.make_company()
+        plan = orders.plan_change(
+            company.id, add_vehicles=[orders.VehicleSpec(plate="ABC123", base_county="12")],
+        )
+        order = orders.create_order(company.id, plan)
+        Order.objects.filter(id=order.id).update(
+            created_at=timezone.now() - orders.REUSE_PENDING_WITHIN - timedelta(minutes=1)
+        )
+        from django.core.management import call_command
+        from io import StringIO
+
+        call_command("fleet_tick", stdout=StringIO())
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.CANCELED)
+        self.assertEqual(list(orders.visible_orders(company.id)), [])
+
 
 class IntroContinuityTests(FleetTestCase):
     """§6: senare tillagda bilar får bara företagets återstående introduktionstid."""
