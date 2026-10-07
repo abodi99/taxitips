@@ -543,7 +543,10 @@ function kvalitet(d) {
     <div class="dash-stats dash-stats-2">
       ${stat("AI-kostnad i månaden", esc(krDec(sp.costMonthKr)),
         { note: `av ${esc(num(sp.budgetKr))} kr i budget${share === null ? "" : ` (${esc(share)} %)`}`, alert: share !== null && share >= 80 })}
-      ${stat("AI-anrop i dag", num(sp.callsToday), { note: `tak ${esc(num(sp.dailyCallCap))} per dygn` })}
+      ${stat("AI-anrop i dag", num(sp.callsToday), {
+        note: `tak ${esc(num(sp.dailyCallCap))} per dygn${sp.failedToday ? `, ${esc(num(sp.failedToday))} misslyckade` : ""}`,
+        alert: (sp.failedToday ?? 0) > (sp.callsToday ?? 0),
+      })}
       ${stat("Notiser som AI stoppade", num(d.gateBlocked24h), { note: "senaste dygnet" })}
       ${stat("Oeniga bedömningar", r ? num(r.disagreements) : "–",
         { note: r ? `AI och regel skilde 20+ poäng, ${esc(r.day)}` : "ingen rapport än" })}

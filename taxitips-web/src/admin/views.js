@@ -535,14 +535,88 @@ function tabOversikt(d, config, crm, found) {
 
 /* --- Medlemskap --------------------------------------------------------- */
 
+/**
+ * Ny plats till ett konto (2026-10): medlemskapet är personbaserat, så en
+ * plats skapas utan bil och utan regnr -- bara vem som ska ha den och ett
+ * baslän. Betalningen (prov, beställning, kupong) ligger kvar i kortet under.
+ */
+function addMembershipBlock(d, config) {
+  const counties = config?.counties ?? [];
+  return `
+    <div class="card">
+      <h2>Ny plats till ett konto</h2>
+      <p class="muted">Medlemskapet hör till en <b>person</b>, inte en bil. Skriv kontots e-post:
+        personen loggar in i appen och tar platsen där. Baslän kan väljas nu eller senare.</p>
+      <div class="county-add">
+        <input id="newMemberEmail" type="email" placeholder="namn@bolaget.se" autocomplete="off" />
+        <select id="newMemberCounty" aria-label="Baslän för den nya platsen">
+          <option value="">Baslän (valfritt)</option>
+          ${counties.map((c) => `<option value="${esc(c.code)}">${esc(c.name)}</option>`).join("")}
+        </select>
+        <button class="btn btn-primary btn-small" data-action="membership-create">Skapa plats</button>
+      </div>
+    </div>`;
+}
+
+/**
+ * Manuellt beviljande (fleet/grants.py): fullt medlemskap utan kostnad till
+ * en person. Kräver canManage -- det flyttar rättigheter utan betalning, samma
+ * gräns som kuponger. Skäl och tidsgräns är obligatoriska att ta ställning
+ * till; beslutet loggas och visas här i efterhand.
+ */
+function grantsCard(d, config) {
+  const grants = d.grants ?? [];
+  if (!config?.canManage && !grants.length) return "";
+  const who = (g) =>
+    g.email
+      ? `väntar på ${esc(g.email)} (loggar in i appen)`
+      : g.resolvedEmail
+        ? esc(g.resolvedEmail)
+        : g.userId
+          ? "ett konto"
+          : "—";
+  return `
+    <div class="card">
+      <h2>Beviljat utan kostnad <span class="muted">(${esc(grants.filter((g) => g.active).length)})</span></h2>
+      <p class="muted">Fullt medlemskap utan betalning, till en person. Ingen order, ingen faktura
+        och ingen ändring i Stripe -- platsen räknas inte mot nästa faktura. Skälet loggas.</p>
+      ${config?.canManage ? `
+      <div class="start-option">
+        <label>Kontots e-post<input id="grantEmail" type="email" placeholder="namn@bolaget.se" autocomplete="off" /></label>
+        <label>Skäl (loggas)<input id="grantReason" placeholder="T.ex. goodwill efter driftstörning" autocomplete="off" /></label>
+        <label>Gäller till <span class="muted">(valfritt, tomt = tills vidare)</span>
+          <input id="grantEnds" type="date" /></label>
+        <button class="btn btn-primary" data-action="grant-membership">Tilldela fullt medlemskap utan kostnad</button>
+      </div>` : ""}
+      ${grants.length ? `<table><thead><tr><th>Konto</th><th>Skäl</th><th>Gäller</th><th></th></tr></thead>
+        <tbody>${grants.map((g) => `
+          <tr><td data-label="Konto"><b>${who(g)}</b>
+              <div class="muted">${g.allCounties ? "alla län" : esc((g.counties ?? []).map(countyName).join(", "))}</div></td>
+            <td data-label="Skäl">${esc(g.reason)}
+              ${g.revokeReason ? `<div class="muted">återkallat: ${esc(g.revokeReason)}</div>` : ""}</td>
+            <td data-label="Gäller">${g.revokedAt
+              ? `<span class="pill pill-danger">Återkallat ${esc(date(g.revokedAt))}</span>`
+              : g.active
+                ? `<span class="pill pill-ok">Aktivt</span> ${g.endsAt ? `till ${esc(date(g.endsAt))}` : "tills vidare"}`
+                : `<span class="pill">Utgånget</span> ${g.endsAt ? esc(date(g.endsAt)) : ""}`}</td>
+            <td data-label="">${config?.canManage && !g.revokedAt
+              ? `<button class="btn btn-danger btn-small" data-action="grant-revoke"
+                  data-grant="${esc(g.id)}" data-who="${esc(g.resolvedEmail || g.email || g.userId)}">Återkalla</button>`
+              : ""}</td></tr>`).join("")}
+        </tbody></table>` : '<p class="muted">Inga beviljanden.</p>'}
+    </div>`;
+}
+
 function tabBilar(d, config, pending) {
   const open = (d.licenses ?? []).filter((l) => LICENSE_OPEN.includes(l.status));
   return `
     ${membershipsCard(d, config, pending)}
+    ${config?.canSell ? addMembershipBlock(d, config) : ""}
     ${config?.canSell ? `<details class="card add-cars" ${open.length ? "" : "open"}>
       <summary><h2>+ Lägg till medlemskap</h2></summary>
       ${addCarsBlock(d, config)}
     </details>` : ""}
+    ${grantsCard(d, config)}
     ${phonesCard(d, config)}
     ${d.notify ? notifyCard({ ...d.notify, canManage: !!config?.canSell }, {
       countyNames: Object.fromEntries((d.notify.countyCatalog ?? []).map((c) => [c.code, c.name])),

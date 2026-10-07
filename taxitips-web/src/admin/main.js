@@ -1135,6 +1135,61 @@ async function act(action, ds) {
       return render();
     }
 
+    /* --- Personbaserat medlemskap: ny plats utan bil, och beviljanden --- */
+
+    case "membership-create": {
+      const email = document.getElementById("newMemberEmail")?.value.trim();
+      if (!email) {
+        flash("Skriv kontots e-post först.");
+        return;
+      }
+      const baseCounty = document.getElementById("newMemberCounty")?.value ?? "";
+      await admin.createMembership(state.companyId, { email, baseCounty });
+      flash(`Platsen skapas och tilldelas ${email}.`);
+      return render();
+    }
+
+    case "grant-membership": {
+      const email = document.getElementById("grantEmail")?.value.trim();
+      const reason = document.getElementById("grantReason")?.value.trim();
+      const endsAt = document.getElementById("grantEnds")?.value ?? "";
+      if (!email) {
+        flash("Skriv kontots e-post först.");
+        return;
+      }
+      if (!reason) {
+        flash("Skriv varför medlemskapet beviljas utan kostnad -- skälet loggas.");
+        return;
+      }
+      if (
+        !confirm(
+          `Tilldela ${email} fullt medlemskap utan kostnad?\n\n` +
+            (endsAt ? `Gäller till ${endsAt}. ` : "Gäller tills vidare. ") +
+            "Ingen order eller faktura skapas, och platsen räknas inte mot nästa betalning.",
+        )
+      )
+        return;
+      await admin.grantMembership(state.companyId, {
+        email,
+        reason,
+        ...(endsAt ? { endsAt } : {}),
+        allCounties: true,
+      });
+      flash(`${email} har fått fullt medlemskap utan kostnad.`);
+      return render();
+    }
+
+    case "grant-revoke": {
+      const reason = prompt(
+        `Återkalla beviljandet för ${ds.who}? Åtkomsten stängs direkt och platsen som ` +
+          "beviljandet skapade avslutas.\n\nSkäl (sparas i loggen):",
+      );
+      if (!reason?.trim()) return;
+      await admin.revokeGrant(ds.grant, reason.trim());
+      flash("Beviljandet är återkallat.");
+      return render();
+    }
+
     case "phone-rename": {
       const label = prompt("Nytt namn på telefonen (syns under bilen och i appen):", ds.label || "");
       if (!label?.trim()) return;

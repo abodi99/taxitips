@@ -114,6 +114,14 @@ export const admin = {
     request(`/api/admin/licenses/${licenseId}/assign`, { method: "POST", body }),
   unassignMembership: (licenseId) =>
     request(`/api/admin/licenses/${licenseId}/unassign`, { method: "POST", body: {} }),
+  // Ny plats till ett konto -- utan bil och utan regnr (fleet/admin_api.py).
+  createMembership: (companyId, body) =>
+    request(`/api/admin/companies/${companyId}/memberships`, { method: "POST", body }),
+  // Manuellt beviljande: fullt medlemskap utan kostnad (fleet/grants.py).
+  grantMembership: (companyId, body) =>
+    request(`/api/admin/companies/${companyId}/grant`, { method: "POST", body }),
+  revokeGrant: (grantId, reason) =>
+    request(`/api/admin/grants/${grantId}/revoke`, { method: "POST", body: { reason } }),
   inviteDriver: (id, licenseId, email, label) =>
     request(`/api/admin/companies/${id}/driver-invites`, {
       method: "POST",
