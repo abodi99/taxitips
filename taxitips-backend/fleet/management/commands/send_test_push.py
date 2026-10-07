@@ -19,6 +19,7 @@ from django.core.management.base import BaseCommand, CommandError
 
 from billing import fcm
 from billing.models import Company, Device
+from core import notify
 from fleet.push_gate import can_receive
 
 
@@ -56,10 +57,16 @@ class Command(BaseCommand):
             body = (tip.summary or body)[:180]
             # Samma fält som riktiga notiser (core/notify._send_due), så att
             # appens väg för "öppna tipset" provas på riktigt.
+            # Samma fält som riktiga notiser (core/notify._send_due), så att
+            # appens banderoll visar rätt ikon och styrka även för ett test: en
+            # testnotis utan `kind` och `level` såg ut som ett svagt tågtips
+            # oavsett vad tipset var.
             data = {
                 "opportunity_id": str(tip.id),
                 "severity_tier": tip.severity_tier or "",
                 "demand_score": tip.demand_score or 0,
+                "kind": tip.kind or "",
+                "level": notify.level_of(tip),
             }
             self.stdout.write(f"Tips: {tip.id} -- {title}")
 
