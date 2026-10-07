@@ -17,7 +17,9 @@ import time
 import uuid
 
 from django.test import Client, RequestFactory, override_settings
+from django.utils import timezone
 
+from billing.models import Device
 from fleet import access, licensing, membership
 from fleet.models import License, MembershipSession
 from fleet.tests.base import FleetTestCase
@@ -147,6 +149,30 @@ class MembershipTests(FleetTestCase):
         result = self.resolve(self.owner_headers())
         self.assertTrue(result.ok, result.reason)
         self.assertEqual(result.kind, "member")
+
+    def test_an_owner_app_without_a_jwt_gets_the_accounts_access(self):
+        # Ägarappen skickar enhetstoken men inte alltid Authorization
+        # (`/api/fleet/me`). Telefonraden bär kontot, så en inloggad ägare ska
+        # få kontots åtkomst -- inte "Telefonen är inte godkänd för någon bil".
+        device = Device.objects.create(
+            id=uuid.uuid4(), company_id=self.company.id, token="install-owner-app",
+            label="Ägarapp", kind="owner_app", notify_prefs={},
+            created_at=timezone.now(), user_id=self.owner.user_id,
+        )
+        result = self.resolve({"X-Device-Token": device.token})
+        self.assertTrue(result.ok, result.reason)
+        self.assertEqual(result.kind, "member")
+        self.assertEqual(result.counties, ("12",))
+
+    def test_a_phone_without_an_account_is_unchanged(self):
+        # Regression: en telefon utan konto på raden får telefonens eget skäl.
+        device = Device.objects.create(
+            id=uuid.uuid4(), company_id=self.company.id, token="install-no-account",
+            label="Okänd", kind="driver", notify_prefs={}, created_at=timezone.now(),
+        )
+        result = self.resolve({"X-Device-Token": device.token})
+        self.assertFalse(result.ok)
+        self.assertEqual(result.reason, "device_not_approved")
 
     # --- län -------------------------------------------------------------
 

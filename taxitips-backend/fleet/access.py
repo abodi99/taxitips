@@ -389,8 +389,16 @@ def resolve(request, now=None) -> Access:
         # fick det gamla bolagets status, län och tips medan inställningarna
         # visade det nya (2026-10-03, Malmö Taxi på en telefon som stod på
         # Demo AB). En förartelefon med godkänd bil går som förut.
-        if payload and device_result.kind != "driver":
-            return _member_access(payload, now, device_id=device_result.device_id)
+        #
+        # Ägarappen bär sitt konto på telefonraden (`devices.user_id`), så
+        # kontot hittas även när appen inte hunnit skicka JWT:n. Utan det gick
+        # en inloggad ägare rakt in i "Telefonen är inte godkänd för någon bil"
+        # trots ett aktivt medlemskap -- `/api/fleet/me` skickar enhetstoken men
+        # inte alltid Authorization.
+        if device_result.kind != "driver":
+            account = payload or _account_payload_for_device(device_result.device_id)
+            if account:
+                return _member_access(account, now, device_id=device_result.device_id)
         # En token som är okänd får ändå prövas mot JWT-vägen: en ägare kan ha
         # en gammal token liggande OCH vara inloggad. Men skälet sparas, så att
         # svaret blir "unknown_device_token" och inte "no_credentials" när det
@@ -655,6 +663,20 @@ def _legacy_access(device: Device, window: Window, now) -> Access | None:
         ),
         message="Övergångsåtkomst. Be din administratör parkoppla telefonen mot en bil.",
     )
+
+
+def _account_payload_for_device(device_id) -> dict | None:
+    """
+    Kontot som äger en telefonrad (`devices.user_id`), som en JWT-payload.
+
+    Ägarappen skriver kontot på telefonraden när den loggar in; en förartelefon
+    har oftast inget. `None` när raden inte finns eller saknar konto -- då prövas
+    ingen ägarväg, och svaret blir telefonens eget skäl.
+    """
+    if not device_id:
+        return None
+    user_id = Device.objects.filter(id=device_id).values_list("user_id", flat=True).first()
+    return {"sub": str(user_id)} if user_id else None
 
 
 def _member_access(payload: dict, now, *, device_id=None) -> Access:
