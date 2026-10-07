@@ -3,6 +3,13 @@
     "supabase-local": {
       "type": "http",
       "url": "http://127.0.0.1:54321/mcp"
+    },
+    "metamcp-taxitips": {
+      "type": "http",
+      "url": "https://mcp.taxitips.se/metamcp/taxitips/mcp",
+      "headers": {
+        "Authorization": "Bearer ${METAMCP_API_KEY}"
+      }
     }
   }
 }
