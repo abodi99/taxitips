@@ -127,7 +127,7 @@ void main() {
 
   testWidgets('en typ som aldrig kan ge notis visas inte', (tester) async {
     await pump(tester, _FakeApi());
-    await tester.tap(find.text('Fler val: enskilda störningstyper'));
+    await tester.tap(find.text('Fler val'));
     await tester.pumpAndSettle();
     expect(find.text('Förseningar'), findsOneWidget);
     expect(find.text('Vägarbete eller köbildning'), findsNothing);
@@ -140,5 +140,15 @@ void main() {
     expect(find.text('Välj läge'), findsNothing);
     expect(find.text('Även svagare tips'), findsNothing);
     expect(find.text('Hur viktiga?'), findsOneWidget);
+  });
+
+  testWidgets('reglagen är korta: på/av, paus, kategorier och nivå', (
+    tester,
+  ) async {
+    await pump(tester, _FakeApi());
+    expect(find.text('Skicka notiser'), findsOneWidget);
+    expect(find.text('Paus'), findsOneWidget);
+    expect(find.text('Vilka notiser?'), findsOneWidget);
+    expect(find.text('1 tim'), findsOneWidget);
   });
 }

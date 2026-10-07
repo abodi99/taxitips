@@ -1346,15 +1346,34 @@ class ApiClient {
     final installId = await ensureInstallationId();
     final backend = _backend;
     if (backend != null) {
-      final body = await backend.deviceSession(
+      Future<Map<String, dynamic>> call(String? token) => backend.deviceSession(
         installationId: installId,
         pushToken: fcmToken.isEmpty ? null : fcmToken,
         label: label,
         platform: platform,
         // Förartoken om den finns; annars JWT → owner_app-enhet.
-        deviceToken: deviceToken,
+        deviceToken: token,
         accessToken: _accessToken,
       );
+      Map<String, dynamic> body;
+      try {
+        body = await call(deviceToken);
+      } on ApiException catch (e) {
+        // Den sparade enhetstoken känner servern inte igen (databasen
+        // återställd eller telefonen avparkopplad). Utan det här fastnade
+        // telefonen: varje registrering svarade `unknown_device`, ingen
+        // devices-rad skapades, och notisinställningarna blev read-only för
+        // alla. Rensa token och gå via installation_id i stället -- den
+        // inloggade användarens JWT räcker för att skapa raden.
+        if (deviceToken != null &&
+            deviceToken!.isNotEmpty &&
+            (e.status == 404 || e.message == 'unknown_device')) {
+          await clearDevice();
+          body = await call(null);
+        } else {
+          rethrow;
+        }
+      }
       final token = body['device_token']?.toString();
       // Ägare utan tidigare förartoken får installation_id som deviceToken
       // så notisprefs och X-Device-Token fungerar vidare i sessionen.

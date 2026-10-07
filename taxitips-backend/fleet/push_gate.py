@@ -23,7 +23,7 @@ from dataclasses import dataclass
 from django.utils import timezone
 
 from fleet.access import company_window, enforce_licenses, license_counties
-from fleet.models import DeviceApproval, License, VehicleSession
+from fleet.models import DeviceApproval, License, MembershipSession, VehicleSession
 
 
 @dataclass(frozen=True)
@@ -60,6 +60,16 @@ def can_receive(device, snapshot: dict | None = None, *, now=None) -> Verdict:
         if not features.for_company(company_id, now).allows(category):
             return Verdict(False, f"trial_category_locked:{category}")
 
+    # Kontobaserat medlemskap (2026-10): platsen tilldelas KONTOT, och appen
+    # håller en öppen MembershipSession. Den vägen skapar varken DeviceApproval
+    # eller VehicleSession. Utan den här grenen svarade grinden
+    # `device_not_approved` och en provägares telefon fick aldrig en enda
+    # notis -- medan `access._membership_access` släppte in samma konto i
+    # appen. Notisen och listan ska vila på samma rättighet (§3).
+    membership_license = _membership_license(device)
+    if membership_license is not None:
+        return _county_verdict(membership_license.id, snapshot, now, "membership")
+
     approvals = DeviceApproval.objects.filter(
         device_id=device.id, status=DeviceApproval.Status.ACTIVE
     ).exists()
@@ -87,7 +97,40 @@ def can_receive(device, snapshot: dict | None = None, *, now=None) -> Verdict:
         License.Status.ACTIVE, License.Status.TRIAL, License.Status.PENDING_CANCEL
     ):
         return Verdict(False, "license_inactive")
+    return _county_verdict(session.license_id, snapshot, now, "entitled")
 
+
+def _membership_license(device):
+    """
+    Licensen för ett kontobaserat medlemskap som den här telefonen håller,
+    eller None.
+
+    Samma krav som `access._membership_access`: en ÖPPEN MembershipSession för
+    kontot, och en plats som faktiskt är tilldelad det (`is_assigned_to`). Ett
+    medlemskap som tagits bort från kontot ger ingenting.
+    """
+    user_id = getattr(device, "user_id", None)
+    if not user_id:
+        return None
+    session = (
+        MembershipSession.objects.filter(user_id=user_id, ended_at__isnull=True)
+        .select_related("license")
+        .first()
+    )
+    if session is None or session.license is None:
+        return None
+    license = session.license
+    if not license.is_assigned_to(user_id):
+        return None
+    if license.status not in (
+        License.Status.ACTIVE, License.Status.TRIAL, License.Status.PENDING_CANCEL
+    ):
+        return None
+    return license
+
+
+def _county_verdict(license_id, snapshot: dict | None, now, ok_reason: str) -> Verdict:
+    """Länsprövningen, delad av medlems- och licensvägen."""
     snapshot = snapshot or {}
     if "area_codes" in snapshot:
         codes = [str(c) for c in (snapshot.get("area_codes") or [])]
@@ -98,9 +141,9 @@ def can_receive(device, snapshot: dict | None = None, *, now=None) -> Verdict:
         codes = _codes_from_opportunity(snapshot.get("id"))
     if not codes:
         return Verdict(True, "unplaced_tip")
-    entitled = set(license_counties(session.license_id, now))
+    entitled = set(license_counties(license_id, now))
     if any(code in entitled or code[:2] in entitled for code in codes):
-        return Verdict(True, "entitled")
+        return Verdict(True, ok_reason)
     return Verdict(False, "outside_licensed_county")
 
 
