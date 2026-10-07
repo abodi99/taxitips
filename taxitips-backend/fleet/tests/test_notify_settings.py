@@ -13,6 +13,7 @@ import json
 import uuid
 
 from django.test import Client, override_settings
+from django.utils import timezone
 
 from billing.models import Device
 from fleet import pairing
@@ -49,6 +50,21 @@ class CustomerNotifySettingsTests(FleetTestCase):
         self.assertEqual(phone["entitledCounties"], ["01"])
         self.assertEqual([p["id"] for p in data["presetCatalog"]][:4],
                          ["recommended", "strongest", "everything", "silent"])
+
+    def test_an_owner_app_phone_shows_the_companys_counties(self):
+        # Ägarapp: telefonraden bär kontot och har inget godkännande. Utan
+        # fallbacken visade portalen inga län för en telefon som i appen såg
+        # hela bolagets, och administratören kunde inte sätta området.
+        from fleet import notify_settings
+
+        owner_app = Device.objects.create(
+            id=uuid.uuid4(), company_id=self.data["company"].id, token="owner-app-token",
+            label="Ägarapp", kind="owner_app", notify_prefs={},
+            created_at=timezone.now(), user_id=self.data["owner"].user_id,
+        )
+        counties, restricted = notify_settings.device_entitlement(owner_app)
+        self.assertEqual(counties, ["01"])
+        self.assertTrue(restricted)
 
     def test_the_owner_changes_a_drivers_phone(self):
         response = self.call(

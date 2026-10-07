@@ -22,7 +22,12 @@ from dataclasses import dataclass
 
 from django.utils import timezone
 
-from fleet.access import company_window, enforce_licenses, license_counties
+from fleet.access import (
+    company_window,
+    enforce_licenses,
+    license_counties,
+    member_company_counties,
+)
 from fleet.models import DeviceApproval, License, MembershipSession, VehicleSession
 
 
@@ -68,12 +73,22 @@ def can_receive(device, snapshot: dict | None = None, *, now=None) -> Verdict:
     # appen. Notisen och listan ska vila på samma rättighet (§3).
     membership_license = _membership_license(device)
     if membership_license is not None:
-        return _county_verdict(membership_license.id, snapshot, now, "membership")
+        return _county_verdict(
+            set(license_counties(membership_license.id, now)), snapshot, "membership"
+        )
 
     approvals = DeviceApproval.objects.filter(
         device_id=device.id, status=DeviceApproval.Status.ACTIVE
     ).exists()
     if not approvals:
+        # Ägarappen: ett inloggat konto (telefonradens `user_id`) i ett aktivt
+        # bolag har bolagets åtkomst -- samma väg som `access._member_access`.
+        # En sådan telefon skapar ingen DeviceApproval. Prövas EFTER
+        # godkännandet och medlemskapet, precis som `access.resolve`: en
+        # förartelefon med godkänd bil går alltid som förut.
+        member_counties = member_company_counties(device, now)
+        if member_counties is not None:
+            return _county_verdict(member_counties, snapshot, "member")
         if enforce_licenses() or License.objects.filter(company_id=company_id).exists():
             # Företaget är migrerat men telefonen är spärrad eller inte
             # parkopplad. Ingen notis.
@@ -97,7 +112,9 @@ def can_receive(device, snapshot: dict | None = None, *, now=None) -> Verdict:
         License.Status.ACTIVE, License.Status.TRIAL, License.Status.PENDING_CANCEL
     ):
         return Verdict(False, "license_inactive")
-    return _county_verdict(session.license_id, snapshot, now, "entitled")
+    return _county_verdict(
+        set(license_counties(session.license_id, now)), snapshot, "entitled"
+    )
 
 
 def _membership_license(device):
@@ -129,8 +146,8 @@ def _membership_license(device):
     return license
 
 
-def _county_verdict(license_id, snapshot: dict | None, now, ok_reason: str) -> Verdict:
-    """Länsprövningen, delad av medlems- och licensvägen."""
+def _county_verdict(entitled, snapshot: dict | None, ok_reason: str) -> Verdict:
+    """Länsprövningen, delad av medlems-, ägar- och licensvägen."""
     snapshot = snapshot or {}
     if "area_codes" in snapshot:
         codes = [str(c) for c in (snapshot.get("area_codes") or [])]
@@ -141,7 +158,7 @@ def _county_verdict(license_id, snapshot: dict | None, now, ok_reason: str) -> V
         codes = _codes_from_opportunity(snapshot.get("id"))
     if not codes:
         return Verdict(True, "unplaced_tip")
-    entitled = set(license_counties(license_id, now))
+    entitled = {str(c) for c in entitled}
     if any(code in entitled or code[:2] in entitled for code in codes):
         return Verdict(True, ok_reason)
     return Verdict(False, "outside_licensed_county")

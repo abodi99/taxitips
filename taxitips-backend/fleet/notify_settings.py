@@ -9,9 +9,10 @@ personal (ADMIN_SELL, fleet/admin_notify.py) ändrar samma sak som föraren sjä
 * **Bara företagets egna telefoner.** Anroparen slår upp telefonen med
   företaget i frågan; en telefon i ett annat företag finns inte (404).
 * **Länen aldrig utöver bilens licens.** Rättigheten är unionen av länen för
-  bilarna telefonen är godkänd för (fleet/access.license_counties) -- samma
-  rättighet som prövas strax före sändningen (fleet/push_gate.py). Ett val
-  utanför den sparas inte.
+  bilarna telefonen är godkänd för (fleet/access.license_counties), och för en
+  ägarapp utan bil är den bolagets län (fleet/access.member_company_counties)
+  -- samma rättighet som prövas strax före sändningen (fleet/push_gate.py). Ett
+  val utanför den sparas inte.
 * **Företagets standard gäller nya telefoner.** Den sätts när en telefon
   kopplas till en bil i företaget för första gången (fleet/pairing.py) och
   bär bara reglerna, aldrig område eller paus (core/notify_prefs.DEFAULT_FIELDS).
@@ -28,7 +29,7 @@ from django.utils import timezone
 from billing.models import Device
 from core import areas, notify_prefs
 from fleet import device_prefs, features
-from fleet.access import enforce_licenses, license_counties
+from fleet.access import enforce_licenses, license_counties, member_company_counties
 from fleet.models import CompanyNotifyDefault, DeviceApproval, License
 
 log = logging.getLogger(__name__)
@@ -97,6 +98,13 @@ def device_entitlement(device, now=None) -> tuple[list[str], bool]:
         for license_id in license_ids:
             counties |= set(license_counties(license_id, now))
         return sorted(counties), True
+    # Ägarapp (kontobaserad): telefonraden bär sitt konto och har därför inget
+    # godkännande. Samma län som appen visar och push-grinden prövar
+    # (fleet/access.member_company_counties) -- annars visade portalen inga län
+    # för en telefon som i appen såg hela bolagets.
+    owner_counties = member_company_counties(device, now)
+    if owner_counties:
+        return sorted(owner_counties), True
     if enforce_licenses() or License.objects.filter(company_id=device.company_id).exists():
         return [], True
     return [], False

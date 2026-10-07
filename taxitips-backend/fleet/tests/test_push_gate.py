@@ -45,11 +45,33 @@ class MembershipGateTests(FleetTestCase):
         self.assertEqual(verdict.reason, "outside_licensed_county")
 
     def test_without_a_session_the_phone_is_still_blocked(self):
-        # Regression: en olänkad telefon får fortfarande inget.
+        # Regression: en olänkad telefon får fortfarande inget. Raden bär
+        # varken konto eller godkännande -- till skillnad från ägarappens rad
+        # nedan, som bär kontot. Läs tillbaka raden ur databasen: ett objekt
+        # från före `update()` har kvar `user_id=None` och hade låtit testet
+        # passera på fel grunder (den prövade då aldrig ägargrenen).
         data = self.full_setup(county="12")
-        device = Device.objects.get(id=data["device"].id)
-        DeviceApproval.objects.filter(device_id=device.id).delete()
-        Device.objects.filter(id=device.id).update(user_id=data["owner"].user_id)
-        verdict = can_receive(device, {"area_codes": ["12"]})
+        DeviceApproval.objects.filter(device_id=data["device"].id).delete()
+        verdict = can_receive(Device.objects.get(id=data["device"].id), {"area_codes": ["12"]})
         self.assertFalse(verdict.ok)
         self.assertEqual(verdict.reason, "device_not_approved")
+
+    def test_a_logged_in_owners_phone_receives(self):
+        # Ägarappen: telefonraden bär kontot, ingen bil. Utan den här grenen
+        # fick en inloggad ägare aldrig en notis, trots att appen visade tipsen.
+        data = self.full_setup(county="12")
+        DeviceApproval.objects.filter(device_id=data["device"].id).delete()
+        Device.objects.filter(id=data["device"].id).update(
+            user_id=data["owner"].user_id, kind="owner_app"
+        )
+        verdict = can_receive(Device.objects.get(id=data["device"].id), {"area_codes": ["12"]})
+        self.assertTrue(verdict.ok, verdict.reason)
+        self.assertEqual(verdict.reason, "member")
+
+    def test_an_owners_phone_outside_the_county_is_blocked(self):
+        data = self.full_setup(county="12")
+        DeviceApproval.objects.filter(device_id=data["device"].id).delete()
+        Device.objects.filter(id=data["device"].id).update(user_id=data["owner"].user_id)
+        verdict = can_receive(Device.objects.get(id=data["device"].id), {"area_codes": ["01"]})
+        self.assertFalse(verdict.ok)
+        self.assertEqual(verdict.reason, "outside_licensed_county")

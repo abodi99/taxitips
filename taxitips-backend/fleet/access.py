@@ -294,6 +294,32 @@ def company_counties(company_id, now=None) -> tuple[str, ...]:
     return tuple(sorted({row.county_code for row in rows}))
 
 
+def member_company_counties(device, now=None) -> set[str] | None:
+    """
+    Bolagets län för ett inloggat konto på telefonraden (`devices.user_id`).
+
+    `None` när raden inte bär ett konto i telefonens bolag (ingen medlem) --
+    då är detta inte en ägarapp och anroparen prövar sina egna vägar. En
+    medlem utan län ger en tom mängd, inte `None`.
+
+    En ägarapp har inget godkännande; rättigheten kommer från kontot. Push-
+    grinden (fleet/push_gate.py) och portalens telefonvy
+    (fleet/notify_settings.py) läser samma hjälpare, så att telefonens län är
+    desamma i appen, i portalen och i notisbeslutet. Kontots bolag måste vara
+    telefonens eget -- annars hade en telefon i ett bolag fått ett annats län.
+    """
+    now = now or timezone.now()
+    user_id = getattr(device, "user_id", None)
+    if not user_id:
+        return None
+    member = CompanyMember.objects.filter(user_id=user_id, status="active").first()
+    if member is None or str(member.company_id) != str(getattr(device, "company_id", "")):
+        return None
+    if not company_window(member.company_id, now).ok:
+        return None
+    return set(company_counties(member.company_id, now))
+
+
 # ---------------------------------------------------------------------------
 # Credential -> enhet
 # ---------------------------------------------------------------------------
