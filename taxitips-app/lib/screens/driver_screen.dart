@@ -36,6 +36,7 @@ import '../widgets/guided_tour.dart';
 import '../widgets/map_legend_sheet.dart';
 import '../widgets/signal_card.dart';
 import '../widgets/signal_map.dart';
+import '../widgets/push_banner.dart';
 import '../widgets/vehicle_session_sheet.dart';
 import '../widgets/google_signal_map.dart';
 
@@ -587,35 +588,32 @@ class _DriverScreenState extends State<DriverScreen>
     await _openAlertDetail(alert);
   }
 
-  /// En notis medan appen är öppen: visa den och hämta om flödet, så att
-  /// tipset som notisen handlar om redan ligger i listan när föraren tittar.
+  /// En notis medan appen är öppen: visa den som en banderoll högst upp och
+  /// hämta om flödet, så att tipset notisen handlar om redan ligger i listan
+  /// när föraren tittar.
+  ///
+  /// Banderollen ritas av widgeten (lib/widgets/push_banner.dart) och ligger i
+  /// appens rot-Overlay, alltså över hela skalet: notisen syns på
+  /// inställningarna och i supportchatten, inte bara i listan. Texten skrivs
+  /// inte ihop här -- kortet visar samma ikon, färg och ord som listan och
+  /// kartan.
   void _onForegroundPush(RemoteMessage message) {
     if (!mounted) return;
-    final title = message.notification?.title ?? 'TaxiTips';
-    final body = message.notification?.body ?? '';
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text(body.isEmpty ? title : '$title\n$body'),
-          duration: const Duration(seconds: 8),
-          behavior: SnackBarBehavior.floating,
-          action: message.data['type'] == 'support_reply'
-              ? SnackBarAction(label: 'Öppna', onPressed: _openSupportChat)
-              : (message.data['opportunity_id']?.toString() ?? '').isEmpty
-              ? null
-              : SnackBarAction(
-                  label: 'Visa',
-                  onPressed: () async {
-                    final alert = await widget.api.alertById(
-                      message.data['opportunity_id'].toString(),
-                    );
-                    if (alert != null && mounted) await _openAlertDetail(alert);
-                  },
-                ),
-        ),
-      );
-    if (message.data['type'] == 'support_reply') {
+    final banner = PushBannerData.fromMessage(message);
+    final opportunityId = banner.opportunityId;
+    showPushBanner(
+      context,
+      banner,
+      onOpen: banner.isSupportReply
+          ? _openSupportChat
+          : opportunityId.isEmpty
+          ? null
+          : () async {
+              final alert = await widget.api.alertById(opportunityId);
+              if (alert != null && mounted) await _openAlertDetail(alert);
+            },
+    );
+    if (banner.isSupportReply) {
       unawaited(_refreshSupportUnread());
       return;
     }
@@ -669,6 +667,9 @@ class _DriverScreenState extends State<DriverScreen>
     widget.tourRequest?.removeListener(_onTourRequested);
     _tourTimer?.cancel();
     _tour?.dismiss();
+    // Banderollen ligger i appens Overlay, inte i den här skärmens träd: utan
+    // detta blev en notis kvar över nästa skärm efter utloggning.
+    hidePushBanner();
     _pushSub?.cancel();
     _openedSub?.cancel();
     _timer?.cancel();

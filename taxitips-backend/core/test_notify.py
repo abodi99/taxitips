@@ -324,6 +324,17 @@ class PushCycleTests(SupabaseCompanyMixin, TestCase):
         self.assertEqual(delivery.snapshot["title"], o.title)
         self.assertEqual(delivery.snapshot["demand_score"], 80)
 
+    def test_the_notification_carries_mode_and_level_for_the_in_app_banner(self):
+        # Appens banderoll väljer ikon ur `kind` (signal_kinds.categoryOfAlert)
+        # och styrka ur `level` -- samma fält listan visar. Utan dem fick en
+        # färja tågets symbol och varje notis ordet "Svag", eftersom appen
+        # annars räknar styrkan ur `worth_it_score`, som inte skickas.
+        opportunity(kind="ferry", severity_tier=SeverityTier.LINE_PAUSED, demand_score=80)
+        self.run_cycle([FakeDevice()])
+        data = self.sent[0]["data"]
+        self.assertEqual(data["kind"], "ferry")
+        self.assertEqual(data["level"], "high")
+
     def test_a_device_that_filtered_it_out_gets_nothing_but_others_still_do(self):
         opportunity(region="sl", severity_tier=SeverityTier.LINE_PAUSED, demand_score=80)
         wants = FakeDevice({"regions": ["sl"]}, label="Stockholm")

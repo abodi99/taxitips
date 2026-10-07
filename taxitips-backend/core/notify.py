@@ -1321,6 +1321,15 @@ def _send_due(sender, devices, now) -> Counter:
                     "opportunity_id": snapshot.get("id") or "",
                     "severity_tier": snapshot.get("severity_tier") or "",
                     "demand_score": snapshot.get("demand_score") or 0,
+                    # Färdsättet följer med, så att appens banderoll visar
+                    # samma ikon som listan och kartan
+                    # (taxitips-app/lib/signal_kinds.categoryOfAlert). Utan det
+                    # hade en färja och ett inställt tåg fått samma symbol.
+                    "kind": snapshot.get("kind") or "",
+                    # Backendens egen bedömning. Appen räknar annars styrkan
+                    # själv ur `worth_it_score`, som inte skickas -- och då blir
+                    # varje notis "Svag". `level` är samma fält listan visar.
+                    "level": snapshot.get("level") or "",
                 },
                 # Samma händelse ersätter den förra notisen på telefonen.
                 collapse_key=collapse_key(snapshot.get("group") or delivery.opportunity_external_id),
