@@ -883,23 +883,40 @@ def _devices(require_token: bool = True, weak_only: bool = False):
     `weak_only=True`: bara telefoner som valt svagare tips. En cykel med bara
     svaga kandidater ska inte läsa varje telefon i landet var 30:e sekund.
     """
-    from billing.models import Company, Device
+    from billing.models import Device
 
-    active = set(
-        Company.objects.filter(status__in=("trial", "active")).values_list("id", flat=True)
-    ) | set(
-        Company.objects.filter(subscription_status="active").values_list("id", flat=True)
-    )
-    # Entitlement gäller även push: ett uppsagt bolags förare ska inte
-    # väckas av data de inte får se i appen. Samma bolagskontroll som
-    # core/entitlement.py gör för läsvägen -- den hade annars funnits på
-    # ett ställe och saknats på det andra.
+    # Rätten att ta emot bor i fleet.access.company_window -- SAMMA fråga som
+    # listan (core/entitlement.py) och sändgrinden (fleet/push_gate.py)
+    # ställer. Urvalet läste tidigare legacy-fältet `companies.status`, och
+    # då föll varje telefon vars bolag hade ett giltigt prov i `fleet_trial`
+    # men `status=canceled` i Supabase bort INNAN grinden ens tillfrågades:
+    # svaret blev `no_devices` och `push_delivery` stod på noll rader i hela
+    # tabellens liv (mätt 2026-10-07, docs/bearbetning-optimeringar.md §2).
+    # company_window prövar spärr, beviljande, prov, betald period, frist och
+    # uppsägning i rätt ordning, och faller tillbaka på bolagets status bara
+    # när den nya modellen inte vet något -- precis det urvalet ska göra.
+    from fleet.access import company_window
+
     rows = Device.objects.all()
     if weak_only:
         rows = rows.filter(notify_prefs__weak=True)
     if require_token:
         rows = rows.exclude(push_token__isnull=True).exclude(push_token="")
-    return [d for d in rows if d.company_id in active]
+    rows = list(rows)
+    # En prövning per bolag, inte per telefon: ett bolag med femtio bilar
+    # ska inte kosta femtio uppslag var 30:e sekund.
+    now = timezone.now()
+    open_by_company: dict = {}
+    out = []
+    for device in rows:
+        company_id = device.company_id
+        if company_id is None:
+            continue
+        if company_id not in open_by_company:
+            open_by_company[company_id] = company_window(company_id, now).ok
+        if open_by_company[company_id]:
+            out.append(device)
+    return out
 
 
 def _has_cap(prefs) -> bool:
@@ -1092,13 +1109,32 @@ def run_push_cycle(now=None, sender=None, simulate: bool = False) -> dict:
 
         sender = fcm_sender
 
-    gate = {}
+    gate: dict = {}
     if devices and rows:
         # Osäkra regler (*.ambiguous) läses av den bättre modellen innan någon
         # väcks; grinden får bara stoppa, och släpper igenom om AI:n inte svarar.
         from core import ai_gate
 
         rows, gate = ai_gate.screen(rows, now)
+        # Räknarna följer alltid med när grinden kört, även med noll osäkra
+        # kandidater: "grinden kördes men hade inget att pröva" och "grinden
+        # kördes aldrig" såg annars likadana ut i svaret, och det var så
+        # 0 gate-anrop på 154 osäkra tips kunde gå omärkt i tre veckor.
+        gate = {"ran": True, **gate}
+
+    briefed: dict = {}
+    if devices and rows:
+        # Förarbeskedet för just de tips som går ut nu, efter grinden och före
+        # köandet (core/briefs.ensure). Fail-open: hinner det inte går notisen
+        # med kortets vanliga text.
+        from core import briefs
+
+        try:
+            briefed = dict(briefs.ensure(rows, now))
+        except Exception as exc:  # ett besked får aldrig stoppa en notis
+            reraise_time_limit(exc)
+            log.warning("notify: besked misslyckades: %s", type(exc).__name__)
+            briefed = {"error": 1}
 
     counts = _recent_counts(devices, now) if devices else {}
     queued = _enqueue(rows, devices, now, counts) if devices and rows else 0
@@ -1116,7 +1152,8 @@ def run_push_cycle(now=None, sender=None, simulate: bool = False) -> dict:
         "candidates": len(rows),
         "weakCandidates": len(weak_rows),
         "devices": len(devices),
-        **({"aiGate": gate} if gate.get("gated") else {}),
+        **({"aiGate": gate} if gate else {}),
+        **({"briefs": briefed} if briefed else {}),
     }
 
 

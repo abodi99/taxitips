@@ -218,14 +218,34 @@ def billable_license_count(company_id) -> int:
     Antalet KÖPTA billicenser. Provbilar räknas inte -- de är ett annat fält i
     ett annat flöde, och det är hela skillnaden mellan tre provbilar och tre
     debiterade licenser (§7).
+
+    Platser som hålls av ett öppet BEVILJANDE (fleet/grants.py) räknas inte
+    heller: de är gratis på en persons beslut, och `stripe_sync.
+    sync_company_amount` räknar nästa fakturas belopp ur exakt den här
+    funktionen. Utan undantaget hade ett beviljande blivit en höjning av
+    kundens abonnemang vid nästa förnyelse.
     """
-    return active_licenses(company_id).count()
+    from fleet import grants
+
+    free = grants.grant_license_ids(company_id)
+    return active_licenses(company_id).exclude(id__in=free).count()
 
 
 def extra_county_count(company_id, now=None) -> int:
-    """Summan av alla bilars extra län. Priset är per bil OCH extra län."""
+    """
+    Summan av alla bilars extra län. Priset är per bil OCH extra län.
+
+    Beviljade platser hoppas över, av samma skäl som i
+    `billable_license_count`: ett beviljande ger alla län utan kostnad och
+    får aldrig hamna på fakturan.
+    """
+    from fleet import grants
+
     now = now or timezone.now()
-    license_ids = list(active_licenses(company_id).values_list("id", flat=True))
+    free = grants.grant_license_ids(company_id)
+    license_ids = list(
+        active_licenses(company_id).exclude(id__in=free).values_list("id", flat=True)
+    )
     return (
         LicenseCounty.objects.filter(
             license_id__in=license_ids, kind=LicenseCounty.Kind.EXTRA, active_from__lte=now

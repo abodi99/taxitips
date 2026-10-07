@@ -146,11 +146,23 @@ def company_window(company_id, now=None) -> Window:
     vägar in passerar den här funktionen: förartelefonen, den inloggade ägaren
     och övergångsvägen. En betald period ger ingen åtkomst åt ett avstängt
     företag.
+
+    Ett manuellt beviljande (fleet/grants.py) öppnar perioden som `free_grant`
+    -- efter avstängningsprövningen, före abonnemanget, eftersom beviljandet
+    finns till just för att betalningen inte ska styra (t.ex. en tvist med
+    Stripe medan kunden ändå ska kunna köra).
     """
     from fleet import accounts
 
     if accounts.company_block(company_id) is not None:
         return Window(False, "company_suspended")
+
+    from fleet import grants
+
+    grant = grants.active_grant(company_id, now)
+    if grant is not None:
+        return Window(True, grants.WINDOW_REASON, grant.ends_at)
+
     return _subscription_window(company_id, now)
 
 
@@ -452,11 +464,23 @@ def _maybe_claim_memberships(payload: dict, now) -> list:
     Adressen kommer ur den VERIFIERADE token. `.exists()`-grinden håller
     snabbvägen billig: en extra fråga bara när det faktiskt finns något att lösa
     in för adressen.
+
+    Ett väntande BEVILJANDE (fleet/grants.py) löses också in här: raden binder
+    adressen till kontot, och när personen sedan tar platsen i appen gäller
+    beviljandets period och län.
     """
     email = (payload.get("email") or "").strip().lower()
     user_id = payload.get("sub")
     if not email or not user_id:
         return []
+    from fleet.models import MembershipGrant
+
+    if MembershipGrant.objects.filter(
+        user_id__isnull=True, email__iexact=email, revoked_at__isnull=True
+    ).exists():
+        from fleet import grants
+
+        grants.claim_for_email(email=email, user_id=user_id, now=now)
     if not License.objects.filter(
         assignee_user_id__isnull=True, assignee_email__iexact=email
     ).exists():
@@ -760,6 +784,9 @@ def _window_message(reason: str) -> str:
         "past_due": "Medlemskapet är inte betalt. Ditt företags administratör hanterar det på webben.",
         "canceled": "Medlemskapet är avslutat.",
         "no_subscription": "Företaget har inget medlemskap.",
+        # free_grant behöver ingen egen text: fönstret är öppet, så ingen
+        # nekad vy visar skälet. Texten finns bara för fullständighetens skull
+        # om en vy ändå råkar fråga efter ett nekat skäl.
         "unknown_company": "Företaget finns inte.",
         "company_suspended": "Företagets konto är avstängt. Kontakta TaxiTips support.",
         "account_blocked": "Kontot är spärrat. Kontakta TaxiTips support.",

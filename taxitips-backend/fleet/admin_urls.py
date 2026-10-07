@@ -91,6 +91,11 @@ urlpatterns = [
     path("licenses/<uuid:license_id>/release", admin_api.release_license),
     path("licenses/<uuid:license_id>/assign", admin_api.assign_membership),
     path("licenses/<uuid:license_id>/unassign", admin_api.unassign_membership),
+    # Kontobaserat medlemskap utan bil: ny plats till ett konto, och manuellt
+    # beviljande av fullt medlemskap utan kostnad (fleet/grants.py).
+    path("companies/<uuid:company_id>/memberships", admin_api.create_membership),
+    path("companies/<uuid:company_id>/grant", admin_api.grant_free_membership),
+    path("grants/<uuid:grant_id>/revoke", admin_api.revoke_grant),
     path("companies/<uuid:company_id>/driver-invites", admin_api.driver_invite_create),
     path("driver-invites/<uuid:invite_id>/resend", admin_api.driver_invite_resend),
     path("driver-invites/<uuid:invite_id>/revoke", admin_api.driver_invite_revoke),

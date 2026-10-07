@@ -36,8 +36,8 @@ from billing.models import Company, CompanyMember, Device
 from core.api import _json
 from core.models import OpportunityReport, PushDelivery
 from fleet import (
-    access, archive, audit, county_changes, discounts, driver_invites, licensing, membership, pairing,
-    pricing, risk, roles, sessions, trials,
+    access, archive, audit, county_changes, discounts, driver_invites, grants, licensing,
+    membership, pairing, pricing, risk, roles, sessions, trials,
 )
 from fleet.api import _DOMAIN_ERRORS, _error
 from fleet.models import (
@@ -482,6 +482,10 @@ def company_detail(request, company_id):
             for i in OwnerInvite.objects.filter(company_id=company.id).order_by("-created_at")[:10]
         ],
         "licenses": licenses,
+        # Manuella beviljanden (fleet/grants.py): vem som fått allt gratis,
+        # av vem, varför och tills när. Även återkallade, så att historiken
+        # finns i samma vy som resten av kundens liv.
+        "grants": [grants.view(g, now=now) for g in grants.grants_for_company(company.id)],
         "devices": devices,
         "notify": notify,
         # Förarinbjudningar med e-post som inte lösts in, per bil i vyn.
@@ -740,6 +744,119 @@ def unassign_membership(request, license_id):
         subject_type="license", subject_id=license.id,
     )
     return _json(request, {"ok": True, "membership": membership.view(updated)})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def create_membership(request, company_id):
+    """
+    POST /api/admin/companies/<id>/memberships {"email"|"userId", "baseCounty"?}
+
+    Ny plats till ett KONTO -- utan bil och utan regnr. Medlemskapet är sedan
+    2026-10 personbaserat: platsen skapas här, tilldelas direkt och körs i
+    appen av kontot. Baslän kan lämnas tomt (väljs senare); länen på en betald
+    plats ändras annars via en beställning.
+    """
+    principal = _staff(request, Perm.ADMIN_SELL)
+    company = _company_or_404(company_id)
+    body = _body(request)
+    email = str(body.get("email") or "").strip()
+    user_id = str(body.get("userId") or body.get("user_id") or "").strip()
+    base_county = str(body.get("baseCounty") or "").strip()
+    if not email and not user_id:
+        raise membership.MembershipError("person_required", "Ange kontots e-post eller användar-id.")
+    license = licensing.create_membership_license(
+        company_id=company.id, base_county=base_county, status=License.Status.ACTIVE,
+        actor_user_id=principal.user_id,
+    )
+    if email:
+        membership.assign_to_email(
+            license=license, email=email, actor_user_id=principal.user_id,
+        )
+    else:
+        membership.assign_to_self(
+            license=license, user_id=user_id, actor_user_id=principal.user_id,
+        )
+    _record(
+        principal, "membership_created", company_id=company.id,
+        subject_type="license", subject_id=license.id,
+        detail={"base_county": base_county, "email": email, "user_id": user_id},
+    )
+    return _json(request, {"ok": True, "membership": membership.view(license)})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def grant_free_membership(request, company_id):
+    """
+    POST /api/admin/companies/<id>/grant
+    {"email"|"userId", "reason", "endsAt"?, "allCounties"?, "counties"?}
+
+    Tilldela fullt medlemskap utan kostnad: en person, ett skäl, en tidsgräns.
+
+    Kräver ADMIN_MANAGE -- det flyttar rättigheter UTAN betalning, samma
+    gräns som kuponger och direkt avslut (fleet/roles.py). Ingen beställning,
+    ingen faktura och ingen Stripe-rörelse skapas (fleet/grants.py), och
+    platsen räknas bort från nästa fakturas belopp (licensing.
+    billable_license_count).
+    """
+    principal = _staff(request, Perm.ADMIN_MANAGE)
+    company = _company_or_404(company_id)
+    body = _body(request)
+    grant = grants.grant_membership(
+        company_id=company.id,
+        user_id=str(body.get("userId") or body.get("user_id") or "").strip() or None,
+        email=str(body.get("email") or "").strip(),
+        reason=str(body.get("reason") or ""),
+        ends_at=_parse_ends_at(body.get("endsAt")),
+        all_counties=bool(body.get("allCounties", True)),
+        counties=[str(c) for c in (body.get("counties") or [])],
+        actor_user_id=principal.user_id,
+    )
+    return _json(request, {"ok": True, "grant": grants.view(grant)})
+
+
+def _parse_ends_at(value):
+    """Slutdatum för ett beviljande: full tidpunkt eller ett datum (dagens slut)."""
+    if not value:
+        return None
+    parsed = parse_datetime(str(value))
+    if parsed is None:
+        from django.utils.dateparse import parse_date
+
+        day = parse_date(str(value))
+        if day is None:
+            raise grants.GrantError("invalid_ends_at", "Slutdatumet går inte att tolka.")
+        from datetime import datetime, time
+
+        parsed = datetime.combine(day, time(23, 59, 59))
+    if timezone.is_naive(parsed):
+        parsed = timezone.make_aware(parsed)
+    return parsed
+
+
+@csrf_exempt
+@require_POST
+@handle
+def revoke_grant(request, grant_id):
+    """
+    POST /api/admin/grants/<id>/revoke {"reason": "…"} -- avsluta beviljandet.
+
+    Fönstret stängs direkt och den vanliga periodprövningen gäller igen. En
+    plats som skapades av beviljandet avslutas; en betald plats röras inte.
+    """
+    principal = _staff(request, Perm.ADMIN_MANAGE)
+    from fleet.models import MembershipGrant
+
+    grant = MembershipGrant.objects.filter(id=grant_id).first()
+    if grant is None:
+        raise grants.GrantError("unknown_grant", "Beviljandet finns inte.", status=404)
+    updated = grants.revoke(
+        grant, reason=str(_body(request).get("reason") or ""), actor_user_id=principal.user_id,
+    )
+    return _json(request, {"ok": True, "grant": grants.view(updated)})
 
 
 @csrf_exempt

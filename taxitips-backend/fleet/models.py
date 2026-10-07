@@ -1033,6 +1033,90 @@ class MembershipSession(models.Model):
         ]
 
 
+class MembershipGrant(models.Model):
+    """
+    Ett manuellt beviljande: fullt medlemskap utan kostnad, till ett KONTO.
+
+    **Varför en egen tabell och inte en rabatt eller en kupong.** Rabatten
+    (`CompanyDiscount`) ändrar ett belopp som fortfarande ska faktureras, och
+    kupongen (`Coupon`) är en kod med ett antal dagar som någon måste lösa in.
+    Det här är något annat: en människa i admin har beslutat att den här
+    personen ska ha allt, gratis, och det beslutet ska gå att läsa i efterhand
+    -- vem, när, till vem, varför, tills när. Därför en rad med aktör och skäl,
+    inte en flagga på ett bolag.
+
+    **Ingen beställning, ingen faktura, ingen Stripe.** Beviljandet rör aldrig
+    `Order`, `Subscription` eller `fleet/pricing.py`. Det öppnar företagets
+    period i `fleet/access.py:company_window` (skäl `free_grant`) och ger
+    platsen alla län, vilket i sin tur öppnar alla kategorier
+    (`fleet/features.py`).
+
+    **Räckvidd.** Perioden är företagets (`company_window` är en fråga per
+    bolag), men platsen är personens: bara den som har ett medlemskap
+    tilldelat sig får data i appen (`_membership_access` kräver en licens
+    tilldelad kontot). Ett beviljande till person A ger alltså inte person B
+    tips -- B har ingen plats.
+
+    `ends_at` NULL = tills vidare. `revoked_at` satt = avslutat, och då gäller
+    den vanliga periodprövningen igen (abonnemang, prov, frist).
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    company_id = models.UUIDField(db_index=True)
+    # Platsen beviljandet ger. `license_created` skiljer en plats som skapades
+    # HÄR (och därför avslutas vid en återkallelse) från en redan köpt plats
+    # (som aldrig röras -- den är betald).
+    license = models.ForeignKey(License, on_delete=models.CASCADE, related_name="grants")
+    license_created = models.BooleanField(default=False)
+
+    # Personen. `user_id` är kontot; `email` bär ett beviljande till en adress
+    # som ännu inte loggat in och binds när hen gör det (`claim_for_email`),
+    # exakt som `License.assignee_email`.
+    user_id = models.UUIDField(null=True, blank=True, db_index=True)
+    email = models.CharField(max_length=254, blank=True, default="")
+
+    # Länen som beviljades, som de var då. En lista i efterhand säger inget om
+    # vad som gällde, och "alla län" är ett beslut värt att skriva ner.
+    counties = models.JSONField(default=list, blank=True)
+    all_counties = models.BooleanField(default=True)
+
+    reason = models.TextField()
+    starts_at = models.DateTimeField()
+    ends_at = models.DateTimeField(null=True, blank=True)
+    granted_by = models.UUIDField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    revoked_at = models.DateTimeField(null=True, blank=True)
+    revoked_by = models.UUIDField(null=True, blank=True)
+    revoke_reason = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "fleet_membership_grant"
+        indexes = [
+            models.Index(fields=["company_id", "revoked_at"]),
+            models.Index(fields=["user_id", "revoked_at"]),
+        ]
+        constraints = [
+            # Två öppna beviljanden till samma person i samma bolag är antingen
+            # en dubbelklickning eller ett misstag. Databasen avgör det, inte
+            # en kontroll i Python som två samtidiga anrop hinner förbi.
+            models.UniqueConstraint(
+                fields=["company_id", "user_id"],
+                # `user_id__isnull=False`, inte True: villkoret ska träffa raden
+                # som HAR ett konto. Med `isnull=True` hade indexet i stället
+                # förbjudit fler än ett e-postbeviljande (user_id NULL) per bolag
+                # och låtit två öppna rader för samma konto passera.
+                condition=Q(revoked_at__isnull=True, user_id__isnull=False),
+                name="fleet_one_open_grant_per_company_user",
+            ),
+            models.UniqueConstraint(
+                fields=["company_id", "email"],
+                condition=Q(revoked_at__isnull=True) & ~Q(email=""),
+                name="fleet_one_open_grant_per_company_email",
+            ),
+        ]
+
+
 # ---------------------------------------------------------------------------
 # Beställningar och väntande ändringar
 # ---------------------------------------------------------------------------
