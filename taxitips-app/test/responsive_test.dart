@@ -50,6 +50,29 @@ void main() {
 
   FakeDriverApi plain() => FakeDriverApi(device: null);
 
+  // Bekräftelsekortet ("Bekräfta din e-post") visas bara efter att formuläret
+  // skickats, så `registrering` ovan når det aldrig. Här pumpas det i samma ram
+  // skärmen ger det: SingleChildScrollView + ConstrainedBox(maxWidth: 480).
+  Widget confirmCard() => Scaffold(
+    backgroundColor: TbColors.navy,
+    body: SafeArea(
+      child: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: SignupConfirmCard(
+              email: 'agare@bolag.se',
+              onResend: () async {},
+              onChangeEmail: () {},
+              onLogin: () {},
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+
   final screens = <String, Widget Function()>{
     'introduktionen': () => OnboardingScreen(onDone: () {}),
     'välkomst': () => WelcomeScreen(onLogin: () {}, onSignup: () {}),
@@ -66,6 +89,7 @@ void main() {
       onLogin: () {},
       onBack: () {},
     ),
+    'registrering, bekräftelsekortet': confirmCard,
     'välkomst till provet': () =>
         TrialWelcomeScreen(api: plain(), onDone: () {}),
     'inställningar, förare': () =>

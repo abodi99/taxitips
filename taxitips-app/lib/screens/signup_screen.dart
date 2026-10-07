@@ -1,10 +1,8 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
-import '../analytics.dart';
 import '../api_client.dart';
 import '../net_status.dart';
 import '../theme.dart';
@@ -350,19 +348,8 @@ class SignupScreenState extends State<SignupScreen> {
                   ),
                   const SizedBox(height: 32),
                   if (_confirmEmail != null)
-                    _CodeCard(
+                    SignupConfirmCard(
                       email: _confirmEmail!,
-                      onVerify: (code) async {
-                        await widget.api.verifySignupCode(
-                          email: _confirmEmail!,
-                          code: code,
-                        );
-                        await logAnalyticsEvent(
-                          'sign_up',
-                          params: {'method': 'email_otp'},
-                        );
-                        widget.onDone();
-                      },
                       onResend: () =>
                           widget.api.resendConfirmation(_confirmEmail!),
                       onChangeEmail: () => setState(() => _confirmEmail = null),
@@ -726,33 +713,37 @@ class _Step extends StatelessWidget {
   }
 }
 
-/// Kontot är skapat; e-posten bekräftas med koden i mejlet (6 siffror).
-/// Rätt kod loggar in direkt och registrerar företaget. Länken i samma mejl
-/// fungerar som reserv ("Tryckte du på länken? Logga in").
-class _CodeCard extends StatefulWidget {
-  const _CodeCard({
+/// Kontot är skapat; e-posten bekräftas med länken i mejlet.
+///
+/// Ingen kod: registreringen bekräftas genom att kunden trycker på "Bekräfta
+/// e-post" i mejlet och sedan loggar in här -- först då registreras företaget
+/// (`completePendingRegistration` i main.dart). Regenereringskoden togs bort
+/// 2026-10-07 (docs/epost-otp.md).
+///
+/// Publik för att `test/responsive_test.dart` ska kunna pumpa den på en smal
+/// telefon: den visas bara efter att formuläret skickats, så den vanliga
+/// skärmpumpen når den aldrig (samma skäl som `SignupScreenState` är publik).
+class SignupConfirmCard extends StatefulWidget {
+  const SignupConfirmCard({
+    super.key,
     required this.email,
-    required this.onVerify,
     required this.onResend,
     required this.onChangeEmail,
     required this.onLogin,
   });
 
   final String email;
-  final Future<void> Function(String code) onVerify;
   final Future<void> Function() onResend;
   final VoidCallback onChangeEmail;
   final VoidCallback onLogin;
 
   @override
-  State<_CodeCard> createState() => _CodeCardState();
+  State<SignupConfirmCard> createState() => SignupConfirmCardState();
 }
 
-class _CodeCardState extends State<_CodeCard> {
-  static const _length = 6;
+class SignupConfirmCardState extends State<SignupConfirmCard> {
   static const _cooldown = 60;
 
-  final _code = TextEditingController();
   String? _error;
   String? _note;
   bool _busy = false;
@@ -763,16 +754,11 @@ class _CodeCardState extends State<_CodeCard> {
   void initState() {
     super.initState();
     _startCooldown();
-    _code.addListener(() {
-      final digits = _code.text.replaceAll(RegExp(r'\D'), '');
-      if (digits.length == _length && !_busy) _verify();
-    });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
-    _code.dispose();
     super.dispose();
   }
 
@@ -787,36 +773,6 @@ class _CodeCardState extends State<_CodeCard> {
     });
   }
 
-  Future<void> _verify() async {
-    final code = _code.text.replaceAll(RegExp(r'\D'), '');
-    if (code.length != _length) {
-      setState(() => _error = 'Skriv de $_length siffrorna från mejlet.');
-      return;
-    }
-    FocusScope.of(context).unfocus();
-    setState(() {
-      _busy = true;
-      _error = null;
-      _note = null;
-    });
-    try {
-      await widget.onVerify(code);
-    } catch (e) {
-      if (!mounted) return;
-      final text = e.toString();
-      setState(() {
-        _error = text.contains('expired') || text.contains('invalid')
-            ? 'Koden stämmer inte eller har gått ut. Försök igen eller begär en ny.'
-            : (netFailureOf(e) != null
-                  ? netMessage(netFailureOf(e)!)
-                  : 'Det gick inte att bekräfta. Försök igen.');
-      });
-      _code.clear();
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
   Future<void> _resend() async {
     setState(() {
       _busy = true;
@@ -825,7 +781,7 @@ class _CodeCardState extends State<_CodeCard> {
     });
     try {
       await widget.onResend();
-      _note = 'Ny kod skickad till ${widget.email}.';
+      _note = 'Nytt mejl skickat till ${widget.email}.';
       _startCooldown();
     } catch (e) {
       // Supabase begränsar hur ofta samma adress får ett nytt mejl.
@@ -855,7 +811,7 @@ class _CodeCardState extends State<_CodeCard> {
           ),
           const SizedBox(height: 14),
           const Text(
-            'Skriv koden från mejlet',
+            'Bekräfta din e-post',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontFamily: kDisplayFont,
@@ -869,7 +825,7 @@ class _CodeCardState extends State<_CodeCard> {
             TextSpan(
               style: const TextStyle(color: TbColors.muted, height: 1.4),
               children: [
-                const TextSpan(text: 'Vi skickade en kod med 6 siffror till\n'),
+                const TextSpan(text: 'Vi skickade ett mejl till\n'),
                 TextSpan(
                   text: widget.email,
                   style: const TextStyle(
@@ -882,39 +838,11 @@ class _CodeCardState extends State<_CodeCard> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 20),
-          TextField(
-            controller: _code,
-            enabled: !_busy,
-            autofocus: true,
-            keyboardType: TextInputType.number,
-            autofillHints: const [AutofillHints.oneTimeCode],
-            maxLength: _length,
+          const Text(
+            'Öppna mejlet och tryck på "Bekräfta e-post". '
+            'Kom sedan tillbaka hit och logga in.',
             textAlign: TextAlign.center,
-            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
-            style: const TextStyle(
-              fontSize: 30,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 14,
-              color: TbColors.ink,
-            ),
-            decoration: InputDecoration(
-              counterText: '',
-              hintText: '••••••',
-              hintStyle: const TextStyle(
-                color: TbColors.sand,
-                letterSpacing: 14,
-              ),
-              filled: true,
-              fillColor: TbColors.foam,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: const BorderSide(color: TbColors.navy, width: 2),
-              ),
-            ),
+            style: TextStyle(color: TbColors.muted, height: 1.5),
           ),
           if (_error != null) ...[
             const SizedBox(height: 10),
@@ -940,7 +868,7 @@ class _CodeCardState extends State<_CodeCard> {
           ],
           const SizedBox(height: 18),
           FilledButton(
-            onPressed: _busy ? null : _verify,
+            onPressed: _busy || _wait > 0 ? null : _resend,
             style: FilledButton.styleFrom(
               backgroundColor: TbColors.taxi,
               foregroundColor: TbColors.ink,
@@ -958,17 +886,15 @@ class _CodeCardState extends State<_CodeCard> {
                       strokeWidth: 2.5,
                     ),
                   )
-                : const Text(
-                    'Bekräfta',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                : Text(
+                    _wait > 0
+                        ? 'Skicka nytt mejl om $_wait s'
+                        : 'Skicka nytt mejl',
+                    style: const TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.w800,
+                    ),
                   ),
-          ),
-          const SizedBox(height: 6),
-          TextButton(
-            onPressed: _busy || _wait > 0 ? null : _resend,
-            child: Text(
-              _wait > 0 ? 'Skicka ny kod om $_wait s' : 'Skicka ny kod',
-            ),
           ),
           Text(
             'Syns inget? Titta i skräpposten.',
@@ -976,8 +902,13 @@ class _CodeCardState extends State<_CodeCard> {
             style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
           ),
           const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
+          // Wrap i stället för Row: de två länkarna ("Ändra e-post" och
+          // "Tryckte på länken? Logga in") är tillsammans bredare än kortet på en
+          // smal telefon och spiller annars över kanten. Nu bryts de till två
+          // rader i stället.
+          Wrap(
+            alignment: WrapAlignment.center,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               TextButton(
                 onPressed: _busy ? null : widget.onChangeEmail,

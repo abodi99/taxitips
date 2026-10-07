@@ -12,9 +12,10 @@ ett registreringsmejl och en förarinbjudan ser ut att komma från samma ställe
 GoTrues platshållare (`{{ .Token }}`, `{{ .ConfirmationURL }}`) sätts in
 orörda -- de är Go-mallar och fylls i av GoTrue, inte här.
 
-**Kod och länk.** Appen ber om koden (verifyOTP), portalen och adminwebben
-följer länken. Registrering och inloggning har därför båda; återställning
-har bara länken, eftersom appen skickar den till sidan där lösenordet väljs.
+**Kod eller länk.** Registreringen bekräftas med länken (som återställningen):
+appen öppnar den i webbläsaren och registrerar företaget vid nästa inloggning.
+Inloggning med engångskod har både kod och länk, eftersom appen ber om koden
+(verifyOTP); bekräftelsekoden i registreringsmejlet togs bort 2026-10-10.
 """
 
 from __future__ import annotations
@@ -32,17 +33,19 @@ URL = "{{ .ConfirmationURL }}"
 IGNORE = "Var det inte du? Då kan du strunta i det här mejlet – inget händer utan koden eller länken."
 
 TEMPLATES = {
-    # Registrering (signUp) och bekräftelse av e-post.
+    # Registrering (signUp) och bekräftelse av e-post: bara länken, precis som
+    # återställningen. Engångskoden ({{ .Token }}) togs bort 2026-10-10.
     "confirmation": dict(
         title="Bekräfta din e-post",
-        preheader=f"Din kod: {TOKEN}",
+        preheader="Tryck på knappen för att bekräfta din e-post.",
         content=(
             L.heading("Bekräfta din e-post")
-            + L.paragraph("Välkommen till Taxi Tips! Skriv den här koden i appen för att slutföra registreringen:")
-            + L.code_box(TOKEN)
-            + L.paragraph("Registrerade du dig på taxitips.se? Tryck på knappen i stället:")
+            + L.paragraph("Välkommen till Taxi Tips! Tryck på knappen för att bekräfta {{ .Email }} och slutföra registreringen:")
             + L.button(URL, "Bekräfta e-post")
-            + L.paragraph(IGNORE, muted=True, small=True)
+            + L.paragraph(
+                "Var det inte du? Då kan du strunta i det här mejlet – inget händer utan länken.",
+                muted=True, small=True,
+            )
         ),
     ),
     # Inloggning med kod eller länk (signInWithOtp).
@@ -107,7 +110,7 @@ TEMPLATES = {
 
 # Ämnesraderna sätts som miljövariabler i GoTrue (docs/auth-mejl.md).
 SUBJECTS = {
-    "confirmation": "Din kod till Taxi Tips",
+    "confirmation": "Bekräfta din e-post för Taxi Tips",
     "magic_link": "Din inloggningskod till Taxi Tips",
     "recovery": "Välj ett nytt lösenord för Taxi Tips",
     "invite": "Du är inbjuden till Taxi Tips",

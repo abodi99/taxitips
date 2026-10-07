@@ -566,50 +566,9 @@ class ApiClient {
   }
 
   /// Nytt bekräftelsemejl när det första inte kom fram (skräppost, fel adress).
-  /// Engångskoden i bekräftelsemejlet (6 siffror). Rätt kod ger en session
-  /// direkt -- ingen länk, ingen webbläsare -- och företaget som väntade
-  /// registreras på en gång (completePendingRegistration).
-  ///
-  /// Kräver att Supabases mall för "Confirm signup" innehåller `{{ .Token }}`
-  /// (taxitips-web/public/email-templates/bekrafta-konto.html). Länken i samma
-  /// mejl fungerar fortfarande som reserv.
-  Future<Map<String, dynamic>?> verifySignupCode({
-    required String email,
-    required String code,
-  }) => _reported('verify_signup_code', () async {
-    await ensureInitialized();
-    // Lyssnaren i main.dart får inte hoppa till appen innan företaget är
-    // registrerat -- anroparen går vidare själv när det är klart.
-    _signInInProgress = true;
-    try {
-      final AuthResponse res;
-      try {
-        res = await _sb.auth.verifyOTP(
-          type: OtpType.signup,
-          email: email.trim().toLowerCase(),
-          token: code.replaceAll(RegExp(r'\s'), ''),
-        );
-      } catch (e) {
-        throw asApiIfNetwork(e);
-      }
-      final token = res.session?.accessToken;
-      if (token == null || token.isEmpty) {
-        throw ApiException(401, 'Koden gav ingen inloggning. Begär en ny kod.');
-      }
-      await saveSession(token);
-      // Kontot är bekräftat och inloggat. Går registreringen av företaget
-      // fel (t.ex. orgnr som redan finns) visas det i företagspanelen, som
-      // försöker igen -- precis som efter en vanlig inloggning (main.dart).
-      try {
-        return await completePendingRegistration();
-      } catch (_) {
-        return null;
-      }
-    } finally {
-      _signInInProgress = false;
-    }
-  });
-
+  /// Registreringen bekräftas med länken i mejlet ({{ .ConfirmationURL }}, som
+  /// går till _confirmedPage); kontot och företaget görs klart vid inloggning
+  /// (completePendingRegistration).
   Future<void> resendConfirmation(String email) async {
     await ensureInitialized();
     await _sb.auth.resend(

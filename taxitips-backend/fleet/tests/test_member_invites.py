@@ -147,8 +147,8 @@ class AuthTemplateTests(FleetTestCase):
             call_command("build_auth_email_templates", out=out, stdout=open("/dev/null", "w"))
             confirmation = (Path(out) / "confirmation.html").read_text()
             recovery = (Path(out) / "recovery.html").read_text()
-        # Registreringen: koden till appen och länken till webben.
-        self.assertIn("{{ .Token }}", confirmation)
+        # Registreringen bekräftas med länken -- ingen engångskod i mejlet.
+        self.assertNotIn("{{ .Token }}", confirmation)
         self.assertIn('href="{{ .ConfirmationURL }}"', confirmation)
         self.assertIn("/email/logo.png", confirmation)
         # Återställningen är bara en länk: appen ber inte om någon kod där.

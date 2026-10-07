@@ -4,7 +4,7 @@ Två vägar skickar mejl, med samma utseende (`taxitips-backend/fleet/email_layo
 
 | Mejl | Skickas av | Mall |
 |---|---|---|
-| Registreringskod, inloggningskod, nytt lösenord, byte av e-post, bekräftelsekod | Supabase Auth (GoTrue) | `taxitips-web/public/email/*.html`, hämtas från taxitips.se |
+| Registreringslänk, inloggningskod, nytt lösenord, byte av e-post, bekräftelsekod | Supabase Auth (GoTrue) | `taxitips-web/public/email/*.html`, hämtas från taxitips.se |
 | Inbjudan till kundportalen, förarinbjudan, prov, betalning, uppsägning | Djangos utkorg (`fleet/notifications.py` → `fleet/mailer.py`) | HTML byggs ur mejlets text vid utskick |
 
 Båda skickar från `hej@taxitips.se` via smtp.hostinger.com (SPF/DKIM/DMARC finns på taxitips.se).
@@ -31,7 +31,7 @@ GOTRUE_MAILER_TEMPLATES_RECOVERY: https://taxitips.se/email/recovery.html
 GOTRUE_MAILER_TEMPLATES_INVITE: https://taxitips.se/email/invite.html
 GOTRUE_MAILER_TEMPLATES_EMAIL_CHANGE: https://taxitips.se/email/email_change.html
 GOTRUE_MAILER_TEMPLATES_REAUTHENTICATION: https://taxitips.se/email/reauthentication.html
-GOTRUE_MAILER_SUBJECTS_CONFIRMATION: "Din kod till Taxi Tips"
+GOTRUE_MAILER_SUBJECTS_CONFIRMATION: "Bekräfta din e-post för Taxi Tips"
 GOTRUE_MAILER_SUBJECTS_MAGIC_LINK: "Din inloggningskod till Taxi Tips"
 GOTRUE_MAILER_SUBJECTS_RECOVERY: "Välj ett nytt lösenord för Taxi Tips"
 GOTRUE_MAILER_SUBJECTS_INVITE: "Du är inbjuden till Taxi Tips"
@@ -42,7 +42,7 @@ GOTRUE_MAILER_OTP_EXP: "3600"
 GOTRUE_SMTP_SENDER_NAME: "Taxi Tips"
 ```
 
-`GOTRUE_MAILER_AUTOCONFIRM` ska vara `false`, så att registreringen skickar koden. Det är redan
+`GOTRUE_MAILER_AUTOCONFIRM` ska vara `false`, så att registreringen skickar bekräftelsemejlet. Det är redan
 läget i prod: nya konton bekräftas i efterhand.
 
 **Starta om supabase-taxitips från Coolify-gränssnittet, inte via API:t.** En omstart via API
@@ -51,8 +51,8 @@ har lämnat alla containrar stoppade, databasen inräknad. Kontrollera efteråt 
 
 ### Prova
 
-1. Registrera ett testkonto i appen med en egen adress. Mejlet ska ha loggan, koden i en ruta
-   och knappen "Bekräfta e-post".
+1. Registrera ett testkonto i appen med en egen adress. Mejlet ska ha loggan och
+   knappen "Bekräfta e-post" – ingen kod (registreringen bekräftas med länken).
 2. "Glömt lösenord" i portalen. Knappen ska leda till portalen, där ett nytt lösenord väljs.
 3. Logga in med kod i appen.
 
