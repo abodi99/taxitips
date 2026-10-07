@@ -1,4 +1,4 @@
-import { COUNTIES, countyName, date, dateTime, money } from "./api.js";
+import { COUNTIES, countyName, date, dateTime, money, offerableCountyEntries } from "./api.js";
 import { notifyCard } from "../notify_editor.js";
 
 /**
@@ -496,7 +496,7 @@ function inviteAccountsCard(rows, canAssign) {
  */
 function membershipCountyControls(row, opts) {
   const trial = row.status === "trial";
-  const options = Object.entries(COUNTIES)
+  const options = offerableCountyEntries()
     .map(([code, name]) => `<option value="${esc(code)}">${esc(name)}</option>`)
     .join("");
   if (trial) {

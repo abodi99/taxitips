@@ -194,32 +194,46 @@ _SCB_CODE = {
 }
 
 
+def offerable_county_codes() -> frozenset[str]:
+    """
+    SCB-koder för län vi säljer och låter kunden välja.
+
+    Halland, Sörmland, Jämtland, Västerbotten och Norrbotten 404:ar hos
+    Trafiklab -- att ta betalt för dem hade varit ett löfte om realtid vi
+    inte kan hålla. Kronoberg (`krono`) finns i Trafiklab och ingår.
+    Västra Götaland ingår via Västtrafiks adapter.
+    """
+    return frozenset(
+        _SCB_CODE[road_key]
+        for _label, operator, road_key in COUNTIES
+        if operator is not None
+    )
+
+
 def county_catalog() -> list[dict]:
     """
-    Alla 21 län att välja körområde bland, med vad vi hämtar kollektivtrafik från.
+    Län som går att köpa och välja körområde bland.
 
-    notify_region_catalog() erbjöd bara län med kollektivtrafikkälla, så
-    Norrbotten, Västerbotten, Jämtland, Halland och Sörmland gick inte att välja
-    trots att andra källor kan ha tips där. Ett län utan kollektivtrafikkälla
-    väljs nu med öppna ögon: `transit` är None och `note` säger det.
+    Bara län med kollektivtrafik-realtid. De fem utan källa listas av
+    uncovered_counties() som förklaring, aldrig som val.
     """
     from core.areas import COUNTY_NAMES
 
     out = []
     for _label, operator, road_key in COUNTIES:
+        if operator is None:
+            continue
         code = _SCB_CODE[road_key]
         if operator == "vt-adapter":
             transit = "Västtrafik"
         elif operator == "sl":
             transit = "SL"
-        elif operator:
-            transit = f"Trafiklab ({operator})"
         else:
-            transit = None
+            transit = f"Trafiklab ({operator})"
         out.append({
             "code": code,
             "name": COUNTY_NAMES[code],
             "transit": transit,
-            "note": "" if transit else "Ingen kollektivtrafikkälla i länet.",
+            "note": "",
         })
     return sorted(out, key=lambda c: c["code"])

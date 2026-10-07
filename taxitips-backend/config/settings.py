@@ -336,6 +336,8 @@ CELERY_BEAT_SCHEDULE = {
     "fleet-reconcile-stripe": {
         "task": "fleet.tasks.reconcile_stripe", "schedule": 6 * 60 * 60
     },
+    # Driftlarm: ett mejl vid OK→FAIL, inte varje cykel (core/ops_alerts.py).
+    "ops-alert": {"task": "core.tasks.ops_alert_task", "schedule": 5 * 60},
 }
 
 # All AI av utan deploy: TAXITIPS_AI=off i Coolify och en omstart. Reglerna
@@ -442,6 +444,8 @@ TWENTY_API_KEY = os.environ.get("TWENTY_API_KEY", "")
 TWENTY_BASE_URL = os.environ.get("TWENTY_BASE_URL", "https://taxitips.tw.a2m-tech.com")
 FLEET_MAIL_FROM = os.environ.get("FLEET_MAIL_FROM", "")
 FLEET_MAIL_REPLY_TO = os.environ.get("FLEET_MAIL_REPLY_TO", "hej@taxitips.se")
+# Driftlarm (core/ops_alerts.py). Tom = inga mejl. Sätt i Coolify, inte i git.
+OPS_ALERT_EMAIL = os.environ.get("OPS_ALERT_EMAIL", "")
 # Kundportalen, som mejlen länkar till. Betalning sker där, aldrig i appen (§9c).
 FLEET_PORTAL_URL = os.environ.get("FLEET_PORTAL_URL", "https://taxitips.se/portal")
 # Förarinbjudan med e-post (fleet/driver_invites.py). Supabase Auths

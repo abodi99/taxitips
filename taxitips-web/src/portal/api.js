@@ -219,3 +219,12 @@ export const COUNTIES = {
 export function countyName(code) {
   return COUNTIES[String(code)] ?? `Län ${code}`;
 }
+
+/** Län utan kollektivtrafik-realtid. Namnen i COUNTIES behålls för gamla licenser. */
+export const UNOFFERABLE_COUNTIES = new Set(["04", "13", "23", "24", "25"]);
+
+export function offerableCountyEntries() {
+  return Object.entries(COUNTIES).filter(
+    ([code]) => !UNOFFERABLE_COUNTIES.has(String(code)),
+  );
+}

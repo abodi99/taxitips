@@ -562,11 +562,11 @@ class SignupScreenState extends State<SignupScreen> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 _Step(n: 1, text: 'Skapa kontot'),
-                                _Step(n: 2, text: 'Lägg till bilen'),
+                                _Step(n: 2, text: 'Välj län för din plats'),
                                 _Step(
                                   n: 3,
                                   text:
-                                      'Bjud in förarna — provet startar när första telefonen kopplas',
+                                      'Bjud in förarna på webben — provet startar när första föraren loggar in',
                                 ),
                               ],
                             ),

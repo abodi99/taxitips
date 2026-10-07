@@ -739,6 +739,9 @@ function tabBetalning(d, config) {
           ${s?.cancelAtPeriodEnd ? '<span class="pill pill-warn">Uppsagt</span>' : ""}</dd>
         ${s?.periodEnd ? `<dt>Betalt till</dt><dd>${esc(date(s.periodEnd))}</dd>` : ""}
         ${s?.monthlyOre ? `<dt>Per månad</dt><dd>${esc(money(s.monthlyOre))} exkl. moms</dd>` : ""}
+        ${s?.licenseCount != null ? `<dt>Platser</dt><dd>${esc(s.licenseCount)}</dd>` : ""}
+        ${s?.extraCountyCount != null ? `<dt>Extra län</dt><dd>${esc(s.extraCountyCount)}</dd>` : ""}
+        ${s?.packageSummary ? `<dt>Paket</dt><dd>${esc(s.packageSummary)}</dd>` : ""}
         ${d.discount ? `<dt>Rabatt</dt><dd>${d.discount.kind === "percent_bp"
           ? `${esc((d.discount.value / 100).toFixed(2))} %` : `${esc(money(d.discount.value))}/mån`}</dd>` : ""}
       </dl>

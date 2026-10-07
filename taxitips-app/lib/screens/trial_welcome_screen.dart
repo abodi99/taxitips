@@ -503,17 +503,17 @@ class _TrialPage extends StatelessWidget {
             // "Tills dess går ingen tid" säger bara servern (status pending);
             // utan svar sägs bara när provet startar.
             info.status == 'pending'
-                ? 'Provet startar när du kopplar den första telefonen. '
+                ? 'Provet startar när första föraren loggar in. '
                       'Tills dess går ingen tid.'
-                : 'Provet startar när du kopplar den första telefonen.',
+                : 'Provet startar när första föraren loggar in.',
             style: _bodyStyle,
           ),
         if (limit != null) ...[
           const SizedBox(height: 12),
           Text(
             limit == 1
-                ? 'Du kan ha 1 bil i provet, med ett län.'
-                : 'Du kan ha upp till $limit bilar i provet.',
+                ? 'Du kan ha 1 plats i provet, med ett län.'
+                : 'Du kan ha upp till $limit platser i provet.',
             style: _bodyStyle,
           ),
         ],
@@ -534,21 +534,22 @@ class _StepsPage extends StatelessWidget {
       children: [
         _Step(
           n: 1,
-          title: 'Lägg till bil och välj län',
+          title: 'Välj län för din plats',
           text:
-              'Öppna Inställningar och tryck på Lägg till bil. '
-              'Länet styr vilka tips bilen får.',
+              'Öppna Inställningar och välj vilket län platsen ska gälla. '
+              'Länet styr vilka tips du får.',
         ),
         _Step(
           n: 2,
           title: 'Kör själv?',
-          text: 'Öppna bilen och tryck på "Kör själv med den här telefonen".',
+          text:
+              'Öppna Inställningar och tryck på "Kör själv med den här telefonen".',
         ),
         _Step(
           n: 3,
-          title: 'Bjud in förare med e-post',
+          title: 'Bjud in förare på webben',
           text:
-              'Öppna bilen och tryck på "Bjud in förare med e-post". '
+              'Inbjudan skickas av företagets administratör på webben, inte från appen. '
               'Föraren får ett mejl, väljer ett lösenord och loggar in i '
               'appen med e-post och lösenord.',
         ),

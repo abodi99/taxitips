@@ -23,7 +23,7 @@ from datetime import timedelta
 from django.test import Client, RequestFactory, override_settings
 from django.utils import timezone
 
-from core import areas
+from core import coverage
 from fleet import access, grants, licensing, sessions
 from fleet.models import (
     AuditEvent,
@@ -98,7 +98,7 @@ class GrantTests(FleetTestCase):
         self.assertTrue(grant.all_counties)
         self.assertEqual(
             set(access.license_counties(grant.license_id)),
-            {code for code, _name in areas.COUNTIES},
+            set(coverage.offerable_county_codes()),
         )
         self.assertTrue(features.for_company(self.company.id).full)
 
@@ -158,7 +158,7 @@ class GrantTests(FleetTestCase):
 
         grant = self.grant(user_id=uuid.uuid4())
 
-        # Platsen och dess 21 län finns, men räknas inte mot fakturan.
+        # Platsen och dess offerable län finns, men räknas inte mot fakturan.
         self.assertEqual(licensing.billable_license_count(self.company.id), before_licenses)
         self.assertEqual(licensing.extra_county_count(self.company.id), before_extras)
 
@@ -273,7 +273,7 @@ class GrantTests(FleetTestCase):
         self.assertTrue(result.ok)
         self.assertEqual(result.reason, "membership")
         self.assertEqual(result.period, "free_grant")
-        self.assertEqual(set(result.counties), {code for code, _name in areas.COUNTIES})
+        self.assertEqual(set(result.counties), set(coverage.offerable_county_codes()))
 
     def test_expired_grant_closes_the_window_again(self):
         self.make_subscription(self.company, days_left=-5, status=SubscriptionStatus.PAST_DUE)

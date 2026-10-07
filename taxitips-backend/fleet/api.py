@@ -658,8 +658,8 @@ def company_overview(request):
         # då visar portalen och appen bara koden, i stället för en knapp som
         # inte fungerar.
         "driverInvites": {"enabled": driver_invites.enabled()},
-        # Länslistan för att välja baslän på en ny provbil i appen.
-        "countyCatalog": [{"code": code, "name": name} for code, name in areas.COUNTIES],
+        # Länslistan för att välja baslän -- bara län med kollektivtrafik-realtid.
+        "countyCatalog": areas.county_catalog(),
     })
 
 

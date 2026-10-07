@@ -64,12 +64,20 @@ def assert_county_available(code: str) -> str:
     Bara län som finns i produktens täckningskonfiguration.
 
     GPS-positionen ger ingen behörighet och inget län (§5): föraren kan stå var
-    som helst, rättigheten är köpt. Och ett län vi inte har data för får inte gå
-    att köpa -- kunden hade betalat för en tom lista.
+    som helst, rättigheten är köpt. Och ett län vi inte har kollektivtrafik-
+    realtid för får inte gå att köpa -- kunden hade betalat för en tom lista.
     """
+    from core.coverage import offerable_county_codes
+
     code = str(code or "").strip()
     if code not in areas.COUNTY_NAMES:
         raise LicensingError("unknown_county", f"Länskoden {code!r} finns inte.")
+    if code not in offerable_county_codes():
+        name = areas.COUNTY_NAMES[code]
+        raise LicensingError(
+            "uncovered_county",
+            f"{name} saknar kollektivtrafik i realtid, så vi säljer inte länet.",
+        )
     return code
 
 

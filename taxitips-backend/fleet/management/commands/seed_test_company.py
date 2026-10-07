@@ -44,7 +44,7 @@ class Command(BaseCommand):
         parser.add_argument("--org", default="5566778899")
         parser.add_argument("--plate", default="TEST01")
         parser.add_argument("--base-county", default="14")
-        parser.add_argument("--extra-counties", default="12,13")
+        parser.add_argument("--extra-counties", default="12,01")
         parser.add_argument("--days", type=int, default=30)
         parser.add_argument("--email", default="test@taxitips.se")
 

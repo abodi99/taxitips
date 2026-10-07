@@ -3742,8 +3742,8 @@ class _ScorePresetChip extends StatelessWidget {
 }
 
 /// Icke-blockerande banner när företaget saknar åtkomst. Rubrik och text följer
-/// serverns skäl (fleet/access.py): en ny provkund som inte kopplat någon
-/// telefon än ska få veta vad nästa steg är, inte att provet "gått ut".
+/// serverns skäl (fleet/access.py): en ny provkund som inte startat
+/// provet än ska få veta vad nästa steg är, inte att provet "gått ut".
 class _EntitlementBanner extends StatelessWidget {
   const _EntitlementBanner({this.reason, this.message, this.onOpenSettings});
 
@@ -3754,8 +3754,8 @@ class _EntitlementBanner extends StatelessWidget {
   (String, String, IconData, Color) get _copy => switch (reason) {
     'trial_not_started' => (
       'Välkommen! Ett steg kvar',
-      'Lägg till en bil under Inställningar och koppla en telefon. '
-          'Provperioden startar när den första telefonen kopplas.',
+      'Välj län under Inställningar. Förare bjuds in på webben. '
+          'Provperioden startar när den första föraren loggar in.',
       Icons.flag_outlined,
       TbColors.live,
     ),
@@ -3831,7 +3831,7 @@ class _EntitlementBanner extends StatelessWidget {
                     ),
                     child: Text(
                       reason == 'trial_not_started'
-                          ? 'Lägg till bil och förare'
+                          ? 'Öppna inställningar'
                           : 'Se inställningar',
                     ),
                   ),

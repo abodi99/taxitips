@@ -494,9 +494,9 @@ class AdminVehicleTests(_Base):
         self.assertEqual(r.status_code, 200, r.content)
         self.assertEqual(r.json()["plate"], "BBB222")
         r = self.call("post", f"/api/admin/licenses/{lic.id}/counties", self.admin_id,
-                      {"base": "13", "extras": ["12", "13"]})
-        self.assertEqual(r.json(), {"ok": True, "base": "13", "extras": ["12"]})
-        self.assertEqual(sorted(access.license_counties(lic.id)), ["12", "13"])
+                      {"base": "01", "extras": ["12", "01"]})
+        self.assertEqual(r.json(), {"ok": True, "base": "01", "extras": ["12"]})
+        self.assertEqual(sorted(access.license_counties(lic.id)), ["01", "12"])
         self.assertEqual(self.call("post", f"/api/admin/licenses/{lic.id}/remove", self.admin_id, {}).status_code, 400)
         r = self.call("post", f"/api/admin/licenses/{lic.id}/remove", self.admin_id, {"reason": "Fel bil"})
         self.assertEqual(r.status_code, 200, r.content)
@@ -506,7 +506,7 @@ class AdminVehicleTests(_Base):
     def test_a_paid_car_is_changed_through_the_order_not_directly(self):
         data = self.full_setup()
         lic = data["license"]
-        r = self.call("post", f"/api/admin/licenses/{lic.id}/counties", self.admin_id, {"base": "13"})
+        r = self.call("post", f"/api/admin/licenses/{lic.id}/counties", self.admin_id, {"base": "01"})
         self.assertEqual(r.json()["reason"], "paid_license")
         sales_id = str(uuid.uuid4())
         StaffRole.objects.create(user_id=sales_id, role=StaffRole.Role.SALES)
@@ -569,19 +569,19 @@ class AdminBaseCountyTests(_Base):
             payload={"licenseId": str(lic.id), "county": "14"}, effective_at=timezone.now(),
         )
         path = f"/api/admin/licenses/{lic.id}/base-county"
-        self.assertEqual(self.call("post", path, self.admin_id, {"county": "13"}).json()["reason"], "reason_required")
-        r = self.call("post", path, self.admin_id, {"county": "13", "reason": "Kunden flyttade"})
+        self.assertEqual(self.call("post", path, self.admin_id, {"county": "01"}).json()["reason"], "reason_required")
+        r = self.call("post", path, self.admin_id, {"county": "01", "reason": "Kunden flyttade"})
         self.assertEqual(r.status_code, 200, r.content)
         lic.refresh_from_db()
-        self.assertEqual((lic.base_county, lic.scheduled_base_county), ("13", ""))
-        self.assertIn("13", access.license_counties(lic.id))
+        self.assertEqual((lic.base_county, lic.scheduled_base_county), ("01", ""))
+        self.assertIn("01", access.license_counties(lic.id))
         self.assertEqual(
             LicenseCounty.objects.filter(license=lic, kind="base", active_to__isnull=True).count(), 1,
         )
         self.assertFalse(PendingChange.objects.filter(status=PendingChange.Status.PENDING).exists())
         self.assertTrue(AuditEvent.objects.filter(action="admin_base_county_set").exists())
         device = Device.objects.get(id=data["device"].id)
-        self.assertEqual(device.notify_prefs.get("counties"), ["13"])
+        self.assertEqual(device.notify_prefs.get("counties"), ["01"])
         self.assertEqual(r.json().get("devicesSynced"), 1)
 
     def test_sales_cannot_change_a_paid_car_directly(self):
@@ -589,7 +589,7 @@ class AdminBaseCountyTests(_Base):
         sales_id = str(uuid.uuid4())
         StaffRole.objects.create(user_id=sales_id, role=StaffRole.Role.SALES)
         r = self.call("post", f"/api/admin/licenses/{data['license'].id}/base-county", sales_id,
-                      {"county": "13", "reason": "x"})
+                      {"county": "01", "reason": "x"})
         self.assertEqual(r.status_code, 403)
 
     def test_the_whole_company_changes_at_once(self):

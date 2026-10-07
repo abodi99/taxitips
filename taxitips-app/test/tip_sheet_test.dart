@@ -7,6 +7,21 @@ import 'package:taxitips_app/theme.dart';
 import 'package:taxitips_app/widgets/alert_feedback_bar.dart';
 import 'package:taxitips_app/widgets/tip_sheet.dart';
 
+class _FakeApi extends ApiClient {
+  _FakeApi() : super(supabaseUrl: 'http://localhost', supabaseAnonKey: 'x');
+
+  final reports = <({String id, String reason})>[];
+
+  @override
+  Future<Map<String, dynamic>> submitTipReport({
+    required String opportunityId,
+    String reason = '',
+  }) async {
+    reports.add((id: opportunityId, reason: reason));
+    return {'ok': true};
+  }
+}
+
 /// Tipsbladet i den återställda designen: snabbknappar överst, ett samlat
 /// huvudkort (sträcka → status → händelse) och ett kombinerat kort för
 /// särskilda omständigheter + taxiersättning. Särfallen (Övrigt, avslutat,
@@ -127,6 +142,7 @@ void main() {
     Future<void> Function(bool favorite)? onToggleFavorite,
     VoidCallback? onOpenSourcePage,
     VoidCallback? onClose,
+    ApiClient? api,
   }) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -140,10 +156,12 @@ void main() {
               height: 720,
               child: TipSheetBody(
                 alert: alert,
-                api: ApiClient(
-                  supabaseUrl: 'http://localhost',
-                  supabaseAnonKey: 'x',
-                ),
+                api:
+                    api ??
+                    ApiClient(
+                      supabaseUrl: 'http://localhost',
+                      supabaseAnonKey: 'x',
+                    ),
                 distanceKm: distanceKm,
                 now: now,
                 onToggleFavorite: onToggleFavorite ?? (v) async {},
@@ -354,6 +372,25 @@ void main() {
     testWidgets('utan egen sida finns ingen länk', (tester) async {
       await pumpSheet(tester, strongTip());
       expect(find.text('Trafikbolagets sida'), findsNothing);
+    });
+
+    testWidgets('rapporten skickas utan att slänga textfältet för tidigt', (
+      tester,
+    ) async {
+      final api = _FakeApi();
+      await pumpSheet(tester, strongTip(), api: api);
+
+      await tester.tap(find.text('Rapportera felaktigt tips'));
+      await tester.pumpAndSettle();
+      expect(find.text('Skicka rapport'), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField), 'Fel plats');
+      await tester.tap(find.text('Skicka rapport'));
+      await tester.pumpAndSettle();
+
+      expect(api.reports, [(id: 't1', reason: 'Fel plats')]);
+      expect(find.text('Rapporterat'), findsOneWidget);
+      expect(find.text('Tack — vi granskar tipset.'), findsOneWidget);
     });
 
     testWidgets('krysset stänger bladet', (tester) async {

@@ -90,10 +90,10 @@ void main() {
     await next(tester);
     expect(find.text('Du provar gratis i 14 dagar'), findsOneWidget);
     expect(
-      find.textContaining('Provet startar när du kopplar den första telefonen'),
+      find.textContaining('Provet startar när första föraren loggar in'),
       findsOneWidget,
     );
-    expect(find.text('Du kan ha 1 bil i provet, med ett län.'), findsOneWidget);
+    expect(find.text('Du kan ha 1 plats i provet, med ett län.'), findsOneWidget);
   });
 
   testWidgets('sida 2: pågående prov visar slutdatum, längd räknas ur datum', (
@@ -118,7 +118,7 @@ void main() {
       find.textContaining('Provet pågår. Det gäller till 2026-10-08'),
       findsOneWidget,
     );
-    expect(find.text('Du kan ha upp till 3 bilar i provet.'), findsOneWidget);
+    expect(find.text('Du kan ha upp till 3 platser i provet.'), findsOneWidget);
   });
 
   testWidgets('utan svar från servern gissas ingen längd', (tester) async {
@@ -134,12 +134,12 @@ void main() {
     await pump(tester, _FakeApi(features: _trialFeatures));
     await next(tester);
     await next(tester);
-    expect(find.text('Lägg till bil och välj län'), findsOneWidget);
+    expect(find.text('Välj län för din plats'), findsOneWidget);
     expect(
       find.textContaining('Kör själv med den här telefonen'),
       findsOneWidget,
     );
-    expect(find.text('Bjud in förare med e-post'), findsOneWidget);
+    expect(find.text('Bjud in förare på webben'), findsOneWidget);
     expect(find.textContaining('bolagskod'), findsNothing);
     expect(find.textContaining('läs upp'), findsNothing);
   });

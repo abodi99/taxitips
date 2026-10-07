@@ -270,7 +270,7 @@ class AdminExtraCountyChangeTests(_ApiCase):
         self.assertEqual(event.detail["note"], "Flyttar verksamheten")
 
         self.assertEqual(self.trial_county(self.license, "03").status_code, 200)
-        self.assertEqual(self.trial_county(self.license, "04").json()["reason"], "county_change_limit")
+        self.assertEqual(self.trial_county(self.license, "05").json()["reason"], "county_change_limit")
 
         detail = self.get(f"/api/admin/companies/{self.data['company'].id}", user=self.admin).json()
         self.assertEqual(detail["licenses"][0]["countyChanges"]["used"], 3)

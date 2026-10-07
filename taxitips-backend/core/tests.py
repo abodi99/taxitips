@@ -242,10 +242,14 @@ class AreaOnWriteTests(TestCase):
 
 
 class CountyCatalogTests(TestCase):
-    def test_every_county_is_selectable_and_says_what_is_missing(self):
-        from core.coverage import county_catalog
+    def test_only_realtime_counties_are_sold(self):
+        from core.coverage import county_catalog, uncovered_counties
 
         catalog = {c["code"]: c for c in county_catalog()}
-        self.assertEqual(len(catalog), 21)
-        self.assertIsNone(catalog["25"]["transit"])  # Norrbotten
+        self.assertEqual(len(catalog), 16)
+        self.assertNotIn("13", catalog)  # Halland 404
+        self.assertNotIn("04", catalog)  # Sörmland 404
+        self.assertNotIn("25", catalog)  # Norrbotten 404
+        self.assertIn("07", catalog)  # Kronoberg finns i Trafiklab
         self.assertEqual(catalog["14"]["transit"], "Västtrafik")
+        self.assertIn("Halland", uncovered_counties())

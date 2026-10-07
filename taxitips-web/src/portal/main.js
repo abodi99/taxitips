@@ -1,7 +1,7 @@
 import { authErrorMessage, flagField, setBusy } from "../auth_form.js";
 import { promptAndSetPassword, sendPasswordReset } from "../auth_password.js";
 import { setupPasswordToggles } from "../password_toggle.js";
-import { ApiError, COUNTIES, api, countyName, supabase } from "./api.js";
+import { ApiError, api, countyName, offerableCountyEntries, supabase } from "./api.js";
 import * as views from "./views.js";
 import { quoteHtml } from "./views.js";
 import { notifyBody } from "../notify_editor.js";
@@ -260,7 +260,7 @@ async function loadPricing() {
   state.pricing = { loading: true };
   const cars = data.continueVehicles ?? [];
   const base = String(cars[0]?.baseCounty ?? data.licenses?.[0]?.baseCounty ?? "12");
-  const extra = Object.keys(COUNTIES).find((code) => code !== base);
+  const extra = offerableCountyEntries().map(([code]) => code).find((code) => code !== base);
   const [own, probe] = await Promise.allSettled([
     api.quote(continueChange() ?? {}),
     api.quote({
@@ -860,7 +860,7 @@ async function commitTrial(change) {
 /* --- Lägg till medlemskap: ett län ur en lista, inga webbläsar-popupper ----- */
 
 /** Länen i bokstavsordning, från samma källa som resten av portalen. */
-const COUNTY_OPTIONS = Object.entries(COUNTIES)
+const COUNTY_OPTIONS = offerableCountyEntries()
   .map(([code, name]) => ({ code, name }))
   .sort((a, b) => a.name.localeCompare(b.name, "sv"));
 

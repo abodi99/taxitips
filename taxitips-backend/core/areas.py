@@ -258,7 +258,11 @@ def device_area_codes(prefs: dict | None) -> list[str]:
 
 
 def county_catalog() -> list[dict]:
-    return [{"code": code, "name": name} for code, name in COUNTIES]
+    """Län som går att sälja och välja. De utan realtid utelämnas (core/coverage)."""
+    from core.coverage import offerable_county_codes
+
+    offered = offerable_county_codes()
+    return [{"code": code, "name": name} for code, name in COUNTIES if code in offered]
 
 
 def municipality_catalog() -> dict[str, list[dict]]:

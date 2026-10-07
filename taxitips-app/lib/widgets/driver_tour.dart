@@ -90,8 +90,8 @@ List<TourStep> driverTourSteps({
       id: 'settings',
       title: 'Inställningar',
       text: owner
-          ? 'Här lägger du till bilar, väljer län och bjuder in förare. '
-                'Här slår du också på notiser och väljer bilen du kör själv. '
+          ? 'Här väljer du län och slår på notiser. Förare bjuds in på webben. '
+                'Här väljer du också vilken plats du kör med. '
                 'Genomgången finns kvar under Hjälp.'
           : 'Här slår du på notiser och väljer bilen du kör. Notiser säger '
                 'till när ett starkt tips dyker upp nära dig. Genomgången '

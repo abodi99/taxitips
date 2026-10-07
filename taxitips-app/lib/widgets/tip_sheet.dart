@@ -14,6 +14,7 @@ import 'alert_feedback_bar.dart';
 import 'brand_icons.dart';
 import 'signal_card.dart';
 import 'tip_detail_parts.dart';
+import 'tip_report_button.dart';
 
 /// Tipsbladet: det som öppnas när föraren trycker på ett tips.
 ///
@@ -600,59 +601,22 @@ class _TopActionBarState extends State<_TopActionBar> {
 
   Future<void> _openReportDialog() async {
     if (_reported || _oppId.isEmpty) return;
-    final controller = TextEditingController();
-    final reason = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Rapportera felaktigt tips'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Berätta kort vad som inte stämmer, till exempel fel plats eller att störningen redan är löst.',
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                hintText: 'Valfri förklaring',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Avbryt'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('Skicka rapport'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
+    final reason = await showTipReportDialog(context);
     if (reason == null || !mounted) return;
     try {
       await widget.api.submitTipReport(opportunityId: _oppId, reason: reason);
-      if (mounted) {
-        setState(() => _reported = true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tack — vi granskar tipset.')),
-        );
-      }
+      if (!mounted) return;
+      setState(() => _reported = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tack — vi granskar tipset.')),
+      );
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Kunde inte skicka rapporten. Prova igen.'),
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Kunde inte skicka rapporten. Prova igen.'),
+        ),
+      );
     }
   }
 

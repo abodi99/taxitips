@@ -200,3 +200,20 @@ def push_cycle_task() -> dict:
     if result.get("sent"):
         log.info("core.tasks: push_cycle skickade %s notiser", result["sent"])
     return result
+
+
+@shared_task(name="core.tasks.ops_alert_task", soft_time_limit=HEARTBEAT_LIMITS[0], time_limit=HEARTBEAT_LIMITS[1])
+def ops_alert_task() -> dict:
+    """
+    Mejlar vid övergång OK→FAIL på /health/pipeline. Debounce -- se core/ops_alerts.py.
+    """
+    from core import ops_alerts
+
+    try:
+        with single_run("ops_alert", HEARTBEAT_LIMITS[1] + LOCK_MARGIN_SECONDS) as acquired:
+            if not acquired:
+                return {"skipped": "pågår redan"}
+            return ops_alerts.maybe_notify()
+    except Exception:
+        log.exception("core.tasks: ops_alert misslyckades")
+        return {"error": "exception"}

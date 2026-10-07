@@ -81,8 +81,13 @@ class DeviceCountyTests(SimpleTestCase):
         self.assertEqual(areas.device_counties({"regions": ["rail"]}), [])
         self.assertEqual(areas.device_counties(None), [])
 
-    def test_catalog_has_all_21_counties(self):
-        self.assertEqual(len(areas.county_catalog()), 21)
+    def test_catalog_omits_counties_without_realtime(self):
+        codes = {c["code"] for c in areas.county_catalog()}
+        self.assertEqual(len(codes), 16)
+        self.assertNotIn("13", codes)
+        self.assertNotIn("04", codes)
+        self.assertIn("07", codes)
+        self.assertIn("14", codes)
 
 
 class MunicipalityTests(SimpleTestCase):

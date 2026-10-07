@@ -1309,7 +1309,7 @@ def notify_prefs(request):
         # infria hade tolkats som "lugnt där" i stället för "vi hämtar inte
         # där". Se core/coverage.py.
         "uncoveredCounties": uncovered_counties(),
-        # Körområde: alla 21 län, med kollektivtrafikkälla eller inte. Ersätter
+        # Körområde: bara län med kollektivtrafik-realtid. Ersätter
         # regionCatalog, som finns kvar för äldre klienter.
         "countyCatalog": county_catalog(),
         # Kommunerna per län, för att förfina ett valt län.

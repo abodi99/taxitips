@@ -206,7 +206,9 @@ def _set_grant_counties(
     `extra_county_count` hoppar över platser med ett öppet beviljande.
     """
     if all_counties:
-        codes = [code for code, _name in areas.COUNTIES]
+        from core.coverage import offerable_county_codes
+
+        codes = sorted(offerable_county_codes())
     else:
         codes = sorted({licensing.assert_county_available(str(c)) for c in counties})
         if not codes:

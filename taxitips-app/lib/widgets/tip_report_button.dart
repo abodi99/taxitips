@@ -3,6 +3,74 @@ import 'package:flutter/material.dart';
 import '../api_client.dart';
 import '../theme.dart';
 
+/// Dialogen där föraren beskriver vad som är fel med tipset.
+///
+/// Äger [TextEditingController] själv: att slänga den när `showDialog`
+/// returnerar (medan rutan fortfarande animerar bort och tangentbordet
+/// stängs) gav `used after being disposed` och
+/// `framework.dart: '_dependents.isEmpty': is not true`.
+Future<String?> showTipReportDialog(BuildContext context) {
+  return showDialog<String>(
+    context: context,
+    useRootNavigator: true,
+    builder: (ctx) => const _TipReportDialog(),
+  );
+}
+
+class _TipReportDialog extends StatefulWidget {
+  const _TipReportDialog();
+
+  @override
+  State<_TipReportDialog> createState() => _TipReportDialogState();
+}
+
+class _TipReportDialogState extends State<_TipReportDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      scrollable: true,
+      title: const Text('Rapportera felaktigt tips'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Berätta kort vad som inte stämmer, till exempel fel plats eller att störningen redan är löst.',
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            maxLines: 3,
+            textInputAction: TextInputAction.done,
+            decoration: const InputDecoration(
+              hintText: 'Valfri förklaring',
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Avbryt'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _controller.text.trim()),
+          child: const Text('Skicka rapport'),
+        ),
+      ],
+    );
+  }
+}
+
 /// Rapportera att tipset visar felaktig information (skilt från 👍/👎).
 class TipReportButton extends StatefulWidget {
   const TipReportButton({
@@ -24,42 +92,7 @@ class _TipReportButtonState extends State<TipReportButton> {
 
   Future<void> _openDialog() async {
     if (_busy || _sent) return;
-    final controller = TextEditingController();
-    final reason = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Rapportera felaktigt tips'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Berätta kort vad som stämmer inte, till exempel fel plats eller att störningen redan är löst.',
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: controller,
-              maxLines: 3,
-              decoration: const InputDecoration(
-                hintText: 'Valfri förklaring',
-                border: OutlineInputBorder(),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Avbryt'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, controller.text.trim()),
-            child: const Text('Skicka rapport'),
-          ),
-        ],
-      ),
-    );
-    controller.dispose();
+    final reason = await showTipReportDialog(context);
     if (reason == null || !mounted) return;
     setState(() => _busy = true);
     try {
@@ -67,20 +100,18 @@ class _TipReportButtonState extends State<TipReportButton> {
         opportunityId: widget.opportunityId,
         reason: reason,
       );
-      if (mounted) setState(() => _sent = true);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tack — vi granskar tipset.')),
-        );
-      }
+      if (!mounted) return;
+      setState(() => _sent = true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Tack — vi granskar tipset.')),
+      );
     } catch (_) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Kunde inte skicka rapporten. Prova igen.'),
-          ),
-        );
-      }
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Kunde inte skicka rapporten. Prova igen.'),
+        ),
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }

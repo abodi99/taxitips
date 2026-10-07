@@ -320,6 +320,10 @@ class SalesPermissionTests(SalesTestCase):
         self.assertFalse(body["canManage"])
         self.assertEqual(body["price"]["baseOre"], 79900)
         self.assertTrue(any(c["code"] == "14" for c in body["counties"]))
+        codes = {c["code"] for c in body["counties"]}
+        self.assertNotIn("13", codes)
+        self.assertNotIn("04", codes)
+        self.assertIn("07", codes)
 
 
 # ---------------------------------------------------------------------------
@@ -409,7 +413,7 @@ class SalesTrialTests(SalesTestCase):
         """
         company = self.new_company()
         response = self.post(f"/api/admin/companies/{company.id}/trial", {
-            "vehicles": self.vehicles("GBG001", county="14", extras=["13"]),
+            "vehicles": self.vehicles("GBG001", county="14", extras=["12"]),
         })
         self.assertEqual(response.status_code, 200, response.content)
         license = License.objects.get(company_id=company.id)
@@ -436,7 +440,7 @@ class SalesTrialTests(SalesTestCase):
         ).json()
         self.assertTrue(body["entitled"], body)
         self.assertEqual(len(body["alerts"]), 1)
-        self.assertEqual(access.license_counties(license.id), ("13", "14"))
+        self.assertEqual(access.license_counties(license.id), ("12", "14"))
 
     def test_a_trial_without_plates_creates_membership_seats(self):
         """Säljpanelen skapar platser utan regnr, samma som portalen."""
@@ -473,7 +477,7 @@ class SalesTrialTests(SalesTestCase):
     def test_converting_a_trial_drops_counties_that_were_not_ordered(self):
         company = self.new_company()
         self.post(f"/api/admin/companies/{company.id}/trial", {
-            "vehicles": self.vehicles("C1", county="14", extras=["13", "12"]),
+            "vehicles": self.vehicles("C1", county="14", extras=["01", "12"]),
         })
         license = License.objects.get(company_id=company.id)
         trial = Trial.objects.get(company_id=company.id)
@@ -483,13 +487,21 @@ class SalesTrialTests(SalesTestCase):
             ends_at=trials_start + timedelta(days=14),
         )
         plan = orders.plan_change(company.id, add_vehicles=[
-            orders.VehicleSpec(plate="C1", base_county="14", extra_counties=["13"]),
+            orders.VehicleSpec(plate="C1", base_county="14", extra_counties=["01"]),
         ])
         order = orders.create_order(company.id, plan)
         orders.mark_order_paid(order)
         license.refresh_from_db()
         self.assertEqual(license.status, License.Status.ACTIVE)
-        self.assertEqual(access.license_counties(license.id), ("13", "14"))
+        self.assertEqual(access.license_counties(license.id), ("01", "14"))
+
+    def test_uncovered_county_cannot_be_sold(self):
+        company = self.new_company()
+        response = self.post(f"/api/admin/companies/{company.id}/trial", {
+            "vehicles": self.vehicles("H1", county="13"),
+        })
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["reason"], "uncovered_county")
 
 
 # ---------------------------------------------------------------------------
@@ -620,14 +632,14 @@ class CouponTests(SalesTestCase):
 class OrderTests(SalesTestCase):
     def order(self, company, *, payment="stripe_card", accepted=True, vehicles=None, user=None):
         return self.post(f"/api/admin/companies/{company.id}/orders", {
-            "addVehicles": vehicles or self.vehicles("H1", "H2", county="14", extras=["13"]),
+            "addVehicles": vehicles or self.vehicles("H1", "H2", county="14", extras=["12"]),
             "accepted": accepted, "payment": payment,
         }, user=user)
 
     def test_the_quote_uses_the_pricing_engine(self):
         company = self.new_company()
         body = self.post(f"/api/admin/companies/{company.id}/quote", {
-            "addVehicles": self.vehicles("Q1", "Q2", county="14", extras=["13"]),
+            "addVehicles": self.vehicles("Q1", "Q2", county="14", extras=["12"]),
         }).json()
         # Två bilar à 799 kr och två extra län à 199 kr, en hel månad i förskott.
         self.assertEqual(body["now"]["amountOre"], 2 * 79900 + 2 * 19900)
@@ -675,7 +687,8 @@ class OrderTests(SalesTestCase):
         lines = [(i["price_data"]["unit_amount"], i["quantity"]) for i in create["items"]]
         self.assertEqual(lines, [(79900, 2), (19900, 2)])
         self.assertEqual(sum(u * q for u, q in lines), 2 * 79900 + 2 * 19900)
-        self.assertEqual(create["description"], "2 bilar (H1, H2) · Hallands län, Västra Götalands län")
+        self.assertEqual(create["description"], "2 bilar (H1, H2) · Skåne län, Västra Götalands län")
+        self.assertEqual(create["metadata"]["extra_counties"], "2")
         self.assertEqual(create["collection_method"], "charge_automatically")
         customer = [c for c in fake.calls if c[0] == "Customer.create"][0][1]
         self.assertEqual(customer["email"], "faktura@gbgtaxi.test")
@@ -684,6 +697,20 @@ class OrderTests(SalesTestCase):
         self.assertTrue(subscription.stripe_subscription_id.startswith("sub_"))
         # Ingen licens förrän Stripe säger att fakturan är betald.
         self.assertFalse(License.objects.filter(company_id=company.id).exists())
+
+    def test_package_summary_includes_pending_extra_counties(self):
+        from fleet.stripe_sync import package_summary
+
+        company = self.new_company()
+        text = package_summary(
+            company.id,
+            adding=[{"plate": "ABC123", "baseCounty": "14", "extraCounties": ["12"]}],
+            add_counties=[{"licenseId": "x", "county": "01"}],
+        )
+        self.assertIn("ABC123", text)
+        self.assertIn("Stockholms län", text)
+        self.assertIn("Skåne län", text)
+        self.assertIn("Västra Götalands län", text)
 
     def test_an_abandoned_first_attempt_creates_a_new_subscription_not_a_one_off_invoice(self):
         """Stängd betalsida får inte göra nästa köp till en engångsfaktura."""

@@ -127,8 +127,8 @@ void main() {
     SharedPreferences.setMockInitialValues({});
     await pumpDriver(tester, api: FakeDriverApi(owner: true));
     await toLastStep();
-    expect(find.textContaining('bjuder in förare'), findsOneWidget);
-    expect(find.textContaining('lägger du till bilar'), findsOneWidget);
+    expect(find.textContaining('Förare bjuds in på webben'), findsOneWidget);
+    expect(find.textContaining('lägger du till bilar'), findsNothing);
     await disposeScreen(tester);
   });
 }

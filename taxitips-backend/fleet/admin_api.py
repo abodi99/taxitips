@@ -139,6 +139,12 @@ def _monthly_ore(subscription: Subscription, now) -> int:
     return _mrr_ore([subscription], now)
 
 
+def _package_summary(company_id) -> str:
+    from fleet import stripe_sync
+
+    return stripe_sync.package_summary(company_id)
+
+
 def _mrr_ore(active, now) -> int:
     """Samma belopp som `_monthly_ore`, för många abonnemang i tre frågor."""
     ids = [row.company_id for row in active]
@@ -520,7 +526,10 @@ def company_detail(request, company_id):
              "hadSuccessfulPayment": sub.had_successful_payment,
              "renewalStopped": bool(sub.renewal_stopped_at),
              "stripeSubscriptionId": sub.stripe_subscription_id,
-             "monthlyOre": _monthly_ore(sub, now)}
+             "monthlyOre": _monthly_ore(sub, now),
+             "licenseCount": licensing.billable_license_count(company.id),
+             "extraCountyCount": licensing.extra_county_count(company.id, now=now),
+             "packageSummary": _package_summary(company.id)}
             if sub else None
         ),
         "trial": (
@@ -840,7 +849,16 @@ def create_membership(request, company_id):
         subject_type="license", subject_id=license.id,
         detail={"base_county": base_county, "email": email, "user_id": user_id},
     )
-    return _json(request, {"ok": True, "membership": membership.view(license)})
+    # Platsen är aktiv och räknas mot nästa faktura -- Stripe måste följa med,
+    # annars står abonnemanget kvar på det gamla antalet.
+    from fleet import commerce
+
+    stripe = commerce.resync_amount(company.id)
+    return _json(request, {
+        "ok": True,
+        "membership": membership.view(license),
+        "stripe": stripe,
+    })
 
 
 @csrf_exempt

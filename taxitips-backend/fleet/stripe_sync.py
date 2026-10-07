@@ -211,7 +211,24 @@ def sync_subscription_amount(
     return SyncResult(created.id, quote.amount_ore, created=True)
 
 
-def package_summary(company_id, *, adding: list[dict] | None = None) -> str:
+def _pending_from_request(request: dict | None) -> tuple[list[dict], list[dict]]:
+    req = request or {}
+    return list(req.get("addVehicles") or []), list(req.get("addCounties") or [])
+
+
+def _pending_extra_county_count(request: dict | None) -> int:
+    """Extra län i en obetald order: per ny plats plus `addCounties`."""
+    vehicles, counties = _pending_from_request(request)
+    extras = 0
+    for spec in vehicles:
+        extras += len([c for c in (spec.get("extraCounties") or []) if c])
+    extras += len(counties)
+    return extras
+
+
+def package_summary(
+    company_id, *, adding: list[dict] | None = None, add_counties: list[dict] | None = None,
+) -> str:
     """
     Paketet i klartext för Stripes dashboard: "3 bilar (ABC123, DEF456,
     GHI789) · Stockholm, Skåne". Det är det man ser i abonnemangslistan och på
@@ -220,6 +237,8 @@ def package_summary(company_id, *, adding: list[dict] | None = None) -> str:
     `adding` är bilarna i en obetald beställning (`Order.request.addVehicles`).
     Vid den första beställningen finns inga licenser ännu -- de skapas när
     betalningen kommit -- och utan dem hade det stått "0 bilar".
+    `add_counties` är extra län på befintliga platser (`Order.request.addCounties`)
+    så att en manuell länsökning syns i beskrivningen redan på betallänken.
     """
     from core import areas
     from fleet import licensing, sessions
@@ -245,6 +264,12 @@ def package_summary(company_id, *, adding: list[dict] | None = None) -> str:
         codes = sorted(set(codes) | {
             str(c) for c in [spec.get("baseCounty"), *(spec.get("extraCounties") or [])] if c
         })
+    pending_codes = {
+        str(item.get("county") or "")
+        for item in (add_counties or [])
+        if item.get("county")
+    }
+    codes = sorted(set(codes) | pending_codes)
     counties = ", ".join(areas.COUNTY_NAMES.get(c, c) for c in codes)
     cars = f"{count} {'bil' if count == 1 else 'bilar'}"
     if plates:
@@ -375,6 +400,7 @@ def collect_trial_commit(
     line_items = _checkout_line_items(
         recurring_lines, currency=order.currency, amount_ore=amount_ore,
     )
+    adding, add_counties = _pending_from_request(order.request)
 
     session = stripe.checkout.Session.create(
         mode="subscription",
@@ -383,14 +409,14 @@ def collect_trial_commit(
         subscription_data={
             "trial_end": trial_end_ts,
             "description": package_summary(
-                order.company_id,
-                adding=(order.request or {}).get("addVehicles") or [],
+                order.company_id, adding=adding, add_counties=add_counties,
             ),
             "metadata": {
                 "company_id": str(order.company_id),
                 "order_id": str(order.id),
                 "kind": "trial_commit",
                 "licenses": str(order.quantity_after),
+                "extra_counties": str(_pending_extra_county_count(order.request)),
                 "price_version": subscription.price_version_id,
             },
         },
@@ -540,6 +566,7 @@ def collect_order(
     customer_id = ensure_customer(company, subscription)
     collection = _collection(collection_method, days_until_due)
     has_open_subscription = existing_subscription_is_open(subscription)
+    adding, add_counties = _pending_from_request(order.request)
 
     if not has_open_subscription:
         created = stripe.Subscription.create(
@@ -549,12 +576,13 @@ def collect_order(
                 amount_ore=order.amount_now_ore,
             ),
             description=package_summary(
-                order.company_id, adding=(order.request or {}).get("addVehicles") or [],
+                order.company_id, adding=adding, add_counties=add_counties,
             ),
             metadata={
                 "company_id": str(order.company_id),
                 "order_id": str(order.id),
                 "licenses": str(order.quantity_after),
+                "extra_counties": str(_pending_extra_county_count(order.request)),
                 "price_version": subscription.price_version_id,
             },
             payment_behavior="default_incomplete",

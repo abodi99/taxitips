@@ -90,7 +90,7 @@ def config(request):
         "canSell": principal.can(Perm.ADMIN_SELL),
         "canManage": principal.can(Perm.ADMIN_MANAGE),
         "canSupport": principal.can(Perm.ADMIN_SUPPORT),
-        "counties": [{"code": code, "name": name} for code, name in areas.COUNTIES],
+        "counties": areas.county_catalog(),
         "price": {
             "id": price.id, "label": price.label, "currency": price.currency,
             "vatRateBp": price.vat_rate_bp, "baseOre": price.base_price_ore,
