@@ -33,4 +33,14 @@ class TaxiTipsConfig {
   /// döljer demons knappar till registrering och kontakt (src/demo/main.js):
   /// appen leder inte vidare till något köp (membership_copy.dart).
   static const demoUrl = 'https://taxitips.se/demo?app=1';
+
+  /// Kundportalen där företagets administratör hanterar kontot (bilar,
+  /// fakturor, medlemmar). Bara synlig för inloggad ägare/admin i
+  /// Inställningar — inte en köpväg för förare (membership_copy.dart).
+  ///
+  ///   flutter run --dart-define=PORTAL_URL=https://portal.taxitips.se
+  static const portalUrl = String.fromEnvironment(
+    'PORTAL_URL',
+    defaultValue: 'https://portal.taxitips.se',
+  );
 }

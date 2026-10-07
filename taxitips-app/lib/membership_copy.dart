@@ -1,10 +1,14 @@
 /// Hur appen talar om medlemskapet -- på ETT ställe.
 ///
-/// **Appen säljer ingenting.** Inga priser, inga köpknappar, inga länkar eller
-/// uppmaningar som leder till en betalning utanför butikerna (Apple 3.1.1 och
-/// 3.1.3, Google Play Payments; docs/fleet-abonnemang.md §9c). Medlemskap sköts
-/// av företagets administratör på webben, och appen säger bara det: neutral
-/// text, ingen länk.
+/// **Appen säljer ingenting.** Inga priser, inga köpknappar, inga uppmaningar
+/// att köpa utanför butikerna (Apple 3.1.1 och 3.1.3(c) Enterprise Services,
+/// Google Play Payments; docs/fleet-abonnemang.md §9c).
+///
+/// Företagets administratör (inloggad ägare/admin med session) får en genväg
+/// till kundportalen för att *hantera företagskontot* — bilar, fakturor och
+/// medlemmar. Det är kontostyrning på webben, inte en konsument-CTA att
+/// "prenumerera billigare utanför butiken". Förare ser bara neutral text
+/// utan länk.
 ///
 /// Texterna här är appens egna. Serverns meddelanden om åtkomst (`message`)
 /// kan innehålla en uppmaning ("Uppdatera betalmetoden", "Kontakta TaxiTips för
@@ -18,21 +22,29 @@ import 'signal_kinds.dart';
 const kNotInTrial = 'Ingår inte i provet.';
 
 /// Vem som sköter medlemskapet. Ingen länk, inget pris, ingen knapp.
+/// Visas för förare och i låsta lägen — inte som köpuppmaning.
 const kMembershipOnWeb =
     'Ditt företags administratör hanterar medlemskapet på webben.';
 
-/// Raden om fakturor och medlemskap i Inställningar (ägare). Ingen länk, ingen
-/// knapp, inget pris: bara vem som sköter det.
+/// Raden om fakturor och medlemskap när användaren inte är admin (ingen länk).
 const kInvoicesOnWeb =
     'Fakturor och medlemskap hanteras av företagets administratör på webben.';
 
 /// Båda meningarna: det som visas där något är låst.
 const kNotInTrialNote = '$kNotInTrial $kMembershipOnWeb';
 
-/// Inställningarnas hänvisning för fakturor och medlemskap. Ingen länk, inget
-/// pris, ingen knapp -- bara var det sköts.
+/// Inställningarnas hänvisning för fakturor och medlemskap (förare / footer).
+/// Ingen länk, inget pris, ingen knapp -- bara var det sköts.
 const kBillingOnWeb =
     'Fakturor och medlemskap hanteras av företagets administratör på webben.';
+
+/// Rubrik på admin-genvägen till kundportalen (Inställningar → Företaget).
+/// Formulerad som kontohantering, inte köp.
+const kPortalAccountTitle = 'Hantera företagskonto';
+
+/// Underrad till [kPortalAccountTitle]. Inget om att köpa, prenumerera eller pris.
+const kPortalAccountSubtitle =
+    'Öppnar kundportalen på webben: bilar, fakturor och medlemmar.';
 
 /// Skäl (`access.reason`, fleet/access.py) som handlar om betalning eller
 /// avtal. Deras serverstext visas inte; appen använder [membershipNotice].

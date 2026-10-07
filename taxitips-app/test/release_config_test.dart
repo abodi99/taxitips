@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taxitips_app/api_client.dart';
+import 'package:taxitips_app/config.dart';
 
 /// Det som måste stämma i butiksbygget och som ingen märker förrän granskningen
 /// (eller en användare) gör det: inga inlagda konton, rätt behörigheter, push
@@ -31,6 +32,10 @@ void main() {
   test('integritetspolicy och villkor öppnas på taxitips.se', () {
     // Inte Supabase (api.taxitips.se), som svarar 401 på /privacy.html.
     expect(ApiClient.webUrl, 'https://taxitips.se');
+  });
+
+  test('kundportalen pekar på portal.taxitips.se', () {
+    expect(TaxiTipsConfig.portalUrl, 'https://portal.taxitips.se');
   });
 
   test('inga köpbibliotek eller inbäddade webbvyer', () {

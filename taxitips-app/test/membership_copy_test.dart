@@ -1,13 +1,14 @@
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:taxitips_app/config.dart';
 import 'package:taxitips_app/membership_copy.dart';
 import 'package:taxitips_app/signal_kinds.dart';
 
-/// Appen säljer ingenting (Apple 3.1.1/3.1.3, Google Play Payments;
-/// docs/fleet-abonnemang.md §9c): inga priser, inga köpknappar, inga länkar
-/// eller uppmaningar som leder till en betalning utanför butikerna. Testerna
-/// vaktar texterna och koden.
+/// Appen säljer ingenting (Apple 3.1.1/3.1.3(c), Google Play Payments;
+/// docs/fleet-abonnemang.md §9c): inga priser, inga köpknappar, inga
+/// uppmaningar som leder till ett *köp* utanför butikerna. Admin får en
+/// kontohanteringslänk till kundportalen; testerna vaktar skillnaden.
 void main() {
   group('membershipNotice', () {
     test('skäl om medlemskap får appens text, aldrig serverns uppmaning', () {
@@ -51,6 +52,18 @@ void main() {
         kBillingOnWeb,
         'Fakturor och medlemskap hanteras av företagets administratör på webben.',
       );
+      expect(kPortalAccountTitle, 'Hantera företagskonto');
+      expect(
+        kPortalAccountSubtitle,
+        'Öppnar kundportalen på webben: bilar, fakturor och medlemmar.',
+      );
+      // Portaltexterna får inte låta som köp-CTA.
+      for (final text in [kPortalAccountTitle, kPortalAccountSubtitle]) {
+        expect(text.toLowerCase(), isNot(contains('prenumer')));
+        expect(text.toLowerCase(), isNot(contains('köp')));
+        expect(text.toLowerCase(), isNot(contains('betala')));
+        expect(text.toLowerCase(), isNot(contains('uppgradera')));
+      }
     });
   });
 
@@ -59,6 +72,10 @@ void main() {
     expect(signalCategoryFromFeatureKey('transit'), SignalCategory.transit);
     expect(signalCategoryFromFeatureKey('okänd'), isNull);
     expect(signalCategoryFromFeatureKey(null), isNull);
+  });
+
+  test('portal-URL:n är kundportalen, överskrivbar med dart-define', () {
+    expect(TaxiTipsConfig.portalUrl, 'https://portal.taxitips.se');
   });
 
   group('koden', () {
@@ -77,8 +94,11 @@ void main() {
     }
 
     test('inga köp- eller betalvägar i klienten', () {
+      // Kundportalen (portal.taxitips.se / PORTAL_URL) är tillåten som
+      // kontohantering för admin — se membership_copy.dart. Stripe Checkout,
+      // billing portal-API, IAP och köpord är fortfarande förbjudna.
       final forbidden = RegExp(
-        r'stripe|checkout|billingportal|billing/portal|/portal|paymentUrl|'
+        r'stripe|checkout|billingportal|billing/portal|paymentUrl|'
         r'in_app_purchase|purchases_flutter|revenuecat|betallänk|'
         r'uppgradera|prenumerera',
         caseSensitive: false,
@@ -88,6 +108,27 @@ void main() {
         for (var i = 0; i < lines.length; i++) {
           if (forbidden.hasMatch(lines[i])) {
             hits.add('$path: ${lines[i].trim()}');
+          }
+        }
+      });
+      expect(hits, isEmpty, reason: hits.join('\n'));
+    });
+
+    test('portal-URL:n används bara i config och Inställningar', () {
+      final portalMention = RegExp(
+        r'portalUrl|portal\.taxitips|PORTAL_URL',
+        caseSensitive: false,
+      );
+      const allowed = {
+        'lib/config.dart',
+        'lib/screens/settings_screen.dart',
+        'lib/membership_copy.dart',
+      };
+      final hits = <String>[];
+      source().forEach((path, lines) {
+        for (final line in lines) {
+          if (portalMention.hasMatch(line) && !allowed.contains(path)) {
+            hits.add('$path: ${line.trim()}');
           }
         }
       });
@@ -110,10 +151,11 @@ void main() {
     });
 
     test('externa länkar finns bara där de ska', () {
-      // Filer som får öppna en webbadress. Ingen av dem leder till ett köp av
-      // Taxi Tips: kartnavigering, appbutiken (uppdatering), juridiska sidor,
-      // trafikbolagets och evenemangets egen sida, och demon. Ny fil här =
-      // granska att den inte leder till betalning, och lägg till den.
+      // Filer som får öppna en webbadress. Ingen av dem är en köpknapp:
+      // kartnavigering, appbutiken (uppdatering), juridiska sidor,
+      // trafikbolagets och evenemangets egen sida, demon, och adminens
+      // kontohantering i kundportalen. Ny fil här = granska att den inte
+      // leder till ett köp-CTA, och lägg till den.
       const allowed = {
         'lib/navigation.dart',
         'lib/screens/welcome_screen.dart',

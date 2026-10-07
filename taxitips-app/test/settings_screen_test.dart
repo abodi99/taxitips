@@ -8,9 +8,9 @@ import 'package:taxitips_app/widgets/settings_ui.dart';
 
 import 'driver_test_support.dart';
 
-/// Inställningarna är grupperade med korta rubriker och en rad om vad man kan
-/// göra i varje. Fakturor och medlemskap är en neutral rad: ingen länk, ingen
-/// knapp (Apples och Googles regler, membership_copy.dart).
+/// Inställningarna är grupperade med korta rubriker. Ägare/admin får en
+/// genväg till kundportalen som kontohantering; förare får bara neutral
+/// text utan länk (membership_copy.dart).
 void main() {
   setUpAll(loadAppFonts);
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -47,9 +47,7 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('ägaren ser alla grupper och den neutrala fakturaraden', (
-    tester,
-  ) async {
+  testWidgets('ägaren ser alla grupper och portalgenvägen', (tester) async {
     await pumpSettings(
       tester,
       api: FakeDriverApi(owner: true),
@@ -66,13 +64,37 @@ void main() {
       await reveal(tester, f);
       expect(f, findsOneWidget, reason: title);
     }
-    // Fakturaraden: exakt texten, och inget som går att trycka på.
-    final note = find.text(kInvoicesOnWeb);
-    await reveal(tester, note);
+    final portal = find.text(kPortalAccountTitle);
+    await reveal(tester, portal);
+    expect(portal, findsOneWidget);
+    expect(find.text(kPortalAccountSubtitle), findsOneWidget);
+    // Tappbar rad (kontohantering), inte en död note-rad.
     expect(
-      kInvoicesOnWeb,
-      'Fakturor och medlemskap hanteras av företagets administratör på webben.',
+      find.ancestor(of: portal, matching: find.byType(ListTile)),
+      findsOneWidget,
     );
+    // Ingen rå URL i UI, och ingen köpformulering.
+    expect(find.textContaining('http'), findsNothing);
+    expect(find.textContaining('prenumer'), findsNothing);
+
+    await reveal(tester, find.text('Visa genomgången igen'));
+    expect(find.text('Så fungerar Taxi Tips'), findsOneWidget);
+    expect(find.text('Visa genomgången igen'), findsOneWidget);
+  });
+
+  testWidgets('föraren ser sina grupper, utan portalgenväg', (tester) async {
+    await pumpSettings(tester, api: FakeDriverApi(), onShowTour: () {});
+    expect(find.text('Företaget och bilarna'), findsNothing);
+    expect(find.text(kPortalAccountTitle), findsNothing);
+    expect(find.text(kInvoicesOnWeb), findsNothing);
+    for (final title in ['Den här telefonen', 'Notiser', 'Konto', 'Hjälp']) {
+      final f = find.widgetWithText(SettingsSectionHeader, title);
+      await reveal(tester, f);
+      expect(f, findsOneWidget, reason: title);
+    }
+    // Neutral fakturatext längst ner, utan länk.
+    final note = find.text(kBillingOnWeb);
+    await reveal(tester, note);
     expect(note, findsOneWidget);
     expect(
       find.ancestor(of: note, matching: find.byType(InkWell)),
@@ -82,22 +104,6 @@ void main() {
       find.ancestor(of: note, matching: find.byType(ListTile)),
       findsNothing,
     );
-    expect(find.textContaining('http'), findsNothing);
-
-    await reveal(tester, find.text('Visa genomgången igen'));
-    expect(find.text('Så fungerar Taxi Tips'), findsOneWidget);
-    expect(find.text('Visa genomgången igen'), findsOneWidget);
-  });
-
-  testWidgets('föraren ser sina grupper, utan företagsdelen', (tester) async {
-    await pumpSettings(tester, api: FakeDriverApi(), onShowTour: () {});
-    expect(find.text('Företaget och bilarna'), findsNothing);
-    expect(find.text(kInvoicesOnWeb), findsNothing);
-    for (final title in ['Den här telefonen', 'Notiser', 'Konto', 'Hjälp']) {
-      final f = find.widgetWithText(SettingsSectionHeader, title);
-      await reveal(tester, f);
-      expect(f, findsOneWidget, reason: title);
-    }
   });
 
   testWidgets('"Visa genomgången igen" kallar på genomgången', (tester) async {

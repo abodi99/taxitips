@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../api_client.dart';
+import '../config.dart';
 import '../membership_copy.dart';
 import '../net_status.dart';
 import '../signal_kinds.dart' show countyShort;
@@ -176,6 +177,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
+  /// Kundportalen för företagets administratör (kontohantering på webben).
+  /// SFSafariViewController / Chrome Custom Tabs först — synlig system-URL,
+  /// inte en dold WebView. Faller tillbaka till extern webbläsare.
+  Future<void> _openCompanyPortal() async {
+    final uri = Uri.parse(TaxiTipsConfig.portalUrl);
+    try {
+      if (await launchUrl(uri, mode: LaunchMode.inAppBrowserView)) return;
+    } catch (_) {
+      // Plattformen saknar in-app-bläddrare; öppna externt.
+    }
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
   Future<void> _loadCounties() async {
     final data = await widget.api.getNotifyPrefs();
     final names = <String, String>{
@@ -287,9 +301,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // [_Footer]; något nytt som hör hemma sist (t.ex. radera kontot) läggs före
   // den, som en egen grupp.
 
-  /// Företaget och bilarna, för ägare. Fakturor och medlemskap sköts på
-  /// webben av företagets administratör: en neutral rad, ingen länk, ingen
-  /// knapp (membership_copy.dart; Apples och Googles regler).
+  /// Företaget och bilarna, för inloggad ägare/admin. Genväg till kundportalen
+  /// som kontohantering — inte en köpknapp (membership_copy.dart).
   List<Widget> _companySection() => [
     const SettingsSectionHeader(
       title: 'Företaget och bilarna',
@@ -302,11 +315,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
       onChanged: () => unawaited(_loadCounties()),
     ),
     const SizedBox(height: 12),
-    const SettingsGroup(
+    SettingsGroup(
       children: [
-        SettingsNoteRow(
-          icon: Icons.receipt_long_outlined,
-          text: kInvoicesOnWeb,
+        SettingsNavRow(
+          icon: Icons.manage_accounts_outlined,
+          title: kPortalAccountTitle,
+          subtitle: kPortalAccountSubtitle,
+          trailingIcon: Icons.open_in_browser,
+          onTap: () => unawaited(_openCompanyPortal()),
         ),
       ],
     ),
@@ -538,8 +554,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     onCloseAccount: _isOffice ? _closeAccount : null,
                   ),
                   // Radera mitt konto: allra sist, se _AccountDeletionFooter.
+                  // Förare får den neutrala fakturatexten; admin har redan
+                  // portalgenvägen ovan och behöver inte samma rad igen.
                   if (_isOffice || _isDevice)
-                    _AccountDeletionFooter(onDelete: _deleteAccount),
+                    _AccountDeletionFooter(
+                      onDelete: _deleteAccount,
+                      showBillingNote: !_isOffice,
+                    ),
                 ],
               ),
             ),
@@ -635,12 +656,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 }
 
-/// Längst ner i Inställningarna: var fakturor och medlemskap sköts (neutral
-/// text, ingen länk -- membership_copy.dart) och "Radera mitt konto".
+/// Längst ner i Inställningarna: "Radera mitt konto", och för förare en
+/// neutral rad om var fakturor sköts (ingen länk -- membership_copy.dart).
 class _AccountDeletionFooter extends StatelessWidget {
-  const _AccountDeletionFooter({required this.onDelete});
+  const _AccountDeletionFooter({
+    required this.onDelete,
+    this.showBillingNote = true,
+  });
 
   final VoidCallback onDelete;
+
+  /// Förare: visa [kBillingOnWeb]. Admin har portalgenvägen i företagsdelen.
+  final bool showBillingNote;
 
   @override
   Widget build(BuildContext context) {
@@ -648,12 +675,18 @@ class _AccountDeletionFooter extends StatelessWidget {
       padding: const EdgeInsets.only(top: 16),
       child: Column(
         children: [
-          const Text(
-            kBillingOnWeb,
-            textAlign: TextAlign.center,
-            style: TextStyle(color: TbColors.muted, fontSize: 13, height: 1.35),
-          ),
-          const SizedBox(height: 8),
+          if (showBillingNote) ...[
+            const Text(
+              kBillingOnWeb,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: TbColors.muted,
+                fontSize: 13,
+                height: 1.35,
+              ),
+            ),
+            const SizedBox(height: 8),
+          ],
           TextButton(
             onPressed: onDelete,
             style: TextButton.styleFrom(
