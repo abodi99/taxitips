@@ -241,4 +241,46 @@ void main() {
       expect(find.text('Avgång inställd'), findsNothing);
     });
   });
+
+  group('på en telefon', () {
+    testWidgets('håller ihop på telefonbredd, även med lång text', (
+      tester,
+    ) async {
+      // Förarens telefon är ~360-430 px bred. En rubrik längre än skärmen ska
+      // kapas, inte svämma över -- samma fälla som gjorde den gamla visningen
+      // oläsbar.
+      tester.view.physicalSize = const Size(360 * 3, 800 * 3);
+      tester.view.devicePixelRatio = 3.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Align(
+              alignment: Alignment.topCenter,
+              child: PushBanner(
+                data: const PushBannerData(
+                  title:
+                      'Jantar Unity väntas lägga till i Ystad hamn inom en halvtimme',
+                  body:
+                      'Färjan ankommer inom 30 minuter och flera hundra '
+                      'resenärer kliver av i hamnen samtidigt.',
+                  opportunityId: 'o1',
+                  kind: 'ferry',
+                  severityTier: 'arrival_wave',
+                  level: 'high',
+                  demandScore: 80,
+                ),
+                onOpen: () {},
+                onDismiss: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+      expect(tester.takeException(), isNull);
+      // Rubriken kapas till en rad i stället för att tryckas ihop.
+      expect(find.textContaining('Jantar Unity'), findsOneWidget);
+    });
+  });
 }
