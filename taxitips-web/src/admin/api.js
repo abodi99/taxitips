@@ -109,6 +109,11 @@ export const admin = {
     request(`/api/admin/approvals/${approvalId}/label`, { method: "POST", body: { label } }),
   releaseCar: (licenseId, reason) =>
     request(`/api/admin/licenses/${licenseId}/release`, { method: "POST", body: { reason } }),
+  // Kontobaserat medlemskap (2026-10): tilldela platsen ett konto åt kunden.
+  assignMembership: (licenseId, body) =>
+    request(`/api/admin/licenses/${licenseId}/assign`, { method: "POST", body }),
+  unassignMembership: (licenseId) =>
+    request(`/api/admin/licenses/${licenseId}/unassign`, { method: "POST", body: {} }),
   inviteDriver: (id, licenseId, email, label) =>
     request(`/api/admin/companies/${id}/driver-invites`, {
       method: "POST",

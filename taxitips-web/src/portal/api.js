@@ -110,6 +110,18 @@ export const api = {
     request(`/api/fleet/devices/${deviceId}/notify-prefs`, { method: "POST", body }),
   setNotifyDefault: (body) => request("/api/fleet/notify-default", { method: "POST", body }),
   members: () => request("/api/fleet/members"),
+  // Kontobaserat medlemskap (2026-10): tilldela platsen ett konto. Provet får
+  // sin egen plats i appen; fler platser köps här och tilldelas andra konton.
+  memberships: () => request("/api/fleet/memberships"),
+  assignMembership: (licenseId, body) =>
+    request(`/api/fleet/memberships/${licenseId}/assign`, { method: "POST", body }),
+  unassignMembership: (licenseId) =>
+    request(`/api/fleet/memberships/${licenseId}/unassign`, { method: "POST", body: {} }),
+  setMembershipCounty: (licenseId, county) =>
+    request(`/api/fleet/memberships/${licenseId}/county`, {
+      method: "POST",
+      body: { base: county },
+    }),
   inviteMember: (email, role) =>
     request("/api/fleet/members/invite", { method: "POST", body: { email, role } }),
   revokeMemberInvite: (inviteId) =>

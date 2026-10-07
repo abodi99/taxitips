@@ -680,6 +680,34 @@ class ApiClient {
   Future<Map<String, dynamic>> setTrialCounty(String licenseId, String base) =>
       _owner('trial/vehicles/$licenseId/county', {'base': base});
 
+  // --- Kontobaserat medlemskap (2026-10) ---------------------------------
+  // En plats tilldelas ett KONTO i stället för en bil. Under provet får ägaren
+  // sin egen plats (chooseTrialCounty); fler platser köps och tilldelas andra
+  // konton i portalen/admin, aldrig här (appen bjuder inte in).
+
+  /// Kontots medlemskap (Bearer): egna platser och vilken som är aktiv i appen.
+  Future<Map<String, dynamic>> memberships() => _owner('memberships');
+
+  /// Ta medlemskapet i appen: en öppen session per konto. `force` är svaret på
+  /// "någon annan använder det -- ta över?" (servern svarar `takeover_required`).
+  Future<Map<String, dynamic>> startMembershipSession({
+    String? licenseId,
+    bool force = false,
+  }) => _owner('membership-session', {
+    if (licenseId != null && licenseId.isNotEmpty) 'licenseId': licenseId,
+    'force': force,
+  });
+
+  /// Provets steg i appen (registrera -> kod -> app): ta platsen och välj län.
+  /// Servern skapar platsen (utan bil), tilldelar kontot och sätter länen.
+  /// Idempotent -- en andra gång byter den bara län.
+  Future<Map<String, dynamic>> chooseTrialCounty(String baseCounty) =>
+      _owner('memberships/trial', {'baseCounty': baseCounty});
+
+  /// Byt län på ett medlemskap som redan är tilldelat kontot.
+  Future<Map<String, dynamic>> setMembershipCounty(String licenseId, String base) =>
+      _owner('memberships/$licenseId/county', {'base': base});
+
   /// Tar bort en provbil och frigör platsen i provet.
   Future<Map<String, dynamic>> removeTrialVehicle(String licenseId) =>
       _owner('trial/vehicles/$licenseId/remove', {});

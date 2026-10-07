@@ -19,6 +19,7 @@ void main() {
     WidgetTester tester, {
     required FakeDriverApi api,
     VoidCallback? onShowTour,
+    VoidCallback? onLogout,
   }) async {
     tester.view.physicalSize = const Size(360, 640);
     tester.view.devicePixelRatio = 1;
@@ -26,7 +27,11 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         theme: buildTaxiTheme(),
-        home: SettingsScreen(api: api, onLogout: () {}, onShowTour: onShowTour),
+        home: SettingsScreen(
+          api: api,
+          onLogout: onLogout ?? () {},
+          onShowTour: onShowTour,
+        ),
       ),
     );
     await tester.pump(const Duration(milliseconds: 500));
@@ -109,5 +114,24 @@ void main() {
     await pumpSettings(tester, api: FakeDriverApi());
     await reveal(tester, find.text('Så fungerar Taxi Tips'));
     expect(find.text('Visa genomgången igen'), findsNothing);
+  });
+
+  testWidgets('föraren kan inte koppla bort telefonen -- bara logga ut', (
+    tester,
+  ) async {
+    var loggedOut = 0;
+    await pumpSettings(
+      tester,
+      api: FakeDriverApi(),
+      onLogout: () => loggedOut++,
+    );
+    await reveal(tester, find.text('Logga ut'));
+    expect(find.text('Logga ut'), findsOneWidget);
+    // "Koppla från telefonen" är borttagen (2026-10-07): ett telefonbyte sker
+    // genom att logga in på en annan telefon, och servern tillåter ett byte per
+    // kalendermånad. Inställningarna har därför ingen avkopplingsknapp kvar.
+    expect(find.text('Koppla från telefonen'), findsNothing);
+    await tester.tap(find.text('Logga ut'));
+    expect(loggedOut, 1);
   });
 }

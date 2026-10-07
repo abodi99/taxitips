@@ -151,42 +151,118 @@ function attention(c) {
 
 /* --- Hem ---------------------------------------------------------------- */
 
-export function oversikt(d, list = { companies: [] }, supportWaiting = 0) {
+/**
+ * Att-göra-läge: inkorg (support, tipprapporter, granskningar, CRM) överst
+ * med ett klick, sedan kundrader, statusrad och nyckeltal.
+ */
+export function oversikt(d, list = { companies: [] }, inbox = {}) {
+  const supportWaiting = inbox.supportWaiting ?? 0;
+  const tipReportsOpen = inbox.tipReportsOpen ?? d.tipReportsOpen ?? 0;
+  const reviewsOpen = d.reviewsOpen ?? 0;
+  const crmOverdue = inbox.crmTasksOverdue ?? d.crmTasksOverdue ?? 0;
+  const statusReport = inbox.statusReport ?? null;
+  const statusLine = inbox.statusLine ?? "";
   const subs = d.subscriptions ?? {};
-  const todo = (list.companies ?? [])
+  const companies = list.companies ?? [];
+  const todo = companies
     .map((c) => ({ c, a: attention(c) }))
     .filter((x) => x.a)
     .sort((x, y) => y.a.level - x.a.level);
+  const trialsEnding = companies.filter((c) => {
+    if (c.trial?.status !== "active" || !c.trial.endsAt) return false;
+    const days = Math.ceil((new Date(c.trial.endsAt) - Date.now()) / 86400000);
+    return days >= 0 && days <= 3;
+  }).length;
+
+  const inboxItems = [
+    supportWaiting ? {
+      view: "support",
+      label: supportWaiting === 1 ? "1 fråga väntar i supporten" : `${supportWaiting} frågor väntar i supporten`,
+      go: "Öppna support",
+      level: 3,
+      danger: true,
+    } : null,
+    tipReportsOpen ? {
+      view: "tipprapporter",
+      label: tipReportsOpen === 1 ? "1 tipprapport att granska" : `${tipReportsOpen} tipprapporter att granska`,
+      go: "Granska",
+      level: 3,
+      danger: true,
+    } : null,
+    reviewsOpen ? {
+      view: "granskning",
+      label: reviewsOpen === 1 ? "1 riskgranskning väntar" : `${reviewsOpen} riskgranskningar väntar`,
+      go: "Öppna",
+      level: 3,
+      danger: true,
+    } : null,
+    crmOverdue ? {
+      view: "pipeline",
+      filter: "tasks",
+      label: crmOverdue === 1 ? "1 försenad CRM-uppgift" : `${crmOverdue} försenade CRM-uppgifter`,
+      go: "Öppna uppgifter",
+      level: 2,
+    } : null,
+    trialsEnding ? {
+      view: "kunder",
+      filter: "prov",
+      label: trialsEnding === 1
+        ? "1 prov slutar inom 3 dagar"
+        : `${trialsEnding} prov slutar inom 3 dagar`,
+      go: "Visa prov",
+      level: 2,
+    } : null,
+  ].filter(Boolean);
+
   return `
     <div class="page-head">
-      <div><h1>Hem</h1><p class="muted">Det här behöver göras. Tryck på en rad för att gå direkt till rätt steg.</p></div>
+      <div><h1>Hem</h1><p class="muted">Det som behöver dig just nu. Ett klick tar dig dit.</p></div>
       <button class="btn btn-primary" data-action="goto" data-view="nykund">+ Ny kund</button>
     </div>
 
+    ${inboxItems.length ? `
+    <div class="card attn-inbox">
+      <h2>Inkorg</h2>
+      <ul class="todo">${inboxItems.map((item) => `
+        <li><button class="todo-row${item.danger ? " is-danger" : ""}" data-action="goto"
+          data-view="${esc(item.view)}"${item.filter ? ` data-filter="${esc(item.filter)}"` : ""}>
+          <span class="todo-dot lvl-${item.level}" aria-hidden="true"></span>
+          <span class="todo-main"><b>${esc(item.label)}</b></span>
+          <span class="todo-go">${esc(item.go)} →</span>
+        </button></li>`).join("")}</ul>
+    </div>` : ""}
+
     <div class="card">
-      <h2>Att göra <span class="muted">(${esc(todo.length)})</span></h2>
-      ${supportWaiting ? `<p><button class="btn btn-primary" data-action="goto" data-view="support">
-        ${esc(supportWaiting)} ${supportWaiting === 1 ? "fråga väntar" : "frågor väntar"} på svar i supporten →</button></p>` : ""}
+      <h2>Kunder som behöver åtgärd <span class="muted">(${esc(todo.length)})</span></h2>
       ${todo.length ? `<ul class="todo">${todo.map(({ c, a }) => `
         <li><button class="todo-row" data-action="open-company" data-id="${esc(c.id)}" data-tab="${esc(a.step)}">
           <span class="todo-dot lvl-${a.level}" aria-hidden="true"></span>
           <span class="todo-main"><b>${esc(c.name)}</b><span class="muted">${esc(a.why)}</span></span>
           <span class="todo-go">${esc(STEPS.find((st) => st.id === a.step)?.title ?? "")} →</span>
         </button></li>`).join("")}</ul>`
-        : '<p class="muted">Inget att göra just nu. 🎉</p>'}
-      ${d.reviewsOpen ? `<p><button class="btn btn-quiet" data-action="goto" data-view="granskning">
-        ${esc(d.reviewsOpen)} riskgranskning(ar) väntar →</button></p>` : ""}
-      ${d.tipReportsOpen ? `<p><button class="btn btn-primary" data-action="goto" data-view="tipprapporter">
-        ${esc(d.tipReportsOpen)} ${d.tipReportsOpen === 1 ? "tipprapport" : "tipprapporter"} att granska →</button></p>` : ""}
+        : `<p class="muted">${inboxItems.length
+          ? "Inga kunder kräver åtgärd just nu."
+          : "Inget att göra just nu."}</p>`}
     </div>
 
-    <div class="kpis">
-      ${kpi("Kunder", esc(d.companies), { view: "kunder" })}
-      ${kpi("Betalande", esc(subs.active ?? 0), { view: "kunder" })}
-      ${kpi("Prov", esc(d.trialsActive), { view: "kunder" })}
-      ${kpi("MRR exkl. moms", esc(money(d.mrrOre, d.currency)))}
-      ${kpi("Förare i tjänst nu", esc(d.sessionsActive))}
-    </div>
+    ${statusReport ? `
+    <button type="button" class="status-inline st-${esc(statusReport.overall ?? "ok")}"
+      data-action="goto" data-view="status">
+      <span class="st-dot st-${esc(statusReport.overall ?? "ok")}" aria-hidden="true"></span>
+      <span>Datakällor: ${esc(statusLine || "okänt")}</span>
+      <span class="todo-go">Status →</span>
+    </button>` : ""}
+
+    <details class="card attn-kpis">
+      <summary>Nyckeltal</summary>
+      <div class="kpis">
+        ${kpi("Kunder", esc(d.companies), { view: "kunder" })}
+        ${kpi("Betalande", esc(subs.active ?? 0), { view: "kunder" })}
+        ${kpi("Prov", esc(d.trialsActive), { view: "kunder" })}
+        ${kpi("MRR exkl. moms", esc(money(d.mrrOre, d.currency)))}
+        ${kpi("Förare i tjänst nu", esc(d.sessionsActive))}
+      </div>
+    </details>
   `;
 }
 
@@ -264,15 +340,21 @@ export const KUND_TABS = [
   { id: "bilar", title: "Bilar och förare" },
   { id: "konton", title: "Inloggningar" },
   { id: "betalning", title: "Betalning" },
+];
+
+/** Sällan använda flikar — under Mer på kundkortet. */
+export const KUND_TABS_MORE = [
   { id: "foretag", title: "Företag" },
   { id: "historik", title: "Historik" },
 ];
+
+const ALL_KUND_TABS = [...KUND_TABS, ...KUND_TABS_MORE];
 
 /** Ett steg i cykeln (Hem, Kunder) till fliken där det görs. */
 const TAB_FOR = { foretag: "foretag", bilar: "bilar", forare: "bilar", konto: "konton", betalning: "betalning" };
 
 export function kundTab(tab) {
-  if (KUND_TABS.some((t) => t.id === tab)) return tab;
+  if (ALL_KUND_TABS.some((t) => t.id === tab)) return tab;
   return TAB_FOR[tab] ?? "oversikt";
 }
 
@@ -332,6 +414,7 @@ export function kund(d, config = null, tab = "", pending = null, crm = null, log
     konton: (d.members ?? []).filter((m) => m.status === "active").length,
   };
   const alertTabs = new Set(found.filter((i) => i.level >= 2).map((i) => i.tab));
+  const moreActive = KUND_TABS_MORE.some((t) => t.id === active);
   const panel = {
     oversikt: () => tabOversikt(d, config, crm, found),
     bilar: () => tabBilar(d, config, pending),
@@ -345,6 +428,7 @@ export function kund(d, config = null, tab = "", pending = null, crm = null, log
     p.contactPhone ? `<a href="tel:${esc(p.contactPhone.replace(/\s/g, ""))}">${esc(p.contactPhone)}</a>` : "",
     p.contactEmail ? `<a href="mailto:${esc(p.contactEmail)}">${esc(p.contactEmail)}</a>` : "",
   ].filter(Boolean).join(" · ");
+  const next = found[0];
 
   return `
     <button class="back-link" data-action="back">← Alla kunder</button>
@@ -365,11 +449,32 @@ export function kund(d, config = null, tab = "", pending = null, crm = null, log
         ? `Förarna får tips${d.access.validUntil ? ` till ${esc(date(d.access.validUntil))}` : ""}.`
         : `Förarna får inga tips: ${esc(ACCESS_TEXT[d.access?.reason] ?? d.access?.reason ?? "okänt skäl")}.`}</p>`}
 
+    ${next && active === "oversikt" ? `
+      <div class="next-action">
+        <p><b>Nästa steg:</b> ${esc(next.text)}</p>
+        ${next.tab
+          ? `<button class="btn btn-primary" data-action="kund-tab" data-tab="${esc(next.tab)}">${esc(next.label || "Öppna")} →</button>`
+          : `<button class="btn btn-primary" data-action="goto" data-view="granskning">${esc(next.label || "Granskning")} →</button>`}
+      </div>` : ""}
+
     <nav class="ktabs" aria-label="Kundens sidor">
       ${KUND_TABS.map((t) => `
         <button class="ktab" data-action="kund-tab" data-tab="${t.id}" aria-current="${t.id === active ? "page" : "false"}">
           ${esc(t.title)}${badge[t.id] != null ? ` <span class="ktab-n">${esc(badge[t.id])}</span>` : ""}${alertTabs.has(t.id) ? '<span class="ktab-dot" aria-label="behöver åtgärd"></span>' : ""}
         </button>`).join("")}
+      <details class="ktab-more"${moreActive ? " open" : ""}>
+        <summary class="ktab ktab-more-toggle${moreActive ? " is-on" : ""}">Mer${
+          KUND_TABS_MORE.some((t) => alertTabs.has(t.id))
+            ? '<span class="ktab-dot" aria-label="behöver åtgärd"></span>' : ""
+        }</summary>
+        <div class="ktab-more-menu" role="menu">
+          ${KUND_TABS_MORE.map((t) => `
+            <button type="button" role="menuitem" class="ktab-more-item" data-action="kund-tab" data-tab="${t.id}"
+              aria-current="${t.id === active ? "page" : "false"}">${esc(t.title)}${
+                alertTabs.has(t.id) ? '<span class="ktab-dot" aria-label="behöver åtgärd"></span>' : ""
+              }</button>`).join("")}
+        </div>
+      </details>
     </nav>
 
     <section class="step-panel">${panel}</section>
@@ -416,13 +521,13 @@ function tabOversikt(d, config, crm, found) {
       ${tile("foretag", "Behörighet", d.profile?.verificationStatus ? verificationPill(d.profile.verificationStatus) : '<span class="pill">Äldre kund</span>')}
     </div>
 
-    <div class="card">
-      <h2>Kunden ringer om …</h2>
+    <details class="card">
+      <summary>Kunden ringer om …</summary>
       <div class="calls">${CALLS.map(([tab, title, hint]) => `
         <button type="button" class="call" data-action="kund-tab" data-tab="${tab}">
           <b>${esc(title)}</b><span class="muted">${esc(hint)}</span></button>`).join("")}
       </div>
-    </div>
+    </details>
 
     ${crmNotesCard(crm, config)}
   `;
@@ -458,7 +563,7 @@ function phonesCard(d, config) {
       <div class="card-head"><h2>Telefoner <span class="muted">(${esc(devices.length)})</span></h2>
         ${manage && devices.length ? '<button class="btn btn-quiet btn-small" data-action="test-push">Skicka testnotis till alla</button>' : ""}</div>
       <p class="muted">Utan notistoken kan telefonen inte få notiser – be föraren öppna appen och tillåta notiser.
-        Ett extra telefonbyte behövs när föraren har bytt telefon två gånger den här månaden.</p>
+        Ett extra telefonbyte behövs när föraren har bytt telefon en gång den här månaden.</p>
       ${devices.length ? `<table><thead><tr><th>Telefon</th><th>Notiser</th><th>Senast sedd</th><th></th></tr></thead>
       <tbody>${devices.map((dv) => `
         <tr><td data-label="Telefon"><b>${esc(dv.label || "Telefon")}</b>
@@ -842,6 +947,36 @@ function countyChangesRow(l, sell) {
     </div>`;
 }
 
+/**
+ * Medlemskapet (2026-10): platsen tilldelas ett KONTO, inte en bil. I appen får
+ * kunden sin plats själv; här tilldelar personalen fler platser åt kunden,
+ * t.ex. till en kollegas konto. Portalen tar aldrig en app-session.
+ */
+function membershipRow(l, sell) {
+  if (!LICENSE_OPEN.includes(l.status)) return "";
+  const who = l.assigneeEmail
+    ? `väntar på ${esc(l.assigneeEmail)}`
+    : l.assigneeUserId
+      ? "ett konto"
+      : "ingen än";
+  return `<div class="driving ${l.assigned ? "on" : ""}">
+      <span><b>Medlemskap:</b> ${who}
+        <span class="muted">tilldelas ett konto, inte en bil</span></span>
+      ${
+        sell
+          ? `<button class="btn btn-quiet btn-small" data-action="membership-assign"
+               data-license="${esc(l.id)}" data-plate="${esc(l.vehicle)}">${l.assigned ? "Byt konto" : "Tilldela konto"}</button>
+             ${
+               l.assigned
+                 ? `<button class="btn btn-quiet btn-small" data-action="membership-unassign"
+                      data-license="${esc(l.id)}" data-plate="${esc(l.vehicle)}">Ta bort</button>`
+                 : ""
+             }`
+          : ""
+      }
+    </div>`;
+}
+
 function carsCard(d, config, pending = null) {
   const all = d.licenses ?? [];
   const open = all.filter((l) => LICENSE_OPEN.includes(l.status));
@@ -879,6 +1014,7 @@ function carsCard(d, config, pending = null) {
             ${l.scheduledBaseCounty ? `<span class="muted">baslän byts till ${esc(name(l.scheduledBaseCounty))} vid förnyelse</span>` : ""}
           </div>
           ${countyChangesRow(l, sell)}
+          ${membershipRow(l, sell)}
           ${l.status === "pending_cancel" ? `<p class="muted">Bilen avslutas vid nästa förnyelse${l.endsAt ? ` (${esc(date(l.endsAt))})` : ""}.</p>` : ""}
 
           <div class="driving ${l.activePhone ? "on" : ""}">

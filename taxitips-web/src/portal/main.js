@@ -791,6 +791,32 @@ async function handle(action, ctx) {
       if (!county) return;
       return buy({ addCounties: [{ licenseId: ctx.license, county }] });
     }
+    case "assign-membership-self": {
+      await api.assignMembership(ctx.license, { mode: "self" });
+      await refresh();
+      showNotice("Platsen ligger på ditt konto.");
+      return;
+    }
+    case "assign-membership-email": {
+      const email = prompt(
+        "E-post till kontot som ska få platsen. Personen loggar in i appen och tar den där.",
+      );
+      if (!email) return;
+      await api.assignMembership(ctx.license, { mode: "email", email });
+      await refresh();
+      showNotice(`Platsen väntar på ${email}.`);
+      return;
+    }
+    case "unassign-membership": {
+      if (
+        !confirm(
+          "Ta bort tilldelningen? Platsen är kvar men ingen telefon använder den.",
+        )
+      )
+        return;
+      await api.unassignMembership(ctx.license);
+      return refresh();
+    }
     case "change-base": {
       const select = document.querySelector(`[data-county-for="${ctx.license}"]`);
       const county = select?.value;

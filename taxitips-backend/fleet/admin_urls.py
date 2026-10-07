@@ -89,6 +89,8 @@ urlpatterns = [
     path("approvals/<uuid:approval_id>/block", admin_api.block_approval),
     path("approvals/<uuid:approval_id>/label", admin_api.rename_approval),
     path("licenses/<uuid:license_id>/release", admin_api.release_license),
+    path("licenses/<uuid:license_id>/assign", admin_api.assign_membership),
+    path("licenses/<uuid:license_id>/unassign", admin_api.unassign_membership),
     path("companies/<uuid:company_id>/driver-invites", admin_api.driver_invite_create),
     path("driver-invites/<uuid:invite_id>/resend", admin_api.driver_invite_resend),
     path("driver-invites/<uuid:invite_id>/revoke", admin_api.driver_invite_revoke),

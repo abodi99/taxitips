@@ -15,7 +15,7 @@ med engångskod (företagstelefon som flera förare delar) går inte via kontot
 och räknas heller inte — invariant "en aktiv telefon per licens, en bil per
 telefon" styrs fortfarande av `fleet_vehicle_session`.
 
-Gräns: två byte per kalendermånad (Europe/Stockholm). Därefter `device_swap_limit`
+Gräns: ett byte per kalendermånad (Europe/Stockholm). Därefter `device_swap_limit`
 tills personal med ADMIN_MANAGE ger ett extra tillfälle (`grant_extra_swap`).
 """
 
@@ -31,10 +31,14 @@ from django.utils import timezone
 from billing.models import Device
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
-MONTHLY_LIMIT = 2
+# Ett byte per kalendermånad (2026-10-07). Appen har ingen "koppla bort"-knapp
+# längre -- byte sker bara genom att logga in på en annan telefon -- så en
+# förare som byter varje vecka är ett tecken på missbruk. Fler tillfällen ges
+# av personalen per konto (grant_extra_swap), aldrig av kunden själv.
+MONTHLY_LIMIT = 1
 
 LIMIT_MESSAGE = (
-    "Du har bytt telefon två gånger den här månaden. "
+    "Du har bytt telefon en gång den här månaden. "
     "Kontakta support så hjälper vi dig byta igen."
 )
 

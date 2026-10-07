@@ -19,19 +19,26 @@ uppgifterna. Två saker finns kvar med avsikt:
 Radering kräver plattformsadministratör, ett arkiverat bolag och att bolaget
 **aldrig betalat**. Ett bolag som betalat har bokföringsunderlag
 (beställningar, fakturareferenser) som ska sparas i sju år
-(bokföringslagen 7 kap. 2 §); det arkiveras i stället. Inloggningskontona i
-Supabase Auth tas inte bort härifrån -- de blir konton utan bolag.
+(bokföringslagen 7 kap. 2 §); det arkiveras i stället.
+
+**Medlemmarnas inloggningskonton i Supabase Auth raderas med bolaget.** Ett
+konto som lämnades kvar utan bolag kunde fortfarande logga in, och samma
+e-postadress gick inte att registrera på nytt ("adressen är redan
+registrerad") -- en ny kund med samma adress blev utelåst. Kontot hör till
+bolaget och ska bort med det (2026-10-07). Raderingen är bästa möjliga: en
+Auth-tjänst som ligger nere får inte stoppa själva bolagsraderingen.
 """
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass
 
 from django.db import connection, transaction
 from django.utils import timezone
 
 from billing.models import Company, CompanyMember, Device
-from fleet import audit
+from fleet import audit, auth_admin
 from fleet.access import company_window
 from fleet.models import (
     AccountBlock,
@@ -68,6 +75,9 @@ class ArchiveError(Exception):
         self.reason = reason
         self.message = message
         self.status = status
+
+
+log = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
@@ -165,6 +175,36 @@ def unarchive(company_id, *, actor_user_id) -> None:
     )
 
 
+def _delete_auth_accounts(member_ids) -> int:
+    """
+    Raderar bolagets medlemskonton i Supabase Auth.
+
+    Kontot hör till bolaget: lämnas det kvar kunde det fortsätta logga in, och
+    e-postadressen gick inte att registrera på nytt -- nästa kund med samma
+    adress blev utelåst. Bästa möjliga: en Auth-tjänst som ligger nere får inte
+    stoppa bolagsraderingen (raden som tas bort är det som stänger åtkomsten,
+    och ett konto utan medlemskap får ändå ingen företagsdata). Nyckeln saknas
+    bara i lokal utveckling och i testerna; då loggas det och inget mer händer.
+    """
+    users = [str(u) for u in member_ids if u]
+    if not users:
+        return 0
+    if not auth_admin.configured():
+        log.warning(
+            "archive.delete: SUPABASE_SERVICE_ROLE_KEY saknas -- %d Auth-konto(n) lämnas kvar",
+            len(users),
+        )
+        return 0
+    deleted = 0
+    for user_id in users:
+        try:
+            auth_admin.delete_user(user_id)
+            deleted += 1
+        except auth_admin.AuthAdminError as exc:
+            log.warning("archive.delete: Auth-raderingen misslyckades för %s: %s", user_id, exc)
+    return deleted
+
+
 @transaction.atomic
 def delete(company_id, *, actor_user_id, confirm_name: str, now=None) -> dict:
     """Tar bort bolaget för gott. Se modulens docstring för vad som finns kvar."""
@@ -240,6 +280,10 @@ def delete(company_id, *, actor_user_id, confirm_name: str, now=None) -> dict:
         cur.execute("delete from devices where company_id = %s", [str(company_id)])
         counts["telefoner"] = cur.rowcount
         cur.execute("delete from companies where id = %s", [str(company_id)])
+
+    # Kontona i Supabase Auth, sist i raden av raderingar: ett fel där rullar
+    # inte tillbaka bolagsraderingen -- se _delete_auth_accounts.
+    counts["inloggningar"] = _delete_auth_accounts(member_ids)
 
     audit.record(
         "company_deleted", company_id=company_id, actor_user_id=actor_user_id,

@@ -46,6 +46,7 @@ from fleet import (
     driver_invites,
     features,
     licensing,
+    membership,
     ownership,
     notifications,
     orders,
@@ -97,6 +98,7 @@ _DOMAIN_ERRORS = (
     county_changes.CountyChangeError,
     sessions.SessionError,
     licensing.LicensingError,
+    membership.MembershipError,
     orders.OrderError,
     trials.TrialError,
     risk.ReviewRequired,
@@ -568,6 +570,11 @@ def company_overview(request):
             ],
             # Förare som bjudits in med e-post men inte loggat in i appen än.
             "pendingInvites": invites_by_license.get(str(license.id), []),
+            # Kontobaserat medlemskap (2026-10): vem som håller platsen.
+            "assigneeUserId": str(license.assignee_user_id) if license.assignee_user_id else None,
+            "assigneeEmail": license.assignee_email,
+            "assignedAt": license.assigned_at.isoformat() if license.assigned_at else None,
+            "assigned": bool(license.assignee_user_id or license.assignee_email),
         })
 
     pending = [
@@ -760,6 +767,205 @@ def driver_invites_view(request):
         label=body.get("label", ""), created_by=principal.user_id,
     )
     return _json(request, {"ok": True, "invite": driver_invites.view(invite)})
+
+
+# ---------------------------------------------------------------------------
+# Kontobaserat medlemskap (2026-10): ägaren tilldelar, appen tar en session
+# ---------------------------------------------------------------------------
+
+
+@require_GET
+@handle
+def memberships_view(request):
+    """
+    GET /api/fleet/memberships
+
+    Bearer (app): kontots egna medlemskap, plus vilket som är aktivt i appen.
+    Enhetstoken/ägare: företagets alla medlemskap, för portalen.
+    """
+    from core.entitlement import verify_supabase_jwt
+
+    auth = request.headers.get("Authorization", "")
+    payload = verify_supabase_jwt(auth[7:].strip()) if auth.lower().startswith("bearer ") else None
+    if payload and payload.get("sub"):
+        user_id = payload["sub"]
+        # Lös in väntande e-posttilldelningar: den här endpointen är det första
+        # en inbjuden förare träffar efter inloggning, så kontot ska knytas här.
+        access._maybe_claim_memberships(payload, timezone.now())
+        session = sessions.active_membership_session_for_user(user_id)
+        return _json(request, {
+            "ok": True,
+            "memberships": [membership.view(m) for m in membership.memberships_for_user(user_id)],
+            "activeLicenseId": str(session.license_id) if session else None,
+        })
+    principal = _principal(request, None)
+    if not principal.company_id:
+        raise PermissionDenied("no_company", "Inget företag.", status=403)
+    return _json(request, {
+        "ok": True,
+        "memberships": [
+            membership.view(m) for m in membership.memberships_for_company(principal.company_id)
+        ],
+    })
+
+
+@csrf_exempt
+@require_POST
+@handle
+def membership_session_start(request):
+    """
+    POST /api/fleet/membership-session {licenseId?, deviceId?, force?}
+
+    App-sessionen för ett konto: en öppen rad per konto (fleet/sessions.py).
+    Portalen tar aldrig en rad här och begränsas därför inte.
+    """
+    from core.entitlement import verify_supabase_jwt
+
+    auth = request.headers.get("Authorization", "")
+    payload = verify_supabase_jwt(auth[7:].strip()) if auth.lower().startswith("bearer ") else None
+    if not payload or not payload.get("sub"):
+        raise sessions.SessionError("login_required", "Logga in i appen.", status=401)
+    user_id = payload["sub"]
+    body = _body(request)
+    license_id = body.get("licenseId") or body.get("license_id")
+    if not license_id:
+        row = membership.active_membership_for_user(user_id)
+        if row is None:
+            raise sessions.SessionError("membership_required", "Inget medlemskap på kontot.", status=404)
+        license_id = row.id
+    license = License.objects.filter(id=license_id).first()
+    if license is None:
+        raise sessions.SessionError("unknown_license", "Medlemskapet finns inte.", status=404)
+    window = access.company_window(license.company_id)
+    if not window.ok:
+        return _json(
+            request,
+            {"ok": False, "reason": window.reason, "message": access._window_message(window.reason)},
+            status=403,
+        )
+    device_id = body.get("deviceId") or body.get("device_id") or payload["sub"]
+    result = sessions.start_membership_session(
+        user_id=user_id, license_id=license.id, device_id=device_id, force=bool(body.get("force")),
+    )
+    # Att ta medlemskapet i appen ÄR aktiveringen: provets klocka startar här,
+    # precis som vid första telefonen i bilmodellen (samma funktion).
+    _start_trial_on_first_phone(license.company_id)
+    return _json(request, {"ok": True, **result.as_dict()})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def membership_session_end(request):
+    """POST /api/fleet/membership-session/end -- lämna medlemskapet i appen."""
+    from core.entitlement import verify_supabase_jwt
+
+    auth = request.headers.get("Authorization", "")
+    payload = verify_supabase_jwt(auth[7:].strip()) if auth.lower().startswith("bearer ") else None
+    if not payload or not payload.get("sub"):
+        raise sessions.SessionError("login_required", "Logga in i appen.", status=401)
+    session = sessions.active_membership_session_for_user(payload["sub"])
+    if session is not None:
+        from fleet.models import MembershipSession
+
+        sessions.end_membership_session(session, reason=MembershipSession.EndReason.LEAVING)
+    return _json(request, {"ok": True})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def membership_assign(request, license_id):
+    """
+    POST /api/fleet/memberships/<id>/assign  {"mode": "self"|"email", "email": "..."}
+
+    Ägaren registrerar medlemskapet på sig själv, eller tilldelar det till
+    någon annan. En e-post tilldelas när kontot loggar in (claim_for_email).
+    """
+    principal = _principal(request, Perm.MANAGE_DEVICES)
+    license = _company_license(principal, license_id)
+    body = _body(request)
+    mode = str(body.get("mode") or "self").strip().lower()
+    if mode == "email":
+        email = body.get("email") or body.get("assignee_email") or ""
+        updated = membership.assign_to_email(
+            license=license, email=email, actor_user_id=principal.user_id,
+        )
+    else:
+        updated = membership.assign_to_self(
+            license=license, user_id=principal.user_id, actor_user_id=principal.user_id,
+        )
+    return _json(request, {"ok": True, "membership": membership.view(updated)})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def membership_unassign(request, license_id):
+    """POST /api/fleet/memberships/<id>/unassign -- platsen blir otilldelad."""
+    principal = _principal(request, Perm.MANAGE_DEVICES)
+    license = _company_license(principal, license_id)
+    updated = membership.unassign(license=license, actor_user_id=principal.user_id)
+    return _json(request, {"ok": True, "membership": membership.view(updated)})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def membership_county(request, license_id):
+    """
+    POST /api/fleet/memberships/<id>/county  {"base": "12", "extras": ["13"]}
+
+    Provet byter län direkt. Antingen företagets administratör (Bearer +
+    MANAGE_VEHICLES) eller kontot medlemskapet är tilldelat -- det senare är
+    flödet \"registrera dig, bekräfta med kod, tillbaka i appen och välj län\".
+    """
+    from core.entitlement import verify_supabase_jwt
+
+    license = License.objects.filter(id=license_id).first()
+    if license is None:
+        raise membership.MembershipError("unknown_license", "Medlemskapet finns inte.", status=404)
+    body = _body(request)
+    auth = request.headers.get("Authorization", "")
+    payload = verify_supabase_jwt(auth[7:].strip()) if auth.lower().startswith("bearer ") else None
+    user_id = (payload or {}).get("sub")
+    if license.is_assigned_to(user_id):
+        actor = user_id
+    else:
+        principal = _principal(request, Perm.MANAGE_VEHICLES)
+        if str(principal.company_id) != str(license.company_id):
+            raise PermissionDenied("not_allowed", "Du får inte ändra det här medlemskapet.", status=403)
+        actor = principal.user_id
+    base, extras = membership.set_county(
+        license=license, base=body.get("base") or "",
+        extras=body.get("extras") or [], actor_user_id=actor,
+    )
+    return _json(request, {"ok": True, "base": base, "extras": extras, "membership": membership.view(license)})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def membership_trial(request):
+    """
+    POST /api/fleet/memberships/trial  {"baseCounty": "12"}
+
+    Appens steg efter att e-posten bekräftats: ägaren tar sin provplats och
+    väljer län. Skapar platsen (utan bil, tilldelad kontot) första gången och
+    sätter länen. Idempotent -- en andra gång byter den bara län. Flödet
+    "registrera dig, bekräfta med kod, tillbaka i appen och välj län".
+    """
+    from core.entitlement import verify_supabase_jwt
+
+    auth = request.headers.get("Authorization", "")
+    payload = verify_supabase_jwt(auth[7:].strip()) if auth.lower().startswith("bearer ") else None
+    if not payload or not payload.get("sub"):
+        raise membership.MembershipError("login_required", "Logga in i appen.", status=401)
+    body = _body(request)
+    license = membership.ensure_trial_membership(
+        user_id=payload["sub"], base_county=body.get("baseCounty") or body.get("base") or "",
+    )
+    return _json(request, {"ok": True, "membership": membership.view(license)})
 
 
 BULK_INVITE_MAX_ROWS = 200

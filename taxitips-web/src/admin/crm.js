@@ -228,12 +228,14 @@ export function taskList(tasks, opts) {
   return `<ul class="crm-tasks">${tasks.map((t) => taskRow(t, opts)).join("")}</ul>`;
 }
 
-/** Underflikar i CRM: pipeline och uppgifter. */
-function crmSubnav(active) {
+/** Underflikar i CRM: pipeline, uppgifter och uppföljning. */
+export function crmSubnav(active) {
   const tab = (id, label) => `
     <button type="button" role="tab" class="crm-subtab" aria-selected="${active === id}"
       data-action="crm-tab" data-tab="${id}">${label}</button>`;
-  return `<div class="crm-subnav" role="tablist" aria-label="CRM">${tab("pipeline", "Pipeline")}${tab("tasks", "Uppgifter")}</div>`;
+  return `<div class="crm-subnav" role="tablist" aria-label="CRM">${
+    tab("pipeline", "Pipeline")}${tab("tasks", "Uppgifter")}${tab("uppfoljning", "Uppföljning")
+  }</div>`;
 }
 
 /**

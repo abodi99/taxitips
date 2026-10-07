@@ -49,6 +49,7 @@ from fleet.models import (
     DeviceCredential,
     License,
     LicenseCounty,
+    MembershipSession,
     StaffRole,
     Subscription,
     SubscriptionStatus,
@@ -367,6 +368,19 @@ def resolve(request, now=None) -> Access:
     auth = request.headers.get("Authorization", "")
     payload = verify_supabase_jwt(auth[7:].strip()) if auth.lower().startswith("bearer ") else None
     token = request.headers.get("X-Device-Token") or request.GET.get("device_token")
+
+    # Kontobaserat medlemskap (2026-10): ett inloggat konto som håller ett
+    # medlemskap i appen (en öppen MembershipSession) är den nya förarvägen.
+    # Den prövas FÖRE allt annat och kräver ingen billicens/telefon -- en förare
+    # kan vara inbjuden med e-post utan att vara CompanyMember. Har kontot ingen
+    # öppen session faller det vidare till medlemsvägen/tokenvägen som förut, så
+    # portalen och ägarappen är oförändrade.
+    if payload:
+        _maybe_claim_memberships(payload, now)
+        membership_result = _membership_access(payload, now)
+        if membership_result is not None:
+            return membership_result
+
     if token:
         device_result = _driver_access(token, now)
         # En telefon som inte är godkänd för någon bil (ägarappen) har ingen
@@ -395,6 +409,66 @@ def resolve(request, now=None) -> Access:
         return device_result if device_result is not None else Access(False, "invalid_jwt")
 
     return device_result if device_result is not None else Access(False, "no_credentials")
+
+
+def _maybe_claim_memberships(payload: dict, now) -> list:
+    """
+    Lös in väntande medlemskapstilldelningar för det inloggade kontot.
+
+    Adressen kommer ur den VERIFIERADE token. `.exists()`-grinden håller
+    snabbvägen billig: en extra fråga bara när det faktiskt finns något att lösa
+    in för adressen.
+    """
+    email = (payload.get("email") or "").strip().lower()
+    user_id = payload.get("sub")
+    if not email or not user_id:
+        return []
+    if not License.objects.filter(
+        assignee_user_id__isnull=True, assignee_email__iexact=email
+    ).exists():
+        return []
+    from fleet import membership
+
+    return membership.claim_for_email(email=email, user_id=user_id, now=now)
+
+
+def _membership_access(payload: dict, now) -> Access | None:
+    """
+    Förarvägen för ett inloggat konto som håller ett medlemskap i appen.
+
+    `None` när kontot inte har någon öppen MembershipSession -- då är det här
+    inte app-vägen, och anropet faller vidare till medlemsvägen (ägare i
+    portalen, oförändrat). Ett medlemskap som tagits bort från kontot stänger
+    sessionen och ger ingenting.
+    """
+    user_id = payload.get("sub")
+    if not user_id:
+        return None
+    from fleet import sessions
+
+    session = sessions.active_membership_session_for_user(user_id)
+    if session is None:
+        return None
+    license = session.license
+    if not license.is_assigned_to(user_id):
+        sessions.end_membership_session(
+            session, reason=MembershipSession.EndReason.UNASSIGNED, now=now
+        )
+        return None
+    window = company_window(license.company_id, now)
+    if not window.ok:
+        return Access(
+            False, window.reason, kind="driver",
+            company_id=str(license.company_id), license_id=str(license.id),
+            message=_window_message(window.reason),
+        )
+    sessions.heartbeat_membership(session, now=now)
+    return Access(
+        True, "membership", kind="driver",
+        company_id=str(license.company_id), license_id=str(license.id), session_id=str(session.id),
+        counties=license_counties(license.id, now),
+        valid_until=window.valid_until, period=window.reason,
+    )
 
 
 def _driver_access(token: str, now) -> Access:

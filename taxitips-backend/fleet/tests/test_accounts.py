@@ -511,6 +511,28 @@ class AdminVehicleTests(_Base):
         r = self.call("post", f"/api/admin/licenses/{lic.id}/remove", sales_id, {"reason": "x"})
         self.assertEqual(r.status_code, 403)
 
+    def test_staff_assigns_a_membership_to_an_account(self):
+        lic = self.trial_company()
+        r = self.call("post", f"/api/admin/licenses/{lic.id}/assign", self.admin_id,
+                      {"email": "forare@example.test"})
+        self.assertEqual(r.status_code, 200, r.content)
+        lic.refresh_from_db()
+        self.assertEqual(lic.assignee_email, "forare@example.test")
+        self.assertIsNone(lic.assignee_user_id)
+
+        account = str(uuid.uuid4())
+        r = self.call("post", f"/api/admin/licenses/{lic.id}/assign", self.admin_id,
+                      {"userId": account})
+        self.assertEqual(r.status_code, 200, r.content)
+        lic.refresh_from_db()
+        self.assertEqual(str(lic.assignee_user_id), account)
+        self.assertEqual(lic.assignee_email, "")
+
+        r = self.call("post", f"/api/admin/licenses/{lic.id}/unassign", self.admin_id, {})
+        self.assertEqual(r.status_code, 200, r.content)
+        lic.refresh_from_db()
+        self.assertIsNone(lic.assignee_user_id)
+
     def test_a_stripe_billed_car_is_not_removed_directly(self):
         from fleet.models import Subscription
 

@@ -242,33 +242,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
   }
 
-  Future<void> _leaveDevice() async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Lämna denna telefon?'),
-        content: const Text(
-          'Telefonen kopplas från bilen. För att köra igen trycker du på '
-          '"Logga in" och skriver din e-post och ditt lösenord. Då behöver din '
-          'chef ha bjudit in dig.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Avbryt'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Lämna'),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    await widget.api.clearDevice();
-    widget.onLeftDevice?.call();
-  }
-
   Future<void> _chooseCar() async {
     final changed = await VehicleSessionSheet.show(context, widget.api);
     if (changed) await _load();
@@ -403,8 +376,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     const SizedBox(height: 28),
   ];
 
-  /// Kontot: ägaren byter e-post och lösenord och loggar ut; en förare utan
-  /// eget konto kopplar från telefonen.
+  /// Kontot: ägaren byter e-post och lösenord och loggar ut; en förare som bara
+  /// har en telefon (utan eget konto) kan logga ut. Att koppla bort telefonen
+  /// finns inte längre (2026-10-07): byte sker genom att logga in på en annan
+  /// telefon, och servern tillåter ett byte per kalendermånad.
   List<Widget> _accountSection() {
     if (_isOffice) {
       return [
@@ -439,20 +414,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
       ];
     }
     if (_isDevice) {
+      // Ingen utloggningsknapp att visa -> ingen död Konto-grupp (samma regel
+      // som "Visa genomgången igen").
+      if (widget.onLogout == null) return const [];
       return [
         const SettingsSectionHeader(
           title: 'Konto',
-          description:
-              'Koppla från telefonen om du slutar köra eller byter telefon.',
+          description: 'Logga ut om du slutar köra eller byter telefon.',
         ),
         SettingsGroup(
           children: [
             SettingsNavRow(
-              icon: Icons.link_off,
-              iconColor: TbColors.danger,
-              title: 'Koppla från telefonen',
-              titleColor: TbColors.danger,
-              onTap: _leaveDevice,
+              icon: Icons.logout,
+              title: 'Logga ut',
+              trailingIcon: Icons.chevron_right,
+              onTap: widget.onLogout!,
             ),
           ],
         ),

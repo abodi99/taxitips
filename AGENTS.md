@@ -602,6 +602,18 @@ Var och en av dem är skriven efter att ha gått sönder på riktigt.
     den till ett annat släpps det gamla bolagets godkännanden och pass, och
     körområdet sätts till den nya bilens län (`fleet/pairing.py:redeem_code`).
     Annars körde telefonen vidare på förra bolagets bil och län (2026-09-26).
+    **Kontobaserat medlemskap (2026-10):** samma regel finns nu också för KONTOT
+    -- en öppen rad per konto i `fleet_membership_session`
+    (`fleet/sessions.py:start_membership_session`). En andra telefon tar över;
+    portalen tar aldrig en rad och begränsas därför inte. Medlemskapet är en
+    `fleet_license` med `assignee_user_id` (tilldela ett konto i stället för en
+    bil). Se `docs/fleet-abonnemang.md` §14.
+    **Provet får sin egen plats:** efter registrering och bekräftad kod väljer
+    kunden län i appen (`POST /api/fleet/memberships/trial`, idempotent), och
+    platsen (en licens utan bil) tilldelas kontot med en gång -- under provet
+    tilldelar ingen någon annan. Fler platser och andra konton hanteras i
+    portalen (`src/portal/views.js`) och admin (`fleet/admin_api.py:
+    assign_membership`), aldrig i appen. Appen bjuder aldrig in.
 18. **Belopp räknas på servern, i heltal ören.** `fleet/pricing.py` är den
     enda prismotorn. En andra i klienten kan visa rätt när fakturan blir fel.
 19. **Djangos tabeller nås aldrig via PostgREST.** Supabase ger varje ny

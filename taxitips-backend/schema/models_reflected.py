@@ -12,6 +12,24 @@
 from django.db import models
 
 
+class AiCall(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    created_at = models.DateTimeField()
+    purpose = models.CharField(max_length=30)
+    model = models.CharField(max_length=60)
+    ok = models.BooleanField()
+    tokens_in = models.IntegerField()
+    tokens_out = models.IntegerField()
+    cost_micro_usd = models.IntegerField()
+    latency_ms = models.IntegerField()
+    error = models.CharField(max_length=200)
+    subject = models.CharField(max_length=200)
+
+    class Meta:
+        managed = False
+        db_table = 'ai_call'
+
+
 class AisVessels(models.Model):
     id = models.BigAutoField(primary_key=True)
     mmsi = models.BigIntegerField(unique=True)
@@ -494,6 +512,34 @@ class FleetClientError(models.Model):
         db_table = 'fleet_client_error'
 
 
+class FleetCompanyDiscount(models.Model):
+    id = models.UUIDField(primary_key=True)
+    company_id = models.UUIDField(unique=True)
+    kind = models.CharField(max_length=16)
+    value = models.IntegerField()
+    description = models.TextField()
+    valid_until = models.DateTimeField(blank=True, null=True)
+    is_active = models.BooleanField()
+    created_by = models.UUIDField(blank=True, null=True)
+    created_at = models.DateTimeField()
+    deactivated_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_company_discount'
+
+
+class FleetCompanyNotifyDefault(models.Model):
+    company_id = models.UUIDField(primary_key=True)
+    prefs = models.JSONField()
+    updated_at = models.DateTimeField()
+    updated_by = models.UUIDField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_company_notify_default'
+
+
 class FleetCompanyProfile(models.Model):
     company_id = models.UUIDField(primary_key=True)
     country = models.CharField(max_length=2)
@@ -527,6 +573,36 @@ class FleetCompanyProfile(models.Model):
         managed = False
         db_table = 'fleet_company_profile'
         unique_together = (('country', 'org_number'),)
+
+
+class FleetCountyChange(models.Model):
+    id = models.UUIDField(primary_key=True)
+    license_id = models.UUIDField()
+    company_id = models.UUIDField()
+    from_county = models.CharField(max_length=4)
+    to_county = models.CharField(max_length=4)
+    via = models.CharField(max_length=16)
+    order_id = models.UUIDField(blank=True, null=True)
+    actor_user_id = models.UUIDField(blank=True, null=True)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_county_change'
+
+
+class FleetCountyChangeGrant(models.Model):
+    id = models.UUIDField(primary_key=True)
+    license_id = models.UUIDField()
+    company_id = models.UUIDField()
+    month_key = models.CharField(max_length=7)
+    granted_by = models.UUIDField(blank=True, null=True)
+    note = models.CharField(max_length=300)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_county_change_grant'
 
 
 class FleetCoupon(models.Model):
@@ -563,6 +639,129 @@ class FleetCouponRedemption(models.Model):
         managed = False
         db_table = 'fleet_coupon_redemption'
         unique_together = (('coupon', 'company_id'),)
+
+
+class FleetCrmAccount(models.Model):
+    id = models.UUIDField(primary_key=True)
+    name = models.TextField()
+    org_number = models.CharField(max_length=32)
+    county = models.CharField(max_length=32)
+    domain = models.CharField(max_length=255)
+    source = models.CharField(max_length=100)
+    twenty_id = models.CharField(unique=True, max_length=64, blank=True, null=True)
+    created_at = models.DateTimeField()
+    updated_at = models.DateTimeField()
+    city = models.CharField(max_length=100)
+    legal_form = models.CharField(max_length=64)
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_crm_account'
+
+
+class FleetCrmDeal(models.Model):
+    id = models.UUIDField(primary_key=True)
+    name = models.TextField()
+    stage = models.CharField(max_length=20)
+    amount_ore = models.BigIntegerField(blank=True, null=True)
+    notes_summary = models.TextField()
+    source = models.CharField(max_length=100)
+    company_id = models.UUIDField(blank=True, null=True)
+    twenty_id = models.CharField(unique=True, max_length=64, blank=True, null=True)
+    created_at = models.DateTimeField()
+    updated_at = models.DateTimeField()
+    account = models.ForeignKey(FleetCrmAccount, models.DO_NOTHING, blank=True, null=True)
+    person = models.ForeignKey('FleetCrmPerson', models.DO_NOTHING, blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_crm_deal'
+
+
+class FleetCrmNote(models.Model):
+    id = models.UUIDField(primary_key=True)
+    company_id = models.UUIDField(blank=True, null=True)
+    author_user_id = models.UUIDField(blank=True, null=True)
+    author_label = models.TextField()
+    title = models.CharField(max_length=200)
+    body = models.TextField()
+    created_at = models.DateTimeField()
+    account_id = models.UUIDField(blank=True, null=True)
+    person_id = models.UUIDField(blank=True, null=True)
+    deal_id = models.UUIDField(blank=True, null=True)
+    twenty_id = models.CharField(unique=True, max_length=64, blank=True, null=True)
+    edited_at = models.DateTimeField(blank=True, null=True)
+    edited_by_label = models.CharField(max_length=320)
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_crm_note'
+
+
+class FleetCrmPerson(models.Model):
+    id = models.UUIDField(primary_key=True)
+    name = models.TextField()
+    email = models.TextField()
+    phone = models.TextField()
+    title = models.CharField(max_length=200)
+    twenty_id = models.CharField(unique=True, max_length=64, blank=True, null=True)
+    created_at = models.DateTimeField()
+    updated_at = models.DateTimeField()
+    account = models.ForeignKey(FleetCrmAccount, models.DO_NOTHING, blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_crm_person'
+
+
+class FleetCrmTag(models.Model):
+    id = models.UUIDField(primary_key=True)
+    slug = models.CharField(unique=True, max_length=64)
+    category = models.CharField(max_length=20)
+    label = models.CharField(max_length=120)
+    sort_order = models.SmallIntegerField()
+    is_active = models.BooleanField()
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_crm_tag'
+
+
+class FleetCrmTagging(models.Model):
+    id = models.UUIDField(primary_key=True)
+    entity_type = models.CharField(max_length=10)
+    entity_id = models.UUIDField()
+    origin = models.CharField(max_length=32)
+    created_at = models.DateTimeField()
+    tag = models.ForeignKey(FleetCrmTag, models.DO_NOTHING)
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_crm_tagging'
+        unique_together = (('tag', 'entity_type', 'entity_id'),)
+
+
+class FleetCrmTask(models.Model):
+    id = models.UUIDField(primary_key=True)
+    title = models.CharField(max_length=200)
+    body = models.TextField()
+    status = models.CharField(max_length=10)
+    due_date = models.DateField(blank=True, null=True)
+    assignee_user_id = models.UUIDField(blank=True, null=True)
+    assignee_label = models.CharField(max_length=320)
+    deal_id = models.UUIDField(blank=True, null=True)
+    account_id = models.UUIDField(blank=True, null=True)
+    person_id = models.UUIDField(blank=True, null=True)
+    company_id = models.UUIDField(blank=True, null=True)
+    created_by_user_id = models.UUIDField(blank=True, null=True)
+    created_by_label = models.CharField(max_length=320)
+    completed_at = models.DateTimeField(blank=True, null=True)
+    created_at = models.DateTimeField()
+    updated_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_crm_task'
 
 
 class FleetDeviceApproval(models.Model):
@@ -603,6 +802,36 @@ class FleetDeviceCredential(models.Model):
         db_table = 'fleet_device_credential'
 
 
+class FleetDeviceLinkEvent(models.Model):
+    id = models.UUIDField(primary_key=True)
+    user_id = models.UUIDField()
+    device_id = models.UUIDField()
+    previous_device_id = models.UUIDField(blank=True, null=True)
+    via = models.CharField(max_length=40)
+    is_swap = models.BooleanField()
+    admin_override = models.BooleanField()
+    actor_user_id = models.UUIDField(blank=True, null=True)
+    note = models.CharField(max_length=300)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_device_link_event'
+
+
+class FleetDeviceSwapGrant(models.Model):
+    id = models.UUIDField(primary_key=True)
+    user_id = models.UUIDField()
+    month_key = models.CharField(max_length=7)
+    granted_by = models.UUIDField(blank=True, null=True)
+    note = models.CharField(max_length=300)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_device_swap_grant'
+
+
 class FleetDriverInvite(models.Model):
     id = models.UUIDField(primary_key=True)
     company_id = models.UUIDField()
@@ -627,6 +856,20 @@ class FleetDriverInvite(models.Model):
         managed = False
         db_table = 'fleet_driver_invite'
         unique_together = (('company_id', 'email'),)
+
+
+class FleetDriverLoginCode(models.Model):
+    id = models.UUIDField(primary_key=True)
+    email = models.TextField()
+    code_hash = models.CharField(max_length=64)
+    created_at = models.DateTimeField()
+    expires_at = models.DateTimeField()
+    attempts = models.IntegerField()
+    used_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_driver_login_code'
 
 
 class FleetJoinRequest(models.Model):
@@ -666,6 +909,10 @@ class FleetLicense(models.Model):
     canceled_at = models.DateTimeField(blank=True, null=True)
     ends_at = models.DateTimeField(blank=True, null=True)
     trial = models.ForeignKey('FleetTrial', models.DO_NOTHING, blank=True, null=True)
+    assignee_user_id = models.UUIDField(blank=True, null=True)
+    assignee_email = models.CharField(max_length=254)
+    assigned_at = models.DateTimeField(blank=True, null=True)
+    assigned_by = models.UUIDField(blank=True, null=True)
 
     class Meta:
         managed = False
@@ -686,6 +933,23 @@ class FleetLicenseCounty(models.Model):
         managed = False
         db_table = 'fleet_license_county'
         unique_together = (('license', 'county_code'),)
+
+
+class FleetMembershipSession(models.Model):
+    id = models.UUIDField(primary_key=True)
+    company_id = models.UUIDField()
+    user_id = models.UUIDField(unique=True)
+    device_id = models.UUIDField()
+    started_at = models.DateTimeField()
+    last_seen_at = models.DateTimeField()
+    ended_at = models.DateTimeField(blank=True, null=True)
+    ended_reason = models.CharField(max_length=20)
+    ended_by_device = models.UUIDField(blank=True, null=True)
+    license = models.OneToOneField(FleetLicense, models.DO_NOTHING)
+
+    class Meta:
+        managed = False
+        db_table = 'fleet_membership_session'
 
 
 class FleetOrder(models.Model):
@@ -876,6 +1140,7 @@ class FleetSalesFollowup(models.Model):
     contact_attempts = models.IntegerField()
     updated_by = models.UUIDField(blank=True, null=True)
     updated_at = models.DateTimeField()
+    churn_reason = models.CharField(max_length=20)
 
     class Meta:
         managed = False
@@ -994,6 +1259,7 @@ class FleetTrial(models.Model):
     ended_reason = models.TextField()
     created_at = models.DateTimeField()
     invite = models.ForeignKey(FleetSalesInvite, models.DO_NOTHING, blank=True, null=True)
+    planned_days = models.IntegerField(blank=True, null=True)
 
     class Meta:
         managed = False
@@ -1149,6 +1415,15 @@ class Opportunities(models.Model):
     area_codes = models.JSONField()
     ai_adjusted_at = models.DateTimeField(blank=True, null=True)
     municipality_code = models.CharField(max_length=4, blank=True, null=True)
+    suppressed_at = models.DateTimeField(blank=True, null=True)
+    suppressed_by = models.UUIDField(blank=True, null=True)
+    suppression_note = models.TextField(blank=True, null=True)
+    departure_at = models.DateTimeField(blank=True, null=True)
+    destination = models.TextField()
+    delay_minutes = models.IntegerField(blank=True, null=True)
+    factors = models.JSONField()
+    brief = models.CharField(max_length=120, blank=True, null=True)
+    brief_key = models.CharField(max_length=64, blank=True, null=True)
 
     class Meta:
         managed = False
@@ -1199,6 +1474,23 @@ class OpportunityFeedback(models.Model):
         unique_together = (('opportunity', 'device_token', 'verdict'),)
 
 
+class OpportunityReport(models.Model):
+    id = models.UUIDField(primary_key=True)
+    device_token = models.TextField()
+    reporter_user_id = models.UUIDField(blank=True, null=True)
+    reason = models.TextField()
+    status = models.CharField(max_length=10)
+    created_at = models.DateTimeField()
+    resolved_at = models.DateTimeField(blank=True, null=True)
+    resolved_by = models.UUIDField(blank=True, null=True)
+    resolution_note = models.TextField()
+    opportunity = models.ForeignKey(Opportunities, models.DO_NOTHING)
+
+    class Meta:
+        managed = False
+        db_table = 'opportunity_report'
+
+
 class ProcessedWebhookEvents(models.Model):
     stripe_event_id = models.TextField(primary_key=True)
     event_type = models.TextField()
@@ -1246,6 +1538,20 @@ class PushDelivery(models.Model):
         unique_together = (('device_id', 'opportunity_external_id'),)
 
 
+class QualityReport(models.Model):
+    id = models.BigAutoField(primary_key=True)
+    day = models.DateField(unique=True)
+    stats = models.JSONField()
+    summary = models.TextField()
+    suggestions = models.JSONField()
+    model = models.CharField(max_length=60)
+    created_at = models.DateTimeField()
+
+    class Meta:
+        managed = False
+        db_table = 'quality_report'
+
+
 class RailAssessment(models.Model):
     id = models.BigAutoField(primary_key=True)
     cache_key = models.CharField(max_length=200)
@@ -1256,6 +1562,7 @@ class RailAssessment(models.Model):
     model_name = models.CharField(max_length=60)
     created_at = models.DateTimeField()
     opportunity = models.ForeignKey(Opportunities, models.DO_NOTHING)
+    facts = models.JSONField(blank=True, null=True)
 
     class Meta:
         managed = False

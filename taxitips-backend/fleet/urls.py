@@ -70,4 +70,13 @@ urlpatterns = [
     path("company/contracting-party", api.change_contracting_party),
     # Plattformens granskning
     path("reviews/<uuid:review_id>/resolve", api.resolve_review),
+    # Kontobaserat medlemskap (2026-10): tilldela ett konto i stället för en bil.
+    # App-sessionen nycklas på kontot (en öppen per konto); portalen tar ingen.
+    path("memberships", api.memberships_view),
+    path("memberships/trial", api.membership_trial),
+    path("membership-session", api.membership_session_start),
+    path("membership-session/end", api.membership_session_end),
+    path("memberships/<uuid:license_id>/assign", api.membership_assign),
+    path("memberships/<uuid:license_id>/unassign", api.membership_unassign),
+    path("memberships/<uuid:license_id>/county", api.membership_county),
 ]

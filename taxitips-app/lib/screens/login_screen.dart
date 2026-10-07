@@ -156,7 +156,7 @@ class _LoginScreenState extends State<LoginScreen> {
       if (e.reason == 'device_swap_limit') {
         return e.message.isNotEmpty
             ? e.message
-            : 'Du har bytt telefon två gånger den här månaden. '
+            : 'Du har bytt telefon en gång den här månaden. '
                   'Kontakta support så hjälper vi dig byta igen.';
       }
       return e.message;

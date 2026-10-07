@@ -289,7 +289,7 @@ function paymentsView(payments) {
       : '<div class="crm-empty"><p>Inga beställningar de senaste 60 dagarna.</p></div>'}`;
 }
 
-export function uppfoljning(data, filter = "ring") {
+export function uppfoljning(data, filter = "ring", opts = {}) {
   const all = data.followUps ?? [];
   const rows = all.filter((r) => matches(r, filter));
   const outcomes = data.outcomes ?? [];
@@ -312,6 +312,7 @@ export function uppfoljning(data, filter = "ring") {
       <div><h1>Uppföljning</h1>
         <p class="muted">Obetalda beställningar, prov som tar slut, uppsägningar och avslutade kunder.</p></div>
     </div>
+    ${opts.crmNav || ""}
     <div class="crm-tabs-row">
       <div class="crm-tabs" role="tablist" aria-label="Filter">${tabs}</div>
     </div>

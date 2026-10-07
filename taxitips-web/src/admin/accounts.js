@@ -158,13 +158,13 @@ const VIA_LABEL = {
 function deviceSwapCard(swaps, userId, manage) {
   const s = swaps || {};
   const used = s.used ?? 0;
-  const limit = s.limit ?? 2;
+  const limit = s.limit ?? 1;
   const grants = s.grants ?? 0;
   const remaining = s.remaining ?? 0;
   const history = s.history || [];
   return `<div class="card table-scroll">
     <h2>Telefonbyten <span class="muted">${esc(used)}/${esc(limit)}${grants ? ` (+${esc(grants)} extra)` : ""} · ${esc(s.month || "")}</span></h2>
-    <p class="muted">Högst två byten per kalendermånad (Stockholm). Första kopplingen och samma telefon igen räknas inte.
+    <p class="muted">Högst ett byte per kalendermånad (Stockholm). Första kopplingen och samma telefon igen räknas inte.
       Kvar: <b>${esc(remaining)}</b>.</p>
     ${manage ? `<div class="btn-row" style="margin-bottom:1rem">
       <button class="btn btn-quiet" data-action="account-allow-device-swap" data-user="${esc(userId)}">Tillåt ett extra byte</button>

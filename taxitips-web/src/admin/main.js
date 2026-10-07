@@ -9,12 +9,13 @@ import { callsCell, followUpBody, nextCell, uppfoljning } from "./followup.js";
 import { admin } from "./api.js";
 import { notifyBody } from "../notify_editor.js";
 import * as sales from "./sales.js";
-import { LEVEL, statusBanner, statusView } from "./status.js";
+import { LEVEL, statusBanner, statusSummaryLine, statusView } from "./status.js";
 import { appVersionCard, bindAppVersionForm, loadAppVersion } from "./app_version.js";
 import * as support from "./support.js";
 import * as tipReports from "./tip_reports.js";
 import {
   EMPTY_PIPELINE_FILTERS,
+  crmSubnav,
   nextSort,
   pipelineNewLeadPrompt,
   pipelineTags,
@@ -70,9 +71,15 @@ const el = {
   codeTimer: document.getElementById("codeTimer"),
 };
 
+/** Vyer som ligger under Mer — sidomenyn öppnas så aktiv flik syns. */
+const MORE_VIEWS = new Set([
+  "dashboard", "tipprapporter", "granskning", "evenemang",
+  "kuponger", "notiser", "konton", "aktivitet", "personal",
+]);
+
 const state = {
-  // Helhetsbilden först; Hem (att göra) är ett klick bort.
-  view: "dashboard",
+  // Hem först: det som kräver åtgärd, inte dashboardens siffror.
+  view: "oversikt",
   companyId: null,
   query: "",
   pushStatus: "",
@@ -130,9 +137,21 @@ function clearError() {
 }
 
 function setTab(view) {
+  // Uppföljning bor under CRM — markera CRM i primärnavet.
+  const highlight = view === "uppfoljning" ? "pipeline" : view;
   for (const tab of el.tabs) {
-    if (tab.dataset.view === view) tab.setAttribute("aria-current", "page");
+    if (tab.dataset.view === highlight) tab.setAttribute("aria-current", "page");
     else tab.removeAttribute("aria-current");
+  }
+  const more = document.getElementById("adminMore");
+  if (more) {
+    // Öppna Mer när aktiv vy ligger där. På mobil stängs dropdownen annars.
+    if (MORE_VIEWS.has(view)) more.open = true;
+    else if (window.matchMedia("(max-width: 900px)").matches) more.open = false;
+  }
+  const toggle = more?.querySelector(".side-more-toggle");
+  if (toggle) {
+    toggle.classList.toggle("is-active", MORE_VIEWS.has(view));
   }
 }
 
@@ -188,15 +207,27 @@ async function renderView(seq) {
         paint(dashboard(await admin.dashboard()));
         break;
       case "oversikt": {
-        const [overview, list, sup, tipRep] = await Promise.all([
+        const [overview, list, sup, tipRep, crmTasks] = await Promise.all([
           admin.overview(), admin.companies(),
-          // Hem ska fungera även om supporten inte svarar.
+          // Hem ska fungera även om supporten/CRM inte svarar.
           admin.supportSummary().catch(() => ({ waiting: 0 })),
           admin.tipReportsSummary().catch(() => ({ open: 0 })),
+          admin.crmTasks({ assignee: "all", status: "open" }).catch(() => null),
         ]);
-        setSupportCount(sup.waiting ?? 0);
-        setTipReportCount(tipRep.open ?? overview.tipReportsOpen ?? 0);
-        paint(statusBanner(state.status) + views.oversikt(overview, list, sup.waiting ?? 0));
+        const waiting = sup.waiting ?? 0;
+        const tipOpen = tipRep.open ?? overview.tipReportsOpen ?? 0;
+        const reviewsOpen = overview.reviewsOpen ?? 0;
+        const crmOverdue = crmTasks?.summary?.overdue ?? 0;
+        setSupportCount(waiting);
+        setTipReportCount(tipOpen);
+        setReviewsCount(reviewsOpen);
+        paint(statusBanner(state.status) + views.oversikt(overview, list, {
+          supportWaiting: waiting,
+          tipReportsOpen: tipOpen,
+          crmTasksOverdue: crmOverdue,
+          statusReport: state.status,
+          statusLine: statusSummaryLine(state.status),
+        }));
         break;
       }
       case "status": {
@@ -230,7 +261,13 @@ async function renderView(seq) {
         ));
         break;
       case "uppfoljning":
-        paint(uppfoljning(await admin.followUps(), state.fuFilter));
+        // Bakåtkompatibelt: Dashboard och gamla länkar → CRM-underflik.
+        state.view = "pipeline";
+        state.crmTab = "uppfoljning";
+        setTab("pipeline");
+        paint(uppfoljning(await admin.followUps(), state.fuFilter, {
+          crmNav: crmSubnav("uppfoljning"),
+        }));
         break;
       case "pipeline": {
         if (state.crmDealId) {
@@ -240,6 +277,10 @@ async function renderView(seq) {
             { peopleQuery: state.crmPeople?.q, peopleHits: state.crmPeople?.hits },
             await admin.crmDeal(state.crmDealId),
           ));
+        } else if (state.crmTab === "uppfoljning") {
+          paint(uppfoljning(await admin.followUps(), state.fuFilter, {
+            crmNav: crmSubnav("uppfoljning"),
+          }));
         } else if (state.crmTab === "tasks") {
           paint(tasksView(await admin.crmTasks(state.taskFilters), state.config));
         } else {
@@ -395,9 +436,34 @@ function setSupportCount(n) {
 
 function setTipReportCount(n) {
   const badge = document.getElementById("tipReportCount");
-  if (!badge) return;
-  badge.textContent = String(n);
-  badge.hidden = !n;
+  if (badge) {
+    badge.textContent = String(n);
+    badge.hidden = !n;
+  }
+  // Tipprapporter/granskningar ligger under Mer — badge på Mer-knappen.
+  refreshMoreBadge();
+}
+
+function setReviewsCount(n) {
+  const badge = document.getElementById("granskningCount");
+  if (badge) {
+    badge.textContent = String(n);
+    badge.hidden = !n;
+  }
+  refreshMoreBadge();
+}
+
+function refreshMoreBadge() {
+  const tip = document.getElementById("tipReportCount");
+  const rev = document.getElementById("granskningCount");
+  const tipN = tip && !tip.hidden ? Number(tip.textContent) || 0 : 0;
+  const revN = rev && !rev.hidden ? Number(rev.textContent) || 0 : 0;
+  const n = tipN + revN;
+  const moreBadge = document.getElementById("moreBadge");
+  if (moreBadge) {
+    moreBadge.textContent = String(n);
+    moreBadge.hidden = !n;
+  }
 }
 
 async function refreshSupportCount() {
@@ -456,6 +522,7 @@ async function enterApp(session) {
   document.getElementById("changePassword").hidden = false;
   el.whoami.textContent = session.user?.email ?? "";
   rememberEmail(session.user?.email);
+  setTab(state.view);
   await render();
 }
 
@@ -963,12 +1030,20 @@ function toggleFollowUp(companyId, open) {
 /** Dashboardens siffror öppnar listan bakom sig med samma urval (dashboard.js). */
 function gotoFilter(view, filter) {
   if (view === "kunder") state.kundFilter = filter;
-  else if (view === "uppfoljning") state.fuFilter = filter;
-  else if (view === "notiser") state.pushStatus = filter;
+  else if (view === "uppfoljning") {
+    state.view = "pipeline";
+    state.crmTab = "uppfoljning";
+    state.fuFilter = filter;
+  } else if (view === "notiser") state.pushStatus = filter;
   else if (view === "pipeline" && filter === "tasks") {
     state.crmDealId = null;
     state.crmTab = "tasks";
     state.taskFilters = { assignee: "all", status: "open" };
+  } else if (view === "pipeline" && filter === "uppfoljning") {
+    state.crmDealId = null;
+    state.crmTab = "uppfoljning";
+  } else if (view === "pipeline" && filter === "prov") {
+    // Hem: "prov slutar" → kunder/prov, redan hanterat via view=kunder.
   }
 }
 
@@ -1034,6 +1109,29 @@ async function act(action, ds) {
       if (reason === null) return;
       const result = await admin.releaseCar(ds.license, reason.trim());
       flash(result.released ? `${ds.plate} är frigjord.` : `Ingen körde ${ds.plate}.`);
+      return render();
+    }
+
+    case "membership-assign": {
+      const email = prompt(
+        `Kontot som ska få platsen på ${ds.plate}? Skriv kontots e-post.\n\n` +
+          "Är adressen känd binds platsen direkt; annars väntar den tills personen loggar in i appen.",
+      );
+      if (!email?.trim()) return;
+      await admin.assignMembership(ds.license, { email: email.trim() });
+      flash(`Platsen på ${ds.plate} tilldelas ${email.trim()}.`);
+      return render();
+    }
+
+    case "membership-unassign": {
+      if (
+        !confirm(
+          `Ta bort tilldelningen på ${ds.plate}? Platsen är kvar men ingen telefon använder den.`,
+        )
+      )
+        return;
+      await admin.unassignMembership(ds.license);
+      flash(`Tilldelningen på ${ds.plate} är borttagen.`);
       return render();
     }
 
@@ -1198,7 +1296,7 @@ async function act(action, ds) {
       return render();
 
     case "crm-tab":
-      state.crmTab = ds.tab === "tasks" ? "tasks" : "pipeline";
+      state.crmTab = ["tasks", "uppfoljning"].includes(ds.tab) ? ds.tab : "pipeline";
       state.crmDealId = null;
       return render();
 

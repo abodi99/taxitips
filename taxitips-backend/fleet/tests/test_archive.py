@@ -9,7 +9,7 @@ import uuid
 from datetime import timedelta
 from unittest import mock
 
-from django.test import Client
+from django.test import Client, override_settings
 from django.utils import timezone
 
 from billing.models import Company, CompanyMember, Device
@@ -100,6 +100,27 @@ class ArchiveTests(FleetTestCase):
         self.assertFalse(trials.eligibility(country="SE", org_number="5566778899").ok)
         deleted = AuditEvent.objects.get(action="company_deleted", company_id=cid)
         self.assertNotIn("Avslutad", json.dumps(deleted.detail))
+
+    @override_settings(
+        SUPABASE_SERVICE_ROLE_KEY="test-service-role", SUPABASE_URL="http://supabase.test",
+    )
+    def test_delete_removes_the_members_auth_accounts(self):
+        # Kontot hör till bolaget: raderas bolaget ska inloggningen bort också,
+        # annars kan den fortsätta logga in och e-posten går inte att använda
+        # igen (se fleet/archive.py:_delete_auth_accounts).
+        colleague = self.make_owner(self.company, role="fleet_admin")
+        self.terminate()
+        archive.archive(self.company.id, actor_user_id=self.staff)
+        with mock.patch("fleet.auth_admin.delete_user") as delete_user:
+            response = self.post(
+                f"/api/admin/companies/{self.company.id}/delete", {"confirmName": "Avslutad AB"}
+            )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(
+            {call.args[0] for call in delete_user.call_args_list},
+            {str(self.owner.user_id), str(colleague.user_id)},
+        )
+        self.assertEqual(response.json()["deleted"]["inloggningar"], 2)
 
     def test_a_company_that_paid_is_only_archived(self):
         self.terminate()

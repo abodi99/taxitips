@@ -14,6 +14,7 @@ import 'push_service.dart';
 import 'remote_config_service.dart';
 import 'screens/driver_screen.dart';
 import 'screens/login_screen.dart';
+import 'screens/membership_county_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/settings_screen.dart';
 import 'screens/signup_screen.dart';
@@ -65,6 +66,7 @@ enum AppRoute {
   login,
   signup,
   trialWelcome,
+  membershipCounty,
   shell,
   driverInvite,
 }
@@ -72,6 +74,9 @@ enum AppRoute {
 class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
   late AppRoute _route;
   String? _invite;
+  // Medlemskapet länvalet gäller, när kontot redan har en plats (inbjuden
+  // förare). Null = ett nytt prov utan plats ännu.
+  Map<String, dynamic>? _membership;
   bool _booting = true;
 
   @override
@@ -84,7 +89,7 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
       if (_route == AppRoute.welcome ||
           _route == AppRoute.login ||
           _route == AppRoute.signup) {
-        _goShell();
+        unawaited(_afterLogin());
       }
     });
     _boot();
@@ -138,22 +143,75 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
   }
 
   /// Efter inloggning: en registrering som väntade på bekräftad e-post görs
-  /// klart innan appen visas. Ett fel där (t.ex. orgnr som redan finns) visas
-  /// i företagspanelen, som försöker igen -- det får inte stänga ute kontot.
+  /// klart innan appen visas, och medlemskapet tas (eller länen väljs).
   ///
   /// Blev företaget registrerat just nu (länken i mejlet, sedan inloggning)
   /// får ägaren välkomsten till provet, precis som efter koden i appen.
   Future<void> _afterLogin() async {
-    Map<String, dynamic>? registered;
     try {
-      registered = await widget.api.completePendingRegistration();
+      await widget.api.completePendingRegistration();
     } catch (_) {}
     if (!mounted) return;
-    if (registered?['created'] == true) {
-      await _goAfterRegistration();
-    } else {
-      _goShell();
-    }
+    await _enterApp();
+  }
+
+  /// Skärmen efter inloggning, avgjord av servern -- appen räknar inte ut något
+  /// som servern redan vet.
+  ///
+  /// 1. Kontots medlemskap: saknas län väljs de (kontobaserat medlemskap), och
+  ///    annars tas platsen i appen (en öppen session per konto).
+  /// 2. Ett nytt prov utan plats ännu: ägaren väljer län först ("registrera dig,
+  ///    bekräfta med kod, tillbaka i appen och välj län").
+  /// 3. Allt annat: rakt in i appen, som förut.
+  Future<void> _enterApp() async {
+    try {
+      final m = await widget.api.memberships();
+      final list = (m['memberships'] as List?) ?? const [];
+      if (list.isNotEmpty) {
+        final activeId = m['activeLicenseId']?.toString();
+        Map<String, dynamic>? chosen;
+        for (final row in list) {
+          if (row is Map &&
+              activeId != null &&
+              row['licenseId']?.toString() == activeId) {
+            chosen = Map<String, dynamic>.from(row);
+            break;
+          }
+        }
+        chosen ??= Map<String, dynamic>.from(list.first as Map);
+        if (((chosen['counties'] as List?) ?? const []).isEmpty) {
+          if (!mounted) return;
+          _membership = chosen;
+          setState(() {
+            _route = AppRoute.membershipCounty;
+            _invite = null;
+          });
+          return;
+        }
+        try {
+          await widget.api.startMembershipSession(
+            licenseId: chosen['licenseId']?.toString(),
+          );
+        } catch (_) {}
+        _goShell();
+        return;
+      }
+    } catch (_) {}
+    try {
+      final data = await widget.api.fleetCompany();
+      final trial = data['trial'];
+      final licenses = (data['licenses'] as List?) ?? const [];
+      if (trial is Map && trial['status'] == 'pending' && licenses.isEmpty) {
+        if (!mounted) return;
+        _membership = null;
+        setState(() {
+          _route = AppRoute.membershipCounty;
+          _invite = null;
+        });
+        return;
+      }
+    } catch (_) {}
+    _goShell();
   }
 
   /// Ett nytt företag är registrerat: välkomsten till provet, en gång. Är den
@@ -240,10 +298,11 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
               ),
               AppRoute.signup => SignupScreen(
                 api: widget.api,
-                // Konto skapat och e-post bekräftad: välkomsten till provet.
+                // Konto skapat och e-post bekräftad: ta medlemskapet och välj
+                // län (eller välkomsten till provet).
                 onDone: () async {
                   await registerForPush(widget.api);
-                  await _goAfterRegistration();
+                  await _afterLogin();
                 },
                 onLogin: () => setState(() => _route = AppRoute.login),
                 onBack: () => setState(() => _route = AppRoute.welcome),
@@ -251,6 +310,21 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
               AppRoute.trialWelcome => TrialWelcomeScreen(
                 api: widget.api,
                 onDone: _goShell,
+              ),
+              // Registrerat och e-posten bekräftad: välj län för provet. Ett nytt
+              // prov går vidare till välkomsten, en inbjuden förare rakt in.
+              AppRoute.membershipCounty => MembershipCountyScreen(
+                api: widget.api,
+                licenseId: _membership?['licenseId']?.toString(),
+                onDone: () {
+                  final newTrial = _membership == null;
+                  _membership = null;
+                  if (newTrial) {
+                    unawaited(_goAfterRegistration());
+                  } else {
+                    _goShell();
+                  }
+                },
               ),
               AppRoute.shell => _AppShell(
                 api: widget.api,

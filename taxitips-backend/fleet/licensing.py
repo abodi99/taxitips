@@ -167,6 +167,45 @@ def create_license(
     return license
 
 
+@transaction.atomic
+def create_membership_license(
+    *,
+    company_id,
+    base_county: str = "",
+    status: str = License.Status.ACTIVE,
+    trial=None,
+    actor_user_id=None,
+    now=None,
+) -> License:
+    """
+    Ett KONTOBASERAT medlemskap: en licens utan bil.
+
+    Skillnaden mot `create_license` är att ingen bil knyts. Medlemskapet hör
+    till ett KONTO (fleet/membership.py), inte till en registrerad bil, så
+    platsen är giltig innan någon bil finns -- det är hela poängen med den nya
+    modellen. Länen läggs på med `set_trial_counties`/`membership.set_county`;
+    under provet får baslänet därför vara tomt tills kunden valt det i appen
+    efter att e-posten bekräftats.
+    """
+    now = now or timezone.now()
+    base_county = str(base_county or "").strip()
+    if base_county:
+        base_county = assert_county_available(base_county)
+    license = License.objects.create(
+        company_id=company_id, status=status, base_county=base_county, trial=trial
+    )
+    if base_county:
+        LicenseCounty.objects.create(
+            license=license, county_code=base_county, kind=LicenseCounty.Kind.BASE, active_from=now
+        )
+    audit.record(
+        "membership_license_created", company_id=company_id, actor_user_id=actor_user_id,
+        actor_kind="customer", subject_type="license", subject_id=license.id,
+        detail={"base_county": base_county, "status": status},
+    )
+    return license
+
+
 def active_licenses(company_id):
     return License.objects.filter(
         company_id=company_id,

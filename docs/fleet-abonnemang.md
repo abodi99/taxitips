@@ -555,3 +555,56 @@ Föreslagna utgångspunkter, ännu inte automatiserade:
   bokföringsunderlag.
 * Hashade personuppgifter är inte automatiskt anonyma och räknas som
   personuppgifter.
+
+## 14. Kontobaserat medlemskap (2026-10)
+
+Enheten som köps är fortfarande en **billicens** (`fleet_license`, med länen i
+`fleet_license_county`) -- antal och pris är oförändrade. Det som ändrats är vem
+som håller platsen: i stället för en registrerad bil tilldelas medlemskapet ett
+**konto**.
+
+* `fleet_license.assignee_user_id` är kontot (Supabase user id) medlemskapet
+  tillhör. NULL = otilldelat.
+* `fleet_license.assignee_email` bär en tilldelning som ännu inte lösts in: när
+  kontot med den adressen loggar in binds det (`fleet/membership.py:
+  claim_for_email`, adressen ur den VERIFIERADE token).
+* Ägaren registrerar medlemskapet på sig själv eller tilldelar det till någon
+  annan: `POST /api/fleet/memberships/<id>/assign {"mode": "self"|"email"}`.
+* Länen väljs per medlemskap: `POST /api/fleet/memberships/<id>/county`. Provet
+  byter direkt; en betald licens byter via en beställning (som förut).
+
+**En app-session per konto.** Att "ta" medlemskapet i appen är en rad i
+`fleet_membership_session` -- ett konto, en öppen rad (partiellt unikt index).
+En andra telefon tar över (`takeover_required` -> `force`), och den gamla
+telefonens nästa anrop hittar ingen öppen rad. **Portalen tar aldrig en sådan
+rad och begränsas därför inte** -- flera webbsessioner för samma konto är
+oförändrat tillåtna. Endpoints: `POST /api/fleet/membership-session` och
+`/api/fleet/membership-session/end`.
+
+Förarvägen för ett konto (`fleet/access.py:_membership_access`) kräver ingen
+billicens och ingen `CompanyMember`-rad -- en förare inbjuden med e-post är inte
+medlem i bolaget. Utan en öppen session faller anropet vidare till den vanliga
+medlemsvägen (ägare i portalen), oförändrat.
+
+**Appens provsteg (registrera -> kod -> välj län).** Efter att e-posten
+bekräftats väljer kunden län i appen: `POST /api/fleet/memberships/trial
+{"baseCounty": "12"}` skapar provplatsen (en licens utan bil, `licensing.
+create_membership_license`), tilldelar den kontot (`assign_to_self`) och sätter
+länen. Steget är idempotent -- en andra gång byter det bara län -- och tar en
+ledig provplats (t.ex. skapad med en bil från webbformuläret) i stället för att
+skapa en andra. Under provet behöver ägaren alltså inte tilldela någon annan:
+platsen är kundens egen. Att ta medlemskapet i appen (`POST /api/fleet/
+membership-session`) startar provets klocka, precis som första telefonen i
+bilmodellen.
+
+**Fler platser och andra konton -- i portalen och admin, inte i appen.** En
+köpt plats tilldelas ett annat konto med `POST /api/fleet/memberships/<id>/assign`
+(portalen, `src/portal/views.js:membershipControls`) eller `POST /api/admin/
+licenses/<id>/assign` (adminwebben, `fleet/admin_api.py:assign_membership`,
+samma väg som kundens). Appen bjuder aldrig in: den väljer bara län och tar
+platsen.
+
+Migreringen `fleet/0024` är EXPAND: bara nya kolumner och en ny tabell. Inga
+befintliga rader får en session, så åtkomsten beter sig exakt som förut tills
+appen börjar ta en session. Kolumnen backfillas från aktiva godkända telefoner
+med ett inloggat konto.

@@ -566,6 +566,21 @@ class License(models.Model):
     base_county = models.CharField(max_length=4)
     scheduled_base_county = models.CharField(max_length=4, blank=True, default="")
 
+    # KONTOBASERAT MEDLEMSKAP (2026-10). Medlemskapet tilldelas ett KONTO i
+    # stället för en bil: ägaren registrerar det på sig själv eller tilldelar
+    # det till någon annan. Licensen är fortfarande det som faktiskt köps och
+    # bär länen (`LicenseCounty`) -- bara tilldelningen är ny.
+    #
+    # `assignee_user_id` = kontot (Supabase user id) medlemskapet hör till.
+    # NULL = otilldelat (ägaren håller platsen, ingen app-åtkomst ännu).
+    # `assignee_email` bär en tilldelning som ännu inte lösts in: när kontot med
+    # den adressen loggar in sätts `assignee_user_id` (fleet/membership.py:
+    # `claim_for_email`). `assigned_at`/`assigned_by` är spårbarheten.
+    assignee_user_id = models.UUIDField(null=True, blank=True, db_index=True)
+    assignee_email = models.CharField(max_length=254, blank=True, default="")
+    assigned_at = models.DateTimeField(null=True, blank=True)
+    assigned_by = models.UUIDField(null=True, blank=True)
+
     trial = models.ForeignKey(Trial, null=True, blank=True, on_delete=models.SET_NULL)
     created_at = models.DateTimeField(auto_now_add=True)
     canceled_at = models.DateTimeField(null=True, blank=True)
@@ -574,6 +589,12 @@ class License(models.Model):
     class Meta:
         db_table = "fleet_license"
         indexes = [models.Index(fields=["company_id", "status"])]
+
+    def is_assigned_to(self, user_id) -> bool:
+        """Är medlemskapet tilldelat just det här kontot?"""
+        if not user_id or not self.assignee_user_id:
+            return False
+        return str(self.assignee_user_id) == str(user_id)
 
 
 class LicenseCounty(models.Model):
@@ -947,6 +968,67 @@ class VehicleSession(models.Model):
             models.UniqueConstraint(
                 fields=["device_id"], condition=Q(ended_at__isnull=True),
                 name="fleet_one_active_session_per_device",
+            ),
+        ]
+
+
+class MembershipSession(models.Model):
+    """
+    Den aktiva app-sessionen för ett KONTO (kontobaserat medlemskap, 2026-10).
+
+    Skillnaden mot `VehicleSession` är vad som är nyckeln: där är det bilen och
+    telefonen, här är det KONTOT. Regeln användaren satte -- "samma konto får
+    inte vara inloggad på mer än en enhet i appen" -- blir *en öppen rad per
+    `user_id`*. En andra telefon som tar medlemskapet stänger den första
+    (övertagande), och den gamla telefonens nästa anrop hittar ingen öppen rad.
+
+    **Portalen begränsas inte.** Webbsidan öppnar aldrig en rad här, så flera
+    webbsessioner för samma konto är oförändrat tillåtna. Bara app-vägen tar
+    en session.
+
+    Båda reglerna är partiella unika index, av samma skäl som i
+    `VehicleSession`: två samtidiga "ta medlemskapet" från två telefoner läser
+    båda innan någon skriver, och bara databasen kan avgöra vem som vann.
+
+    En avslutad session återupplivas aldrig: `heartbeat_membership()` rör bara
+    `last_seen_at` på en öppen rad.
+    """
+
+    class EndReason(models.TextChoices):
+        TAKEOVER = "takeover", "Övertagen av annan enhet"
+        LEAVING = "leaving", "Lämnade medlemskapet"
+        UNASSIGNED = "unassigned", "Medlemskapet togs bort från kontot"
+        DEVICE_MOVED = "device_moved", "Enheten tog ett annat medlemskap"
+        BLOCKED = "blocked", "Spärrad av administratör"
+        EXPIRED = "expired", "Tidsgräns"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    company_id = models.UUIDField()
+    license = models.ForeignKey(License, on_delete=models.CASCADE, related_name="membership_sessions")
+    user_id = models.UUIDField(db_index=True)
+    device_id = models.UUIDField()
+    started_at = models.DateTimeField()
+    last_seen_at = models.DateTimeField()
+    ended_at = models.DateTimeField(null=True, blank=True)
+    ended_reason = models.CharField(max_length=20, choices=EndReason.choices, blank=True, default="")
+    ended_by_device = models.UUIDField(null=True, blank=True)
+
+    class Meta:
+        db_table = "fleet_membership_session"
+        indexes = [
+            models.Index(fields=["user_id", "ended_at"]),
+            models.Index(fields=["license", "-started_at"]),
+        ]
+        constraints = [
+            # Ett konto = en aktiv app-session. Det här ÄR användarens regel.
+            models.UniqueConstraint(
+                fields=["user_id"], condition=Q(ended_at__isnull=True),
+                name="fleet_one_active_membership_session_per_user",
+            ),
+            # Ett medlemskap = en aktiv session (samma som för en billicens).
+            models.UniqueConstraint(
+                fields=["license"], condition=Q(ended_at__isnull=True),
+                name="fleet_one_active_membership_session_per_license",
             ),
         ]
 
@@ -1776,7 +1858,7 @@ class DeviceSwapGrant(models.Model):
     """
     Extra bytestillfälle som personal gett för en kalendermånad (YYYY-MM).
 
-    Effektiv gräns = 2 + antal grants för månaden (fleet/device_swaps.py).
+    Effektiv gräns = 1 + antal grants för månaden (fleet/device_swaps.py).
     """
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)

@@ -89,3 +89,15 @@ export function statusBanner(report) {
     <span class="todo-go">Status →</span>
   </button>`;
 }
+
+/** Kort rad för Hem: "2 nere · 1 varning · 12 ok". */
+export function statusSummaryLine(report) {
+  if (!report) return "";
+  const c = report.counts ?? {};
+  const parts = [];
+  if (c.down) parts.push(`${c.down} nere`);
+  if (c.warn) parts.push(`${c.warn} varning${c.warn === 1 ? "" : "ar"}`);
+  parts.push(`${c.ok ?? 0} ok`);
+  if (c.off) parts.push(`${c.off} av`);
+  return parts.join(" · ");
+}

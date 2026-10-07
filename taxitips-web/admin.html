@@ -89,26 +89,36 @@
     </section>
 
     <div id="app" class="admin-shell" hidden>
+      <!-- Primär meny: det personalen öppnar varje dag. Resten under Mer. -->
       <nav class="admin-side" aria-label="Adminvyer">
-        <button class="tab tab-main" data-view="dashboard" aria-current="page">Dashboard</button>
-        <button class="tab tab-main" data-view="oversikt">Hem</button>
-        <button class="tab tab-main" data-view="kunder">Kunder</button>
-        <button class="tab tab-main" data-view="pipeline">CRM</button>
-        <button class="tab tab-main" data-view="uppfoljning">Uppföljning</button>
-        <button class="tab tab-main" data-view="support">Support
-          <span id="supportCount" class="nav-count" aria-label="väntar på svar" hidden></span></button>
-        <button class="tab tab-main" data-view="tipprapporter">Tipprapporter
-          <span id="tipReportCount" class="nav-count" aria-label="öppna rapporter" hidden></span></button>
-        <button class="tab tab-main" data-view="evenemang">Evenemang</button>
-        <button class="tab tab-main" data-view="status">Status
-          <span id="statusDot" class="st-dot st-nav" aria-label="" hidden></span></button>
-        <p class="side-group">Mer</p>
-        <button class="tab" data-view="kuponger">Kuponger</button>
-        <button class="tab" data-view="notiser">Notiser</button>
-        <button class="tab" data-view="granskning">Granskningar</button>
-        <button class="tab" data-view="konton">Konton</button>
-        <button class="tab" data-view="aktivitet">Appar och fel</button>
-        <button class="tab" data-view="personal">Personal</button>
+        <div class="side-primary">
+          <button class="tab tab-main" data-view="oversikt" aria-current="page">Hem</button>
+          <button class="tab tab-main" data-view="kunder">Kunder</button>
+          <button class="tab tab-main" data-view="support">Support
+            <span id="supportCount" class="nav-count" aria-label="väntar på svar" hidden></span></button>
+          <button class="tab tab-main" data-view="pipeline">CRM</button>
+          <button class="tab tab-main" data-view="status">Status
+            <span id="statusDot" class="st-dot st-nav" aria-label="" hidden></span></button>
+        </div>
+        <details class="side-more" id="adminMore">
+          <summary class="side-more-toggle">Mer
+            <span id="moreBadge" class="nav-count" aria-label="öppna under Mer" hidden></span>
+          </summary>
+          <div class="side-more-items">
+            <button class="tab" data-view="tipprapporter">Tipprapporter
+              <span id="tipReportCount" class="nav-count" aria-label="öppna rapporter" hidden></span></button>
+            <button class="tab" data-view="evenemang">Evenemang</button>
+            <button class="tab" data-view="kuponger">Kuponger</button>
+            <button class="tab" data-view="notiser">Notiser</button>
+            <p class="side-group side-group-sm">Plattform</p>
+            <button class="tab" data-view="dashboard">Rapport</button>
+            <button class="tab" data-view="granskning">Granskningar
+              <span id="granskningCount" class="nav-count" aria-label="öppna granskningar" hidden></span></button>
+            <button class="tab" data-view="konton">Konton</button>
+            <button class="tab" data-view="aktivitet">Appar och fel</button>
+            <button class="tab" data-view="personal">Personal</button>
+          </div>
+        </details>
       </nav>
       <section class="admin-content">
         <p id="globalError" class="error global-error" role="alert" hidden></p>

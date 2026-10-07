@@ -680,6 +680,35 @@ function countyControls(row) {
     </details>`;
 }
 
+/**
+ * Medlemskapet: platsen tilldelas ett konto. Under provet får ägaren sin egen
+ * plats i appen; fler platser köps här och tilldelas andra konton (2026-10).
+ * Portalen tar aldrig en app-session och begränsas därför inte.
+ */
+function membershipControls(row, canManage) {
+  if (!canManage) return "";
+  const assigned = row.assigned === true;
+  const who = row.assigneeEmail
+    ? `väntar på ${esc(row.assigneeEmail)} (hen loggar in i appen)`
+    : row.assigneeUserId
+      ? "ett konto"
+      : "ingen än";
+  return `<div class="membership-block">
+    <h3>Medlemskapet</h3>
+    <p class="muted">Platsen tilldelas ett <b>konto</b>, inte en bil. Appen
+    använder platsen på den telefon kontot loggar in på. Tilldelad: ${who}.</p>
+    <div class="btn-row">
+      <button class="btn btn-quiet" type="button" data-action="assign-membership-self" data-license="${esc(row.licenseId)}">Tilldela mig</button>
+      <button class="btn btn-quiet" type="button" data-action="assign-membership-email" data-license="${esc(row.licenseId)}">Tilldela ett konto (e-post)</button>
+      ${
+        assigned
+          ? `<button class="btn btn-quiet" type="button" data-action="unassign-membership" data-license="${esc(row.licenseId)}">Ta bort tilldelning</button>`
+          : ""
+      }
+    </div>
+  </div>`;
+}
+
 export function bilar(data, bulkInviteResult = null, notify = null) {
   const canManage = (data.permissions ?? []).includes("manage_devices");
   const rows = data.licenses ?? [];
@@ -747,6 +776,7 @@ export function bilar(data, bulkInviteResult = null, notify = null) {
             : ""
         }
         ${countyControls(row)}
+        ${membershipControls(row, canManage)}
       </div>`,
       )
       .join("")}

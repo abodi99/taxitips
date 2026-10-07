@@ -36,8 +36,8 @@ from billing.models import Company, CompanyMember, Device
 from core.api import _json
 from core.models import OpportunityReport, PushDelivery
 from fleet import (
-    access, archive, audit, county_changes, discounts, driver_invites, licensing, pairing, pricing,
-    risk, roles, sessions, trials,
+    access, archive, audit, county_changes, discounts, driver_invites, licensing, membership, pairing,
+    pricing, risk, roles, sessions, trials,
 )
 from fleet.api import _DOMAIN_ERRORS, _error
 from fleet.models import (
@@ -352,6 +352,11 @@ def company_detail(request, company_id):
             "assignmentKind": assignment.kind if assignment else "",
             "baseCounty": lic.base_county,
             "scheduledBaseCounty": lic.scheduled_base_county,
+            # Kontobaserat medlemskap (2026-10): vem som håller platsen.
+            "assigneeUserId": str(lic.assignee_user_id) if lic.assignee_user_id else None,
+            "assigneeEmail": lic.assignee_email,
+            "assigned": bool(lic.assignee_user_id or lic.assignee_email),
+            "assignedAt": _iso(lic.assigned_at),
             "counties": list(access.license_counties(lic.id, now)),
             "endsAt": _iso(lic.ends_at),
             "countyChanges": county_change_rows[str(lic.id)],
@@ -663,6 +668,62 @@ def release_license(request, license_id):
         detail={"holder": holder, "reason": str(_body(request).get("reason") or "")[:200]},
     )
     return _json(request, {"ok": True, "released": True, "holder": holder})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def assign_membership(request, license_id):
+    """
+    POST /api/admin/licenses/<id>/assign {"email": "…"} | {"userId": "…"}
+
+    Personalen tilldelar platsen ett konto åt kunden -- samma väg som kundens
+    egen (fleet/membership.py), så att reglerna är desamma. Ett e-postkonto som
+    vi inte känner igen binds när personen loggar in i appen (claim_for_email);
+    ett känt konto binds direkt. Provet får sin egen plats i appen -- det här är
+    för fler platser och för den som inte når portalen.
+    """
+    principal = _staff(request, Perm.ADMIN_SELL)
+    license = License.objects.filter(id=license_id).first()
+    if license is None:
+        raise membership.MembershipError("unknown_license", "Medlemskapet finns inte.", status=404)
+    body = _body(request)
+    email = str(body.get("email") or "").strip()
+    user_id = str(body.get("userId") or body.get("user_id") or "").strip()
+    if email:
+        updated = membership.assign_to_email(
+            license=license, email=email, actor_user_id=principal.user_id,
+        )
+        detail = {"mode": "email", "email": updated.assignee_email}
+    elif user_id:
+        updated = membership.assign_to_self(
+            license=license, user_id=user_id, actor_user_id=principal.user_id,
+        )
+        detail = {"mode": "user", "user_id": user_id}
+    else:
+        raise membership.MembershipError("email_required", "Ange kontots e-post.")
+    _record(
+        principal, "membership_assigned", company_id=license.company_id,
+        subject_type="license", subject_id=license.id, detail=detail,
+    )
+    return _json(request, {"ok": True, "membership": membership.view(updated)})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def unassign_membership(request, license_id):
+    """POST /api/admin/licenses/<id>/unassign -- platsen blir otilldelad."""
+    principal = _staff(request, Perm.ADMIN_SELL)
+    license = License.objects.filter(id=license_id).first()
+    if license is None:
+        raise membership.MembershipError("unknown_license", "Medlemskapet finns inte.", status=404)
+    updated = membership.unassign(license=license, actor_user_id=principal.user_id)
+    _record(
+        principal, "membership_unassigned", company_id=license.company_id,
+        subject_type="license", subject_id=license.id,
+    )
+    return _json(request, {"ok": True, "membership": membership.view(updated)})
 
 
 @csrf_exempt

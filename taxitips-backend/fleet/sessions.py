@@ -38,6 +38,7 @@ from fleet import audit
 from fleet.models import (
     DeviceApproval,
     License,
+    MembershipSession,
     RiskConfig,
     RiskSignal,
     Vehicle,
@@ -298,3 +299,161 @@ def takeover_pressure(license_id, *, now=None) -> tuple[int, int]:
         created_at__gte=now - timedelta(hours=1),
     ).count()
     return count, config.takeovers_per_hour
+
+
+# ---------------------------------------------------------------------------
+# Kontobaserat medlemskap: en app-session per konto (2026-10)
+#
+# Parallellt med bilsessionen ovan, inte i stället för den. Den här vägen nycklas
+# på KONTOT (`user_id`): användarens regel -- samma konto på en andra telefon i
+# appen tar över -- är det partiella unika indexet på `user_id`. Portalen öppnar
+# aldrig en rad här och begränsas därför inte.
+# ---------------------------------------------------------------------------
+
+
+def active_membership_session_for_user(user_id) -> MembershipSession | None:
+    if not user_id:
+        return None
+    return MembershipSession.objects.filter(user_id=user_id, ended_at__isnull=True).first()
+
+
+def active_membership_session_for_license(license_id) -> MembershipSession | None:
+    return MembershipSession.objects.filter(license_id=license_id, ended_at__isnull=True).first()
+
+
+def membership_holder_label(session: MembershipSession) -> str:
+    """Enhetsnamnet, för meddelandet \"X använder medlemskapet\"."""
+    from billing.models import Device
+
+    device = Device.objects.filter(id=session.device_id).first()
+    return device.label if device and device.label else "En annan enhet"
+
+
+@dataclass(frozen=True)
+class MembershipSessionResult:
+    session: MembershipSession
+    took_over_from: str | None = None
+    left_license: str | None = None
+
+    def as_dict(self) -> dict:
+        s = self.session
+        return {
+            "sessionId": str(s.id),
+            "licenseId": str(s.license_id),
+            "userId": str(s.user_id),
+            "deviceId": str(s.device_id),
+            "startedAt": s.started_at.isoformat(),
+            "tookOverFromDevice": self.took_over_from,
+            "leftLicense": self.left_license,
+        }
+
+
+@transaction.atomic
+def start_membership_session(*, user_id, license_id, device_id, force: bool = False, now=None) -> MembershipSessionResult:
+    """
+    Ta eller ta över ett medlemskap i appen.
+
+    Låsordningen: licensraden låses i stigande id-ordning, samma tanke som i
+    `start_session`. `force=False` ger `takeover_required` med vem som håller
+    det; `force=True` är svaret på den frågan.
+    """
+    now = now or timezone.now()
+    if not user_id:
+        raise SessionError("login_required", "Logga in för att ta medlemskapet.", status=401)
+
+    license = License.objects.select_for_update().filter(id=license_id).order_by("id").first()
+    if license is None:
+        raise SessionError("unknown_license", "Medlemskapet finns inte.", status=404)
+    if not license.is_assigned_to(user_id):
+        raise SessionError("not_assigned", "Medlemskapet är inte tilldelat ditt konto.", status=403)
+    if license.status not in (License.Status.ACTIVE, License.Status.TRIAL, License.Status.PENDING_CANCEL):
+        raise SessionError("license_inactive", "Medlemskapet är inte aktivt.", status=403)
+
+    existing = active_membership_session_for_license(license.id)
+    if (
+        existing is not None
+        and str(existing.user_id) == str(user_id)
+        and str(existing.device_id) == str(device_id)
+    ):
+        heartbeat_membership(existing, now=now)
+        existing.refresh_from_db()
+        return MembershipSessionResult(session=existing)
+
+    took_over_from = None
+    if existing is not None:
+        if not force:
+            raise SessionError(
+                "takeover_required",
+                f"{membership_holder_label(existing)} använder medlemskapet. Vill du ta över?",
+                status=409,
+                detail={
+                    "currentDeviceLabel": membership_holder_label(existing),
+                    "since": existing.started_at.isoformat(),
+                },
+            )
+        MembershipSession.objects.filter(id=existing.id, ended_at__isnull=True).update(
+            ended_at=now, ended_reason=MembershipSession.EndReason.TAKEOVER, ended_by_device=device_id,
+        )
+        took_over_from = str(existing.device_id)
+
+    # Kontot lämnar sitt förra medlemskap: en öppen rad per konto, oavsett
+    # vilket medlemskap det gäller.
+    left_license = None
+    leaving = (
+        MembershipSession.objects.filter(user_id=user_id, ended_at__isnull=True)
+        .exclude(license_id=license.id).first()
+    )
+    if leaving is not None:
+        MembershipSession.objects.filter(id=leaving.id, ended_at__isnull=True).update(
+            ended_at=now, ended_reason=MembershipSession.EndReason.DEVICE_MOVED
+        )
+        left_license = str(leaving.license_id)
+
+    try:
+        session = MembershipSession.objects.create(
+            company_id=license.company_id, license=license, user_id=user_id,
+            device_id=device_id, started_at=now, last_seen_at=now,
+        )
+    except IntegrityError:
+        raise SessionError("takeover_conflict", "Någon annan hann före. Prova igen.", status=409)
+
+    audit.record(
+        "membership_session_started", company_id=license.company_id, actor_user_id=user_id,
+        actor_kind="customer", subject_type="membership_session", subject_id=session.id,
+        detail={
+            "license_id": str(license.id), "device_id": str(device_id),
+            "took_over_from_device": took_over_from, "left_license": left_license,
+        },
+    )
+    return MembershipSessionResult(session=session, took_over_from=took_over_from, left_license=left_license)
+
+
+def heartbeat_membership(session: MembershipSession, now=None) -> bool:
+    """Bara en ÖPPEN rad: en stängd session får aldrig återupplivas."""
+    now = now or timezone.now()
+    return (
+        MembershipSession.objects.filter(id=session.id, ended_at__isnull=True).update(last_seen_at=now) == 1
+    )
+
+
+def end_membership_session(session: MembershipSession, *, reason: str, now=None) -> bool:
+    now = now or timezone.now()
+    return bool(
+        MembershipSession.objects.filter(id=session.id, ended_at__isnull=True).update(
+            ended_at=now, ended_reason=reason
+        )
+    )
+
+
+def end_membership_sessions_for_user(user_id, *, reason: str, now=None) -> int:
+    now = now or timezone.now()
+    return MembershipSession.objects.filter(user_id=user_id, ended_at__isnull=True).update(
+        ended_at=now, ended_reason=reason
+    )
+
+
+def end_membership_sessions_for_license(license_id, *, reason: str, now=None) -> int:
+    now = now or timezone.now()
+    return MembershipSession.objects.filter(license_id=license_id, ended_at__isnull=True).update(
+        ended_at=now, ended_reason=reason
+    )
