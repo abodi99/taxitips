@@ -2,7 +2,9 @@
 
 Fyra spår har mätts parallellt mot produktion 2026-10-07, **enbart läsande**
 (`SELECT`/`EXPLAIN`/`SHOW`, inga skrivningar, inga `manage.py`-kommandon i prod).
-Varje siffra går att återskapa; frågan står i rapporten den kommer från.
+Varje siffra går att återskapa med frågan som står vid den. Agenternas
+rårapporter var arbetsmaterial och sparas inte — den här sammanställningen är
+artefakten.
 
 Fönster: `ai_call` 2026-10-04 → 10-07, `pg_stat_statements` sedan 2026-09-27
 (≈10,5 dygn), tabellräkningar vid mättillfället.
