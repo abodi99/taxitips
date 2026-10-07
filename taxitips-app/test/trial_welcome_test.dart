@@ -217,6 +217,14 @@ void main() {
     expect(done2, ['done']);
   });
 
+  test('resetSeen nollställer flaggan så att välkomsten visas igen', () async {
+    SharedPreferences.setMockInitialValues({TrialWelcomeScreen.seenKey: true});
+    expect(await TrialWelcomeScreen.seen(), isTrue);
+
+    await TrialWelcomeScreen.resetSeen();
+    expect(await TrialWelcomeScreen.seen(), isFalse);
+  });
+
   testWidgets('igen från Inställningar: Stäng i stället för Hoppa över', (
     tester,
   ) async {

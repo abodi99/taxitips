@@ -39,11 +39,11 @@ const el = {
   magicSent: document.getElementById("magicSent"),
 };
 
-/** Primärvyer i flikraden. `lan` finns kvar som alias → bilar. */
-const ALL_VIEWS = new Set(["oversikt", "bilar", "abonnemang", "foretag"]);
+/** Primärvyer i flikraden. Äldre fliknamn (bilar, lan) mappas till medlemskap. */
+const ALL_VIEWS = new Set(["oversikt", "medlemskap", "abonnemang", "foretag"]);
 
 function normalizeView(name) {
-  if (name === "lan") return "bilar";
+  if (name === "lan" || name === "bilar") return "medlemskap";
   return ALL_VIEWS.has(name) ? name : "oversikt";
 }
 
@@ -70,7 +70,7 @@ async function showView(view) {
   markActiveTab(state.view);
   closeMoreMenu();
   if (state.view === "foretag") state.members = await api.members().catch(() => null);
-  if (state.view === "bilar") state.notify = await api.notifySettings().catch(() => null);
+  if (state.view === "medlemskap") state.notify = await api.notifySettings().catch(() => null);
   if (state.view === "abonnemang" && !state.orders) {
     try {
       state.orders = await api.orders();
@@ -85,8 +85,8 @@ async function showView(view) {
 setupPasswordToggles(el.login ?? document);
 
 let state = {
-  view: "oversikt", data: null, orders: null, members: null, bulkInvite: null, pricing: null,
-  notify: null,
+  view: "oversikt", data: null, orders: null, members: null, pricing: null,
+  notify: null, userId: null,
 };
 
 // Inbjudningsmejlet (fleet/notifications.py:member_invite) loggar in direkt
@@ -185,6 +185,7 @@ async function enterApp(session) {
   el.app.hidden = false;
   el.logout.hidden = false;
   el.whoami.textContent = session.user?.email ?? "";
+  state.userId = session.user?.id ?? null;
   const wantsContinue = takeContinueWish();
   if (wantsContinue) state.view = "oversikt";
   await refresh();
@@ -207,8 +208,8 @@ async function refresh() {
       // Listan är en extra: företagssidan ska visas även om den inte svarar.
       state.members = await api.members().catch(() => null);
     }
-    if (state.view === "bilar") {
-      // Samma sak med notiserna: bilarna visas även om de inte svarar.
+    if (state.view === "medlemskap") {
+      // Samma sak med notiserna: medlemskapen visas även om de inte svarar.
       state.notify = await api.notifySettings().catch(() => null);
     }
   } catch (error) {
@@ -233,9 +234,9 @@ function continueChange() {
 
 /**
  * Priset i medlemskapsvyn. Två offerter från servern, som inte ändrar något
- * (POST /api/fleet/quote): fortsättningen med bolagets egna provbilar -- eller
- * nuläget, för den som redan betalar -- och en bil med ett extra län, för
- * länspriset. Portalen räknar inga belopp själv (fleet/pricing.py).
+ * (POST /api/fleet/quote): fortsättningen med bolagets egna medlemskap -- eller
+ * nuläget, för den som redan betalar -- och ett medlemskap med ett extra län,
+ * för länspriset. Portalen räknar inga belopp själv (fleet/pricing.py).
  *
  * Ett fel här är inget fel för kunden: vyn säger då bara att priset visas
  * innan något godkänns. En ekonomiroll utan rätt att se priser får samma text.
@@ -270,7 +271,7 @@ function render() {
   markActiveTab(state.view);
   const html = {
     oversikt: () => views.oversikt(data),
-    bilar: () => views.bilar(data, state.bulkInvite, state.notify),
+    medlemskap: () => views.medlemskap(data, state.userId, state.notify),
     abonnemang: () => views.abonnemang(data, state.orders?.orders ?? [], state.pricing),
     foretag: () => views.foretag(data, state.members),
   }[state.view];
@@ -509,28 +510,10 @@ el.view.addEventListener("submit", async (event) => {
     }
     return;
   }
-  if (form.id === "singleInviteForm" || form.classList.contains("invite-form")) {
+  if (form.id === "membershipInviteForm") {
     event.preventDefault();
-    await inviteDriver(form);
+    await inviteAccount(form);
     return;
-  }
-  if (form.id === "bulkInviteForm") {
-    event.preventDefault();
-    await inviteDriversBulk(form);
-    return;
-  }
-  if (form.id !== "vehicleForm") return;
-  event.preventDefault();
-  clearError();
-  const data = new FormData(form);
-  try {
-    await api.createVehicle(
-      String(data.get("plate") ?? ""),
-      String(data.get("label") ?? ""),
-    );
-    await refresh();
-  } catch (error) {
-    showError(error);
   }
 });
 
@@ -565,97 +548,31 @@ async function saveNotify(form, submitter) {
   }
 }
 
-/** Bjud in en förare med e-post. Servern skapar kontot och skickar mejlet. */
-async function inviteDriver(form) {
+/**
+ * Bjud in ett konto: tilldela ett medlemskap till en e-postadress. Kontot
+ * binds när personen loggar in (fleet/membership.py:claim_for_email) -- adressen
+ * läses ur den verifierade inloggningen, inte ur det här formuläret.
+ */
+async function inviteAccount(form) {
   clearError();
   const data = new FormData(form);
   const email = String(data.get("email") ?? "").trim();
+  const licenseId = String(data.get("licenseId") ?? "").trim();
   const button = form.querySelector('button[type="submit"]');
   if (!email) {
-    showError(new ApiError(400, "Skriv förarens e-post.", "email_required"));
+    showError(new ApiError(400, "Skriv e-postadressen till kontot.", "email_required"));
     form.querySelector('[name="email"]')?.focus();
     return;
   }
-  // Primärformen kan ha bilväljare; per-bil-formen sätter data-attribut.
-  let licenseId = String(data.get("licenseId") ?? form.dataset.license ?? "").trim();
-  let vehicleId = String(data.get("vehicleId") ?? form.dataset.vehicle ?? "").trim();
-  const carSelect = form.querySelector("#invite-car");
-  if (carSelect) {
-    licenseId = carSelect.value;
-    vehicleId = carSelect.selectedOptions[0]?.dataset.vehicle || "";
-  }
   if (!licenseId) {
-    showError(new ApiError(400, "Välj vilken bil föraren ska köra.", "license_required"));
+    showError(new ApiError(400, "Välj vilket medlemskap kontot ska få.", "license_required"));
     return;
   }
   button.disabled = true;
   try {
-    await api.inviteDriver({
-      email,
-      label: String(data.get("label") ?? "").trim(),
-      licenseId,
-      vehicleId: vehicleId || undefined,
-    });
+    await api.assignMembership(licenseId, { mode: "email", email });
     await refresh();
-    showNotice(
-      `Inbjudan skickad till ${email}. Föraren väljer lösenord via mejlet och loggar sedan in i appen.`,
-    );
-  } catch (error) {
-    showError(error);
-  } finally {
-    button.disabled = false;
-  }
-}
-
-const BULK_MAX_ROWS = 200;
-
-/**
- * "Bjud in många förare": en rad per förare, `e-post;regnr;namn`. Semikolon,
- * tabb (inklistrat från Excel) och komma godtas som avgränsare -- ingen av dem
- * kan stå i en e-postadress. Servern prövar varje rad för sig och svarar per
- * rad; här håller vi bara reda på radnumret så att felen går att hitta.
- */
-function parseBulkRows(text) {
-  const rows = [];
-  text.split(/\r?\n/).forEach((raw, index) => {
-    const line = raw.trim();
-    if (!line) return;
-    const [email = "", plate = "", ...rest] = line.split(/[;\t,]/).map((p) => p.trim());
-    rows.push({ line: index + 1, email, plate, label: rest.join(" ").trim() });
-  });
-  return rows;
-}
-
-async function inviteDriversBulk(form) {
-  clearError();
-  const rows = parseBulkRows(String(new FormData(form).get("rows") ?? ""));
-  if (!rows.length) {
-    showError(new ApiError(400, "Skriv minst en förare, en per rad.", "rows_required"));
-    return;
-  }
-  if (rows.length > BULK_MAX_ROWS) {
-    showError(
-      new ApiError(400, `Högst ${BULK_MAX_ROWS} förare åt gången. Dela upp listan.`, "too_many_rows"),
-    );
-    return;
-  }
-  const button = form.querySelector('button[type="submit"]');
-  button.disabled = true;
-  try {
-    const result = await api.inviteDriversBulk(
-      rows.map(({ email, plate, label }) => ({ email, plate, label })),
-    );
-    // Svaret kommer i samma ordning som raderna skickades.
-    state.bulkInvite = {
-      sent: result.sent,
-      results: result.results.map((r, i) => ({ ...r, line: rows[i]?.line })),
-    };
-    await refresh();
-    showNotice(
-      result.failed
-        ? `${result.sent} inbjudningar skickade. ${result.failed} rader gick inte -- se listan.`
-        : `${result.sent} inbjudningar skickade.`,
-    );
+    showNotice(`Medlemskapet väntar nu på ${email}. Personen loggar in i appen och tar platsen.`);
   } catch (error) {
     showError(error);
   } finally {
@@ -750,41 +667,6 @@ async function handle(action, ctx) {
       showNotice(`${ctx.email || "Personen"} är borttagen.`);
       return;
     }
-    case "resend-invite": {
-      await api.resendInvite(ctx.invite);
-      await refresh();
-      showNotice("Inbjudan skickad igen. Den nya länken gäller i sju dagar.");
-      return;
-    }
-    case "revoke-invite": {
-      if (!confirm("Ta bort inbjudan? Föraren kan inte längre använda den för att logga in.")) return;
-      await api.revokeInvite(ctx.invite);
-      return refresh();
-    }
-    case "block": {
-      if (
-        !confirm(
-          "Spärra telefonen? Den slutar visa tips direkt och lämnar bilen. " +
-            "Telefonen behöver anslutas på nytt för att användas igen.",
-        )
-      )
-        return;
-      await api.blockPhone(ctx.approval, "lost_phone");
-      return refresh();
-    }
-    case "change-vehicle": {
-      const plate = prompt(
-        "Registreringsnummer för den nya bilen. Licensens betalperiod, län och " +
-          "provhistorik följer med; den gamla bilens telefoner måste godkännas på nytt.",
-      );
-      if (!plate) return;
-      const created = await api.createVehicle(plate, "");
-      await api.changeVehicle(ctx.license, {
-        mode: "permanent",
-        vehicle_id: created.vehicleId,
-      });
-      return refresh();
-    }
     case "add-county": {
       const select = document.querySelector(`[data-county-for="${ctx.license}"]`);
       const county = select?.value;
@@ -810,7 +692,7 @@ async function handle(action, ctx) {
     case "unassign-membership": {
       if (
         !confirm(
-          "Ta bort tilldelningen? Platsen är kvar men ingen telefon använder den.",
+          "Ta bort tilldelningen? Platsen är kvar men inget konto använder den.",
         )
       )
         return;
@@ -822,16 +704,16 @@ async function handle(action, ctx) {
       const county = select?.value;
       if (!county) return;
       if (ctx.status === "trial") {
-        // Provbilen byter direkt och utan kostnad -- ingen beställning, men
-        // bytet räknas mot bilens två i månaden.
+        // Provplatsen byter direkt och utan kostnad -- ingen beställning, men
+        // bytet räknas mot medlemskapets två i månaden.
         if (
           !confirm(
             `Byta baslän till ${countyName(county)}? Det gäller direkt. ` +
-              "Varje bil kan byta län två gånger per månad.",
+              "Varje medlemskap kan byta län två gånger per månad.",
           )
         )
           return;
-        await api.setTrialCounty(ctx.license, county);
+        await api.setMembershipCounty(ctx.license, county);
         await refresh();
         showNotice(`Baslänet är nu ${countyName(county)}.`);
         return;
@@ -876,10 +758,10 @@ async function handle(action, ctx) {
       return;
     }
     case "add-license": {
-      const plate = prompt("Registreringsnummer för bilen:");
-      if (!plate) return;
       const county = prompt("Baslän (SCB-kod, t.ex. 12 för Skåne):");
       if (!county) return;
+      const plate = prompt("Registreringsnummer för bilen medlemskapet avser (krävs av fakturasystemet):");
+      if (!plate) return;
       return buy({
         addVehicles: [{ plate, baseCounty: county, label: "", extraCounties: [] }],
       });
@@ -980,7 +862,7 @@ async function buy(change) {
     // inte när kunden kommer tillbaka hit.
     const go = confirm(
       "Beställningen väntar på betalning. Öppna betalsidan nu?\n\n" +
-        "Bilarna och länen aktiveras när betalningen har gått igenom.",
+        "Medlemskapen och länen aktiveras när betalningen har gått igenom.",
     );
     if (go) window.open(order.paymentUrl, "_blank", "noopener");
   } else if (order.status === "pending_payment") {

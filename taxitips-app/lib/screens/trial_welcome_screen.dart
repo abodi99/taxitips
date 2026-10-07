@@ -48,6 +48,18 @@ class TrialWelcomeScreen extends StatefulWidget {
     }
   }
 
+  /// Nollställer "sedd"-flaggan. Anropas direkt efter en ny registrering, så
+  /// att varje nytt företag får sin egen välkomst -- även om samma telefon redan
+  /// sett den för ett tidigare företag.
+  static Future<void> resetSeen() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(seenKey);
+    } catch (_) {
+      // Misslyckas det visar seen() ingen välkomst i stället för att fastna.
+    }
+  }
+
   /// Från Inställningar: samma sidor, och tillbaka dit med Stäng/Klar.
   static Future<void> openFromSettings(BuildContext context, ApiClient api) {
     return Navigator.of(context).push(

@@ -240,18 +240,6 @@ def delete_signed_in_account(*, user_id, email: str = "", device: Device | None 
         )
 
     sole = sole_owned_companies(user_id)
-    renewing = [c for c in sole if c["renews"]]
-    if renewing:
-        names = ", ".join(c["companyName"] or "ditt företag" for c in renewing)
-        raise AccountDeletionError(
-            "sole_owner_active_subscription",
-            f"Du är enda ägaren till {names} och medlemskapet förnyas. Avsluta "
-            "företagskontot först (längst ner i Inställningar) eller låt en kollega "
-            "ta över ägarrollen på webben. Sedan kan du radera ditt konto här.",
-            status=409,
-            detail={"companies": [c["companyId"] for c in renewing]},
-        )
-
     _require_auth_admin()
 
     device_ids = _device_ids_for_users([user_id])
@@ -271,6 +259,19 @@ def delete_signed_in_account(*, user_id, email: str = "", device: Device | None 
 
                 trials.end_trial(trial, reason="owner_account_deleted", now=now)
                 trials_ended += 1
+            # Förnyas medlemskapet pausas det och företaget arkiveras, så att
+            # ägaren slipper "avsluta först" och företaget inte lämnas med ett
+            # debiterande abonnemang utan ägare (ägarens beslut 2026-10-07).
+            if company["renews"]:
+                from fleet import archive, ownership
+
+                ownership.close_account(
+                    company_id=company["companyId"], actor_user_id=user_id, now=now,
+                )
+                archive.archive(
+                    company_id=company["companyId"], actor_user_id=user_id,
+                    force=True, now=now,
+                )
 
         memberships = list(CompanyMember.objects.filter(user_id=user_id))
         companies = sorted({str(m.company_id) for m in memberships})

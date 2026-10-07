@@ -7,11 +7,10 @@ import '../signal_kinds.dart';
 import '../net_status.dart';
 import '../theme.dart';
 
-/// Notisinställningar: färdiga lägen (Rekommenderat, Bara de starkaste, Allt
-/// i mina län, Tyst), paus, kategorier, styrka, svagare tips, tysta timmar,
-/// tak per timme och enskilda händelsetyper. Lägena och reglerna kommer från
-/// servern (core/notify_prefs.py); företagets administratör kan ändra samma
-/// sak i kundportalen.
+/// Notisinställningar -- det föraren behöver: av/på, paus, vilka kategorier och
+/// hur viktiga tipsen ska vara. Reglerna kommer från servern
+/// (core/notify_prefs.py); företagets administratör kan ändra samma sak i
+/// kundportalen.
 ///
 /// Län och orter styrs från huvudskärmens filter och synkas till
 /// `devices.notify_prefs` därifrån — ingen dubbel UI här (död kontroll
@@ -51,17 +50,9 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
   /// för att se påslaget ut utan att något händer.
   Set<SignalCategory> _lockedCategories = {};
 
-  /// Färdiga lägen och detaljerade val (core/notify_prefs.py). Tom katalog =
-  /// äldre server: då visas varken lägena eller de nya reglagen.
-  List<Map<String, dynamic>> _presetCatalog = [];
-  String? _preset;
+  /// Svagare tips som eget val. Reglaget visas under "Fler val", där även
+  /// enskilda störningstyper styrs.
   bool _weak = false;
-  ({int from, int to})? _quiet;
-  int? _maxPerHour;
-  int _weakMax = 3;
-  List<int> _maxChoices = const [2, 4, 6];
-
-  bool get _detailed => _presetCatalog.isNotEmpty;
 
   /// Läser reglerna ur sparade prefs. Anropas inuti setState.
   void _readRules(Map<String, dynamic> prefs) {
@@ -77,13 +68,6 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
     };
     _minLevel = prefs['minLevel']?.toString() ?? 'all';
     _weak = prefs['weak'] == true;
-    final quiet = prefs['quietHours'];
-    final from = quiet is Map ? int.tryParse('${quiet['from']}') : null;
-    final to = quiet is Map ? int.tryParse('${quiet['to']}') : null;
-    _quiet = from != null && to != null && from != to
-        ? (from: from, to: to)
-        : null;
-    _maxPerHour = int.tryParse('${prefs['maxPerHour'] ?? ''}');
   }
 
   String get _geoSummary {
@@ -128,17 +112,6 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
       setState(() {
         _readRules(prefs);
         _onDuty = onDuty;
-        _presetCatalog = [
-          for (final p in (data['presetCatalog'] as List?) ?? const [])
-            if (p is Map) Map<String, dynamic>.from(p),
-        ];
-        _preset = data['preset']?.toString();
-        _weakMax = int.tryParse('${data['weakMaxPerHour'] ?? ''}') ?? 3;
-        final choices = [
-          for (final n in (data['maxPerHourChoices'] as List?) ?? const [])
-            ?int.tryParse('$n'),
-        ];
-        if (choices.isNotEmpty) _maxChoices = choices;
         _counties = {
           for (final c in (prefs['counties'] as List?) ?? []) c.toString(),
         };
@@ -227,15 +200,6 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
   }
 
   Future<void> _persist() async {
-    if (_detailed) {
-      // Samma regler via vägen som också svarar med läget (Egna val o.s.v.).
-      return _saveRules({
-        'enabled': _enabled,
-        'types': _types,
-        'categories': _categories,
-        'minLevel': _minLevel,
-      });
-    }
     setState(() => _saving = true);
     try {
       // Spara reglerna -- län och kommuner ägs av huvudskärmens filter.
@@ -256,33 +220,6 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
           _error = netAwareText(e);
         });
       }
-    } finally {
-      if (mounted) setState(() => _saving = false);
-    }
-  }
-
-  /// Sparar ett läge eller detaljerade val och läser tillbaka det servern
-  /// sparade: den rättar själv det som säger emot sig (svagare tips + bara
-  /// starka blir medel och uppåt), och läget räknas där.
-  Future<void> _saveRules(
-    Map<String, dynamic> body, {
-    String done = 'Notisinställningar sparade',
-  }) async {
-    setState(() {
-      _saving = true;
-      _error = null;
-    });
-    try {
-      final res = await widget.api.saveNotifyRules(body);
-      final prefs = res['prefs'];
-      if (!mounted) return;
-      setState(() {
-        if (prefs is Map) _readRules(Map<String, dynamic>.from(prefs));
-        _preset = res['preset']?.toString();
-      });
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(done)));
-    } catch (e) {
-      if (mounted) setState(() => _error = netAwareText(e));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -349,15 +286,6 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
     final editable = _enabled && !_readOnly;
     final paused = _pausedUntil != null;
     return [
-      if (_detailed) ...[
-        _section('Välj läge'),
-        for (final p in _presetCatalog) _presetTile(p),
-        if (_preset == 'custom')
-          Text(
-            'Nu: egna val. Välj ett läge ovan för att börja om.',
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-          ),
-      ],
       _section('Pausa'),
       if (paused)
         Material(
@@ -463,130 +391,9 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
       Text(switch (_minLevel) {
         'high' => 'Bara när många sannolikt behöver taxi.',
         'medium' => 'Medel och starka. Inga svaga.',
-        _ =>
-          _weak
-              ? 'Allt, även svagare tips.'
-              : 'Allt som är värt en notis. Svaga tips väcker dig inte.',
+        _ => 'Allt som är värt en notis. Svaga tips väcker dig inte.',
       }, style: TextStyle(fontSize: 13, color: Colors.grey.shade700)),
-      if (_detailed) ...[
-        const SizedBox(height: 12),
-        Material(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          child: SwitchListTile(
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-            title: const Text(
-              'Även svagare tips',
-              style: TextStyle(fontWeight: FontWeight.w700),
-            ),
-            subtitle: Text(
-              'Fler notiser, till exempel förseningar. Högst $_weakMax i '
-              'timmen. Av från början.',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-            ),
-            value: _weak,
-            activeThumbColor: TbColors.ink,
-            activeTrackColor: TbColors.signal,
-            onChanged: editable && !_saving
-                ? (v) => _saveRules({'weak': v})
-                : null,
-          ),
-        ),
-        _section('Tysta timmar'),
-        _choices<({int from, int to})?>(
-          options: [
-            (null, 'Inga'),
-            ((from: 23, to: 6), '23–06'),
-            ((from: 1, to: 6), '01–06'),
-            if (_quiet != null &&
-                !({(from: 23, to: 6), (from: 1, to: 6)}.contains(_quiet)))
-              (_quiet, '${_hh(_quiet!.from)}–${_hh(_quiet!.to)}'),
-          ],
-          selected: _quiet,
-          enabled: editable,
-          onSelected: (v) => _saveRules({
-            'quietHours': v == null ? null : {'from': v.from, 'to': v.to},
-          }),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          'Inga notiser de timmarna, varje natt. Tipsen finns kvar i listan.',
-          style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-        ),
-        _section('Högst antal i timmen'),
-        _choices<int?>(
-          options: [
-            (null, 'Inget tak'),
-            for (final n in _maxChoices) (n, '$n'),
-            if (_maxPerHour != null && !_maxChoices.contains(_maxPerHour))
-              (_maxPerHour, '$_maxPerHour'),
-          ],
-          selected: _maxPerHour,
-          enabled: editable,
-          onSelected: (v) => _saveRules({'maxPerHour': v}),
-        ),
-      ],
     ];
-  }
-
-  static String _hh(int h) => h.toString().padLeft(2, '0');
-
-  /// Ett färdigt läge: en rad med en mening om vad det betyder.
-  Widget _presetTile(Map<String, dynamic> p) {
-    final id = p['id']?.toString() ?? '';
-    final selected = id == _preset;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Material(
-        color: selected ? TbColors.taxi.withValues(alpha: 0.22) : Colors.white,
-        borderRadius: BorderRadius.circular(12),
-        child: ListTile(
-          contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-          leading: Icon(
-            selected
-                ? Icons.radio_button_checked_rounded
-                : Icons.radio_button_unchecked_rounded,
-            color: TbColors.midnatt,
-          ),
-          title: Text(
-            p['label']?.toString() ?? '',
-            style: const TextStyle(fontWeight: FontWeight.w700),
-          ),
-          subtitle: Text(
-            p['help']?.toString() ?? '',
-            style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
-          ),
-          selected: selected,
-          onTap: _readOnly || _saving || selected
-              ? null
-              : () => _saveRules({
-                  'preset': id,
-                }, done: '${p['label'] ?? 'Läget'} är valt'),
-        ),
-      ),
-    );
-  }
-
-  Widget _choices<T>({
-    required List<(T, String)> options,
-    required T selected,
-    required bool enabled,
-    required void Function(T) onSelected,
-  }) {
-    return Wrap(
-      spacing: 8,
-      runSpacing: 8,
-      children: [
-        for (final (value, label) in options)
-          ChoiceChip(
-            label: Text(label),
-            selected: value == selected,
-            onSelected: enabled && !_saving && value != selected
-                ? (_) => onSelected(value)
-                : null,
-          ),
-      ],
-    );
   }
 
   @override
@@ -649,10 +456,9 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                     border: Border.all(color: TbColors.taxiDeep),
                   ),
                   child: const Text(
-                    'Den här telefonen är inte kopplad till en bil. Du kan se '
-                    'inställningarna men inte spara dem. Öppna Inställningar, '
-                    'tryck på bilen och välj "Kör själv med den här '
-                    'telefonen".',
+                    'Du har ingen aktiv plats på den här enheten just nu. Du kan '
+                    'se inställningarna men inte spara dem. Ta din plats under '
+                    'Inställningar för att kunna spara.',
                     style: TextStyle(
                       fontWeight: FontWeight.w700,
                       height: 1.35,

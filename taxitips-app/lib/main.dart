@@ -163,6 +163,21 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
     // Registrerades företaget just nu är nästa steg alltid länvalet -- oavsett
     // vad medlemskapsanropen nedan råkar svara under en ostadig uppkoppling.
     if (registered != null && registered['created'] == true) {
+      // Inget prov (t.ex. organisationsnumret har redan haft ett de senaste 24
+      // månaderna): visa serverns besked i stället för att skicka ägaren till
+      // länvalet, där "Provet är inte aktivt" annars möter hen utan förklaring.
+      if (registered['trial'] == null) {
+        final message = registered['message']?.toString();
+        _showLoginError(
+          (message != null && message.isNotEmpty)
+              ? message
+              : 'Kontot är skapat men provet kunde inte starta. Kontakta TaxiTips.',
+        );
+        return;
+      }
+      // Varje nytt företag får sin egen välkomst till provet, även om samma
+      // telefon sett den för ett tidigare företag -- nollställ innan länvalet.
+      await TrialWelcomeScreen.resetSeen();
       _membership = null;
       setState(() {
         _route = AppRoute.membershipCounty;

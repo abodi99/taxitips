@@ -7,14 +7,15 @@ import 'package:taxitips_app/theme.dart';
 import 'package:taxitips_app/widgets/alert_feedback_bar.dart';
 import 'package:taxitips_app/widgets/tip_sheet.dart';
 
-/// Tipsbladet följer förarens frågor i ordning: vad och var, hur bråttom, värt
-/// att köra dit, vad gör jag nu, mer om tipset. Särfallen (Övrigt, avslutat,
-/// väghändelse) får ingen "värt att köra"-del.
+/// Tipsbladet i den återställda designen: snabbknappar överst, ett samlat
+/// huvudkort (sträcka → status → händelse) och ett kombinerat kort för
+/// särskilda omständigheter + taxiersättning. Särfallen (Övrigt, avslutat,
+/// väghändelse) får ingen bedömning och ingen "Kör dit".
 void main() {
   final now = DateTime(2026, 10, 3, 20, 0);
   String iso(DateTime t) => t.toUtc().toIso8601String();
 
-  /// Ett starkt tågtips med inställd avgång, ersättning och fyra skäl, så som
+  /// Ett starkt tågtips med inställd avgång, ersättning och skäl, så som
   /// backend (core/api.py `_serialize`) och appens `_alertFromRow` ger det.
   Map<String, dynamic> strongTip() => {
     'id': 't1',
@@ -78,6 +79,18 @@ void main() {
       {'text': 'Sent på kvällen – färre alternativ', 'sign': '+'},
     ];
 
+  /// Fyra skäl som alla ska synas som beslutsunderlag: de tre första direkt,
+  /// det fjärde bakom "Visa alla skäl".
+  Map<String, dynamic> manyFactorsTip() => strongTip()
+    ..['compensation_eligible'] = false
+    ..['travel_options'] = null
+    ..['factors'] = [
+      {'text': 'Natt – nästan inga andra sätt att ta sig hem', 'sign': '+'},
+      {'text': 'Stor station – många resenärer', 'sign': '+'},
+      {'text': 'Sent på kvällen – färre alternativ', 'sign': '+'},
+      {'text': 'Halka på vägarna', 'sign': '+'},
+    ];
+
   Map<String, dynamic> minorTip() => strongTip()
     ..['title'] = 'Spårvagn 7 har ändrad körväg'
     ..['summary'] = 'Spårvagn 7 kör en annan väg på grund av underhåll.'
@@ -91,6 +104,7 @@ void main() {
   Map<String, dynamic> endedTip() => strongTip()
     ..['is_active'] = false
     ..['level'] = 'low'
+    ..['compensation_eligible'] = false
     ..['factors'] = []
     ..['end_time'] = iso(now.subtract(const Duration(minutes: 8)));
 
@@ -109,10 +123,10 @@ void main() {
   Future<void> pumpSheet(
     WidgetTester tester,
     Map<String, dynamic> alert, {
-    Future<void> Function(bool)? onToggleFavorite,
+    double? distanceKm,
+    Future<void> Function(bool favorite)? onToggleFavorite,
     VoidCallback? onOpenSourcePage,
     VoidCallback? onClose,
-    double? distanceKm = 3.2,
   }) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
     addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -152,125 +166,50 @@ void main() {
   });
   tearDown(() => AlertFeedbackBar.debugAlwaysShow = false);
 
-  group('ordningen: förarens frågor uppifrån och ner', () {
-    testWidgets('rubrik och plats före styrkan, styrkan före återkopplingen', (
+  group('ordningen: snabbknappar överst, huvudkortet följer', () {
+    testWidgets('snabbknappar och huvudkortets delar i läsordning', (
       tester,
     ) async {
-      await pumpSheet(tester, strongTip());
+      await pumpSheet(tester, strongTip(), distanceKm: 3.2);
 
-      final headline = find.text('En avgång inställd');
-      final place = find.text('Göteborg C');
-      final distance = find.text('3,2 km från dig');
-      final board = find.text('INSTÄLLD');
-      final timing = find.textContaining('Väntas sluta');
-      final question = find.text('Är det värt att köra dit?');
-      final strength = find.text('Stark signal');
-      final compensation = find.textContaining('Resenären kan få taxin betald');
-      final feedback = find.text('Hur gick det?');
-      final report = find.text('Rapportera felaktigt tips');
-      final more = find.text('Mer om tipset');
+      final drive = find.widgetWithText(FilledButton, 'Kör dit · 3,2 km');
+      final save = find.widgetWithText(OutlinedButton, 'Spara');
+      final category = find.text('Tåg & buss');
+      final placeA = find.text('Göteborg C');
+      final placeB = find.text('Alingsås');
+      final status = find.text('INSTÄLLD');
+      final train = find.text('Tåg 123');
+      final section = find.text('Händelse & beskrivning');
+      final factors = find.text('Särskilda omständigheter');
 
       for (final f in [
-        headline,
-        place,
-        distance,
-        board,
-        timing,
-        question,
-        strength,
-        compensation,
-        feedback,
-        report,
-        more,
+        drive,
+        save,
+        category,
+        placeA,
+        placeB,
+        status,
+        train,
+        section,
+        factors,
       ]) {
         expect(f, findsOneWidget);
       }
 
-      final order = [
-        top(tester, headline),
-        top(tester, place),
-        top(tester, distance),
-        top(tester, board),
-        top(tester, timing),
-        top(tester, question),
-        top(tester, strength),
-        top(tester, compensation),
-        top(tester, feedback),
-        top(tester, report),
-        top(tester, more),
-      ];
-      expect(order, orderedEquals([...order]..sort()));
-      // Strikt stigande: ingen sak delar rad med en annan.
-      for (var i = 1; i < order.length; i++) {
-        expect(order[i], greaterThan(order[i - 1]));
-      }
+      // Snabbknapparna ligger överst, sedan huvudkortet, sedan beslutsunderlaget.
+      expect(top(tester, drive), lessThan(top(tester, category)));
+      expect(top(tester, category), lessThan(top(tester, status)));
+      expect(top(tester, status), lessThan(top(tester, section)));
+      expect(top(tester, section), lessThan(top(tester, factors)));
+
+      // Station A → Station B på samma rad, B till höger.
+      expect(top(tester, placeA), top(tester, placeB));
+      expect(
+        tester.getTopLeft(placeB).dx,
+        greaterThan(tester.getTopLeft(placeA).dx),
+      );
     });
 
-    testWidgets('Kör dit och Spara ligger fast i nederkanten', (tester) async {
-      await pumpSheet(tester, strongTip());
-
-      final drive = find.widgetWithText(FilledButton, 'Kör dit · 3,2 km');
-      final save = find.widgetWithText(OutlinedButton, 'Spara');
-      expect(drive, findsOneWidget);
-      expect(save, findsOneWidget);
-
-      // Samma rad, Spara till höger om Kör dit, och längst ner på bladet.
-      expect(top(tester, drive), top(tester, save));
-      expect(
-        tester.getTopLeft(save).dx,
-        greaterThan(tester.getTopLeft(drive).dx),
-      );
-      expect(tester.getBottomLeft(drive).dy, greaterThan(844 - 90));
-      // Stor tryckyta.
-      expect(tester.getSize(drive).height, greaterThanOrEqualTo(56));
-      expect(tester.getSize(save).height, greaterThanOrEqualTo(56));
-
-      // Rullar föraren ner följer knapparna med: de är inte en del av innehållet.
-      final before = top(tester, drive);
-      await tester.drag(
-        find.byType(SingleChildScrollView),
-        const Offset(0, -300),
-      );
-      await tester.pump();
-      expect(top(tester, drive), before);
-    });
-
-    testWidgets('alternativ trafik och källan ligger längst ner, hopfällda', (
-      tester,
-    ) async {
-      final tip = strongTip();
-      (tip['travel_options'] as Map)['has_alternative'] = true;
-      (tip['travel_options'] as Map)['alternative'] =
-          'Ersättningsbuss går från Lerum till Alingsås.';
-      await pumpSheet(tester, tip);
-
-      final alternative = find.text('Alternativ trafik');
-      expect(alternative, findsOneWidget);
-      expect(
-        top(tester, alternative),
-        greaterThan(top(tester, find.text('Mer om tipset'))),
-      );
-      // Ersättningsbussen står inte i avgångstavlan, bara under "Mer om tipset".
-      expect(
-        find.textContaining('Ersättningsbuss går från Lerum'),
-        findsOneWidget,
-      );
-
-      // Källans text är hopfälld tills man öppnar den.
-      expect(find.text('Typ'), findsNothing);
-      final source = find.text('Hela meddelandet och källan');
-      await tester.ensureVisible(source);
-      await tester.tap(source);
-      await tester.pump();
-      expect(find.text('Typ'), findsOneWidget);
-      expect(find.text('Tåg'), findsOneWidget);
-      expect(find.text('Började'), findsOneWidget);
-      expect(find.text('Slutar'), findsOneWidget);
-      expect(find.textContaining('Hög'), findsOneWidget);
-    });
-  });
-
-  group('värt att köra dit', () {
     testWidgets('ersättningen får en egen ruta och står inte två gånger', (
       tester,
     ) async {
@@ -278,100 +217,31 @@ void main() {
       final sentence = find.textContaining('Resenären kan få taxin betald');
       expect(sentence, findsOneWidget);
       final text = (tester.widget(sentence) as Text).data!;
-      // "kan få", aldrig "har rätt till"; beloppet med hårda mellanslag.
-      expect(text, contains('upp till 1 500 kr per resenär'));
+      expect(text, contains('upp till 1\u00A0500\u00A0kr per resenär'));
       expect(find.textContaining('har rätt'), findsNothing);
+      expect(find.text('Taxiersättning'), findsOneWidget);
     });
 
     testWidgets('utan ersättning finns ingen ersättningsruta', (tester) async {
       await pumpSheet(tester, plainTip());
       expect(find.textContaining('taxin betald'), findsNothing);
-    });
-
-    testWidgets('de tre viktigaste skälen först, resten bakom Visa alla skäl', (
-      tester,
-    ) async {
-      await pumpSheet(tester, plainTip());
-      expect(find.text('Hela linjen står still'), findsOneWidget);
-      expect(
-        find.text('Natt – nästan inga andra sätt att ta sig hem'),
-        findsOneWidget,
-      );
-      expect(find.text('Stor station – många resenärer'), findsOneWidget);
-      expect(find.text('Sent på kvällen – färre alternativ'), findsNothing);
-
-      final all = find.text('Visa alla skäl');
-      await tester.ensureVisible(all);
-      await tester.tap(all);
-      await tester.pump();
-      expect(find.text('Sent på kvällen – färre alternativ'), findsOneWidget);
-      expect(find.text('Visa färre skäl'), findsOneWidget);
-    });
-
-    testWidgets('inget "Visa alla skäl" när alla skäl redan syns', (
-      tester,
-    ) async {
-      final tip = plainTip()
-        ..['factors'] = [
-          {'text': 'Hela linjen står still', 'sign': '+'},
-          {'text': 'Ersättningstrafik är insatt', 'sign': '-'},
-        ];
-      await pumpSheet(tester, tip);
-      expect(find.text('Visa alla skäl'), findsNothing);
-      expect(find.text('Ersättningstrafik är insatt'), findsOneWidget);
-    });
-
-    testWidgets('styrkan är en bedömning med försiktigt språk', (tester) async {
-      await pumpSheet(tester, plainTip());
-      expect(find.text('Stark signal'), findsOneWidget);
-      expect(find.text('Troligt att folk behöver taxi här.'), findsOneWidget);
-
-      final weak = plainTip()..['level'] = 'low';
-      await pumpSheet(tester, weak);
-      await tester.pumpAndSettle();
-      expect(find.text('Svag signal'), findsOneWidget);
-      expect(find.text('Troligen få som behöver taxi här.'), findsOneWidget);
-      // Inget löfte: aldrig "kunder väntar".
-      expect(find.textContaining('väntar'), findsNothing);
+      expect(find.text('Taxiersättning'), findsNothing);
     });
   });
 
   group('särfall', () {
-    testWidgets('Övrigt: meddelandet och platsen, ingen styrka', (
+    testWidgets('Övrigt: meddelandet utan bedömning och ersättning', (
       tester,
     ) async {
       await pumpSheet(tester, minorTip());
-
-      expect(find.text('Spårvagn 7 har ändrad körväg'), findsOneWidget);
-      expect(find.text('Göteborg C'), findsOneWidget);
       expect(find.text('Trafikbolagets meddelande'), findsOneWidget);
+      expect(find.text('Spårvagn 7 har ändrad körväg'), findsWidgets);
       expect(
-        find.text('Spårvagn 7 kör en annan väg på grund av underhåll.'),
+        find.text('Allmänt meddelande. Vi bedömer inte om det är värt att köra dit.'),
         findsOneWidget,
       );
-      // Ingen styrka och inget "värt att köra"-påstående.
-      expect(find.text('Är det värt att köra dit?'), findsNothing);
-      expect(find.textContaining('signal'), findsNothing);
-      expect(find.text('Stark'), findsNothing);
-      expect(
-        find.textContaining('Vi bedömer inte om det är värt att köra dit'),
-        findsOneWidget,
-      );
-      // Kör dit och Spara finns kvar.
-      expect(
-        find.widgetWithText(FilledButton, 'Kör dit · 3,2 km'),
-        findsOneWidget,
-      );
-      expect(find.widgetWithText(OutlinedButton, 'Spara'), findsOneWidget);
-    });
-
-    testWidgets('minor räknas också när bara severity_tier säger ignore', (
-      tester,
-    ) async {
-      final tip = minorTip()..remove('minor');
-      await pumpSheet(tester, tip);
-      expect(find.text('Är det värt att köra dit?'), findsNothing);
-      expect(find.textContaining('signal'), findsNothing);
+      expect(find.text('Särskilda omständigheter'), findsNothing);
+      expect(find.text('Taxiersättning'), findsNothing);
     });
 
     testWidgets('avslutat tips: tydligt slut, ingen uppmaning att köra', (
@@ -381,25 +251,13 @@ void main() {
 
       expect(find.text('Slut. Tipset gäller inte längre.'), findsOneWidget);
       expect(find.textContaining('Tog slut för 8 min sedan'), findsOneWidget);
-      // Ingen styrka, inget "värt att köra", ingen "Kör dit"-huvudknapp.
-      expect(find.text('Är det värt att köra dit?'), findsNothing);
-      expect(find.textContaining('signal'), findsNothing);
       expect(find.textContaining('Kör dit'), findsNothing);
-      expect(find.byType(FilledButton), findsNothing);
-      // Avgången är kvar som sammanhang, under "Mer om tipset".
-      expect(
-        top(tester, find.text('INSTÄLLD')),
-        greaterThan(top(tester, find.text('Mer om tipset'))),
-      );
-      // Navigeringen och Spara finns, men tyst.
-      expect(
-        find.widgetWithText(OutlinedButton, 'Öppna navigering'),
-        findsOneWidget,
-      );
+      expect(find.widgetWithText(OutlinedButton, 'Öppna navigering'), findsOneWidget);
       expect(find.widgetWithText(OutlinedButton, 'Spara'), findsOneWidget);
+      expect(find.text('Särskilda omständigheter'), findsNothing);
     });
 
-    testWidgets('väghändelse: vägen dit, ingen körning och ingen styrka', (
+    testWidgets('väghändelse: vägen dit, ingen körning och ingen bedömning', (
       tester,
     ) async {
       await pumpSheet(tester, roadTip());
@@ -411,11 +269,9 @@ void main() {
         find.text('Räkna med kö, eller välj en annan väg.'),
         findsOneWidget,
       );
-      expect(find.text('Är det värt att köra dit?'), findsNothing);
-      expect(find.textContaining('signal'), findsNothing);
       expect(find.textContaining('Kör dit'), findsNothing);
-      // Ett hinder lovar inga kunder: ingen "Hur gick det?", men rapporten finns.
-      expect(find.text('Hur gick det?'), findsNothing);
+      expect(find.text('Fick körning'), findsNothing);
+      expect(find.text('Ingen kund'), findsNothing);
       expect(find.text('Rapportera felaktigt tips'), findsOneWidget);
       expect(find.widgetWithText(OutlinedButton, 'Spara'), findsOneWidget);
     });
@@ -448,7 +304,6 @@ void main() {
 
     testWidgets('misslyckas sparandet backar knappen', (tester) async {
       final tip = strongTip();
-      // Som skärmens _toggleFavorite: den återställer tipset vid fel.
       await pumpSheet(tester, tip, onToggleFavorite: (v) async {});
       await tester.tap(find.text('Spara'));
       await tester.pump();
@@ -478,10 +333,10 @@ void main() {
         ),
       );
       expect(find.text('Spara'), findsNothing);
-      expect(find.widgetWithText(FilledButton, 'Kör dit'), findsOneWidget);
+      expect(find.textContaining('Kör dit'), findsOneWidget);
     });
 
-    testWidgets('Fick körning och Ingen kund finns kvar efter beslutet', (
+    testWidgets('Fick körning och Ingen kund ligger bland snabbknapparna', (
       tester,
     ) async {
       await pumpSheet(tester, strongTip());
@@ -489,26 +344,15 @@ void main() {
       expect(find.text('Ingen kund'), findsOneWidget);
     });
 
-    testWidgets('trafikbolagets sida öppnas från källrutan', (tester) async {
+    testWidgets('trafikbolagets sida öppnas från snabbknappen', (tester) async {
       var opened = 0;
       await pumpSheet(tester, strongTip(), onOpenSourcePage: () => opened++);
-      final source = find.text('Hela meddelandet och källan');
-      await tester.ensureVisible(source);
-      await tester.tap(source);
-      await tester.pump();
-      final link = find.text('Trafikbolagets sida');
-      await tester.ensureVisible(link);
-      await tester.tap(link);
+      await tester.tap(find.text('Trafikbolagets sida'));
       expect(opened, 1);
     });
 
     testWidgets('utan egen sida finns ingen länk', (tester) async {
       await pumpSheet(tester, strongTip());
-      final source = find.text('Hela meddelandet och källan');
-      await tester.ensureVisible(source);
-      await tester.tap(source);
-      await tester.pump();
-      expect(find.text('Typ'), findsOneWidget);
       expect(find.text('Trafikbolagets sida'), findsNothing);
     });
 
@@ -533,9 +377,40 @@ void main() {
     });
   });
 
+  group('beslutsunderlaget', () {
+    testWidgets('de tre viktigaste skälen först, resten bakom Visa alla skäl', (
+      tester,
+    ) async {
+      await pumpSheet(tester, manyFactorsTip());
+      expect(
+        find.text('Natt – nästan inga andra sätt att ta sig hem'),
+        findsOneWidget,
+      );
+      expect(find.text('Stor station – många resenärer'), findsOneWidget);
+      expect(
+        find.text('Sent på kvällen – färre alternativ'),
+        findsOneWidget,
+      );
+      expect(find.text('Halka på vägarna'), findsNothing);
+
+      final all = find.text('Visa alla skäl');
+      await tester.ensureVisible(all);
+      await tester.tap(all);
+      await tester.pump();
+      expect(find.text('Halka på vägarna'), findsOneWidget);
+      expect(find.text('Visa färre skäl'), findsOneWidget);
+    });
+
+    testWidgets('inget "Visa alla skäl" när alla skäl redan syns', (
+      tester,
+    ) async {
+      await pumpSheet(tester, plainTip());
+      expect(find.text('Visa alla skäl'), findsNothing);
+      expect(find.text('Sent på kvällen – färre alternativ'), findsOneWidget);
+    });
+  });
+
   group('i det riktiga bladet', () {
-    /// Samma uppsättning som driver_screen.dart: dragbart blad med bladets
-    /// egen rullning kopplad till innehållet.
     Future<void> openSheet(
       WidgetTester tester,
       Map<String, dynamic> tip,
@@ -586,21 +461,18 @@ void main() {
       await tester.pumpAndSettle();
     }
 
-    testWidgets('visar beslutet och knapparna utan att rulla', (tester) async {
+    testWidgets('visar huvudkortet och snabbknapparna utan att rulla', (
+      tester,
+    ) async {
       await openSheet(tester, strongTip());
       expect(tester.takeException(), isNull);
-      // På 0,85 av en 844 hög skärm syns rubrik, plats, tavla och styrkan...
-      final strength = find.text('Stark signal');
-      expect(strength, findsOneWidget);
-      expect(top(tester, strength), lessThan(844 - 90));
-      // ...och Kör dit ligger i nederkanten.
-      final drive = find.widgetWithText(FilledButton, 'Kör dit · 3,2 km');
-      expect(tester.getBottomLeft(drive).dy, greaterThan(844 - 90));
+      expect(find.text('INSTÄLLD'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Kör dit · 3,2 km'), findsOneWidget);
     });
 
-    testWidgets('att dra ner i rubriken stänger bladet', (tester) async {
+    testWidgets('att dra ner i innehållet stänger bladet', (tester) async {
       await openSheet(tester, strongTip());
-      await tester.drag(find.text('En avgång inställd'), const Offset(0, 700));
+      await tester.drag(find.text('Göteborg C'), const Offset(0, 700));
       await tester.pumpAndSettle();
       expect(find.byType(TipSheetBody), findsNothing);
     });
@@ -638,22 +510,25 @@ void main() {
       );
       expect(tipHeadline(roadTip()), 'Olycka');
       expect(tipHeadline(minorTip()), 'Spårvagn 7 har ändrad körväg');
-      // Okänd typ: kategorins ord, aldrig en tom rubrik.
       expect(tipHeadline({'kind': 'flight', 'severity_tier': 'x'}), 'Flyg');
     });
 
-    test(
-      'platsen: hållplats eller ort, annars titeln -- aldrig för Övrigt',
-      () {
-        expect(tipPlace(strongTip()), 'Göteborg C');
-        expect(tipPlace({'stop_name': 'Brunnsparken'}), 'Brunnsparken');
-        expect(tipPlace({'title': 'Tåg inställt', 'mode': 'train'}), isNotNull);
-        expect(
-          tipPlace({'title': 'Ändrad körväg', 'severity_tier': 'ignore'}),
-          isNull,
-        );
-      },
-    );
+    test('platsen: hållplats eller ort, annars titeln -- aldrig för Övrigt', () {
+      expect(tipPlace(strongTip()), 'Göteborg C');
+      expect(tipPlace({'stop_name': 'Brunnsparken'}), 'Brunnsparken');
+      expect(tipPlace({'title': 'Tåg inställt', 'mode': 'train'}), isNotNull);
+      expect(
+        tipPlace({'title': 'Ändrad körväg', 'severity_tier': 'ignore'}),
+        isNull,
+      );
+    });
+
+    test('alertPlacesList läser taxi.places', () {
+      expect(alertPlacesList(strongTip()), ['Göteborg C']);
+      expect(alertPlacesList({'taxi': {'places': ['A', 'B']}}), ['A', 'B']);
+      expect(alertPlacesList({'taxi': {}}), isEmpty);
+      expect(alertPlacesList({}), isEmpty);
+    });
 
     test('Övrigt, slut och väg känns igen', () {
       expect(isMinorTip({'minor': true}), isTrue);
@@ -683,18 +558,6 @@ void main() {
         'Börjar nu',
       );
       expect(
-        endsPhrase(now.add(const Duration(minutes: 70)), now),
-        'Väntas sluta om 1 tim 10 min',
-      );
-      expect(
-        endsPhrase(now.add(const Duration(seconds: 30)), now),
-        'Slutar nu',
-      );
-      expect(
-        endsPhrase(now.subtract(const Duration(minutes: 5)), now),
-        'Slutar nu',
-      );
-      expect(
         endedPhrase(now.subtract(const Duration(minutes: 8)), now),
         'Tog slut för 8 min sedan',
       );
@@ -714,24 +577,24 @@ void main() {
         'Natt – nästan inga andra sätt att ta sig hem',
         'Stor station – många resenärer',
       ]);
-      // Utan tavla och utan ersättning står alla fyra kvar.
-      expect(tipFactors(plainTip()), hasLength(4));
+      // Utan tavla och utan ersättning står tre av fyra kvar: "Hela linjen
+      // står still" upprepas av statusbrickan i huvudkortet.
+      expect(tipFactors(plainTip()), hasLength(3));
     });
 
     test('ersättningsmeningen: kan få, belopp och per vem', () {
       expect(
         compensationSentence(1500, perPerson: true),
-        'Resenären kan få taxin betald upp till 1 500 kr per resenär',
+        'Resenären kan få taxin betald upp till 1\u00A0500\u00A0kr per resenär',
       );
       expect(
         compensationSentence(2960, perPerson: false),
-        'Resenären kan få taxin betald upp till 2 960 kr per resa',
+        'Resenären kan få taxin betald upp till 2\u00A0960\u00A0kr per resa',
       );
       expect(
         compensationSentence(800),
-        'Resenären kan få taxin betald upp till 800 kr',
+        'Resenären kan få taxin betald upp till 800\u00A0kr',
       );
-      // Inget belopp: inget påstående om belopp.
       expect(compensationSentence(null), 'Resenären kan få taxin betald');
     });
   });

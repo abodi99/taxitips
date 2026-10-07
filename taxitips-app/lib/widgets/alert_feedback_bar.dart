@@ -44,6 +44,12 @@ class AlertFeedbackBar extends StatefulWidget {
   @visibleForTesting
   static bool debugAlwaysShow = false;
 
+  /// Samma grind som [AlertFeedbackBar.build] använder: knapparna hör hemma
+  /// bara när det finns en Django-backend som kan ta emot svaret. Supabase-
+  /// vägen har aldrig kunnat spara (tabellen har noll rader), och en död
+  /// knapp är värre än ingen.
+  static bool get shouldShow => TaxiTipsConfig.usesDjangoApi || debugAlwaysShow;
+
   @override
   State<AlertFeedbackBar> createState() => _AlertFeedbackBarState();
 }

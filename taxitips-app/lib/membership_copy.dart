@@ -38,11 +38,6 @@ const kNotInTrialNote = '$kNotInTrial $kMembershipOnWeb';
 const kBillingOnWeb =
     'Fakturor och medlemskap hanteras av företagets administratör på webben.';
 
-/// Kontouppgifterna (e-post och lösenord) ändras inte i appen. De sköts i
-/// kundportalen på webben -- en hänvisning, inte en länk eller en knapp.
-const kAccountOnPortal =
-    'E-post och lösenord hanteras i kundportalen på webben (portal.taxitips.se).';
-
 /// Rubrik på admin-genvägen till kundportalen (Inställningar → Företaget).
 /// Formulerad som kontohantering, inte köp.
 const kPortalAccountTitle = 'Hantera företagskonto';

@@ -30,7 +30,7 @@ class SettingsSectionHeader extends StatelessWidget {
   const SettingsSectionHeader({
     super.key,
     required this.title,
-    required this.description,
+    this.description = '',
   });
 
   final String title;
@@ -55,15 +55,17 @@ class SettingsSectionHeader extends StatelessWidget {
               ),
             ),
           ),
-          const SizedBox(height: 2),
-          Text(
-            description,
-            style: const TextStyle(
-              fontSize: 15,
-              height: 1.35,
-              color: TbColors.muted,
+          if (description.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text(
+              description,
+              style: const TextStyle(
+                fontSize: 15,
+                height: 1.35,
+                color: TbColors.muted,
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );

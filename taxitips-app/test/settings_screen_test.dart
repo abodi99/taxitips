@@ -54,7 +54,7 @@ void main() {
       onShowTour: () {},
     );
     for (final title in [
-      'Företaget och bilarna',
+      'Företaget',
       'Medlemskap',
       'Notiser',
       'Konto',
@@ -73,11 +73,7 @@ void main() {
       find.ancestor(of: portal, matching: find.byType(ListTile)),
       findsOneWidget,
     );
-    // E-post och lösenord redigeras inte i appen -- bara en hänvisning till
-    // kundportalen (portal.taxitips.se), ingen länk eller köpväg.
-    final accountNote = find.text(kAccountOnPortal);
-    await reveal(tester, accountNote);
-    expect(accountNote, findsOneWidget);
+    // E-post och lösenord redigeras inte i appen.
     expect(find.text('E-post'), findsNothing);
     expect(find.text('Lösenord'), findsNothing);
     // Ingen rå URL i UI, och ingen köpformulering.
@@ -91,7 +87,7 @@ void main() {
 
   testWidgets('föraren ser sina grupper, utan portalgenväg', (tester) async {
     await pumpSettings(tester, api: FakeDriverApi(), onShowTour: () {});
-    expect(find.text('Företaget och bilarna'), findsNothing);
+    expect(find.text('Företaget'), findsNothing);
     expect(find.text(kPortalAccountTitle), findsNothing);
     expect(find.text(kInvoicesOnWeb), findsNothing);
     for (final title in ['Medlemskap', 'Notiser', 'Konto', 'Hjälp']) {
@@ -131,6 +127,18 @@ void main() {
     await pumpSettings(tester, api: FakeDriverApi());
     await reveal(tester, find.text('Så fungerar Taxi Tips'));
     expect(find.text('Visa genomgången igen'), findsNothing);
+  });
+
+  testWidgets('"Dina län" öppnar länväljaren, inte notisfiltret', (
+    tester,
+  ) async {
+    await pumpSettings(tester, api: FakeDriverApi());
+    final county = find.text('Dina län');
+    await reveal(tester, county);
+    await tester.tap(county);
+    await tester.pumpAndSettle();
+    // MembershipCountyScreen:s egen rubrik -- beviset att länväljaren öppnats.
+    expect(find.text('Var vill du köra?'), findsOneWidget);
   });
 
   testWidgets('föraren kan inte koppla bort telefonen -- bara logga ut', (

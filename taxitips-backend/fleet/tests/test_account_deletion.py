@@ -23,6 +23,7 @@ from fleet import access, accounts, auth_admin, licensing, sessions, trials
 from fleet.models import (
     AuditEvent,
     ClientActivity,
+    CompanyProfile,
     DeviceApproval,
     DeviceCredential,
     DriverInvite,
@@ -90,18 +91,23 @@ class AccountDeletionTests(FleetTestCase):
         self.assertEqual(response.status_code, 401, response.content)
         self.assertEqual(response.json()["reason"], "login_required")
 
-    def test_the_sole_owner_with_a_renewing_membership_is_told_what_to_do(self):
+    def test_the_sole_owner_with_a_renewing_membership_pauses_and_archives(self):
+        # Ägaren raderar sitt konto: medlemskapet pausas (förnyelsen stoppas)
+        # och företaget arkiveras, i stället för att vägra (ägarens beslut
+        # 2026-10-07). Kontot tas bort och företaget lämnas inte föräldralöst.
         data = self.full_setup()
         owner = data["owner"].user_id
         with patch("fleet.auth_admin.delete_user") as delete_user:
             response = self.post(user_id=owner)
-        self.assertEqual(response.status_code, 409, response.content)
-        body = response.json()
-        self.assertEqual(body["reason"], "sole_owner_active_subscription")
-        self.assertIn("Avsluta företagskontot", body["message"])
-        self.assertIn(data["company"].name, body["message"])
-        delete_user.assert_not_called()
-        self.assertTrue(CompanyMember.objects.filter(user_id=owner).exists())
+        self.assertEqual(response.status_code, 200, response.content)
+        delete_user.assert_called_once()
+        self.assertFalse(
+            CompanyMember.objects.filter(user_id=owner, status="active").exists()
+        )
+        profile = CompanyProfile.objects.get(company_id=data["company"].id)
+        self.assertIsNotNone(profile.archived_at)
+        subscription = Subscription.objects.get(id=data["subscription"].id)
+        self.assertIsNotNone(subscription.renewal_stopped_at)
 
     def test_after_closing_the_company_account_the_owner_can_delete(self):
         data = self.full_setup()

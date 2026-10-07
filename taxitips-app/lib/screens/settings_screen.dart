@@ -10,9 +10,9 @@ import '../net_status.dart';
 import '../signal_kinds.dart' show countyShort;
 import '../theme.dart';
 import '../widgets/brand_icons.dart';
-import '../widgets/company_settings_panel.dart';
 import '../widgets/notify_prefs_sheet.dart';
 import '../widgets/settings_ui.dart';
+import 'membership_county_screen.dart';
 import 'onboarding_screen.dart';
 import 'support_chat_screen.dart';
 import 'trial_welcome_screen.dart';
@@ -41,7 +41,6 @@ class SettingsScreen extends StatefulWidget {
 class _SettingsScreenState extends State<SettingsScreen> {
   bool _loading = true;
   String? _error;
-  int _companyPanelEpoch = 0;
   int _supportUnread = 0;
 
   // Konto/medlemskap (kontobaserad vy, 2026-10): e-postadressen är en
@@ -91,7 +90,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     );
     try {
       if (_isOffice) {
-        // Företaget och bilarna läser panelen själv (GET /api/fleet/company).
+        // Företaget hanteras numera i kundportalen; appen visar bara
+        // e-postadressen som upplysning.
         _accountEmail = widget.api.currentUserEmail ?? '';
       }
       if (_isDevice) {
@@ -211,6 +211,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  /// Länväljaren (MembershipCountyScreen) byter medlemskapets län med
+  /// setMembershipCounty, eller skapar/bytar provets län med chooseTrialCounty
+  /// när kontot inte redan har en plats. Skärmen äger anropen; här tar vi bara
+  /// reda på vilken licens som redan är aktiv och läser om länen efteråt.
+  Future<void> _openCountyPicker() async {
+    final navigator = Navigator.of(context);
+    final licenseId = await _activeLicenseId();
+    if (!mounted) return;
+    await navigator.push<void>(
+      MaterialPageRoute(
+        builder: (_) => MembershipCountyScreen(
+          api: widget.api,
+          licenseId: licenseId,
+          onDone: () => navigator.pop(),
+        ),
+      ),
+    );
+    if (mounted) {
+      try {
+        await _loadCounties();
+      } catch (_) {}
+    }
+  }
+
+  /// Den aktiva licensens id, om kontot redan har ett medlemskap. Null när
+  /// kontot är nytt (länväljaren tar provvägen) eller anropet inte är inloggat.
+  Future<String?> _activeLicenseId() async {
+    try {
+      final data = await widget.api.memberships();
+      final active = data['activeLicenseId']?.toString();
+      if (active != null && active.isNotEmpty) return active;
+      final list = data['memberships'] as List? ?? const [];
+      if (list.isNotEmpty && list.first is Map) {
+        return Map<String, dynamic>.from(list.first as Map)['licenseId']?.toString();
+      }
+    } catch (_) {
+      // Ingen inloggning eller inget medlemskap -- se ovan.
+    }
+    return null;
+  }
+
   Future<void> _closeAccount() async {
     final ok = await showDialog<bool>(
       context: context,
@@ -238,7 +279,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
       final result = await widget.api.closeCompanyAccount();
       _showSnack(result['explanation']?.toString() ?? 'Kontot är avslutat.');
       await _load();
-      if (mounted) setState(() => _companyPanelEpoch++);
     } catch (e) {
       _showSnack(_cleanError(e), isError: true);
     }
@@ -251,20 +291,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // [_Footer]; något nytt som hör hemma sist (t.ex. radera kontot) läggs före
   // den, som en egen grupp.
 
-  /// Företaget och bilarna, för inloggad ägare/admin. Genväg till kundportalen
-  /// som kontohantering — inte en köpknapp (membership_copy.dart).
+  /// Företaget, för inloggad ägare/admin. Bilarna och förarna sköts numera i
+  /// kundportalen på webben, inte i appen -- här finns bara genvägen dit som
+  /// kontohantering, inte en köpknapp (membership_copy.dart).
   List<Widget> _companySection() => [
     const SettingsSectionHeader(
-      title: 'Företaget och bilarna',
-      description: 'Se företaget, lägg till bilar och bjud in förare.',
+      title: 'Företaget',
+      description: 'Hantera företagskontot i kundportalen på webben.',
     ),
-    CompanySettingsPanel(
-      key: ValueKey(_companyPanelEpoch),
-      api: widget.api,
-      // Nytt län: medlemskapsöversikten visar det direkt.
-      onChanged: () => unawaited(_loadCounties()),
-    ),
-    const SizedBox(height: 12),
     SettingsGroup(
       children: [
         SettingsNavRow(
@@ -295,8 +329,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (_licenseCountyLabels.isNotEmpty) ...[
         _CountiesOverview(
           licenseLabels: _licenseCountyLabels,
-          activeLabels: _activeCountyLabels,
-          onOpenFilter: _openNotify,
+          onOpenCountyPicker: _openCountyPicker,
         ),
         const SizedBox(height: 12),
       ],
@@ -344,14 +377,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
       return [
         const SettingsSectionHeader(
           title: 'Konto',
-          description: 'E-post och lösenord hanteras i kundportalen på webben.',
         ),
         SettingsGroup(
           children: [
-            const SettingsNoteRow(
-              icon: Icons.open_in_browser,
-              text: kAccountOnPortal,
-            ),
             if (widget.onLogout != null)
               SettingsNavRow(
                 icon: Icons.logout,
@@ -405,7 +433,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             iconColor: TbColors.taxiDeep,
             title: 'Så fungerar Taxi Tips',
             subtitle: _isOffice
-                ? 'Provet, bilar och förare'
+                ? 'Provet, medlemskap och förare'
                 : 'Fyra korta sidor',
             onTap: () => _isOffice
                 ? TrialWelcomeScreen.openFromSettings(context, widget.api)
@@ -455,7 +483,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
               color: TbColors.taxiDeep,
               onRefresh: () async {
                 await _load();
-                if (mounted) setState(() => _companyPanelEpoch++);
               },
               child: ListView(
                 padding: EdgeInsets.fromLTRB(
@@ -516,10 +543,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
         title: const Text('Radera ditt konto?'),
         content: Text(
           _isOffice
-              ? 'Ditt konto och din inloggning tas bort för gott. Telefoner du '
-                    'kört med kopplas från bilen. Är du ensam ägare avslutas ett '
+              ? 'Ditt konto och din inloggning tas bort för gott. Enheter du '
+                    'kört med kopplas från medlemskapet. Är du ensam ägare avslutas ett '
                     'pågående prov. Det går inte att ångra.'
-              : 'Ditt förarkonto tas bort och telefonen kopplas från bilen. '
+              : 'Ditt förarkonto tas bort och enheten kopplas från din plats. '
                     'Din chef kan bjuda in dig igen. Det går inte att ångra.',
         ),
         actions: [
@@ -625,7 +652,7 @@ class _AccountDeletionFooter extends StatelessWidget {
           TextButton(
             onPressed: onDelete,
             style: TextButton.styleFrom(
-              foregroundColor: TbColors.danger,
+              foregroundColor: TbColors.muted,
               minimumSize: const Size(0, 44),
               textStyle: const TextStyle(fontSize: 14),
             ),
@@ -680,29 +707,27 @@ class _Footer extends StatelessWidget {
           link(
             'Avsluta företagskontot',
             onCloseAccount!,
-            color: TbColors.danger,
+            color: TbColors.muted,
           ),
       ],
     );
   }
 }
 
-/// Översikt över medlemskapets län — det man har rätt till, och om filtret
-/// smalnar av.
+/// Översikt över medlemskapets län -- de län platsen omfattar. Ett tryck
+/// öppnar länväljaren (MembershipCountyScreen), som byter län på medlemskapet.
+/// Notisfiltret nås i stället via "Notiser"-raden.
 class _CountiesOverview extends StatelessWidget {
   const _CountiesOverview({
     required this.licenseLabels,
-    required this.activeLabels,
-    required this.onOpenFilter,
+    required this.onOpenCountyPicker,
   });
 
   final List<String> licenseLabels;
-  final List<String> activeLabels;
-  final VoidCallback onOpenFilter;
+  final VoidCallback onOpenCountyPicker;
 
   @override
   Widget build(BuildContext context) {
-    final narrowed = activeLabels.isNotEmpty;
     return Material(
       color: Colors.white,
       shape: RoundedRectangleBorder(
@@ -711,7 +736,7 @@ class _CountiesOverview extends StatelessWidget {
       ),
       clipBehavior: Clip.antiAlias,
       child: InkWell(
-        onTap: onOpenFilter,
+        onTap: onOpenCountyPicker,
         child: Padding(
           padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
           child: Column(
@@ -723,7 +748,7 @@ class _CountiesOverview extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      narrowed ? 'Körområde' : 'Dina län',
+                      'Dina län',
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 16,
@@ -752,19 +777,15 @@ class _CountiesOverview extends StatelessWidget {
                         color: TbColors.ljusgra,
                         borderRadius: BorderRadius.circular(999),
                         border: Border.all(
-                          color: narrowed && !activeLabels.contains(name)
-                              ? TbColors.line
-                              : TbColors.guld.withValues(alpha: 0.55),
+                          color: TbColors.guld.withValues(alpha: 0.55),
                         ),
                       ),
                       child: Text(
                         name,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 14,
-                          color: narrowed && !activeLabels.contains(name)
-                              ? TbColors.muted
-                              : TbColors.ink,
+                          color: TbColors.ink,
                         ),
                       ),
                     ),
@@ -772,11 +793,9 @@ class _CountiesOverview extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                narrowed
-                    ? 'Filtret visar ${activeLabels.join(', ')}. Tryck för att ändra.'
-                    : licenseLabels.length == 1
-                    ? 'Tips och notiser i det här länet.'
-                    : 'Tips och notiser i alla dina län. Tryck för att begränsa.',
+                licenseLabels.length == 1
+                    ? 'Tips och notiser i det här länet. Tryck för att byta.'
+                    : 'Tips och notiser i alla dina län. Tryck för att byta.',
                 style: const TextStyle(
                   fontSize: 13,
                   color: TbColors.muted,

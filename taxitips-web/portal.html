@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Taxi Tips — Kundportal</title>
-  <meta name="description" content="Hantera bilar, telefoner och abonnemang." />
+  <meta name="description" content="Hantera medlemskap, konton och abonnemang." />
   <meta name="robots" content="noindex" />
   <link rel="icon" href="/favicon.ico" sizes="any" />
   <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
@@ -75,13 +75,13 @@
 
       <aside class="auth-panel" aria-label="Om kundportalen">
         <p class="auth-panel-title">Kundportalen</p>
-        <p class="auth-panel-lead">Här sköter kontoret bilarna, förarnas
-          telefoner och abonnemanget.</p>
+        <p class="auth-panel-lead">Här sköter kontoret medlemskapen, kontona
+          och abonnemanget.</p>
         <ul class="auth-points">
-          <li data-icon="drivers"><strong>Bilar och förare</strong>
-            <span>Bjud in förare med e-post. De loggar in i appen.</span></li>
-          <li data-icon="map-pin"><strong>Län per bil</strong>
-            <span>Varje bil har ett baslän. Extra län läggs till under Bilar.</span></li>
+          <li data-icon="drivers"><strong>Medlemskap och konton</strong>
+            <span>Bjud in konton med e-post. De loggar in i appen.</span></li>
+          <li data-icon="map-pin"><strong>Län per medlemskap</strong>
+            <span>Varje medlemskap har ett baslän. Extra län läggs till under Medlemskap.</span></li>
           <li data-icon="office"><strong>Abonnemang och fakturor</strong>
             <span>Provet, medlemskapet, kortet och kvittona på ett ställe.</span></li>
         </ul>
@@ -89,13 +89,13 @@
       </aside>
     </section>
 
-    <!-- Portalen. Primära flikar: Översikt → Bilar → Abonnemang.
+    <!-- Portalen. Primära flikar: Översikt → Medlemskap → Abonnemang.
          Företag (och övrigt) ligger under Mer, så att nyckelvägen syns först. -->
     <div id="app" hidden>
       <nav class="tabs" aria-label="Portalens vyer">
         <div class="tabs-primary" role="tablist">
           <button class="tab" role="tab" data-view="oversikt" aria-selected="true">Hem</button>
-          <button class="tab" role="tab" data-view="bilar" aria-selected="false">Bilar</button>
+          <button class="tab" role="tab" data-view="medlemskap" aria-selected="false">Medlemskap</button>
           <button class="tab" role="tab" data-view="abonnemang" aria-selected="false">Abonnemang</button>
         </div>
         <div class="tab-more">

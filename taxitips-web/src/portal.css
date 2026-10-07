@@ -1497,3 +1497,61 @@ th {
 .member.is-urgent .member-body {
   border-top: 1px solid var(--line);
 }
+
+/* --- Medlemskap (kontobaserad modell) ------------------------------------
+   Översiktskort, inbjudningskort och ett kort per medlemskap. Samma mönster
+   som medlemskortet under Abonnemang: luft, tunna linjer, inga kort i kortet. */
+
+.membership-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem 1rem;
+  margin-bottom: 0.75rem;
+}
+.membership-head h2 {
+  margin: 0;
+  font-size: 1.15rem;
+}
+.membership-head .pill {
+  flex: none;
+}
+.membership-facts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  gap: 0.75rem 1rem;
+  margin: 0 0 0.75rem;
+}
+.membership-facts > div {
+  display: grid;
+  gap: 0.1rem;
+}
+.membership-facts dt {
+  font-size: 0.82rem;
+  color: var(--ink-soft);
+}
+.membership-facts dd {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+}
+.membership-facts dd .pill {
+  margin-left: 0.35rem;
+  font-weight: 600;
+  font-size: 0.8rem;
+}
+.membership-managed {
+  margin: 0.75rem 0 0;
+  font-weight: 600;
+}
+.membership-card {
+  border-left: 4px solid var(--line);
+}
+.membership-card.is-trial {
+  border-left-color: var(--guld);
+}
+.membership-card .btn-row {
+  margin: 0 0 0.75rem;
+}

@@ -117,36 +117,6 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('lägena visas med en mening var, och ett tryck väljer', (
-    tester,
-  ) async {
-    final api = _FakeApi();
-    await pump(tester, api);
-    expect(find.text('Rekommenderat'), findsOneWidget);
-    expect(find.text('Bara starka tips.'), findsOneWidget);
-    expect(find.text('Tyst'), findsOneWidget);
-
-    await tester.tap(find.text('Allt i mina län'));
-    await tester.pumpAndSettle();
-    expect(api.sent.last, {'preset': 'everything'});
-  });
-
-  testWidgets('svagare tips är av från början och ett eget val', (
-    tester,
-  ) async {
-    final api = _FakeApi();
-    await pump(tester, api);
-    final weak = find.widgetWithText(SwitchListTile, 'Även svagare tips');
-    expect(weak, findsOneWidget);
-    expect(tester.widget<SwitchListTile>(weak).value, isFalse);
-
-    await tester.tap(weak);
-    await tester.pumpAndSettle();
-    expect(api.sent.last, {'weak': true});
-    expect(tester.widget<SwitchListTile>(weak).value, isTrue);
-    expect(find.textContaining('egna val'), findsOneWidget);
-  });
-
   testWidgets('en låst kategori i provet visas neutralt, utan köpväg', (
     tester,
   ) async {

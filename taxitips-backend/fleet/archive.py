@@ -151,12 +151,12 @@ def archived_ids() -> set:
     )
 
 
-def archive(company_id, *, actor_user_id, now=None) -> None:
+def archive(company_id, *, actor_user_id, force: bool = False, now=None) -> None:
     now = now or timezone.now()
     current = state(company_id, now)
     if current.archived_at:
         return
-    if not current.can_archive:
+    if not current.can_archive and not force:
         raise ArchiveError("cannot_archive", current.archive_blocker)
     profile, _ = CompanyProfile.objects.get_or_create(company_id=company_id)
     CompanyProfile.objects.filter(company_id=profile.company_id).update(
