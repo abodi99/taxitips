@@ -15,8 +15,8 @@ from django.utils import timezone
 from billing.models import Company, CompanyMember, Device
 from fleet import archive, commerce, orders, sessions, trials
 from fleet.models import (
-    AuditEvent, CompanyProfile, License, Order, SalesFollowUp, Subscription, Trial, Vehicle,
-    VehicleSession,
+    AuditEvent, CompanyProfile, DriverInvite, License, Order, SalesFollowUp, Subscription, Trial,
+    Vehicle, VehicleSession,
 )
 from fleet.tests.base import FleetTestCase
 
@@ -119,6 +119,37 @@ class ArchiveTests(FleetTestCase):
         self.assertEqual(
             {call.args[0] for call in delete_user.call_args_list},
             {str(self.owner.user_id), str(colleague.user_id)},
+        )
+        self.assertEqual(response.json()["deleted"]["inloggningar"], 2)
+
+    @override_settings(
+        SUPABASE_SERVICE_ROLE_KEY="test-service-role", SUPABASE_URL="http://supabase.test",
+    )
+    def test_delete_removes_driver_auth_accounts_too(self):
+        # Förarna som bjudits in med e-post är inte company_members, men deras
+        # Auth-konton hör ändå till bolaget och ska bort med det.
+        driver_user = uuid.uuid4()
+        DriverInvite.objects.create(
+            company_id=self.company.id,
+            license=self.license,
+            vehicle=Vehicle.objects.get(company_id=self.company.id),
+            email="forare@example.test",
+            status=DriverInvite.Status.CONSUMED,
+            expires_at=timezone.now() + timedelta(days=7),
+            auth_user_id=driver_user,
+            consumed_at=timezone.now(),
+            consumed_by_user=driver_user,
+        )
+        self.terminate()
+        archive.archive(self.company.id, actor_user_id=self.staff)
+        with mock.patch("fleet.auth_admin.delete_user") as delete_user:
+            response = self.post(
+                f"/api/admin/companies/{self.company.id}/delete", {"confirmName": "Avslutad AB"}
+            )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertIn(
+            str(driver_user),
+            {call.args[0] for call in delete_user.call_args_list},
         )
         self.assertEqual(response.json()["deleted"]["inloggningar"], 2)
 

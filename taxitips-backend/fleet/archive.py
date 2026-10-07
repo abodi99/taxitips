@@ -49,6 +49,7 @@ from fleet.models import (
     CouponRedemption,
     DeviceApproval,
     DeviceCredential,
+    DriverInvite,
     JoinRequest,
     License,
     LicenseCounty,
@@ -175,9 +176,10 @@ def unarchive(company_id, *, actor_user_id) -> None:
     )
 
 
-def _delete_auth_accounts(member_ids) -> int:
+def _delete_auth_accounts(user_ids) -> int:
     """
-    Raderar bolagets medlemskonton i Supabase Auth.
+    Raderar bolagets konton i Supabase Auth -- medlemmarna och förarna som
+    bjudits in med e-post.
 
     Kontot hör till bolaget: lämnas det kvar kunde det fortsätta logga in, och
     e-postadressen gick inte att registrera på nytt -- nästa kund med samma
@@ -186,7 +188,7 @@ def _delete_auth_accounts(member_ids) -> int:
     och ett konto utan medlemskap får ändå ingen företagsdata). Nyckeln saknas
     bara i lokal utveckling och i testerna; då loggas det och inget mer händer.
     """
-    users = [str(u) for u in member_ids if u]
+    users = [str(u) for u in user_ids if u]
     if not users:
         return 0
     if not auth_admin.configured():
@@ -225,6 +227,14 @@ def delete(company_id, *, actor_user_id, confirm_name: str, now=None) -> dict:
     member_ids = list(
         CompanyMember.objects.filter(company_id=company_id).values_list("user_id", flat=True)
     )
+    # Förarna som bjudits in med e-post är inte medlemmar i bolaget, men deras
+    # Auth-konton hör ändå hit och ska bort med bolaget. consumed_by_user är
+    # kontot som löste in inbjudan, auth_user_id kontot som länken skapade.
+    driver_user_ids: set[str] = set()
+    for field in ("consumed_by_user", "auth_user_id"):
+        for uid in DriverInvite.objects.filter(company_id=company_id).values_list(field, flat=True):
+            if uid:
+                driver_user_ids.add(str(uid))
     counts: dict[str, int] = {}
 
     def gone(label, queryset):
@@ -283,7 +293,9 @@ def delete(company_id, *, actor_user_id, confirm_name: str, now=None) -> dict:
 
     # Kontona i Supabase Auth, sist i raden av raderingar: ett fel där rullar
     # inte tillbaka bolagsraderingen -- se _delete_auth_accounts.
-    counts["inloggningar"] = _delete_auth_accounts(member_ids)
+    counts["inloggningar"] = _delete_auth_accounts(
+        sorted({str(u) for u in member_ids if u} | driver_user_ids)
+    )
 
     audit.record(
         "company_deleted", company_id=company_id, actor_user_id=actor_user_id,
