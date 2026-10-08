@@ -205,7 +205,8 @@ class EnsureTests(TestCase):
 
     def test_the_push_reads_the_brief_when_it_exists(self):
         o = herrljunga()
-        with self.answer("Västtåg inställt Herrljunga C 11:33 – nästa tåg 13:33"):
+        line = "Västtåg inställt Herrljunga C 11:33 – nästa tåg 13:33"
+        with patch.object(ai_client, "transport", lambda m, p, s, t: (s(text=line), 400, 30)):
             briefs.run()
         o.refresh_from_db()
         body = notify.push_body(o)

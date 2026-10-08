@@ -166,6 +166,10 @@ def windows_for(company_ids, now=None, *, companies=None, subscriptions=None, bl
     spärr + beviljande + abonnemang + några provfrågor per rad, och sidan
     stod på "Laddar …" tills gunicorn-arbetarna släppte. Här läses samma
     tabeller en gång.
+
+    Uppslagen nycklas på `str(id)`: förarvägen skickar bolagets id som text,
+    adminwebben som UUID, och databasen svarar med UUID. Svaret nycklas på id:t
+    så som anroparen skickade det.
     """
     now = now or timezone.now()
     ids = [cid for cid in company_ids if cid is not None]
@@ -189,26 +193,29 @@ def windows_for(company_ids, now=None, *, companies=None, subscriptions=None, bl
             row.company_id: row
             for row in Subscription.objects.filter(company_id__in=ids)
         }
+    subscriptions = {str(key): row for key, row in subscriptions.items()}
     trials_by = {}
     for trial in Trial.objects.filter(company_id__in=ids).order_by("-created_at"):
-        trials_by.setdefault(trial.company_id, []).append(trial)
+        trials_by.setdefault(str(trial.company_id), []).append(trial)
     if companies is None:
         companies = {row.id: row for row in Company.objects.filter(id__in=ids)}
+    companies = {str(key): row for key, row in companies.items()}
 
     out = {}
     for cid in ids:
-        if str(cid) in blocked:
+        key = str(cid)
+        if key in blocked:
             out[cid] = Window(False, "company_suspended")
             continue
-        grant = grant_by.get(cid)
+        grant = grant_by.get(key)
         if grant is not None:
             out[cid] = Window(True, grants.WINDOW_REASON, grant.ends_at)
             continue
         out[cid] = _subscription_window(
             cid, now,
-            subscription=subscriptions.get(cid),
-            trials=trials_by.get(cid, []),
-            company=companies.get(cid),
+            subscription=subscriptions.get(key),
+            trials=trials_by.get(key, []),
+            company=companies.get(key),
         )
     return out
 

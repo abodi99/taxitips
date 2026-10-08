@@ -91,7 +91,7 @@ def _safe_grant_list(qs) -> list:
 
 
 def active_grants_for(company_ids, now=None) -> dict:
-    """Aktiva beviljanden, ett per bolag, lästa i en fråga."""
+    """Aktiva beviljanden, ett per bolag, lästa i en fråga. Nycklade på `str(company_id)`."""
     now = now or timezone.now()
     ids = [cid for cid in company_ids if cid]
     if not ids:
@@ -103,10 +103,11 @@ def active_grants_for(company_ids, now=None) -> dict:
     )
     out = {}
     for grant in rows:
-        if grant.company_id in out:
+        key = str(grant.company_id)
+        if key in out:
             continue
         if _is_active(grant, now):
-            out[grant.company_id] = grant
+            out[key] = grant
     return out
 
 
@@ -120,7 +121,7 @@ def active_grant(company_id, now=None) -> MembershipGrant | None:
     """
     if not company_id:
         return None
-    return active_grants_for([company_id], now).get(company_id)
+    return active_grants_for([company_id], now).get(str(company_id))
 
 
 def open_grants(company_id) -> list[MembershipGrant]:
@@ -149,11 +150,11 @@ def grant_license_ids(company_id) -> set[str]:
     """
     if not company_id:
         return set()
-    return grant_license_ids_by_company([company_id]).get(company_id, set())
+    return grant_license_ids_by_company([company_id]).get(str(company_id), set())
 
 
 def grant_license_ids_by_company(company_ids) -> dict:
-    """Samma som `grant_license_ids`, för många bolag."""
+    """Samma som `grant_license_ids`, för många bolag. Nycklade på `str(company_id)`."""
     ids = [cid for cid in company_ids if cid]
     if not ids:
         return {}
@@ -166,7 +167,7 @@ def grant_license_ids_by_company(company_ids) -> dict:
     for company_id, license_id in rows:
         if not license_id:
             continue
-        out.setdefault(company_id, set()).add(str(license_id))
+        out.setdefault(str(company_id), set()).add(str(license_id))
     return out
 
 

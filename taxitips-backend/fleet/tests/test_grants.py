@@ -90,6 +90,16 @@ class GrantTests(FleetTestCase):
         self.assertTrue(window.ok)
         self.assertEqual(window.reason, "free_grant")
 
+    def test_the_window_is_the_same_for_a_text_id_and_a_uuid(self):
+        # Förarvägen skickar bolagets id som text; databasen svarar med UUID.
+        self.make_subscription(self.company, days_left=-5, status=SubscriptionStatus.PAST_DUE)
+        self.grant(user_id=uuid.uuid4())
+        as_uuid = access.company_window(self.company.id)
+        as_text = access.company_window(str(self.company.id))
+        self.assertEqual((as_text.ok, as_text.reason), (as_uuid.ok, as_uuid.reason))
+        self.assertEqual(as_text.reason, "free_grant")
+        self.assertEqual(grants.grant_license_ids(str(self.company.id)), grants.grant_license_ids(self.company.id))
+
     def test_grant_gives_all_counties_and_full_features(self):
         from fleet import features
 

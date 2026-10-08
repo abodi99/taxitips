@@ -6,6 +6,7 @@ en störning för att AI:n inte svarar. Transporten är utbytt -- inget nät.
 from __future__ import annotations
 
 import json
+from collections import Counter
 from unittest.mock import patch
 
 from django.test import TestCase, override_settings
@@ -56,7 +57,10 @@ class AiGateTests(SupabaseCompanyMixin, TestCase):
             self.sent.append(title)
             return {"ok": True}
 
-        with patch.object(notify, "_devices", return_value=[FakeDevice()]):
+        # Förarbeskedet (core/briefs.ensure) anropar också modellen i pushcykeln;
+        # här räknas bara grindens anrop. Beskedet har egna tester i test_briefs.
+        with patch.object(notify, "_devices", return_value=[FakeDevice()]), \
+                patch("core.briefs.ensure", return_value=Counter()):
             return notify.run_push_cycle(sender=sender)
 
     def test_a_stated_next_departure_stops_the_push(self):
