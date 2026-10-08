@@ -546,3 +546,55 @@ class TravelOptionsDepartureTests(TestCase):
         self.assertEqual(out["departure"]["status"], "delayed")
         self.assertEqual(out["departure"]["new_clock"], "21:14")
         self.assertIsNone(out["gap_minutes"])
+
+
+class VanishedTests(TestCase):
+    """
+    Hämtningen ser bara avgångar vars annonserade tid ligger framåt. Ett tåg som
+    passerat sin avgångstid saknas därför i nästa runda -- utan att störningen är
+    över. Mätt 2026-10-08: 3 711 tips avslutades i snitt 0,7 min efter avgången,
+    45-59 min före sin egen sluttid.
+    """
+
+    def tip(self, external_id, departure_at, end_time, kind="transit"):
+        from core.models import Opportunity, SeverityTier
+
+        return Opportunity.objects.create(
+            external_id=external_id, kind=kind, mode="train",
+            severity_tier=SeverityTier.LINE_PAUSED, level="high", title="Inställt",
+            summary="", demand_score=75, region="rail",
+            start_time=departure_at - timedelta(minutes=90),
+            end_time=end_time, departure_at=departure_at,
+        )
+
+    def close(self, current_ids, now):
+        from core.management.commands.poll_rail import close_vanished
+
+        return close_vanished(current_ids, now)
+
+    def test_a_departed_train_keeps_its_own_end(self):
+        planned_end = NOW + timedelta(minutes=50)
+        departed = self.tip("tvr:Mot:8780:a", NOW - timedelta(minutes=3), planned_end)
+        self.assertEqual(self.close([], NOW), 0)
+        departed.refresh_from_db()
+        self.assertEqual((departed.end_time, departed.expired_reason), (planned_end, None))
+
+    def test_a_train_missing_before_its_departure_is_closed(self):
+        upcoming = self.tip("tvr:Mot:8782:b", NOW + timedelta(minutes=40), NOW + timedelta(minutes=100))
+        self.assertEqual(self.close([], NOW), 1)
+        upcoming.refresh_from_db()
+        self.assertEqual((upcoming.end_time, upcoming.expired_reason), (NOW, "source_removed"))
+
+    def test_a_train_still_in_the_fetch_is_not_touched(self):
+        kept = self.tip("tvr:Mot:8784:c", NOW + timedelta(minutes=40), NOW + timedelta(minutes=100))
+        self.assertEqual(self.close(["tvr:Mot:8784:c"], NOW), 0)
+        kept.refresh_from_db()
+        self.assertIsNone(kept.expired_reason)
+
+    def test_the_clock_margin_protects_a_departure_right_now(self):
+        self.tip("tvr:Mot:8786:d", NOW + timedelta(seconds=60), NOW + timedelta(minutes=70))
+        self.assertEqual(self.close([], NOW), 0)
+
+    def test_other_sources_are_not_touched(self):
+        self.tip("sl:123", NOW + timedelta(minutes=40), NOW + timedelta(minutes=100))
+        self.assertEqual(self.close([], NOW), 0)

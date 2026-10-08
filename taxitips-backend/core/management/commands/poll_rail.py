@@ -7,20 +7,42 @@ Kör så här:
 """
 
 import json
+from datetime import timedelta
 
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from django.db.models import Q
 from django.utils import timezone
 
 from core.alternatives import route_note
 
 from core.health import polling
-from core.models import SourceStatus, Station
+from core.models import Opportunity, SourceStatus, Station
 from core.repository import upsert_opportunities, upsert_source_events
 from core.scoring import classify, taxi_outcome
 from core.sources import resrobot
 from core.sources.smhi import cached_region_weather
 from core.sources.trafikverket_rail import TrafikverketRail
+
+# Frågan till Trafikverket ser bara avgångar vars ANNONSERADE tid ligger framåt
+# (`AdvertisedTimeAtLocation > $now`). Ett tåg vars avgångstid passerat saknas
+# därför i nästa hämtning utan att störningen är över: de som står kvar efter ett
+# inställt eller försenat tåg är just det tipset handlar om, och tipset lever till
+# sin egen sluttid (trafikverket_rail.platform_end). Bara en avgång som fortfarande
+# borde ha kommit med i hämtningen och saknas har försvunnit ur källan.
+# Marginalen täcker klockskillnaden mot Trafikverkets $now.
+DEPARTED_MARGIN = timedelta(minutes=2)
+
+
+def close_vanished(current_ids: list[str], now) -> int:
+    """Avslutar järnvägstips vars avgång ännu inte gått men som saknas i hämtningen."""
+    return (
+        Opportunity.objects.filter(kind="transit", external_id__startswith="tvr:")
+        .filter(Q(end_time__gt=now) | Q(end_time__isnull=True))
+        .filter(Q(departure_at__isnull=True) | Q(departure_at__gt=now + DEPARTED_MARGIN))
+        .exclude(external_id__in=current_ids)
+        .update(end_time=now, expired_reason="source_removed", updated_at=now)
+    )
 
 
 class Command(BaseCommand):
@@ -189,17 +211,7 @@ class Command(BaseCommand):
         ])
 
         if client.last_stats.get("complete") is not False:
-            from django.db.models import Q
-            from core.models import Opportunity
-
-            now = timezone.now()
-            current_ids = [a.external_id for a in alerts]
-            (
-                Opportunity.objects.filter(kind="transit", external_id__startswith="tvr:")
-                .filter(Q(end_time__gt=now) | Q(end_time__isnull=True))
-                .exclude(external_id__in=current_ids)
-                .update(end_time=now, expired_reason="source_removed", updated_at=now)
-            )
+            close_vanished([a.external_id for a in alerts], timezone.now())
 
         status.written = written
         spread = sorted({o.score for _a, _r, _c, o in assessed}, reverse=True)
