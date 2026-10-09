@@ -106,7 +106,8 @@ def _build_predicthq(raw_event: dict) -> dict | None:
     end_at, basis, note = timing.finish(
         row["start_at"], source_end, row["time_known"], category, row["multi_day"], predicted_end,
     )
-    row.update(category=category, end_at=end_at, end_basis=basis, end_note=note, hidden_reason="", region=_region(row))
+    hidden = timing.crowd_hidden_reason(row["segment"], row.get("attendance"), row.get("local_rank"))
+    row.update(category=category, end_at=end_at, end_basis=basis, end_note=note, hidden_reason=hidden, region=_region(row))
     return row
 
 
@@ -180,6 +181,9 @@ def resolve_addons(source: str) -> int:
             reason = "Samma föreställning är redan listad som en annan tilläggspost." if key in kept else ""
             kept.add(key)
         reason = reason[:200]
+        if event.hidden_reason.startswith(timing.CROWD_REASON_PREFIX):
+            # Publikgränsen (crowd_hidden_reason) gäller oavsett tilläggsposter.
+            continue
         if event.hidden_reason != reason:
             event.hidden_reason = reason
             event.save(update_fields=["hidden_reason"])

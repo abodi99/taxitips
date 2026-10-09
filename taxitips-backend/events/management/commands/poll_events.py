@@ -103,8 +103,9 @@ class Command(BaseCommand):
             status.note = f"{stats['truncated']} fönster kapade vid 1000 träffar; inget markerades som borta"
         self._report(rows, status.detail, wrote=True)
 
-    # En månad räcker för en förare, och PredictHQ:s planer kapar långa horisonter.
-    PREDICTHQ_MAX_DAYS = 30
+    # 90 dagar framåt enligt avtalet 2026-10-09 (ägarens önskan: se kvällar och helger i god
+    # tid). Hämtas var 6:e timme (beat poll-events) och sparas; appen läser databasen.
+    PREDICTHQ_MAX_DAYS = 90
 
     def _poll_predicthq(self, options, status):
         rights = rights_for(ingest.PREDICTHQ)

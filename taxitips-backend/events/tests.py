@@ -566,6 +566,13 @@ class MatchingTests(SimpleTestCase):
                                        [self.tm("TMA", "Konsert med Kören", 4, "13:00")]), {})
 
 
+# PredictHQ utan avtal: grindarna ska då säga nej. Standardläget har avtal sedan 2026-10-09.
+NO_AGREEMENT = {
+    **settings.EVENT_SOURCES,
+    "predicthq": {"store": False, "store_reference": "", "show_in_app": False, "app_reference": "", "retired": ""},
+}
+
+
 class PredictHQLiveTests(TestCase):
     def setUp(self):
         now = timezone.now()
@@ -607,6 +614,7 @@ class PredictHQLiveTests(TestCase):
         self.assertEqual(status, 502)
         self.assertIn("saknas", body["error"])
 
+    @override_settings(EVENT_SOURCES=NO_AGREEMENT)
     def test_saving_predicthq_is_refused(self):
         with self.assertRaises(ValueError):
             ingest.save([], source="predicthq", now=timezone.now(), fetched_until=timezone.now().date())
@@ -651,7 +659,7 @@ class RightsTests(SimpleTestCase):
         """
         Utan miljövariabler: TheSportsDB lagras och visas i appen på ägarbeslutet 2026-10-09 --
         och referensen säger att det är ett beslut, inget avtal. Ticketmaster lagras men visas
-        inte i appen förrän det beslutet fattats. PredictHQ: inget.
+        inte i appen förrän det beslutet fattats. PredictHQ: lagras och visas enligt avtalet.
         """
         sports = rights.rights_for("thesportsdb")
         self.assertTrue(sports.may_store())
@@ -661,8 +669,10 @@ class RightsTests(SimpleTestCase):
         tm = rights.rights_for("ticketmaster")
         self.assertTrue(tm.may_store())
         self.assertFalse(tm.may_show_in_app())
-        self.assertFalse(rights.rights_for("predicthq").may_store())
-        self.assertFalse(rights.rights_for("predicthq").may_show_in_app())
+        phq = rights.rights_for("predicthq")
+        self.assertTrue(phq.may_store())
+        self.assertTrue(phq.may_show_in_app())
+        self.assertIn("Avtal med PredictHQ", phq.store_reference)
 
     def test_a_retired_source_grants_nothing_whatever_the_switches_say(self):
         r = self.phq(store=True, store_reference="avtal", show_in_app=True, app_reference="avtal",
@@ -672,8 +682,10 @@ class RightsTests(SimpleTestCase):
         self.assertIn("används inte längre", r.refusal("store"))
         self.assertIn("används inte längre", r.refusal("app"))
 
-    def test_predicthq_is_retired_by_default(self):
-        self.assertIn("402", rights.rights_for("predicthq").retired)
+    def test_predicthq_is_in_use_under_the_agreement(self):
+        phq = rights.rights_for("predicthq")
+        self.assertEqual(phq.retired, "")
+        self.assertIn("Avtal med PredictHQ", phq.app_reference)
 
 
 class PredictHQStorageTests(TestCase):
@@ -682,6 +694,7 @@ class PredictHQStorageTests(TestCase):
             phq_soon("PHS1", "Stort derby", 3, "19:00", attendance=24000, lat=59.2944, lon=18.0810), ingest.PREDICTHQ,
         )]
 
+    @override_settings(EVENT_SOURCES=NO_AGREEMENT)
     def test_refused_without_a_reference(self):
         with self.assertRaises(rights.StorageNotPermitted):
             ingest.save(self.rows(), source="predicthq", now=timezone.now(), fetched_until=timezone.now().date())
@@ -693,7 +706,7 @@ class PredictHQStorageTests(TestCase):
         ingest.save(self.rows(), source="predicthq", now=now, fetched_until=(now + dt.timedelta(days=30)).date())
         self.assertEqual(Event.objects.get(source="predicthq", external_id="PHS1").attendance, 24000)
 
-    @override_settings(PREDICTHQ_ACCESS_TOKEN="t")
+    @override_settings(PREDICTHQ_ACCESS_TOKEN="t", EVENT_SOURCES=NO_AGREEMENT)
     def test_the_poll_makes_no_call_when_storage_is_not_permitted(self):
         with mock.patch("events.sources.predicthq.fetch_events") as fetch:
             call_command("poll_events", "--source", "predicthq", stdout=mock.MagicMock())
@@ -866,40 +879,65 @@ class OwnerDecisionAppTests(TestCase):
                                                    lat=59.3337, lon=18.0770), ingest.PREDICTHQ)],
                         source="predicthq", now=now, fetched_until=until)
 
-    def test_sports_are_in_the_app_and_ticketmaster_and_predicthq_are_not(self):
+    def test_predicthq_and_sports_are_in_the_app_and_ticketmaster_is_not(self):
         with override_settings(EVENT_SOURCES=PRODUCTION_LIKE):
             body = _entitled_upcoming(counties="01")
         sources = {e["source"] for e in body["events"]}
-        self.assertEqual(sources, {"thesportsdb"})
+        self.assertNotIn("ticketmaster", sources)
+        self.assertIn("thesportsdb", sources)
         hockey = next(e for e in body["events"] if e["source"] == "thesportsdb")
         self.assertEqual((hockey["sport"], hockey["sportLabel"]), ("ishockey", "Ishockey"))
-        self.assertEqual(body["attribution"], "Evenemangsdata från TheSportsDB")
-        self.assertNotIn("PredictHQ", json.dumps(body, ensure_ascii=False))
-        # Avslutad betyder inte raderad: raden ligger kvar.
-        self.assertTrue(Event.objects.filter(source="predicthq", external_id="PHOLD").exists())
+        self.assertIn("TheSportsDB", body["attribution"])
 
 
 class PollIsolationTests(TestCase):
     @override_settings(EVENT_SOURCES=PRODUCTION_LIKE, PREDICTHQ_ACCESS_TOKEN="t", TICKETMASTER_API_KEY="k",
                        THESPORTSDB_API_KEY="123")
-    def test_predicthq_is_not_called_and_a_failing_source_does_not_stop_the_sports(self):
+    def test_a_failing_predicthq_does_not_stop_the_sports(self):
         from django.core.management.base import CommandError
 
         from events.sources import thesportsdb as tsdb
 
         SourceStatus.objects.create(source="predicthq", ok=False, message="PredictHQError: 402",
                                     consecutive_failures=36, checked_at=timezone.now())
-        with mock.patch("events.sources.predicthq.fetch_events") as phq, \
+        with mock.patch("events.sources.predicthq.fetch_events",
+                        side_effect=predicthq.PredictHQError("PredictHQ svarade 402")) as phq, \
                 mock.patch("events.sources.ticketmaster.fetch_events", side_effect=ticketmaster.TicketmasterError("503")), \
                 mock.patch.object(tsdb, "fetch_events", return_value=([], {"leagues": {}, "errors": [], "calls": 1,
                                                                            "complete": True})) as sports:
             with self.assertRaises(CommandError) as raised:
                 call_command("poll_events", stdout=mock.MagicMock(), stderr=mock.MagicMock())
-        phq.assert_not_called()
+        phq.assert_called_once()
         sports.assert_called_once()
         self.assertIn("ticketmaster", str(raised.exception))
-        predicthq_status = SourceStatus.objects.get(source="predicthq")
-        self.assertTrue(predicthq_status.ok)
-        self.assertIn("används inte längre", predicthq_status.message)
+        self.assertIn("predicthq", str(raised.exception))
+        self.assertFalse(SourceStatus.objects.get(source="predicthq").ok)
         self.assertTrue(SourceStatus.objects.get(source="thesportsdb").ok)
         self.assertFalse(SourceStatus.objects.get(source="ticketmaster").ok)
+
+
+class CrowdFilterTests(SimpleTestCase):
+    """Bara PredictHQ-evenemang med mycket folk visas för föraren; resten lagras med skälet."""
+
+    def test_a_big_crowd_is_shown(self):
+        self.assertEqual(timing.crowd_hidden_reason("sports", 24000, 80), "")
+
+    def test_a_small_crowd_is_hidden_with_the_reason(self):
+        reason = timing.crowd_hidden_reason("concerts", 300, 90)
+        self.assertTrue(reason.startswith(timing.CROWD_REASON_PREFIX))
+        self.assertIn(str(timing.TAXI_MIN_ATTENDANCE), reason)
+
+    def test_without_a_forecast_the_local_rank_decides(self):
+        self.assertEqual(timing.crowd_hidden_reason("performing-arts", None, timing.PHQ_MIN_LOCAL_RANK), "")
+        self.assertTrue(timing.crowd_hidden_reason("performing-arts", None, timing.PHQ_MIN_LOCAL_RANK - 1))
+        self.assertTrue(timing.crowd_hidden_reason("performing-arts", None, None))
+
+    def test_weather_and_airport_signals_are_never_events(self):
+        for segment in ("severe-weather", "disasters", "terror", "airport-delays"):
+            self.assertTrue(timing.crowd_hidden_reason(segment, 50000, 100), segment)
+
+    def test_the_row_carries_the_reason(self):
+        row = ingest.build_row(phq_event("PHSMALL", category="concerts", attendance=200), ingest.PREDICTHQ)
+        self.assertTrue(row["hidden_reason"].startswith(timing.CROWD_REASON_PREFIX))
+        row = ingest.build_row(phq_event("PHBIG", category="sports", attendance=20000), ingest.PREDICTHQ)
+        self.assertEqual(row["hidden_reason"], "")

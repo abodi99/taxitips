@@ -227,6 +227,33 @@ def city_from_address(formatted: str | None) -> str:
     return match.group(1).strip() if match else ""
 
 
+# PredictHQ-kategorier som inte är en publik som går hem samtidigt. De lagras (andra
+# signaler kan läsa dem) men visas aldrig som evenemang i förarens lista.
+PHQ_NOT_A_CROWD = frozenset({"severe-weather", "disasters", "terror", "airport-delays"})
+# Utan publikprognos (473 scenföreställningar saknade den, mätt 2026-09) avgör PredictHQ:s
+# lokala betydelse, 0-100. 60 = "betydande" i deras skala.
+PHQ_MIN_LOCAL_RANK = 60
+CROWD_REASON_PREFIX = "Publik: "
+
+
+def crowd_hidden_reason(segment: str, attendance: int | None, local_rank: int | None) -> str:
+    """
+    Varför ett PredictHQ-evenemang inte visas för föraren, eller "" om det ska visas.
+
+    Bara det som samlar så mycket folk att många behöver ta sig hem samtidigt: minst
+    TAXI_MIN_ATTENDANCE i prognosen, eller -- när prognosen saknas -- hög lokal betydelse.
+    """
+    if segment in PHQ_NOT_A_CROWD:
+        return f"{CROWD_REASON_PREFIX}ingen publik som går hem samtidigt ({segment})."
+    if attendance is not None:
+        if attendance < TAXI_MIN_ATTENDANCE:
+            return f"{CROWD_REASON_PREFIX}väntad publik under {TAXI_MIN_ATTENDANCE} -- för få för taxikörningar."
+        return ""
+    if (local_rank or 0) < PHQ_MIN_LOCAL_RANK:
+        return f"{CROWD_REASON_PREFIX}publiken okänd och låg lokal betydelse (under {PHQ_MIN_LOCAL_RANK})."
+    return ""
+
+
 def size_level(attendance: int | None) -> str:
     if attendance is None:
         return "okand"

@@ -198,6 +198,12 @@ PREDICTHQ_ACCESS_TOKEN = os.environ.get("PREDICTHQ_ACCESS_TOKEN", "")
 # utveckling; en betald nyckel krävs för att publicera en app (events/sources/thesportsdb.py).
 THESPORTSDB_API_KEY = os.environ.get("THESPORTSDB_API_KEY", "123")
 
+# Testerna når aldrig evenemangskällorna på riktigt, även när .env har nycklarna: ett
+# test hämtade 3 184 riktiga PredictHQ-evenemang och förbrukade kvoten (2026-10-09).
+# Ett test som behöver en nyckel sätter den själv (override_settings) och mockar anropet.
+if sys.argv[1:2] == ["test"]:
+    TICKETMASTER_API_KEY = PREDICTHQ_ACCESS_TOKEN = THESPORTSDB_API_KEY = ""
+
 # Evenemangskällor: vad som får lagras och vad som får visas i förarappen. Brytarna är
 # teknik och ger ingen rätt. Varje handling kräver ÄVEN en referens till det som faktiskt
 # tillåter den -- en villkorspunkt eller ett skriftligt avtal. Tom referens = inte
@@ -210,6 +216,9 @@ EVENTS_APP_PREVIEW = os.environ.get("EVENTS_APP_PREVIEW") == "1"
 # Ägarbesluten om visning i förarappen (events/rights.py: ett ägarbeslut är en giltig referens
 # bara om texten säger att det är ett beslut och inte ett avtal). En tom *_APP_REFERENCE i miljön
 # faller tillbaka hit; stäng av visningen med *_SHOW_IN_APP=0.
+PREDICTHQ_AGREEMENT = os.environ.get("EVENTS_PREDICTHQ_AGREEMENT_REFERENCE") or (
+    "Avtal med PredictHQ (ägaren, 2026-10-09): lagring i egen databas och visning i förarappen."
+)
 TICKETMASTER_OWNER_DECISION = (
     "Ägarbeslut (förberett, inte påslaget): Ticketmasters evenemang i förarappen. Inget skriftligt avtal med "
     "Ticketmaster är registrerat; villkoren förbjuder att \"derive revenues\" utan avtal, så visningen "
@@ -237,18 +246,16 @@ EVENT_SOURCES = {
         "app_reference": os.environ.get("EVENTS_TICKETMASTER_APP_REFERENCE") or TICKETMASTER_OWNER_DECISION,
     },
     "predicthq": {
-        "store": os.environ.get("EVENTS_PREDICTHQ_STORE", "0") == "1",
-        # Tom med avsikt: villkor 3.7 d i förbjuder lagring utan skriftligt avtal, även lokalt.
-        "store_reference": os.environ.get("EVENTS_PREDICTHQ_STORE_REFERENCE", ""),
-        "show_in_app": os.environ.get("EVENTS_PREDICTHQ_SHOW_IN_APP", "0") == "1",
-        "app_reference": os.environ.get("EVENTS_PREDICTHQ_APP_REFERENCE", ""),
-        # Avslutad: varken hämtning, lagring eller visning, oavsett variablerna ovan (events/rights.py).
-        # Lagrade rader ligger kvar tills de passerat. Sätt EVENTS_PREDICTHQ_RETIRED= (tomt) först
-        # när en ny prenumeration finns.
-        "retired": os.environ.get(
-            "EVENTS_PREDICTHQ_RETIRED",
-            "PredictHQ-prenumerationen gick ut; API:t svarar 402 sedan 2026-09-26",
-        ),
+        # Avtal med PredictHQ sedan 2026-10-09 (ägaren): lagring och visning i förarappen.
+        # Villkor 3.7 d i förbjuder lagring utan skriftligt avtal -- referensen pekar på det.
+        "store": os.environ.get("EVENTS_PREDICTHQ_STORE", "1") == "1",
+        "store_reference": PREDICTHQ_AGREEMENT,
+        "show_in_app": os.environ.get("EVENTS_PREDICTHQ_SHOW_IN_APP", "1") == "1",
+        "app_reference": PREDICTHQ_AGREEMENT,
+        # Tom = i bruk. Sätt en text (skälet) om avtalet upphör: då varken hämtning, lagring
+        # eller visning (events/rights.py). Prenumerationen gick ut 2026-09-26 och förnyades
+        # med avtal 2026-10-09.
+        "retired": os.environ.get("EVENTS_PREDICTHQ_RETIRED", ""),
     },
     "thesportsdb": {
         "store": os.environ.get("EVENTS_THESPORTSDB_STORE", "1") == "1",
