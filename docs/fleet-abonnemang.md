@@ -253,6 +253,14 @@ order utan villkorsversion går inte att knyta till ett avtal i efterhand.
   kort (`POST /api/fleet/trial/commit`). Då skapas ett Stripe-abonnemang med
   `trial_end = Trial.ends_at`; första dragningen sker vid provslut. Utan
   sparat kort avslutas provet utan debitering (`fleet_tick`).
+* **Provslut är klockan, inte cron-jobbet:** ett aktivt prov vars `ends_at`
+  passerat ger `trial_ended` direkt i `access.company_window` (och därmed inga
+  notiser), även innan `fleet_tick` stängt raden.
+* **Avsluta provet** (adminwebben, `POST /api/admin/companies/<id>/trial/end`,
+  säljare/plattformsadmin, skäl krävs, idempotent, `trial_ended_by_staff` i
+  loggen): provet blir `ended` med `ends_at = nu`. Ett betalt abonnemang rörs
+  inte; ett prov med sparat kort (trial commit) avslutas inte här (409
+  `trial_committed`) -- avsluta abonnemanget i stället.
 * Kortfritt *säljarinbjudan* (utan krav på kort under provet) kräver en
   personlig engångsinbjudan från en säljare, giltig sju dagar, med
   **dokumenterad verifierad företagskontakt** (obligatoriskt fält).
@@ -441,6 +449,16 @@ anteckning om hur.
 | Företag (`company`) | alla förartelefoner och inloggade i företaget; ägaren får bara läsa | `access.company_window` -> `company_suspended` |
 | Konto (`user`) | den inloggade vägen och alla adminbehörigheter, även personalens | `_member_access`, `principal_for` -> `account_blocked` |
 | E-postadress (`email`) | samma, plus registrering och ägarinbjudan | dito, `assert_email_allowed` |
+| Pausade tips, företag (`pause`) | tips och notiser för hela företaget; ägaren når portalen | `access.company_window` -> `company_paused` |
+| Pausade tips, konto (`user_pause`) | tips och notiser för ett konto; portalen fungerar | `_account_stop`, `push_gate` -> `account_paused` |
+
+**Pausa tipsen** (kunden betalar inte) är inte en spärr: säljare och
+plattformsadministratör pausar och återupptar på kundsidan
+(`POST /api/admin/companies/<id>/pause|resume`,
+`POST /api/admin/accounts/<user_id>/pause|resume`), skäl krävs, idempotent,
+revisionslogg `company_tips_paused/resumed`, `user_tips_paused/resumed`. Appen
+visar "Medlemskapet är pausat. Ditt företags administratör hanterar
+medlemskapet på webben." -- inget pris, ingen länk (§9c).
 
 Inget raderas: en hävd spärr återställer exakt det som fanns. Bara
 `platform_admin` spärrar och häver. E-postadresser läses ur

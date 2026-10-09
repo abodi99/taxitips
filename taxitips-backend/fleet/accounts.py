@@ -12,6 +12,13 @@ e-postadress eller ett enskilt konto.
   `principal_for`. Förartelefoner bär ingen e-post och påverkas bara av
   företagsspärren.
 
+**Pausade tips** (`pause`/`resume`, kinds `pause` och `user_pause`) är samma
+rad men ett annat beslut: kunden betalar inte, inget fusk. De ger
+`company_paused` respektive `account_paused` -- ett neutralt skäl som appen
+visar utan pris eller länk -- och stoppar tips och notiser. Pausen rör aldrig
+portalen (`principal_for`): ägaren ska kunna ordna medlemskapet på webben.
+Säljare och plattformsadministratör pausar; spärrar är bara plattformens.
+
 Registrering och inbjudningar prövas också mot e-postspärren, så att en
 avstängd adress inte kan skapa ett nytt företag och börja om.
 
@@ -123,6 +130,21 @@ def company_block(company_id) -> AccountBlock | None:
     return _active().filter(kind=AccountBlock.Kind.COMPANY, value=str(company_id)).first()
 
 
+def company_pause(company_id) -> AccountBlock | None:
+    if not company_id:
+        return None
+    return _active().filter(kind=AccountBlock.Kind.PAUSE, value=str(company_id)).first()
+
+
+def account_pause(user_id) -> AccountBlock | None:
+    if not user_id:
+        return None
+    return _active().filter(kind=AccountBlock.Kind.USER_PAUSE, value=str(user_id)).first()
+
+
+_COMPANY_KINDS = (AccountBlock.Kind.COMPANY, AccountBlock.Kind.PAUSE)
+
+
 def account_block(*, user_id=None, email: str = "") -> AccountBlock | None:
     """Spärren som gäller ett konto, via dess id eller dess e-postadress."""
     email = normalize_email(email)
@@ -163,7 +185,10 @@ def _normalize_value(kind: str, value) -> str:
         raise AccountError("invalid_id", "Id:t går inte att tolka.") from exc
 
 
-def block(*, kind: str, value, reason: str, actor_user_id, company_id=None) -> AccountBlock:
+def block(
+    *, kind: str, value, reason: str, actor_user_id, company_id=None,
+    action: str = "", actor_kind: str = "platform_admin",
+) -> AccountBlock:
     if kind not in AccountBlock.Kind.values:
         raise AccountError("invalid_kind", "Okänd sorts spärr.")
     reason = str(reason or "").strip()[:500]
@@ -171,7 +196,7 @@ def block(*, kind: str, value, reason: str, actor_user_id, company_id=None) -> A
         raise AccountError("reason_required", "Skriv varför spärren läggs.")
     value = _normalize_value(kind, value)
     # Den som spärrar sig själv låser ute den enda som kan häva spärren.
-    if kind == AccountBlock.Kind.USER and value == str(actor_user_id):
+    if kind in (AccountBlock.Kind.USER, AccountBlock.Kind.USER_PAUSE) and value == str(actor_user_id):
         raise AccountError("self_block", "Du kan inte spärra ditt eget konto.")
     if kind == AccountBlock.Kind.EMAIL and value == email_for(actor_user_id):
         raise AccountError("self_block", "Du kan inte spärra din egen e-postadress.")
@@ -183,15 +208,20 @@ def block(*, kind: str, value, reason: str, actor_user_id, company_id=None) -> A
     except IntegrityError as exc:
         raise AccountError("already_blocked", "Det finns redan en aktiv spärr.", status=409) from exc
     audit.record(
-        f"admin_block_{kind}", company_id=company_id if kind == "company" else None,
-        actor_user_id=actor_user_id, actor_kind="platform_admin",
+        action or f"admin_block_{kind}",
+        # Företagets spärr/paus, eller kontots paus lagd från en kundsida.
+        company_id=company_id,
+        actor_user_id=actor_user_id, actor_kind=actor_kind,
         subject_type="account_block", subject_id=row.id,
         detail={"kind": kind, "value": value, "reason": reason},
     )
     return row
 
 
-def lift(block_id, *, actor_user_id, note: str = "") -> AccountBlock:
+def lift(
+    block_id, *, actor_user_id, note: str = "", action: str = "",
+    actor_kind: str = "platform_admin", company_id=None,
+) -> AccountBlock:
     row = _active().filter(id=block_id).first()
     if row is None:
         raise AccountError("unknown_block", "Spärren finns inte eller är redan hävd.", status=404)
@@ -200,9 +230,9 @@ def lift(block_id, *, actor_user_id, note: str = "") -> AccountBlock:
     )
     row.refresh_from_db()
     audit.record(
-        f"admin_unblock_{row.kind}",
-        company_id=row.value if row.kind == AccountBlock.Kind.COMPANY else None,
-        actor_user_id=actor_user_id, actor_kind="platform_admin",
+        action or f"admin_unblock_{row.kind}",
+        company_id=row.value if row.kind in _COMPANY_KINDS else company_id,
+        actor_user_id=actor_user_id, actor_kind=actor_kind,
         subject_type="account_block", subject_id=row.id,
         detail={"kind": row.kind, "value": row.value, "note": row.lift_note},
     )
@@ -218,3 +248,60 @@ def block_row(row: AccountBlock) -> dict:
         "liftedAt": row.lifted_at.isoformat() if row.lifted_at else None,
         "liftNote": row.lift_note,
     }
+
+
+# ---------------------------------------------------------------------------
+# Pausade tips (kunden betalar inte -- inte en spärr)
+# ---------------------------------------------------------------------------
+
+
+def _pause_kind(scope: str) -> str:
+    if scope == "company":
+        return AccountBlock.Kind.PAUSE
+    if scope == "user":
+        return AccountBlock.Kind.USER_PAUSE
+    raise AccountError("invalid_kind", "Okänd sorts paus.")
+
+
+def pause(*, scope: str, value, reason: str, actor_user_id, actor_kind: str,
+          company_id=None) -> tuple[AccountBlock, bool]:
+    """
+    Pausar tipsen för ett företag (`scope="company"`) eller ett konto
+    (`scope="user"`). Idempotent: en redan pausad sak returneras som den är,
+    med `created=False`. Kräver skäl; skrivs i revisionsloggen.
+    """
+    kind = _pause_kind(scope)
+    if not str(reason or "").strip():
+        raise AccountError("reason_required", "Skriv varför tipsen pausas.")
+    existing = _active().filter(kind=kind, value=_normalize_value(kind, value)).first()
+    if existing is not None:
+        return existing, False
+    try:
+        row = block(
+            kind=kind, value=value, reason=reason, actor_user_id=actor_user_id,
+            company_id=company_id, action=f"{scope}_tips_paused", actor_kind=actor_kind,
+        )
+    except AccountError as exc:
+        if exc.reason != "already_blocked":
+            raise
+        # Två samtidiga klick: den andra läser den första radens paus.
+        return _active().filter(kind=kind, value=_normalize_value(kind, value)).first(), False
+    return row, True
+
+
+def resume(*, scope: str, value, actor_user_id, actor_kind: str, note: str = "",
+           company_id=None) -> AccountBlock | None:
+    """Häver pausen. Idempotent: None när inget var pausat."""
+    kind = _pause_kind(scope)
+    row = _active().filter(kind=kind, value=_normalize_value(kind, value)).first()
+    if row is None:
+        return None
+    try:
+        return lift(
+            row.id, actor_user_id=actor_user_id, note=note,
+            action=f"{scope}_tips_resumed", actor_kind=actor_kind, company_id=company_id,
+        )
+    except AccountError as exc:
+        if exc.reason != "unknown_block":
+            raise
+        return None

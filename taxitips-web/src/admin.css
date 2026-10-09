@@ -343,6 +343,22 @@ button.kpi:hover {
   margin-top: 0.5rem;
 }
 
+/* Pausade tips: ett betalningsuppehåll, inte en spärr -- lugnare än röd. */
+.paused-banner {
+  border: 1.5px solid var(--warn, #c47a00);
+  background: color-mix(in srgb, var(--warn, #c47a00) 10%, var(--vit));
+  border-radius: var(--radius);
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 1rem;
+}
+.paused-banner .muted {
+  display: block;
+  margin-top: 0.25rem;
+}
+.paused-banner .btn {
+  margin-top: 0.5rem;
+}
+
 .drop {
   border: 2px dashed var(--line-strong);
   border-radius: var(--radius);

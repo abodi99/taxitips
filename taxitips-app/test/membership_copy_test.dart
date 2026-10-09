@@ -29,6 +29,41 @@ void main() {
       }
     });
 
+    test('provslut och paus: neutral text om webben, ingen länk, inget pris', () {
+      final texts = {
+        'trial_ended': membershipNotice(
+          'trial_ended',
+          serverMessage: 'Betala på https://taxitips.se/portal för 299 kr.',
+        ),
+        'company_paused': membershipNotice(
+          'company_paused',
+          serverMessage: 'Betala nu: https://taxitips.se/betala',
+        ),
+        'account_paused': membershipNotice('account_paused'),
+      };
+      expect(
+        texts['trial_ended'],
+        'Provperioden är slut. Ditt företags administratör hanterar '
+        'medlemskapet på webben.',
+      );
+      expect(texts['company_paused'], kPausedNotice);
+      expect(texts['account_paused'], kPausedNotice);
+      expect(kPausedNotice, startsWith('Medlemskapet är pausat.'));
+      for (final entry in texts.entries) {
+        final text = entry.value;
+        expect(text, contains(kMembershipOnWeb), reason: entry.key);
+        expect(text, isNot(contains('http')), reason: entry.key);
+        expect(text, isNot(contains('www')), reason: entry.key);
+        expect(text, isNot(contains('.se')), reason: entry.key);
+        expect(text, isNot(matches(RegExp(r'\d'))), reason: entry.key);
+        expect(text, isNot(contains('kr')), reason: entry.key);
+        expect(text.toLowerCase(), isNot(contains('betala')), reason: entry.key);
+        expect(text.toLowerCase(), isNot(contains('köp')), reason: entry.key);
+        expect(text.toLowerCase(), isNot(contains('prenumer')), reason: entry.key);
+        expect(isMembershipReason(entry.key), isTrue, reason: entry.key);
+      }
+    });
+
     test('andra skäl visar serverns text, eller reservtexten', () {
       expect(
         membershipNotice(

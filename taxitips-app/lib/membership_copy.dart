@@ -67,7 +67,17 @@ const _billingReasons = {
   'past_due',
   'canceled',
   'no_subscription',
+  // Pausat av TaxiTips för att medlemskapet inte betalas (fleet/accounts.py).
+  // Samma neutrala besked: inget pris, ingen länk, ingen uppmaning att betala.
+  'company_paused',
+  'account_paused',
 };
+
+/// Besked när provperioden är slut. Pekar på webben utan länk.
+const kTrialEndedNotice = 'Provperioden är slut. $kMembershipOnWeb';
+
+/// Besked när medlemskapet är pausat (företaget eller kontot).
+const kPausedNotice = 'Medlemskapet är pausat. $kMembershipOnWeb';
 
 /// Handlar skälet om medlemskap (prov slut, period slut, betalning, uppsagt)?
 bool isMembershipReason(String? reason) => _billingReasons.contains(reason);
@@ -80,7 +90,10 @@ String membershipNotice(
   String? serverMessage,
   String fallback = 'Åtkomsten är inte aktiv.',
 }) {
-  if (reason == 'trial_ended') return 'Provperioden är slut. $kMembershipOnWeb';
+  if (reason == 'trial_ended') return kTrialEndedNotice;
+  if (reason == 'company_paused' || reason == 'account_paused') {
+    return kPausedNotice;
+  }
   if (_billingReasons.contains(reason)) {
     return 'Medlemskapet är inte aktivt just nu. $kMembershipOnWeb';
   }

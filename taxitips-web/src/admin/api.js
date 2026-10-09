@@ -253,6 +253,18 @@ export const admin = {
       method: "POST",
       body: { days, reason },
     }),
+  // Avsluta provet nu: ingen åtkomst, inga notiser (fleet/trials.end_trial_now).
+  endTrial: (id, reason) =>
+    request(`/api/admin/companies/${id}/trial/end`, { method: "POST", body: { reason } }),
+  // Pausa tipsen (kunden betalar inte) -- inte en spärr (fleet/accounts.pause).
+  pauseCompany: (id, reason) =>
+    request(`/api/admin/companies/${id}/pause`, { method: "POST", body: { reason } }),
+  resumeCompany: (id, note) =>
+    request(`/api/admin/companies/${id}/resume`, { method: "POST", body: { note } }),
+  pauseAccount: (userId, companyId, reason) =>
+    request(`/api/admin/accounts/${userId}/pause`, { method: "POST", body: { reason, companyId } }),
+  resumeAccount: (userId, companyId, note) =>
+    request(`/api/admin/accounts/${userId}/resume`, { method: "POST", body: { note, companyId } }),
   // Fler bilar i provet: alltid ett manuellt beslut med skäl (fleet/trials.set_vehicle_limit).
   setTrialVehicleLimit: (id, vehicleLimit, reason) =>
     request(`/api/admin/companies/${id}/trial/vehicles`, {

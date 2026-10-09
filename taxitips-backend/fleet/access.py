@@ -158,7 +158,9 @@ def company_window(company_id, now=None) -> Window:
     )
 
 
-def windows_for(company_ids, now=None, *, companies=None, subscriptions=None, blocked=None) -> dict:
+def windows_for(
+    company_ids, now=None, *, companies=None, subscriptions=None, blocked=None, paused=None,
+) -> dict:
     """
     Samma svar som `company_window`, för många bolag, utan en fråga per rad.
 
@@ -187,6 +189,18 @@ def windows_for(company_ids, now=None, *, companies=None, subscriptions=None, bl
                 value__in=[str(i) for i in ids],
             )
         }
+    if paused is None:
+        # Pausade tips (fleet/accounts.pause): ett betalningsneutralt uppehåll
+        # som personalen lägger när kunden inte betalar. Prövas före
+        # beviljandet och abonnemanget, precis som spärren.
+        paused = {
+            str(row.value)
+            for row in AccountBlock.objects.filter(
+                kind=AccountBlock.Kind.PAUSE,
+                lifted_at__isnull=True,
+                value__in=[str(i) for i in ids],
+            )
+        }
     grant_by = grants.active_grants_for(ids, now)
     if subscriptions is None:
         subscriptions = {
@@ -206,6 +220,9 @@ def windows_for(company_ids, now=None, *, companies=None, subscriptions=None, bl
         key = str(cid)
         if key in blocked:
             out[cid] = Window(False, "company_suspended")
+            continue
+        if key in paused:
+            out[cid] = Window(False, "company_paused")
             continue
         grant = grant_by.get(key)
         if grant is not None:
@@ -260,6 +277,14 @@ def _subscription_window(company_id, now=None, *, subscription=None, trials=None
                 return Window(True, "billing_deferred", subscription.current_period_end)
             return Window(False, "trial_ended")
         if any(row.status == Trial.Status.ENDED for row in trials):
+            return Window(False, "trial_ended")
+        # Ett prov vars slut passerat men som nattens fleet_tick ännu inte
+        # stängt är slut NU -- klockan här, inte cron-jobbet, avgör. Utan den
+        # här raden svarade fönstret `no_subscription` fram till nästa tick.
+        if any(
+            row.status == Trial.Status.ACTIVE and row.ends_at and row.ends_at <= now
+            for row in trials
+        ):
             return Window(False, "trial_ended")
         # Ett prov som väntar på första telefonen är inte "inget abonnemang":
         # för en ny kund hade det låtit som att registreringen misslyckats.
@@ -578,6 +603,15 @@ def _membership_access(payload: dict, now) -> Access | None:
             session, reason=MembershipSession.EndReason.UNASSIGNED, now=now
         )
         return None
+    # Ett spärrat eller pausat KONTO får inga tips i appen, även med en plats.
+    # Sessionen lämnas öppen: en hävd spärr/paus ska återställa exakt det som fanns.
+    stop = _account_stop(payload)
+    if stop is not None:
+        return Access(
+            False, stop, kind="driver",
+            company_id=str(license.company_id), license_id=str(license.id),
+            message=_window_message(stop),
+        )
     window = company_window(license.company_id, now)
     if not window.ok:
         return Access(
@@ -825,10 +859,9 @@ def _member_access(payload: dict, now, *, device_id=None) -> Access:
 
     user_id = payload.get("sub")
     accounts.seen(payload)
-    if accounts.account_block(user_id=user_id, email=payload.get("email") or "") is not None:
-        return Access(
-            False, "account_blocked", kind="member", message=_window_message("account_blocked"),
-        )
+    stop = _account_stop(payload)
+    if stop is not None:
+        return Access(False, stop, kind="member", message=_window_message(stop))
     member = CompanyMember.objects.filter(user_id=user_id, status="active").first()
     if member is None:
         return Access(False, "no_active_membership")
@@ -857,6 +890,23 @@ def _member_access(payload: dict, now, *, device_id=None) -> Access:
     )
 
 
+def _account_stop(payload: dict) -> str | None:
+    """
+    `account_blocked` (spärr) eller `account_paused` (pausade tips) för det
+    inloggade kontot, annars None. Bara tipsvägarna frågar efter pausen:
+    `principal_for` (portalen) gör det inte, så att en pausad ägare
+    fortfarande kan ordna medlemskapet på webben.
+    """
+    from fleet import accounts
+
+    user_id = payload.get("sub")
+    if accounts.account_block(user_id=user_id, email=payload.get("email") or "") is not None:
+        return "account_blocked"
+    if accounts.account_pause(user_id) is not None:
+        return "account_paused"
+    return None
+
+
 def _window_message(reason: str) -> str:
     return {
         # Texterna visas i appen: inga betalinstruktioner, inga länkar till köp
@@ -875,6 +925,9 @@ def _window_message(reason: str) -> str:
         # om en vy ändå råkar fråga efter ett nekat skäl.
         "unknown_company": "Företaget finns inte.",
         "company_suspended": "Företagets konto är avstängt. Kontakta TaxiTips support.",
+        # Pausat medlemskap: neutralt, inget om betalning, ingen länk.
+        "company_paused": "Medlemskapet är pausat. Ditt företags administratör hanterar medlemskapet på webben.",
+        "account_paused": "Ditt medlemskap är pausat. Ditt företags administratör hanterar medlemskapet på webben.",
         "account_blocked": "Kontot är spärrat. Kontakta TaxiTips support.",
     }.get(reason, "Åtkomsten är inte aktiv.")
 

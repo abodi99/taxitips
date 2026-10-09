@@ -125,6 +125,15 @@ def send_billing_push(company_id: str, event_type: str) -> dict:
         log.warning("billing: FIREBASE_SERVICE_ACCOUNT_JSON saknas, hoppar över push")
         return {"sent": 0, "skipped": "no_service_account"}
 
+    # Ett företag utan åtkomst (provet slut, pausat, avstängt, uppsagt) får
+    # inga notiser alls -- inte heller om fakturering. Kunden får mejlet, och
+    # appen visar skälet neutralt när den öppnas (fleet/access.py).
+    from fleet.access import company_window
+
+    window = company_window(company_id)
+    if not window.ok:
+        return {"sent": 0, "skipped": f"company_{window.reason}"}
+
     devices = list(Device.objects.filter(company_id=company_id, push_token__isnull=False))
     if not devices:
         return {"sent": 0}

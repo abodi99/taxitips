@@ -68,6 +68,9 @@ urlpatterns = [
     path("companies/<uuid:company_id>/orders", admin_sales.create_order),
     path("companies/<uuid:company_id>/trial", admin_sales.start_trial),
     path("companies/<uuid:company_id>/trial/extend", admin_sales.extend_trial),
+    path("companies/<uuid:company_id>/trial/end", admin_sales.end_trial),
+    path("companies/<uuid:company_id>/pause", admin_sales.pause_company),
+    path("companies/<uuid:company_id>/resume", admin_sales.resume_company),
     path("companies/<uuid:company_id>/trial/vehicles", admin_sales.set_trial_vehicle_limit),
     path("companies/<uuid:company_id>/discount", admin_sales.set_discount),
     path("companies/<uuid:company_id>/discount/clear", admin_sales.clear_discount),
@@ -128,6 +131,8 @@ urlpatterns = [
     path("accounts/<uuid:user_id>/test-push", admin_accounts.test_push),
     path("accounts/<uuid:user_id>/allow-device-swap", admin_accounts.allow_device_swap),
     path("accounts/<uuid:user_id>/delete", admin_accounts.delete_account),
+    path("accounts/<uuid:user_id>/pause", admin_sales.pause_account),
+    path("accounts/<uuid:user_id>/resume", admin_sales.resume_account),
     # Appar och fel: senaste inloggning, version och telefon per konto och
     # telefon, och appens/serverns fel. Se fleet/admin_activity.py.
     path("activity/clients", admin_activity.clients),

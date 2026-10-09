@@ -1462,6 +1462,13 @@ class AccountBlock(models.Model):
         COMPANY = "company", "Företag"
         EMAIL = "email", "E-postadress"
         USER = "user", "Konto"
+        # Pausade tips: inte en spärr för fusk utan ett betalningsneutralt
+        # uppehåll (kunden betalar inte). Samma rad, samma hävning och samma
+        # revisionsspår, men ett eget skäl i åtkomstsvaret (`company_paused`,
+        # `account_paused`) så att appen kan säga det neutralt. Ägaren når
+        # fortfarande kundportalen -- det är där medlemskapet ordnas.
+        PAUSE = "pause", "Pausat företag"
+        USER_PAUSE = "user_pause", "Pausat konto"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     kind = models.CharField(max_length=10, choices=Kind.choices)

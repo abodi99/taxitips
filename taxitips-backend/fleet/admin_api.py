@@ -486,6 +486,10 @@ def company_detail(request, company_id):
             # Tom när kontot inte loggat in sedan katalogen infördes.
             "email": emails.get(str(m.user_id), ""),
             "blocked": accounts.block_row(block) if block else None,
+            "paused": (
+                accounts.block_row(pause_row)
+                if (pause_row := accounts.account_pause(m.user_id)) else None
+            ),
         })
     suspension = accounts.company_block(company.id)
     trial = Trial.objects.filter(company_id=company.id).order_by("-created_at").first()
@@ -518,6 +522,11 @@ def company_detail(request, company_id):
         ),
         "access": {"ok": window.ok, "reason": window.reason, "validUntil": _iso(window.valid_until)},
         "suspension": accounts.block_row(suspension) if suspension else None,
+        # Pausade tips (kunden betalar inte) -- skilt från en spärr.
+        "pause": (
+            accounts.block_row(pause_row)
+            if (pause_row := accounts.company_pause(company.id)) else None
+        ),
         "subscription": (
             {"status": sub.status, "priceVersion": sub.price_version_id,
              "periodStart": _iso(sub.current_period_start), "periodEnd": _iso(sub.current_period_end),

@@ -372,6 +372,74 @@ def end_trial(trial: Trial, *, reason: str, converted: bool = False, now=None) -
     return trial
 
 
+def end_trial_now(
+    company_id,
+    *,
+    reason: str,
+    actor_user_id,
+    actor_kind: str = "sales",
+    now=None,
+) -> tuple[Trial, bool]:
+    """
+    Personalen avslutar provet NU (adminwebben, "Avsluta provet").
+
+    Provet blir `ended` med `ends_at = nu` och provbilarna avslutas -- samma
+    väg som när provet löper ut (`end_trial`), så åtkomsten stängs i samma
+    sekund: `access.company_window` svarar `trial_ended` och notisgrinden
+    släpper inget mer. Ett betalt abonnemang rörs inte.
+
+    Idempotent: ett prov som redan är slut returneras med `changed=False`.
+    Ett prov där kunden sparat kort (trial commit) avslutas inte här -- där
+    väntar ett Stripe-abonnemang på provslutet, och det är ett abonnemangs-
+    beslut (avsluta abonnemanget), inte ett provbeslut.
+    """
+    now = now or timezone.now()
+    reason = (reason or "").strip()
+    if not reason:
+        raise TrialError("reason_required", "Skriv varför provet avslutas.")
+
+    with transaction.atomic():
+        trial = (
+            Trial.objects.select_for_update()
+            .filter(company_id=company_id, status__in=[Trial.Status.PENDING, Trial.Status.ACTIVE])
+            .order_by("-created_at")
+            .first()
+        )
+        if trial is None:
+            latest = Trial.objects.filter(company_id=company_id).order_by("-created_at").first()
+            if latest is None:
+                raise TrialError("no_trial", "Företaget har inget prov.", status=404)
+            return latest, False
+
+        from fleet import commerce
+
+        if commerce.has_active_trial_commit(company_id):
+            raise TrialError(
+                "trial_committed",
+                "Kunden har sparat kort och provet går över i abonnemanget vid provslut. "
+                "Avsluta abonnemanget i stället.",
+                status=409,
+            )
+
+        before = {
+            "status": trial.status,
+            "endsAt": trial.ends_at.isoformat() if trial.ends_at else None,
+        }
+        Trial.objects.filter(id=trial.id).update(ends_at=now)
+        trial.ends_at = now
+        trial = end_trial(trial, reason="ended_by_staff", converted=False, now=now)
+        audit.record(
+            "trial_ended_by_staff",
+            company_id=company_id,
+            actor_user_id=actor_user_id,
+            actor_kind=actor_kind,
+            subject_type="trial",
+            subject_id=trial.id,
+            detail={"before": before, "endsAt": now.isoformat(), "reason": reason[:300]},
+        )
+    return trial, True
+
+
 # ---------------------------------------------------------------------------
 # Säljarinbjudan
 # ---------------------------------------------------------------------------

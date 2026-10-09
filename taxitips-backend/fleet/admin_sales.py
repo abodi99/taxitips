@@ -338,6 +338,118 @@ def extend_trial(request, company_id):
 @csrf_exempt
 @require_POST
 @handle
+def end_trial(request, company_id):
+    """
+    POST /api/admin/companies/<id>/trial/end {"reason": "..."}
+
+    Avslutar provet nu: ingen åtkomst, inga notiser. Idempotent. Ett betalt
+    abonnemang rörs inte (fleet/trials.end_trial_now).
+    """
+    principal = _staff(request, Perm.ADMIN_SELL)
+    body = _body(request)
+    company = _company_or_404(company_id)
+    trial, changed = trials.end_trial_now(
+        company.id,
+        reason=str(body.get("reason", "")),
+        actor_user_id=principal.user_id,
+        actor_kind=principal.staff_role or "sales",
+    )
+    if changed:
+        # Samma mejl som när provet löper ut: var medlemskapet ordnas (webben).
+        from fleet import notifications
+
+        notifications.trial_ended(company.id, company.email or "", trial)
+    return _json(request, {
+        "ok": True,
+        "changed": changed,
+        "status": trial.status,
+        "endsAt": _iso(trial.ends_at),
+    })
+
+
+def _pause_view(principal, *, scope: str, value, company_id, body: dict, resume: bool) -> dict:
+    from fleet import accounts
+
+    actor_kind = principal.staff_role or "sales"
+    if resume:
+        row = accounts.resume(
+            scope=scope, value=value, actor_user_id=principal.user_id, actor_kind=actor_kind,
+            note=str(body.get("note") or body.get("reason") or ""), company_id=company_id,
+        )
+        return {"ok": True, "changed": row is not None, "pause": None}
+    row, created = accounts.pause(
+        scope=scope, value=value, reason=str(body.get("reason") or ""),
+        actor_user_id=principal.user_id, actor_kind=actor_kind, company_id=company_id,
+    )
+    return {"ok": True, "changed": created, "pause": accounts.block_row(row)}
+
+
+@csrf_exempt
+@require_POST
+@handle
+def pause_company(request, company_id):
+    """
+    POST /api/admin/companies/<id>/pause {"reason": "..."}
+
+    Pausar tipsen för hela företaget (kunden betalar inte). Inte en spärr:
+    appen får `company_paused` med en neutral text, inga notiser skickas, och
+    ägaren når fortfarande portalen. Säljare och plattformsadministratör.
+    """
+    principal = _staff(request, Perm.ADMIN_SELL)
+    company = _company_or_404(company_id)
+    return _json(request, _pause_view(
+        principal, scope="company", value=company.id, company_id=company.id,
+        body=_body(request), resume=False,
+    ))
+
+
+@csrf_exempt
+@require_POST
+@handle
+def resume_company(request, company_id):
+    """POST /api/admin/companies/<id>/resume {"note": "..."} -- idempotent."""
+    principal = _staff(request, Perm.ADMIN_SELL)
+    company = _company_or_404(company_id)
+    return _json(request, _pause_view(
+        principal, scope="company", value=company.id, company_id=company.id,
+        body=_body(request), resume=True,
+    ))
+
+
+@csrf_exempt
+@require_POST
+@handle
+def pause_account(request, user_id):
+    """
+    POST /api/admin/accounts/<user_id>/pause {"reason": "...", "companyId": "..."}
+
+    Pausar tipsen för EN persons konto (en plats som inte betalas). Kontot
+    behåller sina behörigheter i portalen.
+    """
+    principal = _staff(request, Perm.ADMIN_SELL)
+    body = _body(request)
+    company_id = _company_or_404(body["companyId"]).id if body.get("companyId") else None
+    return _json(request, _pause_view(
+        principal, scope="user", value=user_id, company_id=company_id, body=body, resume=False,
+    ))
+
+
+@csrf_exempt
+@require_POST
+@handle
+def resume_account(request, user_id):
+    """POST /api/admin/accounts/<user_id>/resume {"note": "...", "companyId": "..."}"""
+    principal = _staff(request, Perm.ADMIN_SELL)
+    body = _body(request)
+    company_id = _company_or_404(body["companyId"]).id if body.get("companyId") else None
+    return _json(request, _pause_view(
+        principal, scope="user", value=user_id, company_id=company_id, body=body, resume=True,
+    ))
+
+
+@csrf_exempt
+@require_POST
+@handle
 def set_trial_vehicle_limit(request, company_id):
     """POST /api/admin/companies/<id>/trial/vehicles {"vehicleLimit": 3, "reason": "..."}"""
     principal = _staff(request, Perm.ADMIN_SELL)

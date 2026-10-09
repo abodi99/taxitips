@@ -1857,6 +1857,51 @@ async function salesAction(action, ds) {
       return render();
     }
 
+    case "trial-end": {
+      if (!confirm("Avsluta provet NU? Kunden får inga fler tips eller notiser. Ett betalt abonnemang påverkas inte.")) return;
+      const reason = prompt("Skriv varför provet avslutas (sparas i loggen):");
+      if (reason === null || !reason.trim()) return;
+      const result = await admin.endTrial(state.companyId, reason.trim());
+      flash(result.changed ? "Provet är avslutat." : "Provet var redan avslutat.");
+      return render();
+    }
+
+    case "company-pause": {
+      const reason = prompt(
+        "PAUSA TIPSEN: inga tips och inga notiser för företaget tills du återupptar. Kunden ser ett neutralt besked i appen; inget raderas.\n\nSkäl (obligatoriskt, sparas i loggen):",
+      );
+      if (reason === null || !reason.trim()) return;
+      await admin.pauseCompany(state.companyId, reason.trim());
+      flash("Tipsen är pausade.");
+      return render();
+    }
+
+    case "company-resume": {
+      const note = prompt("Återuppta tipsen. Anteckning (sparas i loggen):");
+      if (note === null) return;
+      await admin.resumeCompany(state.companyId, note.trim());
+      flash("Tipsen är återupptagna.");
+      return render();
+    }
+
+    case "member-pause": {
+      const reason = prompt(
+        `Pausa tipsen för ${ds.email || "kontot"}? Kontot får inga tips eller notiser men kan fortfarande logga in i kundportalen.\n\nSkäl (obligatoriskt):`,
+      );
+      if (reason === null || !reason.trim()) return;
+      await admin.pauseAccount(ds.user, state.companyId, reason.trim());
+      flash("Tipsen är pausade för kontot.");
+      return render();
+    }
+
+    case "member-resume": {
+      const note = prompt("Återuppta tipsen för kontot. Anteckning (sparas i loggen):");
+      if (note === null) return;
+      await admin.resumeAccount(ds.user, state.companyId, note.trim());
+      flash("Tipsen är återupptagna för kontot.");
+      return render();
+    }
+
     case "discount-clear": {
       const reason = prompt("Ta bort prisrabatten?\n\nSkäl (valfritt):");
       if (reason === null) return;

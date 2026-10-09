@@ -4034,6 +4034,13 @@ class _EntitlementBanner extends StatelessWidget {
       Icons.info_outline,
       TbColors.taxiDeep,
     ),
+    'company_paused' || 'account_paused' => (
+      'Medlemskapet är pausat',
+      'Nya tips visas inte just nu. $kMembershipOnWeb Det är inte samma sak '
+          'som "inga störningar just nu".',
+      Icons.pause_circle_outline,
+      TbColors.taxiDeep,
+    ),
     _ => (
       'Tipsen är pausade',
       '${membershipNotice(reason, serverMessage: message, fallback: 'Åtkomsten är inte aktiv.')} '

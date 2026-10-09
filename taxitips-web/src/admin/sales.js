@@ -465,6 +465,10 @@ export function trialExtendBlock(d, config) {
         <button class="btn btn-quiet" type="button" data-action="trial-vehicles">Ändra antal platser</button>
       </div>
       <p class="muted">Skälet sparas i händelseloggen. Extra län på en provplats lägger du till under Medlemskap.</p>
+      <h3>Avsluta provet</h3>
+      <p class="muted">Provet slutar nu: inga tips och inga notiser. Kunden får samma mejl som när provet
+        löper ut. Ett betalt abonnemang påverkas inte.</p>
+      <div class="btn-row"><button class="btn btn-danger" type="button" data-action="trial-end">Avsluta provet</button></div>
     </div>`;
 }
 

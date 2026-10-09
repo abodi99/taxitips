@@ -56,6 +56,26 @@ def can_receive(device, snapshot: dict | None = None, *, now=None) -> Verdict:
     window = company_window(company_id, now)
     if not window.ok:
         return Verdict(False, f"company_{window.reason}")
+
+    # Ett spärrat eller pausat KONTO (fleet/accounts.py) väcks inte, även när
+    # företaget har åtkomst: telefonradens konto är den som skulle läsa tipset.
+    # Samma prövning som `access._account_stop` gör för listan.
+    user_id = getattr(device, "user_id", None)
+    if user_id:
+        from fleet.models import AccountBlock
+
+        stop = (
+            AccountBlock.objects.filter(
+                lifted_at__isnull=True, value=str(user_id),
+                kind__in=[AccountBlock.Kind.USER, AccountBlock.Kind.USER_PAUSE],
+            )
+            .values_list("kind", flat=True)
+            .first()
+        )
+        if stop is not None:
+            return Verdict(
+                False, "account_paused" if stop == AccountBlock.Kind.USER_PAUSE else "account_blocked"
+            )
     if window.reason in ("trial", "free_grant") and snapshot:
         # Provet ser bara tåg och buss, och ett beviljande kan ha valda
         # kategorier (fleet/features.py). En notis om ett låst tips hade

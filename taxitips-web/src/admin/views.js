@@ -109,6 +109,7 @@ const ACCESS_TEXT = {
   trial_not_started: "provet startar när första kontot loggar in i appen",
   trial_ended: "provet är slut",
   company_suspended: "avstängt",
+  company_paused: "tipsen är pausade",
   past_due: "betalningen saknas",
   period_expired: "perioden har gått ut",
   canceled: "uppsagt",
@@ -118,8 +119,9 @@ const ACCESS_TEXT = {
 };
 
 /** Status i ett ord, för listan och kundsidans rubrik. */
-function customerStatus(c, { suspended, trial, subscriptionStatus, accessOk }) {
+function customerStatus(c, { suspended, paused, trial, subscriptionStatus, accessOk }) {
   if (suspended) return ["pill-danger", "Avstängd"];
+  if (paused) return ["pill-warn", "Pausad"];
   if (subscriptionStatus === "past_due") return ["pill-danger", "Obetald"];
   if (c.cancelAtPeriodEnd) return ["pill-warn", "Säger upp"];
   if (subscriptionStatus === "active") return ["pill-ok", "Betalande"];
@@ -380,7 +382,7 @@ function issues(d) {
   if (!done.bilar) add(1, "Har inga medlemskap.", "betalning", "Lägg till medlemskap");
   else if (!done.forare) add(1, "Inget konto är tilldelat något medlemskap.", "bilar", "Tilldela konton");
   if (!done.konto) add(1, "Ingen kan logga in i kundportalen.", "konton", "Bjud in");
-  if (!d.suspension && d.access && !d.access.ok && !list.some((i) => i.level === 3)) {
+  if (!d.suspension && !d.pause && d.access && !d.access.ok && !list.some((i) => i.level === 3)) {
     add(2, `Får inga tips: ${ACCESS_TEXT[d.access.reason] ?? d.access.reason}.`, "betalning", "Betalning");
   }
   const reviews = (d.reviews ?? []).filter((r) => r.status === "open").length;
@@ -393,7 +395,7 @@ export function kund(d, config = null, tab = "", pending = null, crm = null, log
   const p = d.profile ?? {};
   const active = kundTab(tab);
   const status = customerStatus(c, {
-    suspended: !!d.suspension, trial: d.trial, subscriptionStatus: d.subscription?.status,
+    suspended: !!d.suspension, paused: !!d.pause, trial: d.trial, subscriptionStatus: d.subscription?.status,
     accessOk: d.access?.ok,
   });
   const open = (d.licenses ?? []).filter((l) => LICENSE_OPEN.includes(l.status));
@@ -426,6 +428,8 @@ export function kund(d, config = null, tab = "", pending = null, crm = null, log
         <p class="muted"><span class="mono">${esc(c.orgNumber || "—")}</span>${contact ? ` · ${contact}` : ""}</p></div>
       <div class="btn-row">
         <button class="btn btn-quiet" data-action="support-start">Chatta med kunden</button>
+        ${config?.canSell && !d.suspension && !d.pause
+          ? '<button class="btn btn-quiet" data-action="company-pause">Pausa tipsen</button>' : ""}
       </div>
     </div>
 
@@ -433,6 +437,12 @@ export function kund(d, config = null, tab = "", pending = null, crm = null, log
       <div class="suspended-banner" role="alert">
         <b>Företaget är avstängt.</b> ${esc(d.suspension.reason)}
         ${config?.canManage ? `<button class="btn btn-quiet" data-action="block-lift" data-block="${esc(d.suspension.id)}">Häv avstängningen</button>` : ""}
+      </div>` : d.pause ? `
+      <div class="paused-banner" role="status">
+        <b>Tipsen är pausade.</b> ${esc(d.pause.reason)}
+        <span class="muted">Ingen tips och inga notiser. Kunden ser ett neutralt besked i appen och kan
+          ordna medlemskapet i kundportalen.</span>
+        ${config?.canSell ? '<button class="btn btn-quiet" data-action="company-resume">Återuppta tipsen</button>' : ""}
       </div>` : `
       <p class="access-line ${d.access?.ok ? "ok" : "bad"}">${d.access?.ok
         ? `Förarna får tips${d.access.validUntil ? ` till ${esc(date(d.access.validUntil))}` : ""}.`
@@ -1035,6 +1045,7 @@ const ROLE_CHOICES = { company_owner: "Ägare", fleet_admin: "Bilar och förare"
 function membersCard(d, config) {
   const members = d.members ?? [];
   const manage = !!config?.canManage;
+  const sell = !!config?.canSell;
   return `
     <div class="card">
       <h2>Vem kan logga in</h2>
@@ -1050,8 +1061,11 @@ function membersCard(d, config) {
             <td data-label="Roll">${esc(MEMBER_ROLE[m.role] ?? m.role)}</td>
             <td data-label="Status">${m.blocked
               ? `<span class="pill pill-danger">Spärrad</span><div class="muted">${esc(m.blocked.reason)}</div>`
-              : m.status === "active" ? '<span class="pill pill-ok">Aktiv</span>' : '<span class="pill">Avstängd här</span>'}</td>
-            <td data-label="" class="actions-cell">${manage ? `<div class="btn-row">
+              : m.status === "active" ? '<span class="pill pill-ok">Aktiv</span>' : '<span class="pill">Avstängd här</span>'}${m.paused
+              ? `<div><span class="pill pill-warn">Tipsen pausade</span><div class="muted">${esc(m.paused.reason)}</div></div>` : ""}</td>
+            <td data-label="" class="actions-cell">${sell && !m.blocked ? (m.paused
+              ? `<button class="btn btn-quiet btn-small" data-action="member-resume" data-user="${esc(m.userId)}">Återuppta tipsen</button>`
+              : `<button class="btn btn-quiet btn-small" data-action="member-pause" data-user="${esc(m.userId)}" data-email="${esc(m.email)}">Pausa tipsen</button>`) : ""}${manage ? `<div class="btn-row">
               ${m.email && !m.blocked ? `<button class="btn btn-primary btn-small" data-action="member-login-link" data-user="${esc(m.userId)}">Skapa inloggningslänk</button>` : ""}
               <details class="more-menu">
                 <summary class="btn btn-small btn-more" aria-label="Mer åtgärder">Mer</summary>

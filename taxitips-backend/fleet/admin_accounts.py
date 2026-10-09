@@ -647,16 +647,17 @@ def blocks(request):
     company_names = {
         str(c.id): c.name
         for c in Company.objects.filter(
-            id__in=[r.value for r in rows if r.kind == AccountBlock.Kind.COMPANY]
+            id__in=[r.value for r in rows if r.kind in accounts._COMPANY_KINDS]
         )
     }
-    user_emails = accounts.emails_for([r.value for r in rows if r.kind == AccountBlock.Kind.USER])
+    user_kinds = (AccountBlock.Kind.USER, AccountBlock.Kind.USER_PAUSE)
+    user_emails = accounts.emails_for([r.value for r in rows if r.kind in user_kinds])
     out = []
     for r in rows:
         row = accounts.block_row(r)
         row["label"] = (
-            company_names.get(r.value, r.value) if r.kind == AccountBlock.Kind.COMPANY
-            else user_emails.get(r.value, r.value) if r.kind == AccountBlock.Kind.USER
+            company_names.get(r.value, r.value) if r.kind in accounts._COMPANY_KINDS
+            else user_emails.get(r.value, r.value) if r.kind in user_kinds
             else r.value
         )
         out.append(row)
@@ -673,7 +674,7 @@ def create_block(request):
     kind = str(body.get("kind") or "")
     value = body.get("value")
     company_id = None
-    if kind == AccountBlock.Kind.COMPANY:
+    if kind in accounts._COMPANY_KINDS:
         company_id = str(_company_or_404(value).id)
     row = accounts.block(
         kind=kind, value=value, reason=str(body.get("reason") or ""),
