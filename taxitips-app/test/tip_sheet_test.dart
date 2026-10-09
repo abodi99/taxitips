@@ -5,6 +5,7 @@ import 'package:taxitips_app/api_client.dart';
 import 'package:taxitips_app/severity_labels.dart';
 import 'package:taxitips_app/theme.dart';
 import 'package:taxitips_app/widgets/alert_feedback_bar.dart';
+import 'package:taxitips_app/widgets/signal_card.dart';
 import 'package:taxitips_app/widgets/tip_sheet.dart';
 
 class _FakeApi extends ApiClient {
@@ -142,6 +143,7 @@ void main() {
     Future<void> Function(bool favorite)? onToggleFavorite,
     VoidCallback? onOpenSourcePage,
     VoidCallback? onClose,
+    Future<void> Function(String url)? onOpenUrl,
     ApiClient? api,
   }) async {
     await tester.binding.setSurfaceSize(const Size(390, 844));
@@ -166,6 +168,7 @@ void main() {
                 now: now,
                 onToggleFavorite: onToggleFavorite ?? (v) async {},
                 onOpenSourcePage: onOpenSourcePage,
+                onOpenUrl: onOpenUrl,
                 onClose: onClose,
               ),
             ),
@@ -247,6 +250,148 @@ void main() {
     });
   });
 
+  group('linje och station', () {
+    testWidgets('överst i bladet: "Buss 725 · Tumba station"', (tester) async {
+      await pumpSheet(
+        tester,
+        strongTip()
+          ..['line'] = 'Buss 725'
+          ..['station'] = 'Tumba station',
+      );
+      final header = find.byKey(const ValueKey('tip-line-station'));
+      expect(header, findsOneWidget);
+      expect((tester.widget(header) as Text).data, 'Buss 725 · Tumba station');
+      // Överst i huvudkortet: ovanför kategorin och statusbrickan.
+      expect(
+        top(tester, header),
+        lessThan(top(tester, find.text('Tåg & buss'))),
+      );
+      expect(top(tester, header), lessThan(top(tester, find.text('INSTÄLLD'))));
+      // Linjen från backend ersätter numret ur texten i tågbrickan.
+      expect(find.text('Buss 725'), findsOneWidget);
+      expect(find.text('Tåg 123'), findsNothing);
+    });
+
+    testWidgets('utan station: första platsen', (tester) async {
+      await pumpSheet(
+        tester,
+        strongTip()
+          ..['line'] = 'Pågatåg 1612'
+          ..['station'] = '',
+      );
+      expect(
+        (tester.widget(find.byKey(const ValueKey('tip-line-station'))) as Text)
+            .data,
+        'Pågatåg 1612 · Göteborg C',
+      );
+    });
+
+    testWidgets('utan linje: inget extra, platsen står som förut', (
+      tester,
+    ) async {
+      await pumpSheet(tester, strongTip());
+      expect(find.byKey(const ValueKey('tip-line-station')), findsNothing);
+      expect(find.text('Göteborg C'), findsOneWidget);
+    });
+
+    test('tolkas försiktigt: saknade fält är tomma', () {
+      expect(tipLineStation({}), isNull);
+      expect(tipLineStation({'line': null, 'station': null}), isNull);
+      expect(tipLineStation({'line': '', 'station': ''}), isNull);
+      expect(
+        tipLineStation({
+          'line': '',
+          'station': '',
+          'taxi': {
+            'places': ['Tumba station'],
+          },
+        }),
+        'Tumba station',
+      );
+      expect(tipLineStation({'line': 'Buss 725'}), 'Buss 725');
+      expect(
+        tipLineStation({'line': ' Buss 725 ', 'station': 'Tumba station '}),
+        'Buss 725 · Tumba station',
+      );
+      // Stationen före platserna.
+      expect(
+        tipStation({
+          'station': 'Tumba station',
+          'taxi': {
+            'places': ['Huddinge'],
+          },
+        }),
+        'Tumba station',
+      );
+      expect(tipPlace({'station': 'Tumba station'}), 'Tumba station');
+    });
+  });
+
+  group('reglerna för ersättningen', () {
+    Map<String, dynamic> withRules() => strongTip()
+      ..['compensation_source'] = 'Västtrafik'
+      ..['compensation_url'] =
+          'https://www.vasttrafik.se/forseningsersattning/';
+
+    testWidgets('länken öppnar huvudmannens sida', (tester) async {
+      final opened = <String>[];
+      await pumpSheet(
+        tester,
+        withRules(),
+        onOpenUrl: (url) async => opened.add(url),
+      );
+      final link = find.byKey(const ValueKey('compensation-rules-link'));
+      await tester.scrollUntilVisible(
+        link,
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      expect(find.text('Läs reglerna hos Västtrafik'), findsOneWidget);
+      // Står vid meningen om att taxin kan betalas.
+      expect(
+        top(tester, link),
+        greaterThan(
+          top(tester, find.textContaining('Resenären kan få taxin betald')),
+        ),
+      );
+      expect(tester.getSize(link).height, greaterThanOrEqualTo(48));
+      await tester.tap(link);
+      expect(opened, ['https://www.vasttrafik.se/forseningsersattning/']);
+    });
+
+    testWidgets('utan adress ingen länk', (tester) async {
+      await pumpSheet(
+        tester,
+        withRules()..['compensation_url'] = '',
+        onOpenUrl: (url) async {},
+      );
+      expect(find.textContaining('Läs reglerna'), findsNothing);
+      expect(find.textContaining('taxin betald'), findsOneWidget);
+    });
+
+    testWidgets('äldre backend utan fälten: ingen länk', (tester) async {
+      await pumpSheet(tester, strongTip(), onOpenUrl: (url) async {});
+      expect(find.textContaining('Läs reglerna'), findsNothing);
+    });
+
+    test('bara http(s)-adresser blir en länk', () {
+      expect(compensationRulesUrl({}), isNull);
+      expect(compensationRulesUrl({'compensation_url': null}), isNull);
+      expect(
+        compensationRulesUrl({'compensation_url': 'javascript:x'}),
+        isNull,
+      );
+      expect(
+        compensationRulesUrl({'compensation_url': 'sl.se/regler'}),
+        isNull,
+      );
+      expect(
+        compensationRulesUrl({'compensation_url': 'https://sl.se/regler'}),
+        'https://sl.se/regler',
+      );
+    });
+  });
+
   group('särfall', () {
     testWidgets('Övrigt: meddelandet utan bedömning och ersättning', (
       tester,
@@ -255,7 +400,9 @@ void main() {
       expect(find.text('Trafikbolagets meddelande'), findsOneWidget);
       expect(find.text('Spårvagn 7 har ändrad körväg'), findsWidgets);
       expect(
-        find.text('Allmänt meddelande. Vi bedömer inte om det är värt att köra dit.'),
+        find.text(
+          'Allmänt meddelande. Vi bedömer inte om det är värt att köra dit.',
+        ),
         findsOneWidget,
       );
       expect(find.text('Särskilda omständigheter'), findsNothing);
@@ -270,7 +417,10 @@ void main() {
       expect(find.text('Slut. Tipset gäller inte längre.'), findsOneWidget);
       expect(find.textContaining('Tog slut för 8 min sedan'), findsOneWidget);
       expect(find.textContaining('Kör dit'), findsNothing);
-      expect(find.widgetWithText(OutlinedButton, 'Öppna navigering'), findsOneWidget);
+      expect(
+        find.widgetWithText(OutlinedButton, 'Öppna navigering'),
+        findsOneWidget,
+      );
       expect(find.widgetWithText(OutlinedButton, 'Spara'), findsOneWidget);
       expect(find.text('Särskilda omständigheter'), findsNothing);
     });
@@ -424,10 +574,7 @@ void main() {
         findsOneWidget,
       );
       expect(find.text('Stor station – många resenärer'), findsOneWidget);
-      expect(
-        find.text('Sent på kvällen – färre alternativ'),
-        findsOneWidget,
-      );
+      expect(find.text('Sent på kvällen – färre alternativ'), findsOneWidget);
       expect(find.text('Halka på vägarna'), findsNothing);
 
       final all = find.text('Visa alla skäl');
@@ -504,7 +651,10 @@ void main() {
       await openSheet(tester, strongTip());
       expect(tester.takeException(), isNull);
       expect(find.text('INSTÄLLD'), findsOneWidget);
-      expect(find.widgetWithText(FilledButton, 'Kör dit · 3,2 km'), findsOneWidget);
+      expect(
+        find.widgetWithText(FilledButton, 'Kör dit · 3,2 km'),
+        findsOneWidget,
+      );
     });
 
     testWidgets('att dra ner i innehållet stänger bladet', (tester) async {
@@ -526,7 +676,14 @@ void main() {
     testWidgets('ingen köpknapp, inget pris att betala, ingen betallänk', (
       tester,
     ) async {
-      await pumpSheet(tester, strongTip());
+      // Med länken till huvudmannens regler: information, inget köp.
+      await pumpSheet(
+        tester,
+        strongTip()
+          ..['compensation_source'] = 'Västtrafik'
+          ..['compensation_url'] = 'https://www.vasttrafik.se/regler/',
+        onOpenUrl: (url) async {},
+      );
       final forbidden = RegExp(
         r'uppgradera|prenumer|köp |betala dig|checkout|stripe|/mån|per månad',
         caseSensitive: false,
@@ -550,19 +707,29 @@ void main() {
       expect(tipHeadline({'kind': 'flight', 'severity_tier': 'x'}), 'Flyg');
     });
 
-    test('platsen: hållplats eller ort, annars titeln -- aldrig för Övrigt', () {
-      expect(tipPlace(strongTip()), 'Göteborg C');
-      expect(tipPlace({'stop_name': 'Brunnsparken'}), 'Brunnsparken');
-      expect(tipPlace({'title': 'Tåg inställt', 'mode': 'train'}), isNotNull);
-      expect(
-        tipPlace({'title': 'Ändrad körväg', 'severity_tier': 'ignore'}),
-        isNull,
-      );
-    });
+    test(
+      'platsen: hållplats eller ort, annars titeln -- aldrig för Övrigt',
+      () {
+        expect(tipPlace(strongTip()), 'Göteborg C');
+        expect(tipPlace({'stop_name': 'Brunnsparken'}), 'Brunnsparken');
+        expect(tipPlace({'title': 'Tåg inställt', 'mode': 'train'}), isNotNull);
+        expect(
+          tipPlace({'title': 'Ändrad körväg', 'severity_tier': 'ignore'}),
+          isNull,
+        );
+      },
+    );
 
     test('alertPlacesList läser taxi.places', () {
       expect(alertPlacesList(strongTip()), ['Göteborg C']);
-      expect(alertPlacesList({'taxi': {'places': ['A', 'B']}}), ['A', 'B']);
+      expect(
+        alertPlacesList({
+          'taxi': {
+            'places': ['A', 'B'],
+          },
+        }),
+        ['A', 'B'],
+      );
       expect(alertPlacesList({'taxi': {}}), isEmpty);
       expect(alertPlacesList({}), isEmpty);
     });

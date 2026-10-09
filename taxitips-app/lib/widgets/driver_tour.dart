@@ -17,7 +17,7 @@ class DriverTourKeys {
   final categories = GlobalKey(debugLabel: 'tour_categories');
   final filter = GlobalKey(debugLabel: 'tour_filter');
 
-  /// Historik-knappen, ovanför Filter.
+  /// Historik-knappen: klockan i raden överst, i vänstra hörnet.
   final history = GlobalKey(debugLabel: 'tour_history');
   final settings = GlobalKey(debugLabel: 'tour_settings');
 }
@@ -60,8 +60,9 @@ List<TourStep> driverTourSteps({
       title: 'Kartan och nålarna',
       text:
           'Varje nål är ett tips. Nålen har samma färg som tipset. Tryck på '
-          'en nål för att öppna tipset. Knappen med frågetecken förklarar '
-          'symbolerna.',
+          'en nål för att öppna tipset. Överst förklarar frågetecknet '
+          'symbolerna, och klockan i vänstra hörnet är Historik: tipsen '
+          'från det senaste dygnet.',
       area: mapArea,
     ),
     TourStep(
@@ -86,8 +87,7 @@ List<TourStep> driverTourSteps({
       title: 'Filter och län',
       text:
           'Med Filter väljer du län, hur starka tips du vill se och vad som '
-          'ska döljas. Välj ditt län här så får du tips därifrån. '
-          'Historik, ovanför, visar tipsen från det senaste dygnet.',
+          'ska döljas. Välj ditt län här så får du tips därifrån.',
       keys: [keys.filter],
     ),
     TourStep(

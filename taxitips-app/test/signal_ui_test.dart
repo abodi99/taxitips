@@ -275,6 +275,51 @@ void main() {
       },
     );
 
+    testWidgets('kortet visar linje och station när backend skickar dem', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        wrap(
+          const SignalCard(
+            alert: {
+              'title': 'Buss 725 inställd',
+              'kind': 'transit',
+              'mode': 'bus',
+              'level': 'high',
+              'line': 'Buss 725',
+              'station': 'Tumba station',
+              'taxi': {
+                'places': ['Tumba'],
+              },
+            },
+          ),
+        ),
+      );
+      expect(find.text('Buss 725 · Tumba station'), findsOneWidget);
+    });
+
+    testWidgets('kortet utan linje och station: platsen som förut', (
+      tester,
+    ) async {
+      await tester.pumpWidget(
+        wrap(
+          const SignalCard(
+            alert: {
+              'title': 'Tåg inställt',
+              'kind': 'transit',
+              'mode': 'train',
+              'level': 'high',
+              'taxi': {
+                'places': ['Göteborg C'],
+              },
+            },
+          ),
+        ),
+      );
+      expect(find.text('Göteborg C'), findsOneWidget);
+      expect(find.textContaining(' · '), findsNothing);
+    });
+
     testWidgets(
       'evenemangskortet på en smal telefon: tiden på en rad, inte en bokstav per rad',
       (tester) async {

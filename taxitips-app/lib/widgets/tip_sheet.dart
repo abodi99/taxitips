@@ -257,12 +257,9 @@ String tipHeadline(Map alert) {
 /// Platsen (hållplats, station, ort). `null` när det bara finns en rubrik att
 /// gå på och rubriken redan står överst.
 String? tipPlace(Map alert) {
-  final stop = alert['stop_name']?.toString() ?? '';
-  if (stop.isNotEmpty) return stop;
-  final places = alertPlacesList(alert);
-  if (places.isNotEmpty && places.first.isNotEmpty) {
-    return places.first;
-  }
+  // Backendens `station`, annars hållplatsen eller första platsen.
+  final station = tipStation(alert);
+  if (station.isNotEmpty) return station;
   if (isMinorTip(alert)) return null;
   return displayTitle(
     title: alert['title']?.toString(),
@@ -338,6 +335,18 @@ List<String> alertPlacesList(Map alert) {
   final raw = (alert['taxi'] as Map?)?['places'];
   if (raw is! List) return const [];
   return [for (final p in raw) p.toString()];
+}
+
+/// Huvudmannens sida med reglerna för taxiersättning (`compensation_url`
+/// från backend), eller null. Bara http(s): en informationslänk till
+/// trafikbolaget, aldrig något att betala.
+String? compensationRulesUrl(Map alert) {
+  final raw = alert['compensation_url']?.toString().trim() ?? '';
+  if (raw.isEmpty) return null;
+  final uri = Uri.tryParse(raw);
+  if (uri == null || !uri.hasAuthority) return null;
+  if (uri.scheme != 'https' && uri.scheme != 'http') return null;
+  return raw;
 }
 
 /// Trafikbolag/huvudman som nämns i en text, eller null. Korta förkortningar
@@ -896,7 +905,10 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
 
   /// "Station A → Station B" ur tipset: starten från platsen/hållplatsen,
   /// målet från den drabbade avgångens destination när den finns.
-  _ParsedRoute parseAlertRoute(Map<String, dynamic> alert, TravelOptions? travel) {
+  _ParsedRoute parseAlertRoute(
+    Map<String, dynamic> alert,
+    TravelOptions? travel,
+  ) {
     final from = tipPlace(alert) ?? tipHeadline(alert);
     final dep = travel?.departure;
     String? to;
@@ -930,9 +942,12 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
       alert['summary']?.toString() ?? '',
     ].join(' ');
     final operator = _mentionedOperator(text);
-    final trainNumber = _trainNumber(alert);
-    final trainLabel =
-        trainNumber == null ? null : '${_modeLabel(alert)} $trainNumber';
+    // Backendens linje ("Pågatåg 1612") före det som går att läsa ur texten.
+    final line = tipLine(alert);
+    final trainNumber = line.isNotEmpty ? line : _trainNumber(alert);
+    final trainLabel = line.isNotEmpty
+        ? line
+        : (trainNumber == null ? null : '${_modeLabel(alert)} $trainNumber');
     final parts = <String>[?operator, ?trainLabel];
     final badgeText = parts.isEmpty ? _modeLabel(alert) : parts.join(' · ');
     return _TrainDetails(
@@ -943,7 +958,10 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
   }
 
   /// Förseningsminuterna från den drabbade avgången, när källan anger dem.
-  int? extractAlertDelayMinutes(Map<String, dynamic> alert, TravelOptions? travel) {
+  int? extractAlertDelayMinutes(
+    Map<String, dynamic> alert,
+    TravelOptions? travel,
+  ) {
     return travel?.departure?.delayMinutes;
   }
 
@@ -961,6 +979,9 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
         ? ''
         : '${distanceText(distanceKm)} från dig';
     final trainDetails = parseAlertTrainDetails(alert, travel);
+    // "Buss 725 · Tumba station" överst, när backend vet linjen. Utan linje
+    // står stationen redan stort nedanför -- då visas inget extra.
+    final lineStation = tipLine(alert).isEmpty ? null : tipLineStation(alert);
 
     // Status & avgångstider
     final dep = travel?.departure;
@@ -1074,6 +1095,20 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    if (lineStation != null) ...[
+                      Text(
+                        lineStation,
+                        key: const ValueKey('tip-line-station'),
+                        style: const TextStyle(
+                          fontFamily: kDisplayFont,
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                          height: 1.2,
+                          color: TbColors.midnatt,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                    ],
                     Row(
                       children: [
                         Text(
@@ -1770,7 +1805,13 @@ class _CompensationBoxState extends State<CompensationBox> {
     Map alert,
     TravelOptions? travel,
   ) {
-    final operatorName = _compensationOperator(alert);
+    // Backend vet vems regler som gäller (core/compensation.py); annars
+    // gissar vi huvudmannen ur texten eller länet.
+    final source = alert['compensation_source']?.toString().trim() ?? '';
+    final operatorName = source.isNotEmpty
+        ? source
+        : _compensationOperator(alert);
+    final url = compensationRulesUrl(alert);
     return _CompensationGuideline(
       title: 'Taxiersättning',
       operatorName: operatorName,
@@ -1778,10 +1819,10 @@ class _CompensationBoxState extends State<CompensationBox> {
       disclaimer:
           'Beloppet gäller när trafikbolagets villkor är uppfyllda. Vi kan '
           'inte bedöma den enskilda resan.',
-      // Villkoren står på huvudmannens egen sida. En felaktig länk vore värre
-      // än ingen: därför visas ingen förrän vi har rätt adress per bolag.
-      url: null,
-      linkLabel: null,
+      // Villkoren står på huvudmannens egen sida, och adressen kommer från
+      // backend. En påhittad länk vore värre än ingen: utan adress ingen länk.
+      url: url,
+      linkLabel: url == null ? null : 'Läs reglerna hos $operatorName',
     );
   }
 
@@ -1897,13 +1938,17 @@ class _CompensationBoxState extends State<CompensationBox> {
                         horizontal: 10,
                         vertical: 6,
                       ),
-                      minimumSize: const Size(0, 36),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      // Minst 48 hög: går att träffa i bilen.
+                      minimumSize: const Size(0, 48),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(8),
                       ),
                     ),
-                    onPressed: () => onOpenUrl(guide.url!),
+                    key: const ValueKey('compensation-rules-link'),
+                    onPressed: () {
+                      unawaited(logAnalyticsEvent('compensation_rules_opened'));
+                      onOpenUrl(guide.url!);
+                    },
                     icon: const Icon(Icons.open_in_new_rounded, size: 14),
                     label: Text(
                       guide.linkLabel!,

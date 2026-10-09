@@ -68,10 +68,7 @@ void main() {
         'Öppnar kundportalen på webben: bilar, fakturor och medlemmar.',
       );
       // Portaltexterna får inte låta som köp-CTA.
-      for (final text in [
-        kPortalAccountTitle,
-        kPortalAccountSubtitle,
-      ]) {
+      for (final text in [kPortalAccountTitle, kPortalAccountSubtitle]) {
         expect(text.toLowerCase(), isNot(contains('prenumer')));
         expect(text.toLowerCase(), isNot(contains('köp')));
         expect(text.toLowerCase(), isNot(contains('betala')));
@@ -169,6 +166,10 @@ void main() {
       // trafikbolagets och evenemangets egen sida, demon, och adminens
       // kontohantering i kundportalen. Ny fil här = granska att den inte
       // leder till ett köp-CTA, och lägg till den.
+      // Länken "Läs reglerna hos {huvudman}" i tipsbladet (compensation_url)
+      // är huvudmannens regler för taxiersättning -- en källa, ingen
+      // betalning. tip_sheet.dart öppnar den inte själv: förarskärmen gör
+      // det via onOpenUrl, så ingen ny fil behövs i listan.
       const allowed = {
         'lib/navigation.dart',
         'lib/screens/welcome_screen.dart',

@@ -34,7 +34,8 @@ class SignalCard extends StatelessWidget {
     final color = strengthColor(strength, category: category);
     final active = alert['is_active'] != false;
     final followed = alert['is_favorite'] == true;
-    final title = alertPlaceTitle(alert);
+    // Linje och station först ("Buss 725 · Tumba station"), annars platsen.
+    final title = tipLineStation(alert) ?? alertPlaceTitle(alert);
     final start = DateTime.tryParse(
       alert['start_time']?.toString() ?? '',
     )?.toLocal();
@@ -199,16 +200,44 @@ String? tipBrief(Map alert) {
 
 /// Platsen först ("Göteborg C"), annars källans rubrik med färdsättet.
 String alertPlaceTitle(Map<String, dynamic> alert) {
-  final places = ((alert['taxi'] as Map?)?['places'] as List?) ?? const [];
-  final stop = alert['stop_name']?.toString() ?? '';
-  if (stop.isNotEmpty) return stop;
-  if (places.isNotEmpty && places.first.toString().isNotEmpty) {
-    return places.first.toString();
-  }
+  final station = tipStation(alert);
+  if (station.isNotEmpty) return station;
   return displayTitle(
     title: alert['title']?.toString(),
     mode: alert['mode']?.toString(),
   );
+}
+
+String _field(Object? value) => value == null ? '' : value.toString().trim();
+
+/// Linjen tipset gäller ("Buss 725", "Pågatåg 1612"), som backend skickar
+/// den i `line`. Tom när den saknas -- äldre svar har inget sådant fält.
+String tipLine(Map alert) => _field(alert['line']);
+
+/// Stationen eller hållplatsen tipset gäller: backendens `station`, annars
+/// hållplatsnamnet eller första platsen i `taxi.places`. Tom när ingen finns.
+String tipStation(Map alert) {
+  final station = _field(alert['station']);
+  if (station.isNotEmpty) return station;
+  final stop = _field(alert['stop_name']);
+  if (stop.isNotEmpty) return stop;
+  final places = (alert['taxi'] as Map?)?['places'];
+  if (places is List && places.isNotEmpty) return _field(places.first);
+  return '';
+}
+
+/// "Buss 725 · Tumba station": linje och station på en rad, det föraren
+/// letar efter först. Bara det som finns; `null` när båda saknas, och då
+/// visas inget extra.
+String? tipLineStation(Map alert) {
+  final line = tipLine(alert);
+  final station = tipStation(alert);
+  final parts = [
+    if (line.isNotEmpty) line,
+    if (station.isNotEmpty && station.toLowerCase() != line.toLowerCase())
+      station,
+  ];
+  return parts.isEmpty ? null : parts.join(' · ');
 }
 
 /// Ikonruta i styrkans färg. Väghinder får triangelns ikon på varningsfärgen,

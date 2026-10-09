@@ -82,6 +82,35 @@ void main() {
     await disposeScreen(tester);
   });
 
+  testWidgets('raden visar linje och station när backend skickar dem', (
+    tester,
+  ) async {
+    final rows = sampleHistory();
+    rows[0] = {
+      ...rows[0],
+      'line': 'Pågatåg 1612',
+      'station': 'Malmö C',
+      'countyName': 'Skåne län',
+    };
+    final api = FakeDriverApi()
+      ..historyBody = {
+        'alerts': rows,
+        'hours': 24,
+        'entitled': true,
+        'needsArea': false,
+        'truncated': false,
+      };
+    await pumpHistory(tester, api);
+    expect(
+      find.descendant(
+        of: find.byType(HistoryRow).at(0),
+        matching: find.text('Pågatåg 1612 · Malmö C · Skåne'),
+      ),
+      findsOneWidget,
+    );
+    await disposeScreen(tester);
+  });
+
   testWidgets('6, 12 eller 24 timmar: valet hämtar om', (tester) async {
     final api = FakeDriverApi();
     await pumpHistory(tester, api);

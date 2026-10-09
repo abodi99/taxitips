@@ -8,7 +8,7 @@ import '../membership_copy.dart';
 import '../net_status.dart';
 import '../signal_kinds.dart';
 import '../theme.dart';
-import '../widgets/signal_card.dart' show StrengthPill;
+import '../widgets/signal_card.dart' show StrengthPill, tipLineStation;
 import '../widgets/tip_sheet.dart';
 
 /// Hur långt bak historiken kan visa. Servern tar upp till 48 timmar
@@ -463,7 +463,8 @@ class HistoryRow extends StatelessWidget {
         ? ''
         : '${time.hour.toString().padLeft(2, '0')}:'
               '${time.minute.toString().padLeft(2, '0')}';
-    final place = tipPlace(shown);
+    // Linje och station ("Buss 725 · Tumba station") när de finns.
+    final place = tipLineStation(shown) ?? tipPlace(shown);
     final county = shown['countyName']?.toString() ?? '';
     final where = [
       if (place != null && place.isNotEmpty) place,

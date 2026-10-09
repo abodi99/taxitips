@@ -2032,6 +2032,14 @@ class ApiClient {
       // true/false/null -- null betyder att huvudmannen inte skriver ut
       // det, och då säger kortet inget heller.
       'compensation_per_person': m['compensation_per_person'],
+      // Var reglerna för ersättningen står: huvudmannens namn och sida.
+      // Information, inget köp. Tomma när backend inte skickar dem.
+      'compensation_source': m['compensation_source']?.toString() ?? '',
+      'compensation_url': m['compensation_url']?.toString() ?? '',
+      // Linjen ("Buss 725") och stationen tipset gäller. Tomma på äldre
+      // svar -- då visar korten platsen som förut (signal_card.tipStation).
+      'line': m['line']?.toString() ?? '',
+      'station': m['station']?.toString() ?? '',
       // "Vad gör resenären i stället?" -- formulerad av backend
       // (core/alternatives.py) så att kort, detaljvy och push säger samma
       // sak. Saknas den (Supabase-vägen) visas ingen rad alls.

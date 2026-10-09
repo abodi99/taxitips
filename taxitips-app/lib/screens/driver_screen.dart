@@ -2246,29 +2246,9 @@ class _DriverScreenState extends State<DriverScreen>
                             fontWeight: FontWeight.w700,
                           ),
                         ),
-                        const SizedBox(height: 14),
-                        const Text(
-                          'Sortera',
-                          style: TextStyle(fontWeight: FontWeight.w700),
-                        ),
-                        const SizedBox(height: 8),
-                        SegmentedButton<String>(
-                          style: SegmentedButton.styleFrom(
-                            selectedBackgroundColor: TbColors.taxi,
-                            selectedForegroundColor: TbColors.ink,
-                          ),
-                          segments: [
-                            for (final (value, icon, label) in _sortOptions)
-                              ButtonSegment(
-                                value: value,
-                                icon: Icon(icon, size: 18),
-                                label: Text(label),
-                              ),
-                          ],
-                          selected: {_sortMode},
-                          onSelectionChanged: (set) =>
-                              apply(() => _sortMode = set.first),
-                        ),
+                        // Sorteringen bor i listans rubrik ("Viktigast ▾"),
+                        // inte här: filtret väljer VAD som visas.
+                        const SizedBox(height: 6),
                         // Alltid med: färdsätten går att dölja även när
                         // inga störningstyper finns att välja bland.
                         Theme(
@@ -2680,6 +2660,16 @@ class _DriverScreenState extends State<DriverScreen>
                         );
                       }
                     },
+              // Huvudmannens regler för taxiersättning (compensation_url):
+              // information, inget köp. Öppnas utanför appen.
+              onOpenUrl: (link) async {
+                final uri = Uri.tryParse(link);
+                if (uri == null ||
+                    (uri.scheme != 'https' && uri.scheme != 'http')) {
+                  return;
+                }
+                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              },
               onClose: () => Navigator.pop(ctx),
             );
           },
@@ -2809,17 +2799,33 @@ class _DriverScreenState extends State<DriverScreen>
                                         mainAxisAlignment:
                                             MainAxisAlignment.spaceBetween,
                                         children: [
-                                          if (widget.onBack != null)
-                                            IconButton(
-                                              icon: const Icon(
-                                                Icons.arrow_back,
+                                          // Vänstra hörnet: Tillbaka (adminläget)
+                                          // och Historik, en tyst ikon som de
+                                          // andra här uppe. Höger hörn har
+                                          // redan två; tre där når loggan.
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              if (widget.onBack != null)
+                                                IconButton(
+                                                  icon: const Icon(
+                                                    Icons.arrow_back,
+                                                  ),
+                                                  tooltip: 'Tillbaka',
+                                                  color: TbColors.ink,
+                                                  onPressed: widget.onBack!,
+                                                ),
+                                              IconButton(
+                                                key: _tourKeys.history,
+                                                icon: const Icon(
+                                                  Icons.history_rounded,
+                                                ),
+                                                tooltip: 'Historik',
+                                                color: TbColors.ink,
+                                                onPressed: _openHistory,
                                               ),
-                                              tooltip: 'Tillbaka',
-                                              color: TbColors.ink,
-                                              onPressed: widget.onBack!,
-                                            )
-                                          else
-                                            const SizedBox(width: 48),
+                                            ],
+                                          ),
                                           // Sällan använt, därför här uppe och
                                           // inte bland kartknapparna där tummen är.
                                           Row(
@@ -2953,16 +2959,17 @@ class _DriverScreenState extends State<DriverScreen>
                   ),
 
                   // 3. Knapparna nere, där tummen når. Två grupper:
-                  //    vänster: det som ändrar VAD som visas -- Historik och
-                  //    Filter, med ord och ikon (inte alla förare läser
-                  //    svenska snabbt, en ikon ensam räcker inte);
+                  //    vänster: Filter, det som ändrar VAD som visas, med ord
+                  //    och ikon (inte alla förare läser svenska snabbt, en
+                  //    ikon ensam räcker inte);
                   //    höger: kartan -- zoom och min position, störst och
                   //    närmast tummen.
-                  // Förklaringen (?) och Inställningar ligger i raden överst:
-                  // de används sällan och ska inte ta tummens plats.
+                  // Historik, förklaringen (?) och Inställningar ligger i
+                  // raden överst: de används sällan och ska inte ta tummens
+                  // plats.
                   // Knapparna följer listans överkant och tonas bort när
                   // listan dras upp -- annars hamnar de under statusraden.
-                  // Filter och Historik finns då i listans rubrik i stället.
+                  // Filter finns då i listans rubrik i stället.
                   Positioned(
                     left: 12,
                     right: 12,
@@ -2982,14 +2989,6 @@ class _DriverScreenState extends State<DriverScreen>
                               mainAxisSize: MainAxisSize.min,
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                _MapLabelButton(
-                                  key: _tourKeys.history,
-                                  heroTag: 'history_fab',
-                                  icon: Icons.history_rounded,
-                                  label: 'Historik',
-                                  onPressed: _openHistory,
-                                ),
-                                const SizedBox(height: 10),
                                 Badge(
                                   key: _tourKeys.filter,
                                   isLabelVisible: _filtersActive,
@@ -3171,12 +3170,6 @@ class _DriverScreenState extends State<DriverScreen>
               ),
             ),
           ),
-          if (_sheetHigh)
-            IconButton(
-              tooltip: 'Historik',
-              onPressed: _openHistory,
-              icon: const Icon(Icons.history_rounded, color: TbColors.midnatt),
-            ),
           if (_sheetHigh)
             Badge(
               isLabelVisible: _filtersActive,
@@ -3908,11 +3901,10 @@ class _EntitlementBanner extends StatelessWidget {
   }
 }
 
-/// En kartknapp med ikon OCH ord ("Historik", "Filter"): vit, 52 hög, så att
+/// En kartknapp med ikon OCH ord ("Filter"): vit, 52 hög, så att
 /// den går att träffa i en bil som rör sig.
 class _MapLabelButton extends StatelessWidget {
   const _MapLabelButton({
-    super.key,
     required this.heroTag,
     required this.icon,
     required this.label,

@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:taxitips_app/screens/driver_screen.dart';
 import 'package:taxitips_app/theme.dart';
+import 'package:taxitips_app/widgets/driver_tour.dart';
 import 'package:taxitips_app/widgets/guided_tour.dart';
 
 import 'driver_test_support.dart';
@@ -98,6 +99,21 @@ void main() {
     expect(find.text('Tipslistan'), findsOneWidget);
     expect(find.text('Steg 1 av 7'), findsOneWidget);
     await disposeScreen(tester);
+  });
+
+  test('Historik nämns där den sitter: klockan överst, inte vid Filter', () {
+    final steps = driverTourSteps(
+      keys: DriverTourKeys(),
+      owner: false,
+      mapArea: () => null,
+    );
+    expect(steps, hasLength(driverSteps.length));
+    final map = steps.firstWhere((s) => s.id == 'map');
+    final filter = steps.firstWhere((s) => s.id == 'filter');
+    expect(map.text, contains('Historik'));
+    expect(map.text, contains('vänstra hörnet'));
+    expect(filter.text, isNot(contains('Historik')));
+    expect(filter.text, isNot(contains('ovanför')));
   });
 
   testWidgets('utan Inställningar-knapp hoppas det sista steget över', (
