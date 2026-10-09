@@ -664,11 +664,13 @@ AI_BRIEF_MAX_PER_RUN = 30
 # Högst så många AI-anrop per minut, alla syften tillsammans. Gratisnivån hos
 # Google tillåter 15 per minut och modell (mätt 2026-10-04: 429 efter 15 anrop),
 # och stötar -- granskningen tar 40 tips, beskeden 30 -- slog i taket direkt.
-# Det som inte hinner med i en körning tas i nästa. Med betald nivå kan taket höjas.
+# Det som inte hinner med i en körning tas i nästa.
 #
-# Miljövariabeln AI_MAX_CALLS_PER_MINUTE höjer taket när faktureringen är på
-# (betald nivå: hundratals per minut) -- se docs/genkit-bedomning.md §5.
-AI_MAX_CALLS_PER_MINUTE = _env_int("AI_MAX_CALLS_PER_MINUTE", 12)
+# Faktureringen slogs på 2026-10-09 (betald nivå: tusentals per minut). 60 räcker
+# för stötarna med god marginal; dagstaket, felpausen och månadsbudgeten står
+# kvar som skydd. Miljövariabeln AI_MAX_CALLS_PER_MINUTE ändrar taket utan
+# deploy -- se docs/genkit-bedomning.md §5.
+AI_MAX_CALLS_PER_MINUTE = _env_int("AI_MAX_CALLS_PER_MINUTE", 60)
 # Av dem hålls så många fria för grinden före en notis (core/ai_gate.py).
 AI_GATE_RESERVED_PER_MINUTE = 3
 
