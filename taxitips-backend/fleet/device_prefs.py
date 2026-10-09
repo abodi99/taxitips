@@ -27,9 +27,22 @@ def apply_counties_to_prefs(prefs: dict, counties: list[str]) -> dict:
     return out
 
 
+# Licensens län när telefonens val senast sattes. Ett län som tillkommit sedan
+# dess (köpt extra län, beviljande) har föraren aldrig kunnat välja bort, och
+# ska därför ge notiser direkt -- annars stannade notiserna på baslänet som
+# kopplingen satte, fast licensen omfattade två län.
+ENTITLED_KEY = "entitledCounties"
+
+
 def align_prefs_to_entitlement(prefs: dict | None, entitled: list[str] | tuple[str, ...]) -> tuple[dict, bool]:
     """
-    Behåll förarens val om det fortfarande gäller. Annars: hela rättigheten.
+    Telefonens län mot licensens: valet får smalna av, aldrig vidga.
+
+    * Län som inte längre ingår tas bort; blir inget kvar gäller hela licensen.
+    * Län som tillkommit sedan valet sattes (`ENTITLED_KEY`) läggs till.
+    * Saknas anteckningen (val sparade före den) och valet är snävare än
+      licensen, gäller hela licensen -- det snävare valet var kopplingens
+      baslän, inte förarens.
 
     Returnerar (nya_prefs, ändrades). Tom rättighet rör ingenting.
     """
@@ -37,20 +50,27 @@ def align_prefs_to_entitlement(prefs: dict | None, entitled: list[str] | tuple[s
     if not entitled_set:
         return dict(prefs or {}), False
     current = dict(prefs or {})
-    chosen = [str(c) for c in (current.get("counties") or []) if str(c).strip()]
-    kept = [c for c in chosen if c in entitled_set]
-    if chosen and kept:
-        # Valet smalnar fortfarande av inom rättigheten — behåll det.
-        if kept == chosen and all(
-            str(m)[:2] in entitled_set for m in (current.get("municipalities") or [])
-        ):
-            return current, False
-        return apply_counties_to_prefs(current, kept), True
-    # Inget valt, eller bara län utanför rättigheten (t.ex. efter admin-byte).
     target = sorted(entitled_set)
-    if chosen == target and not (current.get("regions") or current.get("cities")):
+    chosen = [str(c) for c in (current.get("counties") or []) if str(c).strip()]
+    kept = {c for c in chosen if c in entitled_set}
+    recorded = current.get(ENTITLED_KEY)
+    if isinstance(recorded, list):
+        kept |= entitled_set - {str(c) for c in recorded}
+    elif kept:
+        kept = set(entitled_set)
+    wanted = sorted(kept) or target
+
+    municipalities_ok = all(
+        str(m)[:2] in wanted for m in (current.get("municipalities") or [])
+    )
+    if (
+        chosen == wanted and recorded == target and municipalities_ok
+        and not (current.get("regions") or current.get("cities"))
+    ):
         return current, False
-    return apply_counties_to_prefs(current, target), True
+    out = apply_counties_to_prefs(current, wanted)
+    out[ENTITLED_KEY] = target
+    return out, True
 
 
 def write_device_prefs(device_id, prefs: dict) -> None:

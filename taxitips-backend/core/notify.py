@@ -915,8 +915,31 @@ def _devices(require_token: bool = True, weak_only: bool = False):
         if company_id not in open_by_company:
             open_by_company[company_id] = company_window(company_id, now).ok
         if open_by_company[company_id]:
+            _heal_area(device, now)
             out.append(device)
     return out
+
+
+def _heal_area(device, now) -> None:
+    """
+    Telefonens körområde mot licensens län, här där notisen avgörs. Läkningen
+    i läsvägarna (core/api.py) körs bara när appen öppnar vissa vyer; ett extra
+    län som köpts under passet ska ge notiser utan att föraren öppnar något.
+    Skriver bara när något ändrats. Får aldrig stoppa en notiscykel.
+    """
+    from fleet import device_prefs
+    from fleet.notify_settings import device_entitlement
+
+    try:
+        entitled, restricted = device_entitlement(device, now)
+        if restricted and entitled:
+            prefs, changed = device_prefs.align_prefs_to_entitlement(device.notify_prefs, entitled)
+            if changed:
+                device_prefs.write_device_prefs(device.id, prefs)
+                device.notify_prefs = prefs
+    except Exception as exc:  # ett läkningsfel ska inte tysta alla notiser
+        reraise_time_limit(exc)
+        log.warning("notify: körområdet kunde inte läkas för %s: %s", device.id, type(exc).__name__)
 
 
 def _has_cap(prefs) -> bool:

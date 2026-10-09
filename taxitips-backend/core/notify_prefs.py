@@ -202,6 +202,9 @@ def apply_update(
         counties = {str(c) for c in body["counties"] if str(c) in areas.COUNTY_NAMES}
         if restricted:
             counties &= entitled_set
+            # Föraren har sett och valt bland just dessa län; ett som tillkommer
+            # senare läggs till av fleet/device_prefs.align_prefs_to_entitlement.
+            out["entitledCounties"] = sorted(entitled_set)
         out["counties"] = sorted(counties)
     if isinstance(body.get("categories"), dict):
         out["categories"] = {
