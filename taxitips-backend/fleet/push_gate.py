@@ -56,14 +56,16 @@ def can_receive(device, snapshot: dict | None = None, *, now=None) -> Verdict:
     window = company_window(company_id, now)
     if not window.ok:
         return Verdict(False, f"company_{window.reason}")
-    if window.reason == "trial" and snapshot:
-        # Provet ser bara tåg och buss (fleet/features.py). En notis om ett
-        # låst tips hade lämnat ut just det som provet inte omfattar.
+    if window.reason in ("trial", "free_grant") and snapshot:
+        # Provet ser bara tåg och buss, och ett beviljande kan ha valda
+        # kategorier (fleet/features.py). En notis om ett låst tips hade
+        # lämnat ut just det som perioden inte omfattar.
         from fleet import features
 
         category = features.category_of_row(snapshot)
         if not features.for_company(company_id, now).allows(category):
-            return Verdict(False, f"trial_category_locked:{category}")
+            prefix = "trial" if window.reason == "trial" else "grant"
+            return Verdict(False, f"{prefix}_category_locked:{category}")
 
     # Kontobaserat medlemskap (2026-10): platsen tilldelas KONTOT, och appen
     # håller en öppen MembershipSession. Den vägen skapar varken DeviceApproval

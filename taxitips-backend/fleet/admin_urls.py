@@ -96,6 +96,7 @@ urlpatterns = [
     path("companies/<uuid:company_id>/memberships", admin_api.create_membership),
     path("companies/<uuid:company_id>/grant", admin_api.grant_free_membership),
     path("grants/<uuid:grant_id>/revoke", admin_api.revoke_grant),
+    path("grants/<uuid:grant_id>/update", admin_api.update_grant),
     path("companies/<uuid:company_id>/driver-invites", admin_api.driver_invite_create),
     path("driver-invites/<uuid:invite_id>/resend", admin_api.driver_invite_resend),
     path("driver-invites/<uuid:invite_id>/revoke", admin_api.driver_invite_revoke),

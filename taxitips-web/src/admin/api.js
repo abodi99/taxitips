@@ -122,6 +122,8 @@ export const admin = {
     request(`/api/admin/companies/${companyId}/grant`, { method: "POST", body }),
   revokeGrant: (grantId, reason) =>
     request(`/api/admin/grants/${grantId}/revoke`, { method: "POST", body: { reason } }),
+  updateGrant: (grantId, body) =>
+    request(`/api/admin/grants/${grantId}/update`, { method: "POST", body }),
   inviteDriver: (id, licenseId, email, label) =>
     request(`/api/admin/companies/${id}/driver-invites`, {
       method: "POST",

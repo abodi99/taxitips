@@ -13,7 +13,9 @@ saker:
 
 1. Öppnar företagets period. `fleet/access.py:company_window` svarar
    `free_grant` medan ett beviljande är aktivt, och `fleet/features.py` ger
-   FULL när skälet inte är ett prov -- alla kategorier öppnas.
+   de kategorier beviljandet valde (`categories`; NULL = alla, som för varje
+   beviljande från före kolumnen). Har bolaget flera aktiva beviljanden
+   gäller unionen -- kategorierna är bolagets, liksom perioden.
 2. Ger personen en plats. Medlemskapet är en `License` utan bil
    (`licensing.create_membership_license`), tilldelad kontot -- samma väg som
    provet och portalen (fleet/membership.py). Alla län läggs på platsen, så
@@ -139,6 +141,34 @@ def grants_for_company(company_id, limit: int = 20) -> list[MembershipGrant]:
     )
 
 
+def granted_categories(company_id, now=None) -> frozenset[str] | None:
+    """
+    Kategorierna bolagets AKTIVA beviljanden öppnar, som en union.
+
+    None = alla: något aktivt beviljande har `categories` NULL (alla
+    kategorier, och varje rad från före kolumnen). Ingen aktiv rad alls ger
+    också None -- frågan ställs bara när `company_window` redan svarat
+    `free_grant`, och då ska ett kapplöpande återkallande inte stänga mer än
+    fönstret självt gör.
+    """
+    if not company_id:
+        return None
+    now = now or timezone.now()
+    rows = _safe_grant_list(
+        MembershipGrant.objects.filter(company_id=company_id, revoked_at__isnull=True)
+    )
+    union: set[str] = set()
+    found = False
+    for grant in rows:
+        if not _is_active(grant, now):
+            continue
+        found = True
+        if grant.categories is None:
+            return None
+        union.update(str(c) for c in grant.categories)
+    return frozenset(union) if found else None
+
+
 def grant_license_ids(company_id) -> set[str]:
     """
     Id:n på de platser ett ÖPPET beviljande håller.
@@ -232,6 +262,35 @@ def _set_grant_counties(
     return codes
 
 
+def _clean_categories(categories) -> list[str] | None:
+    """
+    Kategorierna som ska sparas: sorterade nycklar ur `features.ALL_CATEGORIES`.
+
+    None, eller alla fem, sparas som NULL ("alla") -- då följer beviljandet
+    med om en kategori läggs till senare, precis som ett betalt abonnemang.
+    En tom lista är ett fel, inte "inget": ett medlemskap utan en enda
+    kategori ger ett tomt flöde som ser ut som "inga störningar just nu".
+    """
+    if categories is None:
+        return None
+    from fleet.features import ALL_CATEGORIES
+
+    if isinstance(categories, str):
+        categories = [categories]
+    chosen = {str(c).strip() for c in categories if str(c).strip()}
+    unknown = sorted(chosen - set(ALL_CATEGORIES))
+    if unknown:
+        raise GrantError(
+            "unknown_category", f"Okänd kategori: {', '.join(unknown)}.",
+            detail={"unknown": unknown, "allowed": list(ALL_CATEGORIES)},
+        )
+    if not chosen:
+        raise GrantError("categories_required", "Välj minst en kategori.")
+    if chosen >= set(ALL_CATEGORIES):
+        return None
+    return sorted(chosen)
+
+
 def _seat_for(company_id, *, actor_user_id, now) -> tuple[License, bool]:
     """
     Platsen personen ska få: ALLTID en ny, utan bil.
@@ -272,15 +331,17 @@ def grant_membership(
     ends_at=None,
     all_counties: bool = True,
     counties: list[str] | None = None,
+    categories: list[str] | None = None,
     actor_user_id=None,
     now=None,
 ) -> MembershipGrant:
     """
-    Bevilja ett fullt medlemskap utan kostnad.
+    Bevilja ett medlemskap utan kostnad.
 
     Kräver ett skäl -- ett beslut utan skäl går inte att försvara i efterhand.
     `ends_at` NULL betyder tills vidare. Personen anges med `user_id` (känt
-    konto) eller `email` (binder vid första inloggningen).
+    konto) eller `email` (binder vid första inloggningen). `categories` väljer
+    tipskategorierna (`features.ALL_CATEGORIES`); None = alla.
     """
     now = now or timezone.now()
     reason = str(reason or "").strip()
@@ -290,6 +351,8 @@ def grant_membership(
         raise GrantError("invalid_ends_at", "Slutdatumet måste vara i framtiden.")
     if not user_id and not str(email or "").strip():
         raise GrantError("person_required", "Ange kontots e-post eller användar-id.")
+    # Före allt som skriver: ett felaktigt val ska inte lämna en halv plats.
+    chosen_categories = _clean_categories(categories)
 
     resolved_user, resolved_email = _resolve_target(user_id=user_id, email=email)
     already = _existing_open(company_id, user_id=resolved_user, email=resolved_email)
@@ -318,7 +381,7 @@ def grant_membership(
     grant = MembershipGrant.objects.create(
         company_id=company_id, license=license, license_created=license_created,
         user_id=resolved_user, email="" if resolved_user else resolved_email,
-        counties=codes, all_counties=bool(all_counties),
+        counties=codes, all_counties=bool(all_counties), categories=chosen_categories,
         reason=reason, starts_at=now, ends_at=ends_at, granted_by=actor_user_id,
     )
     audit.record(
@@ -328,8 +391,69 @@ def grant_membership(
             "license_id": str(license.id), "license_created": license_created,
             "assignee_user_id": resolved_user, "assignee_email": grant.email,
             "all_counties": grant.all_counties, "counties": codes,
+            "all_categories": chosen_categories is None, "categories": chosen_categories,
             "reason": reason, "ends_at": ends_at.isoformat() if ends_at else None,
         },
+    )
+    return grant
+
+
+_UNSET = object()
+
+
+@transaction.atomic
+def update_grant(
+    grant: MembershipGrant,
+    *,
+    categories=_UNSET,
+    all_counties: bool | None = None,
+    counties: list[str] | None = None,
+    actor_user_id=None,
+    now=None,
+) -> MembershipGrant:
+    """
+    Ändra kategorier och/eller län på ett ÖPPET beviljande.
+
+    `categories` utelämnat = orört, None = alla. Länen ändras bara när
+    `all_counties` anges (True = alla, False = exakt `counties`), och då på
+    samma sätt som vid beviljandet: öppna länrader stängs och de nya läggs upp
+    (`_set_grant_counties`). Skälet och tidsgränsen ändras inte här -- ett nytt
+    skäl är ett nytt beslut, och då återkallas det gamla och ett nytt beviljas.
+
+    Före- och efterläget skrivs i revisionsloggen, så att det i efterhand går
+    att säga vad personen hade vid varje tidpunkt.
+    """
+    now = now or timezone.now()
+    if grant.revoked_at is not None:
+        raise GrantError(
+            "grant_revoked", "Beviljandet är återkallat och kan inte ändras.", status=409,
+        )
+    fields: dict = {}
+    before = {
+        "categories": grant.categories, "all_counties": grant.all_counties,
+        "counties": list(grant.counties or []),
+    }
+    if categories is not _UNSET:
+        fields["categories"] = _clean_categories(categories)
+    if all_counties is not None:
+        codes = _set_grant_counties(
+            grant.license, all_counties=bool(all_counties), counties=counties or [], now=now,
+        )
+        fields["counties"] = codes
+        fields["all_counties"] = bool(all_counties)
+    if not fields:
+        raise GrantError("nothing_to_update", "Ange kategorier eller län att ändra.")
+
+    MembershipGrant.objects.filter(id=grant.id).update(**fields)
+    grant.refresh_from_db()
+    after = {
+        "categories": grant.categories, "all_counties": grant.all_counties,
+        "counties": list(grant.counties or []),
+    }
+    audit.record(
+        "membership_grant_updated", company_id=grant.company_id, actor_user_id=actor_user_id,
+        actor_kind="platform_admin", subject_type="membership_grant", subject_id=grant.id,
+        detail={"license_id": str(grant.license_id), "before": before, "after": after},
     )
     return grant
 
@@ -425,6 +549,7 @@ def view(grant: MembershipGrant, *, now=None) -> dict:
     """Beviljandet som JSON -- samma form adminvyn och revisionsloggen läser."""
     now = now or timezone.now()
     from fleet import accounts
+    from fleet.features import ALL_CATEGORIES
 
     resolved = accounts.email_for(grant.user_id) if grant.user_id else ""
     return {
@@ -436,6 +561,9 @@ def view(grant: MembershipGrant, *, now=None) -> dict:
         "email": grant.email,
         "counties": grant.counties,
         "allCounties": grant.all_counties,
+        # NULL i databasen = alla kategorier; adminvyn får alltid en lista.
+        "categories": list(grant.categories) if grant.categories is not None else list(ALL_CATEGORIES),
+        "allCategories": grant.categories is None,
         "reason": grant.reason,
         "startsAt": grant.starts_at.isoformat() if grant.starts_at else None,
         "endsAt": grant.ends_at.isoformat() if grant.ends_at else None,

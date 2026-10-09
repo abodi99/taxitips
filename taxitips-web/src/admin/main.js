@@ -1179,9 +1179,15 @@ async function act(action, ds) {
         flash("Skriv varför medlemskapet beviljas utan kostnad -- skälet loggas.");
         return;
       }
+      const choice = readGrantChoice("grantCategory", "grantCounty");
+      if (!choice.categories.length) {
+        flash("Välj minst en kategori.");
+        return;
+      }
       if (
         !confirm(
-          `Tilldela ${email} fullt medlemskap utan kostnad?\n\n` +
+          `Tilldela ${email} medlemskap utan kostnad?\n\n` +
+            `Kategorier: ${choice.categoryText}.\nLän: ${choice.countyText}.\n` +
             (endsAt ? `Gäller till ${endsAt}. ` : "Gäller tills vidare. ") +
             "Ingen order eller faktura skapas, och platsen räknas inte mot nästa betalning.",
         )
@@ -1191,9 +1197,28 @@ async function act(action, ds) {
         email,
         reason,
         ...(endsAt ? { endsAt } : {}),
-        allCounties: true,
+        ...choice.body,
       });
-      flash(`${email} har fått fullt medlemskap utan kostnad.`);
+      flash(`${email} har fått medlemskap utan kostnad (${choice.categoryText}).`);
+      return render();
+    }
+
+    case "grant-update": {
+      const choice = readGrantChoice(`grantEditCat-${ds.grant}`, `grantEditCounty-${ds.grant}`);
+      if (!choice.categories.length) {
+        flash("Välj minst en kategori.");
+        return;
+      }
+      if (
+        !confirm(
+          `Ändra beviljandet för ${ds.who}?\n\n` +
+            `Kategorier: ${choice.categoryText}.\nLän: ${choice.countyText}.\n` +
+            "Ändringen gäller direkt och loggas.",
+        )
+      )
+        return;
+      await admin.updateGrant(ds.grant, choice.body);
+      flash(`Beviljandet för ${ds.who} är ändrat (${choice.categoryText}).`);
       return render();
     }
 
@@ -2188,6 +2213,29 @@ function splitList(value) {
 
 function countyLabel(code) {
   return (state.config?.counties ?? []).find((c) => c.code === code)?.name ?? code;
+}
+
+/**
+ * Kategorier och län ur beviljandeformuläret (eller redigeringsraden).
+ * Alla kategorier = `allCategories` (NULL på servern: följer med om en
+ * kategori läggs till). Inga län ikryssade = alla län.
+ */
+function readGrantChoice(categoryField, countyField) {
+  const checked = (name) =>
+    [...document.querySelectorAll(`input[name="${CSS.escape(name)}"]:checked`)].map((el) => el.value);
+  const categories = checked(categoryField);
+  const counties = checked(countyField);
+  const all = categories.length === views.GRANT_CATEGORIES.length;
+  const labels = Object.fromEntries(views.GRANT_CATEGORIES);
+  return {
+    categories,
+    categoryText: all ? "alla" : categories.map((c) => labels[c] ?? c).join(", "),
+    countyText: counties.length ? counties.map(countyLabel).join(", ") : "alla",
+    body: {
+      ...(all ? { allCategories: true } : { categories }),
+      ...(counties.length ? { allCounties: false, counties } : { allCounties: true }),
+    },
+  };
 }
 
 /** Kortets rubrik i bekräftelser: regnr när det finns, annars "medlemskapet". */

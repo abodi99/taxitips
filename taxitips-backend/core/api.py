@@ -770,9 +770,10 @@ def alerts(request):
     ).hexdigest()[:16]
     # Provet ser bara tåg och buss (fleet/features.py). Filtret ligger EFTER den
     # delade cachen, så att ett provföretag och ett betalande i samma ruta delar
-    # uträkningen men aldrig svaret -- planen ingår därför i ETag:en.
+    # uträkningen men aldrig svaret -- planen ingår därför i ETag:en, med
+    # kategorierna (två beviljanden med olika val heter båda "grant").
     plan = features.of(ent)
-    etag = f'W/"{shared["digest"]}-{favorites_digest}-{plan.plan}"'
+    etag = f'W/"{shared["digest"]}-{favorites_digest}-{plan.cache_key}"'
     if etag in _if_none_match(request):
         from django.http import HttpResponseNotModified
 
@@ -821,7 +822,8 @@ def opportunity_detail(request, opportunity_id):
     plan = features.of(ent)
     if not plan.allows(notify.category_of(o)):
         return _json(request, {
-            "error": features.LOCKED_REASON, "message": features.LOCKED_MESSAGE,
+            "error": features.LOCKED_REASON, "message": plan.locked_message,
+            "plan": plan.plan,
         }, status=403)
 
     events = SourceEvent.objects.filter(id__in=[str(i) for i in (o.source_event_ids or [])])

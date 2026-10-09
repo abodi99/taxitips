@@ -253,8 +253,9 @@ def entitlement_for_request(request) -> Entitlement:
     from fleet.access import resolve
 
     access = resolve(request)
-    # Bara ett prov kan smalna av; en känd betald period behöver inga fler frågor.
-    if not access.ok or (access.period and access.period != "trial"):
+    # Bara ett prov eller ett beviljande med valda kategorier (fleet/grants.py)
+    # kan smalna av; en känd betald period behöver inga fler frågor.
+    if not access.ok or (access.period and access.period not in ("trial", "free_grant")):
         plan = features.FULL
     else:
         plan = features.for_company(access.company_id)

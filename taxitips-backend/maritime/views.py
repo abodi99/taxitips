@@ -96,7 +96,7 @@ def ferries(request):
         return _json(request, {
             "ferries": [], "arrivals": [], "terminals": [],
             "entitled": False, "reason": features.LOCKED_REASON,
-            "message": features.LOCKED_MESSAGE,
+            "message": plan.locked_message, "plan": plan.plan,
         })
 
     lat, lon = position_from(request)

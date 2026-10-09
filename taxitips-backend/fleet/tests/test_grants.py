@@ -295,3 +295,215 @@ class GrantTests(FleetTestCase):
         self.assertFalse(window.ok)
         self.assertEqual(window.reason, "past_due")
         self.assertFalse(grants._is_active(grant, later))
+
+@override_settings(SUPABASE_JWT_SECRET=SECRET)
+class GrantCategoryTests(FleetTestCase):
+    """
+    Valda tipskategorier per beviljande (`MembershipGrant.categories`).
+
+    Det som går sönder tyst: att ett beviljande med "bara tåg och buss" ändå
+    lämnar ut flyg i flödet, detaljvyn, färjorna, evenemangen eller notisen --
+    eller att ett äldre beviljande (NULL) plötsligt tappar kategorier.
+    """
+
+    def setUp(self):
+        super().setUp()
+        from fleet.tests.test_access import MALMO, tip
+
+        self.client = Client()
+        self.malmo = MALMO
+        self.data = self.full_setup(county="12")
+        self.company = self.data["company"]
+        # Bolaget betalar inte: perioden är beviljandets och inget annat.
+        Subscription.objects.filter(company_id=self.company.id).update(
+            status=SubscriptionStatus.PAST_DUE,
+            current_period_end=timezone.now() - timedelta(days=5),
+            grace_until=None, access_until=None,
+        )
+        self.assertFalse(access.company_window(self.company.id).ok)
+        sessions.start_session(
+            device_id=self.data["device"].id, license_id=self.data["license"].id,
+        )
+        self.actor = uuid.uuid4()
+        self.train = tip(title="Inställt tåg")
+        self.flight = tip(kind="flight", mode="flight", title="Tre plan landar")
+        self.ferry = tip(kind="ferry", mode="ferry", title="Färjan lägger till")
+
+    def grant(self, *, user_id=None, **kwargs):
+        return grants.grant_membership(
+            company_id=self.company.id, user_id=user_id or uuid.uuid4(),
+            reason="Pilot med valda kategorier", actor_user_id=self.actor, **kwargs,
+        )
+
+    def get(self, path, **params):
+        return self.client.get(path, params, headers={"x-device-token": self.data["secret"]})
+
+    # --- lagring och validering -------------------------------------------
+
+    def test_categories_are_stored_sorted_and_all_is_null(self):
+        from fleet import features
+
+        restricted = self.grant(categories=["road", "transit"])
+        self.assertEqual(restricted.categories, ["road", "transit"])
+        everything = self.grant(categories=list(features.ALL_CATEGORIES))
+        self.assertIsNone(everything.categories)
+        default = self.grant()
+        self.assertIsNone(default.categories)
+
+    def test_no_category_is_refused_and_writes_nothing(self):
+        with self.assertRaises(grants.GrantError) as caught:
+            self.grant(categories=[])
+        self.assertEqual(caught.exception.reason, "categories_required")
+        self.assertEqual(MembershipGrant.objects.count(), 0)
+        self.assertEqual(License.objects.filter(company_id=self.company.id).count(), 1)
+
+    def test_unknown_category_is_refused(self):
+        with self.assertRaises(grants.GrantError) as caught:
+            self.grant(categories=["transit", "taxi"])
+        self.assertEqual(caught.exception.reason, "unknown_category")
+        self.assertEqual(caught.exception.detail["unknown"], ["taxi"])
+        self.assertEqual(MembershipGrant.objects.count(), 0)
+
+    def test_the_audit_trail_carries_the_categories(self):
+        self.grant(categories=["transit"])
+        granted = AuditEvent.objects.get(action="membership_granted", company_id=self.company.id)
+        self.assertEqual(granted.detail["categories"], ["transit"])
+        self.assertFalse(granted.detail["all_categories"])
+
+    # --- vad bolaget får se ------------------------------------------------
+
+    def test_a_null_grant_keeps_everything(self):
+        from fleet import features
+
+        grant = self.grant()
+        # Ett beviljande från före kolumnen: NULL.
+        MembershipGrant.objects.filter(id=grant.id).update(categories=None)
+        self.assertEqual(features.for_company(self.company.id), features.FULL)
+        body = self.get("/api/alerts", **self.malmo).json()
+        self.assertEqual(len(body["alerts"]), 3)
+        self.assertEqual(body["features"]["plan"], "full")
+        self.assertEqual(body["features"]["locked"], [])
+
+    def test_a_restricted_grant_narrows_the_features(self):
+        from fleet import features
+
+        self.grant(categories=["transit", "road"])
+        plan = features.for_company(self.company.id)
+        self.assertEqual(plan.plan, "grant")
+        self.assertFalse(plan.full)
+        self.assertEqual(plan.categories, ("transit", "road"))
+        self.assertEqual(set(plan.locked), {"flight", "ferry", "events"})
+        self.assertEqual(plan.as_dict()["lockedMessage"], features.GRANT_LOCKED_MESSAGE)
+        # Samma svar med bolagets id som text (förarvägen) och som UUID.
+        self.assertEqual(features.for_company(str(self.company.id)), plan)
+
+    def test_a_restricted_grant_hides_other_categories_in_the_feed(self):
+        self.grant(categories=["transit"])
+        body = self.get("/api/alerts", **self.malmo).json()
+        self.assertEqual([a["title"] for a in body["alerts"]], ["Inställt tåg"])
+        self.assertEqual(body["features"]["plan"], "grant")
+        self.assertEqual(body["features"]["hiddenCounts"], {"flight": 1, "ferry": 1})
+        self.assertNotIn("Ingår inte i provet", body["features"]["lockedMessage"])
+
+    def test_detail_ferries_events_and_notifications_follow_the_grant(self):
+        from core import notify
+        from fleet import features
+        from fleet.push_gate import can_receive
+
+        self.grant(categories=["transit", "flight"])
+        detail = self.get(f"/api/opportunities/{self.ferry.id}")
+        self.assertEqual(detail.status_code, 403)
+        self.assertEqual(detail.json()["error"], features.LOCKED_REASON)
+        self.assertEqual(detail.json()["plan"], "grant")
+        self.assertEqual(self.get(f"/api/opportunities/{self.flight.id}").status_code, 200)
+
+        ferries = self.get("/api/ferries", **self.malmo).json()
+        self.assertEqual(ferries["reason"], features.LOCKED_REASON)
+        self.assertEqual(ferries["message"], features.GRANT_LOCKED_MESSAGE)
+        self.assertEqual(self.get("/api/events", **self.malmo).json()["reason"], features.LOCKED_REASON)
+
+        device = self.data["device"]
+        verdict = can_receive(device, notify.snapshot_of(self.ferry))
+        self.assertEqual(verdict.reason, "grant_category_locked:ferry")
+        self.assertNotEqual(
+            can_receive(device, notify.snapshot_of(self.flight)).reason,
+            "grant_category_locked:flight",
+        )
+
+    def test_the_union_over_several_grants_applies(self):
+        from fleet import features
+
+        self.grant(categories=["transit"])
+        self.grant(categories=["flight"])
+        self.assertEqual(features.for_company(self.company.id).categories, ("transit", "flight"))
+        # Ett beviljande med alla kategorier öppnar allt för bolaget.
+        self.grant()
+        self.assertEqual(features.for_company(self.company.id), features.FULL)
+
+    def test_a_paying_company_never_loses_categories_to_a_grant(self):
+        from fleet import features
+
+        Subscription.objects.filter(company_id=self.company.id).update(
+            status=SubscriptionStatus.ACTIVE,
+            current_period_end=timezone.now() + timedelta(days=20),
+        )
+        self.grant(categories=["transit"])
+        self.assertEqual(access.company_window(self.company.id).reason, "free_grant")
+        self.assertEqual(features.for_company(self.company.id), features.FULL)
+        body = self.get("/api/alerts", **self.malmo).json()
+        self.assertEqual(len(body["alerts"]), 3)
+
+    def test_a_changed_grant_never_reuses_the_old_etag(self):
+        grant = self.grant(categories=["transit", "flight"])
+        first = self.get("/api/alerts", **self.malmo)
+        grants.update_grant(grant, categories=["transit"], actor_user_id=self.actor)
+        again = self.client.get(
+            "/api/alerts", self.malmo,
+            headers={"x-device-token": self.data["secret"], "if-none-match": first["ETag"]},
+        )
+        self.assertEqual(again.status_code, 200)
+        self.assertEqual([a["title"] for a in again.json()["alerts"]], ["Inställt tåg"])
+
+    # --- ändra ett öppet beviljande ----------------------------------------
+
+    def test_update_changes_categories_and_counties_and_logs_both_states(self):
+        from fleet import features
+
+        grant = self.grant(categories=["transit"])
+        updated = grants.update_grant(
+            grant, categories=["transit", "events"], all_counties=False, counties=["12"],
+            actor_user_id=self.actor,
+        )
+        self.assertEqual(updated.categories, ["events", "transit"])
+        self.assertFalse(updated.all_counties)
+        self.assertEqual(updated.counties, ["12"])
+        self.assertEqual(access.license_counties(grant.license_id), ("12",))
+        self.assertTrue(features.for_company(self.company.id).allows("events"))
+
+        event = AuditEvent.objects.get(action="membership_grant_updated", company_id=self.company.id)
+        self.assertEqual(str(event.actor_user_id), str(self.actor))
+        self.assertEqual(event.detail["before"]["categories"], ["transit"])
+        self.assertEqual(event.detail["after"]["categories"], ["events", "transit"])
+        self.assertTrue(event.detail["before"]["all_counties"])
+        self.assertEqual(event.detail["after"]["counties"], ["12"])
+
+        # None = alla igen.
+        again = grants.update_grant(grant, categories=None, actor_user_id=self.actor)
+        self.assertIsNone(again.categories)
+        self.assertEqual(features.for_company(self.company.id), features.FULL)
+
+    def test_update_validates_and_refuses_a_revoked_grant(self):
+        grant = self.grant(categories=["transit"])
+        with self.assertRaises(grants.GrantError) as caught:
+            grants.update_grant(grant, categories=[], actor_user_id=self.actor)
+        self.assertEqual(caught.exception.reason, "categories_required")
+        with self.assertRaises(grants.GrantError) as caught:
+            grants.update_grant(grant, actor_user_id=self.actor)
+        self.assertEqual(caught.exception.reason, "nothing_to_update")
+
+        grants.revoke(grant, reason="Klart", actor_user_id=self.actor)
+        with self.assertRaises(grants.GrantError) as caught:
+            grants.update_grant(grant, categories=["road"], actor_user_id=self.actor)
+        self.assertEqual(caught.exception.reason, "grant_revoked")
+        grant.refresh_from_db()
+        self.assertEqual(grant.categories, ["transit"])

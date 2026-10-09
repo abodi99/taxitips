@@ -236,10 +236,12 @@ def upcoming(request):
         return _json(request, {"events": [], "entitled": False, "reason": ent.reason})
     from fleet import features
 
-    if not features.of(ent).allows("events"):
+    plan = features.of(ent)
+    if not plan.allows("events"):
         return _json(request, {
             "events": [], "dayCounts": {}, "entitled": False,
-            "reason": features.LOCKED_REASON, "message": features.LOCKED_MESSAGE,
+            "reason": features.LOCKED_REASON, "message": plan.locked_message,
+            "plan": plan.plan,
         })
 
     now = timezone.now()

@@ -867,9 +867,11 @@ def create_membership(request, company_id):
 def grant_free_membership(request, company_id):
     """
     POST /api/admin/companies/<id>/grant
-    {"email"|"userId", "reason", "endsAt"?, "allCounties"?, "counties"?}
+    {"email"|"userId", "reason", "endsAt"?, "allCounties"?, "counties"?, "categories"?}
 
-    Tilldela fullt medlemskap utan kostnad: en person, ett skäl, en tidsgräns.
+    Tilldela medlemskap utan kostnad: en person, ett skäl, en tidsgräns, och
+    vilka tipskategorier (`categories`, nycklar ur fleet/features.py;
+    utelämnat = alla).
 
     Kräver ADMIN_MANAGE -- det flyttar rättigheter UTAN betalning, samma
     gräns som kuponger och direkt avslut (fleet/roles.py). Ingen beställning,
@@ -888,9 +890,51 @@ def grant_free_membership(request, company_id):
         ends_at=_parse_ends_at(body.get("endsAt")),
         all_counties=bool(body.get("allCounties", True)),
         counties=[str(c) for c in (body.get("counties") or [])],
+        categories=_grant_categories(body),
         actor_user_id=principal.user_id,
     )
     return _json(request, {"ok": True, "grant": grants.view(grant)})
+
+
+def _grant_categories(body: dict):
+    """`categories` ur anropet: None = alla (utelämnat, null eller `allCategories`)."""
+    if body.get("allCategories") is True:
+        return None
+    raw = body.get("categories")
+    if raw is None:
+        return None
+    if not isinstance(raw, (list, tuple)):
+        raise grants.GrantError("invalid_categories", "Kategorierna ska vara en lista.")
+    return [str(c) for c in raw]
+
+
+@csrf_exempt
+@require_POST
+@handle
+def update_grant(request, grant_id):
+    """
+    POST /api/admin/grants/<id>/update
+    {"categories"?: [...], "allCategories"?: true, "allCounties"?: bool, "counties"?: [...]}
+
+    Ändra kategorier och/eller län på ett öppet beviljande. Samma gräns som
+    att bevilja (ADMIN_MANAGE). Före- och efterläget loggas (fleet/grants.py:
+    update_grant).
+    """
+    principal = _staff(request, Perm.ADMIN_MANAGE)
+    from fleet.models import MembershipGrant
+
+    grant = MembershipGrant.objects.filter(id=grant_id).first()
+    if grant is None:
+        raise grants.GrantError("unknown_grant", "Beviljandet finns inte.", status=404)
+    body = _body(request)
+    kwargs: dict = {}
+    if "categories" in body or "allCategories" in body:
+        kwargs["categories"] = _grant_categories(body)
+    if "allCounties" in body:
+        kwargs["all_counties"] = bool(body.get("allCounties"))
+        kwargs["counties"] = [str(c) for c in (body.get("counties") or [])]
+    updated = grants.update_grant(grant, actor_user_id=principal.user_id, **kwargs)
+    return _json(request, {"ok": True, "grant": grants.view(updated)})
 
 
 def _parse_ends_at(value):

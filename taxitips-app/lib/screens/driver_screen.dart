@@ -1485,7 +1485,8 @@ class _DriverScreenState extends State<DriverScreen>
   }
 
   /// Förklaringen bakom ett lås. Ingen länk, inget pris och ingen uppmaning:
-  /// bara att det inte ingår i provet och vem som sköter medlemskapet
+  /// bara att det inte ingår i provet (eller i ett beviljat medlemskap med
+  /// valda kategorier, plan `grant`) och vem som sköter medlemskapet
   /// (lib/membership_copy.dart, §9c). Serverns egen låstext visas inte --
   /// texterna om medlemskap är appens.
   Future<void> _showLocked(SignalCategory category) async {
@@ -1539,7 +1540,7 @@ class _DriverScreenState extends State<DriverScreen>
               ],
               const SizedBox(height: 12),
               Text(
-                kNotInTrialNote,
+                lockedNoteFor(_features['plan']),
                 style: TextStyle(
                   fontSize: 14,
                   height: 1.4,

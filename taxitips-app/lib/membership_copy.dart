@@ -33,6 +33,19 @@ const kInvoicesOnWeb =
 /// Båda meningarna: det som visas där något är låst.
 const kNotInTrialNote = '$kNotInTrial $kMembershipOnWeb';
 
+/// En kategori som ett beviljat medlemskap inte omfattar. Ett beviljande
+/// (fleet/grants.py) kan öppna bara vissa kategorier; det är inget prov, och
+/// "Ingår inte i provet" vore då fel. Servern kallar planen `grant`.
+const kNotInMembership = 'Ingår inte i ditt medlemskap.';
+
+/// Den korta låsraden efter serverns plan (`features.plan`). Okänd eller
+/// saknad plan = provet, som var den enda låsta planen före beviljandena.
+String notIncludedFor(Object? plan) =>
+    plan == 'grant' ? kNotInMembership : kNotInTrial;
+
+/// Hela låstexten efter serverns plan: raden plus vem som sköter medlemskapet.
+String lockedNoteFor(Object? plan) => '${notIncludedFor(plan)} $kMembershipOnWeb';
+
 /// Inställningarnas hänvisning för fakturor och medlemskap (förare / footer).
 /// Ingen länk, inget pris, ingen knapp -- bara var det sköts.
 const kBillingOnWeb =

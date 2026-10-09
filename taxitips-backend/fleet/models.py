@@ -1047,9 +1047,9 @@ class MembershipGrant(models.Model):
 
     **Ingen beställning, ingen faktura, ingen Stripe.** Beviljandet rör aldrig
     `Order`, `Subscription` eller `fleet/pricing.py`. Det öppnar företagets
-    period i `fleet/access.py:company_window` (skäl `free_grant`) och ger
-    platsen alla län, vilket i sin tur öppnar alla kategorier
-    (`fleet/features.py`).
+    period i `fleet/access.py:company_window` (skäl `free_grant`), ger platsen
+    de valda länen och öppnar de valda tipskategorierna (`categories`, NULL =
+    alla; `fleet/features.py`).
 
     **Räckvidd.** Perioden är företagets (`company_window` är en fråga per
     bolag), men platsen är personens: bara den som har ett medlemskap
@@ -1079,6 +1079,13 @@ class MembershipGrant(models.Model):
     # vad som gällde, och "alla län" är ett beslut värt att skriva ner.
     counties = models.JSONField(default=list, blank=True)
     all_counties = models.BooleanField(default=True)
+
+    # Tipskategorierna beviljandet öppnar (nycklarna i
+    # `fleet/features.ALL_CATEGORIES`), sorterade. NULL = alla -- så att
+    # beviljanden från före kolumnen behåller FULL utan någon backfill.
+    # Bolagets kategorier är unionen över dess aktiva beviljanden
+    # (`grants.granted_categories`, läst av `features.for_company`).
+    categories = models.JSONField(null=True, blank=True, default=None)
 
     reason = models.TextField()
     starts_at = models.DateTimeField()

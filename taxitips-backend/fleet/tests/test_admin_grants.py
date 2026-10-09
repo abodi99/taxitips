@@ -115,6 +115,53 @@ class AdminGrantEndpointTests(FleetTestCase):
             action="membership_grant_revoked", company_id=self.company.id
         ).exists())
 
+    def test_grant_with_chosen_categories_and_update_endpoint(self):
+        granted = self.post(
+            f"/api/admin/companies/{self.company.id}/grant", self.admin_id,
+            {"email": "pilot@taxi.test", "reason": "Pilot", "categories": ["transit", "road"]},
+        )
+        self.assertEqual(granted.status_code, 200, granted.content)
+        body = granted.json()["grant"]
+        self.assertEqual(body["categories"], ["road", "transit"])
+        self.assertFalse(body["allCategories"])
+
+        r = self.post(
+            f"/api/admin/grants/{body['id']}/update", self.admin_id,
+            {"categories": ["flight"], "allCounties": False, "counties": ["12"]},
+        )
+        self.assertEqual(r.status_code, 200, r.content)
+        updated = r.json()["grant"]
+        self.assertEqual(updated["categories"], ["flight"])
+        self.assertEqual((updated["allCounties"], updated["counties"]), (False, ["12"]))
+
+        r = self.post(f"/api/admin/grants/{body['id']}/update", self.admin_id, {"allCategories": True})
+        self.assertTrue(r.json()["grant"]["allCategories"])
+        self.assertEqual(len(r.json()["grant"]["categories"]), 5)
+        self.assertEqual(
+            AuditEvent.objects.filter(action="membership_grant_updated").count(), 2,
+        )
+
+    def test_grant_endpoint_refuses_no_category_and_sales_may_not_update(self):
+        r = self.post(
+            f"/api/admin/companies/{self.company.id}/grant", self.admin_id,
+            {"userId": str(uuid.uuid4()), "reason": "Pilot", "categories": []},
+        )
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(r.json()["reason"], "categories_required")
+
+        granted = self.post(
+            f"/api/admin/companies/{self.company.id}/grant", self.admin_id,
+            {"userId": str(uuid.uuid4()), "reason": "OK"},
+        ).json()["grant"]
+        self.assertTrue(granted["allCategories"])
+        r = self.post(
+            f"/api/admin/grants/{granted['id']}/update", self.sales_id, {"categories": ["transit"]},
+        )
+        self.assertEqual(r.status_code, 403)
+        self.assertIsNone(MembershipGrant.objects.get(id=granted["id"]).categories)
+        r = self.post(f"/api/admin/grants/{uuid.uuid4()}/update", self.admin_id, {"categories": ["road"]})
+        self.assertEqual(r.status_code, 404)
+
     def test_revoke_of_unknown_grant_is_a_404(self):
         r = self.post(f"/api/admin/grants/{uuid.uuid4()}/revoke", self.admin_id, {"reason": "x"})
         self.assertEqual(r.status_code, 404)

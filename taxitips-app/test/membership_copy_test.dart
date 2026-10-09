@@ -41,6 +41,15 @@ void main() {
       expect(membershipNotice('okänt', fallback: ''), '');
     });
 
+    test('låstexten följer serverns plan: provet eller ett beviljande', () {
+      expect(notIncludedFor('trial'), kNotInTrial);
+      // Äldre server utan plan: provet var den enda låsta planen.
+      expect(notIncludedFor(null), kNotInTrial);
+      expect(notIncludedFor('grant'), kNotInMembership);
+      expect(lockedNoteFor('trial'), kNotInTrialNote);
+      expect(lockedNoteFor('grant'), '$kNotInMembership $kMembershipOnWeb');
+    });
+
     test('texterna är neutrala', () {
       expect(kNotInTrial, 'Ingår inte i provet.');
       expect(
@@ -48,6 +57,7 @@ void main() {
         'Ditt företags administratör hanterar medlemskapet på webben.',
       );
       expect(kNotInTrialNote, '$kNotInTrial $kMembershipOnWeb');
+      expect(kNotInMembership, 'Ingår inte i ditt medlemskap.');
       expect(
         kBillingOnWeb,
         'Fakturor och medlemskap hanteras av företagets administratör på webben.',

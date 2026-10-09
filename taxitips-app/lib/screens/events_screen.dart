@@ -73,8 +73,9 @@ class _EventsScreenState extends State<EventsScreen> {
   Map<String, int> _dayCounts = const {};
   bool _loading = true;
   String? _error;
-  // Satt när provet inte omfattar evenemang (fleet/features.py). Neutral text,
-  // ingen länk -- medlemskapet sköts utanför appen (membership_copy.dart).
+  // Satt när provet eller medlemskapet inte omfattar evenemang
+  // (fleet/features.py). Neutral text, ingen länk -- medlemskapet sköts
+  // utanför appen (membership_copy.dart).
   String? _locked;
   bool _preview = false;
   String _previewNote = '';
@@ -209,7 +210,9 @@ class _EventsScreenState extends State<EventsScreen> {
         _maxDays = (body['maxDays'] as num?)?.toInt() ?? _maxDays;
         // Appens egen text, inte serverns: texterna om medlemskap bor på ett
         // ställe (lib/membership_copy.dart).
-        _locked = body['reason'] == 'feature_locked' ? kNotInTrialNote : null;
+        _locked = body['reason'] == 'feature_locked'
+            ? lockedNoteFor(body['plan'])
+            : null;
         _loading = false;
       });
     } catch (e) {

@@ -446,6 +446,7 @@ export function kund(d, config = null, tab = "", pending = null, crm = null, log
           : `<button class="btn btn-primary" data-action="goto" data-view="granskning">${esc(next.label || "Granskning")} →</button>`}
       </div>` : ""}
 
+    <div class="ktabs-wrap">
     <nav class="ktabs" aria-label="Kundens sidor">
       ${KUND_TABS.map((t) => `
         <button class="ktab" data-action="kund-tab" data-tab="${t.id}" aria-current="${t.id === active ? "page" : "false"}">
@@ -465,6 +466,7 @@ export function kund(d, config = null, tab = "", pending = null, crm = null, log
         </div>
       </details>
     </nav>
+    </div>
 
     <section class="step-panel">${panel}</section>
   `;
@@ -564,15 +566,74 @@ function addMembershipBlock(d, config) {
 }
 
 /**
- * Manuellt beviljande (fleet/grants.py): fullt medlemskap utan kostnad till
- * en person. Kräver canManage -- det flyttar rättigheter utan betalning, samma
- * gräns som kuponger. Skäl och tidsgräns är obligatoriska att ta ställning
- * till; beslutet loggas och visas här i efterhand.
+ * Tipskategorierna ett beviljande kan öppna -- samma nycklar och ordning som
+ * fleet/features.py ALL_CATEGORIES. Etiketterna är appens kategorirad.
+ */
+export const GRANT_CATEGORIES = [
+  ["transit", "Tåg & buss"],
+  ["road", "Trafik/väg"],
+  ["flight", "Flyg"],
+  ["ferry", "Färja"],
+  ["events", "Evenemang"],
+];
+
+function grantCategoryText(g) {
+  if (g.allCategories !== false) return "alla kategorier";
+  const labels = Object.fromEntries(GRANT_CATEGORIES);
+  return (g.categories ?? []).map((c) => labels[c] ?? c).join(", ");
+}
+
+/** Kryssrutor för kategorier; `checked` = nycklarna som är ikryssade. */
+function grantCategoryChecks(name, checked) {
+  return GRANT_CATEGORIES.map(([key, label]) => `
+    <label class="check"><input type="checkbox" name="${esc(name)}" value="${esc(key)}"
+      ${checked.includes(key) ? "checked" : ""} /> ${esc(label)}</label>`).join("");
+}
+
+/** Kryssrutor för län; inga ikryssade = alla län. */
+function grantCountyChecks(name, counties, checked) {
+  return counties.map((c) => `
+    <label class="check"><input type="checkbox" name="${esc(name)}" value="${esc(c.code)}"
+      ${checked.includes(c.code) ? "checked" : ""} /> ${esc(c.name)}</label>`).join("");
+}
+
+/** Redigeringen av ett öppet beviljande: en egen rad under beviljandet. */
+function grantEditRow(g, config) {
+  const counties = config?.counties ?? [];
+  const cats = g.allCategories !== false ? GRANT_CATEGORIES.map(([k]) => k) : (g.categories ?? []);
+  const chosenCounties = g.allCounties ? [] : (g.counties ?? []);
+  const id = esc(g.id);
+  return `
+    <tr class="grant-edit-row"><td colspan="4" data-label="">
+      <details class="grant-edit">
+        <summary>Ändra kategorier och län</summary>
+        <fieldset class="grant-fieldset">
+          <legend>Kategorier</legend>
+          <div class="county-grid">${grantCategoryChecks(`grantEditCat-${g.id}`, cats)}</div>
+        </fieldset>
+        ${counties.length ? `
+        <fieldset class="grant-fieldset">
+          <legend>Län <span class="muted">(inga ikryssade = alla län)</span></legend>
+          <div class="county-grid">${grantCountyChecks(`grantEditCounty-${g.id}`, counties, chosenCounties)}</div>
+        </fieldset>` : ""}
+        <button class="btn btn-quiet btn-small" data-action="grant-update" data-grant="${id}"
+          data-who="${esc(g.resolvedEmail || g.email || g.userId)}">Spara ändringen</button>
+      </details>
+    </td></tr>`;
+}
+
+/**
+ * Manuellt beviljande (fleet/grants.py): medlemskap utan kostnad till en
+ * person, med valda tipskategorier och län. Kräver canManage -- det flyttar
+ * rättigheter utan betalning, samma gräns som kuponger. Skäl och tidsgräns
+ * är obligatoriska att ta ställning till; beslutet loggas och visas här i
+ * efterhand.
  */
 function grantsCard(d, config) {
   const grants = d.grants ?? [];
   if (!config?.canManage && !grants.length) return "";
   const active = grants.filter((g) => g.active).length;
+  const counties = config?.counties ?? [];
   const who = (g) =>
     g.email
       ? `väntar på ${esc(g.email)} (loggar in i appen)`
@@ -584,20 +645,31 @@ function grantsCard(d, config) {
   return `
     <details class="card"${active ? " open" : ""}>
       <summary>Beviljat utan kostnad <span class="muted">(${esc(active)})</span></summary>
-      <p class="muted">Fullt medlemskap utan betalning, till en person. Ingen order, ingen faktura
-        och ingen ändring i Stripe — platsen räknas inte mot nästa faktura. Skälet loggas.</p>
+      <p class="muted">Medlemskap utan betalning, till en person, med de kategorier och län du väljer.
+        Ingen order, ingen faktura och ingen ändring i Stripe — platsen räknas inte mot nästa faktura.
+        Skälet loggas. Ett bolag som redan betalar behåller alla kategorier.</p>
       ${config?.canManage ? `
       <div class="start-option">
         <label>Kontots e-post<input id="grantEmail" type="email" placeholder="namn@bolaget.se" autocomplete="off" /></label>
         <label>Skäl (loggas)<input id="grantReason" placeholder="T.ex. goodwill efter driftstörning" autocomplete="off" /></label>
         <label>Gäller till <span class="muted">(valfritt, tomt = tills vidare)</span>
           <input id="grantEnds" type="date" /></label>
+        <fieldset class="grant-fieldset">
+          <legend>Kategorier</legend>
+          <div class="county-grid">${grantCategoryChecks("grantCategory", GRANT_CATEGORIES.map(([k]) => k))}</div>
+        </fieldset>
+        ${counties.length ? `
+        <details class="pkg-extras">
+          <summary>Begränsa till vissa län <span class="muted">(annars alla län)</span></summary>
+          <div class="county-grid">${grantCountyChecks("grantCounty", counties, [])}</div>
+        </details>` : ""}
         <button class="btn btn-quiet" data-action="grant-membership">Tilldela utan kostnad</button>
       </div>` : ""}
       ${grants.length ? `<table><thead><tr><th>Konto</th><th>Skäl</th><th>Gäller</th><th></th></tr></thead>
         <tbody>${grants.map((g) => `
           <tr><td data-label="Konto"><b>${who(g)}</b>
-              <div class="muted">${g.allCounties ? "alla län" : esc((g.counties ?? []).map(countyName).join(", "))}</div></td>
+              <div class="muted">${g.allCounties ? "alla län" : esc((g.counties ?? []).map(countyName).join(", "))}</div>
+              <div class="muted">${esc(grantCategoryText(g))}</div></td>
             <td data-label="Skäl">${esc(g.reason)}
               ${g.revokeReason ? `<div class="muted">återkallat: ${esc(g.revokeReason)}</div>` : ""}</td>
             <td data-label="Gäller">${g.revokedAt
@@ -608,7 +680,8 @@ function grantsCard(d, config) {
             <td data-label="">${config?.canManage && !g.revokedAt
               ? `<button class="btn btn-danger btn-small" data-action="grant-revoke"
                   data-grant="${esc(g.id)}" data-who="${esc(g.resolvedEmail || g.email || g.userId)}">Återkalla</button>`
-              : ""}</td></tr>`).join("")}
+              : ""}</td></tr>
+          ${config?.canManage && !g.revokedAt ? grantEditRow(g, config) : ""}`).join("")}
         </tbody></table>` : '<p class="muted">Inga beviljanden.</p>'}
     </details>`;
 }
@@ -981,7 +1054,7 @@ function membersCard(d, config) {
             <td data-label="" class="actions-cell">${manage ? `<div class="btn-row">
               ${m.email && !m.blocked ? `<button class="btn btn-primary btn-small" data-action="member-login-link" data-user="${esc(m.userId)}">Skapa inloggningslänk</button>` : ""}
               <details class="more-menu">
-                <summary class="btn btn-quiet btn-small" aria-label="Fler åtgärder">Mer</summary>
+                <summary class="btn btn-small btn-more" aria-label="Mer åtgärder">Mer</summary>
                 <div class="more-items" role="menu">
                 ${Object.entries(ROLE_CHOICES).filter(([r]) => r !== m.role).map(([r, label]) =>
                   `<button type="button" class="btn btn-quiet btn-small" role="menuitem" data-action="member-role" data-user="${esc(m.userId)}" data-role="${r}">Byt roll: ${esc(label)}</button>`).join("")}

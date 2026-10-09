@@ -805,20 +805,95 @@ tr.clickable:hover td {
   border-radius: 50%;
   background: var(--danger);
 }
-.ktab-more {
+/* Flikraden scrollar i sidled (overflow-x), och en absolut meny vars
+   ankare ligger INNE i en scrollande ruta klipps. Menyn ankras därför i
+   omslaget utanför raden (`.ktabs-wrap`), inte i `.ktab-more`: den hamnar
+   under radens högerkant, där Mer står, och klipps aldrig -- inte heller på
+   mobil när raden scrollats. */
+.ktabs-wrap {
   position: relative;
+  margin: 0 0 1.1rem;
+}
+.ktabs-wrap > .ktabs {
+  margin: 0;
+}
+.ktab-more {
+  position: static;
   margin-left: auto;
+  align-self: center;
+  padding: 0 0 0.3rem 0.5rem;
 }
 .ktab-more-toggle {
   list-style: none;
 }
-.ktab-more-toggle::-webkit-details-marker {
+.ktab-more-toggle::-webkit-details-marker,
+.ktab-more-toggle::marker {
   display: none;
+  content: "";
 }
-.ktab-more-toggle.is-on,
-.ktab-more[open] > .ktab-more-toggle {
+
+/* --- "Mer"-knappar -------------------------------------------------------
+   Sekundärknapp: synlig ram och yta mot kortet, etikett + chevron, tydlig
+   hover/öppen-markering. Färgerna är tokens (brand.css), så knappen följer
+   med om sidan får ett mörkt tema. Ramen är --skiffer, inte --line-strong:
+   en kontroll behöver 3:1 mot bakgrunden (WCAG 1.4.11), och --line-strong
+   ger knappt 2:1 på vitt. Används av flikradens Mer och radmenyerna. */
+.btn-more,
+.ktab.ktab-more-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 0.4rem 0.9rem;
+  margin: 0;
+  border: 1.5px solid var(--skiffer);
+  border-radius: var(--radius-pill);
+  background: var(--vit);
   color: var(--ink);
-  border-bottom-color: var(--guld);
+  font-weight: 700;
+  line-height: 1.2;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+.btn-more::after,
+.ktab.ktab-more-toggle::after {
+  content: "";
+  width: 0.42em;
+  height: 0.42em;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: translateY(-0.15em) rotate(45deg);
+  transition: transform 0.15s ease;
+}
+details[open] > .btn-more::after,
+.ktab-more[open] > .ktab.ktab-more-toggle::after {
+  transform: translateY(0.1em) rotate(-135deg);
+}
+.btn-more:hover,
+.ktab.ktab-more-toggle:hover,
+details[open] > .btn-more,
+.ktab-more[open] > .ktab.ktab-more-toggle {
+  background: var(--ljusgra-djup);
+  border-color: var(--ink);
+  color: var(--ink);
+}
+.btn-more:focus-visible,
+.ktab.ktab-more-toggle:focus-visible {
+  outline: 3px solid var(--guld);
+  outline-offset: 2px;
+}
+/* Den visade fliken ligger under Mer: samma guld som en vald flik. */
+.ktab.ktab-more-toggle.is-on {
+  border-color: var(--guld-djup);
+  background: color-mix(in srgb, var(--guld) 16%, var(--vit));
+}
+@media (forced-colors: active) {
+  .btn-more,
+  .ktab.ktab-more-toggle {
+    border-color: ButtonText;
+  }
 }
 .ktab-more-menu {
   position: absolute;
@@ -1351,6 +1426,31 @@ ul.todo li + li {
 .county-grid label.check {
   margin: 0.2rem 0;
   font-weight: 500;
+}
+
+/* Beviljande utan kostnad: kategorier och län (views.js grantsCard). */
+.grant-fieldset {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  margin: 0.5rem 0 0;
+  padding: 0.35rem 0.85rem 0.25rem;
+  min-width: 0;
+}
+.grant-fieldset legend {
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 0 0.3rem;
+}
+.grant-edit > summary {
+  cursor: pointer;
+  font-weight: 600;
+  padding: 0.25rem 0;
+}
+.grant-edit .btn {
+  margin-top: 0.6rem;
+}
+tr.grant-edit-row td {
+  padding-top: 0;
 }
 
 /* --- Supportchatten ----------------------------------------------------

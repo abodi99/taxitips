@@ -19,6 +19,13 @@ detaljvyn, favoriterna, färjorna, evenemangen och notiserna
 (fleet/push_gate.py). Appen visar låset, men att dölja något i appen skyddar
 ingenting.
 
+**Ett manuellt beviljande väljer själv.** En plattformsadministratör kan
+bevilja ett medlemskap utan kostnad med bara vissa kategorier
+(fleet/grants.py, `MembershipGrant.categories`). Då är planen `grant` och
+kategorierna unionen över bolagets aktiva beviljanden. Ett beviljande smalnar
+aldrig av ett bolag som ändå betalar: perioden bakom beviljandet prövas, och
+är den betald gäller FULL.
+
 **Ingen betalning i appen.** Svaret på ett lås är en text, aldrig en länk
 eller ett pris: köpet sker i kundportalen på webben, genom mejlet eller med
 en säljare (docs/fleet-abonnemang.md §9c).
@@ -42,16 +49,33 @@ LOCKED_REASON = "feature_locked"
 LOCKED_MESSAGE = (
     "Ingår inte i provet. Ditt företags administratör hanterar medlemskapet på webben."
 )
+# Samma sak för ett beviljande med valda kategorier: det är inget prov.
+GRANT_LOCKED_MESSAGE = (
+    "Ingår inte i ditt medlemskap. Ditt företags administratör hanterar medlemskapet på webben."
+)
 
 
 @dataclass(frozen=True)
 class Features:
     categories: tuple[str, ...]
-    plan: str  # "full" | "trial"
+    plan: str  # "full" | "trial" | "grant"
 
     @property
     def full(self) -> bool:
-        return self.plan == "full"
+        # Kategorierna avgör, inte planens namn: filtret får aldrig hoppas över
+        # för en plan som saknar en kategori, vad den än heter.
+        return set(ALL_CATEGORIES) <= set(self.categories)
+
+    @property
+    def locked_message(self) -> str:
+        if not self.locked:
+            return ""
+        return GRANT_LOCKED_MESSAGE if self.plan == "grant" else LOCKED_MESSAGE
+
+    @property
+    def cache_key(self) -> str:
+        """Del av flödets ETag: två planer med olika kategorier får aldrig dela svar."""
+        return self.plan if self.full else f"{self.plan}.{'.'.join(self.categories)}"
 
     @property
     def locked(self) -> tuple[str, ...]:
@@ -65,7 +89,7 @@ class Features:
             "plan": self.plan,
             "categories": list(self.categories),
             "locked": list(self.locked),
-            "lockedMessage": LOCKED_MESSAGE if self.locked else "",
+            "lockedMessage": self.locked_message,
         }
 
 
@@ -81,19 +105,58 @@ def of(ent) -> Features:
 def for_company(company_id, now=None) -> Features:
     """
     Kategorierna för företaget just nu. Frågar inte om perioden är giltig --
-    det gör fleet/access.py -- bara om den är ett okommitterat prov.
+    det gör fleet/access.py -- bara om den är ett okommitterat prov eller ett
+    beviljande med valda kategorier.
     """
     if not company_id:
         return FULL
-    from fleet import commerce
+    from fleet import grants
     from fleet.access import company_window
 
     now = now or timezone.now()
     window = company_window(company_id, now)
+    if window.reason == grants.WINDOW_REASON:
+        return _for_grant(company_id, now)
+    return _for_period(company_id, window.reason)
+
+
+def _for_grant(company_id, now) -> Features:
+    """
+    Ett aktivt manuellt beviljande: unionen av de valda kategorierna.
+
+    Beviljandet går före abonnemanget i `company_window`, men det får inte
+    ta något ifrån ett bolag som ändå har en period: ett betalande bolag som
+    ger en extra person "bara tåg och buss" ska inte tappa resten för alla
+    sina förare. Perioden bakom beviljandet prövas därför, och dess
+    kategorier läggs till (FULL för en betald period, tåg och buss för ett
+    pågående prov).
+    """
+    from fleet import grants
+
+    chosen = grants.granted_categories(company_id, now)
+    if chosen is None or set(ALL_CATEGORIES) <= chosen:
+        return FULL
+    from fleet.access import _subscription_window
+
+    underlying = _subscription_window(company_id, now)
+    if underlying.ok:
+        base = _for_period(company_id, underlying.reason)
+        if base.full:
+            return FULL
+        chosen = chosen | set(base.categories)
+    if set(ALL_CATEGORIES) <= chosen:
+        return FULL
+    return Features(tuple(c for c in ALL_CATEGORIES if c in chosen), "grant")
+
+
+def _for_period(company_id, reason: str) -> Features:
+    """Kategorierna för en period utan beviljande: allt utom ett okommitterat prov."""
+    from fleet import commerce
+
     # Även ett prov som väntar på första telefonen: välkomsten i appen visar
     # då vad provet kommer att omfatta. Åtkomsten ger ändå inga tips förrän
     # provet startat (fleet/access.py), så det öppnar inget.
-    if window.reason not in ("trial", "trial_not_started"):
+    if reason not in ("trial", "trial_not_started"):
         return FULL
     if commerce.has_active_trial_commit(company_id):
         return FULL

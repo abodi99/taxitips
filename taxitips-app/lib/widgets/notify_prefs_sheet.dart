@@ -46,6 +46,10 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
   /// påslaget ut utan att något händer.
   Set<SignalCategory> _lockedCategories = {};
 
+  /// Serverns plan (`features.plan`): avgör om låset säger "provet" eller
+  /// "ditt medlemskap" (lib/membership_copy.dart).
+  Object? _plan;
+
   /// Inloggad ägare utan parad telefon: katalogerna går att visa, men det
   /// finns ingen enhet att spara för (servern svarar readOnly).
   bool _readOnly = false;
@@ -108,6 +112,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
             ? paused
             : null;
         final features = data['features'];
+        _plan = features is Map ? features['plan'] : null;
         _lockedCategories = {
           if (features is Map)
             for (final k in (features['locked'] as List?) ?? const [])
@@ -265,7 +270,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
             c['label']?.toString() ?? '',
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
-          subtitle: locked ? const Text(kNotInTrial) : null,
+          subtitle: locked ? Text(notIncludedFor(_plan)) : null,
           value: locked ? false : (_categories[c['id']?.toString()] ?? true),
           activeThumbColor: TbColors.ink,
           activeTrackColor: TbColors.signal,
