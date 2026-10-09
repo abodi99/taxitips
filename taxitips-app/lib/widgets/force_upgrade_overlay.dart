@@ -72,14 +72,18 @@ class _ForceUpgradeOverlayState extends State<ForceUpgradeOverlay>
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    remoteConfigRevision.addListener(_onRemoteConfigChanged);
     unawaited(_check());
   }
 
   @override
   void dispose() {
+    remoteConfigRevision.removeListener(_onRemoteConfigChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
+
+  void _onRemoteConfigChanged() => unawaited(_check());
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {

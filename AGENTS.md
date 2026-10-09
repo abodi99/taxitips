@@ -73,7 +73,7 @@ Nyckelmoduler i `taxitips-backend/core/`:
 | `compensation.py` | Lagstadgad förseningsersättning per län. |
 | `coverage.py` | Vilka län vi hämtar från, och varför inte de andra. |
 | `health.py` | Bokför varje hämtning i `SourceStatus`. |
-| `api.py` | Förar-API:t. `feed_for()` är urvalslogiken. |
+| `api.py` | Förar-API:t. `feed_for()` är urvalslogiken. `/api/alerts/history?hours=` (1–48 h, högst 500) delar grind, län och kategorilås med flödet (`_shown_tips`, `_FeedArea`, `_request_area`). |
 | `entitlement.py` | **Enda ingången till allt skyddat.** Delegerar till `fleet/access.py`. |
 | `repository.py` | Rå SQL-upsert. Läs kommentaren om `notified_at` innan du rör den. |
 

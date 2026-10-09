@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:taxitips_app/app_version.dart';
+import 'package:taxitips_app/remote_config_service.dart';
 import 'package:taxitips_app/widgets/force_upgrade_overlay.dart';
 
 AppVersion v(String s) => AppVersion.tryParse(s)!;
@@ -214,6 +215,34 @@ void main() {
       t.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
       await t.pumpAndSettle();
       expect(find.text('Uppdatera appen'), findsNothing);
+    });
+  });
+
+  group('Remote Config i realtid', () {
+    testWidgets('en ny lägsta version spärrar en app som står öppen', (t) async {
+      UpgradePolicy? remote;
+      await t.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => ForceUpgradeOverlay(
+            platform: 'android',
+            fetchConfig: () async => config(),
+            readRemotePolicy: (_) => remote,
+            installedVersion: () async => AppVersion.tryParse('1.0.1+2'),
+            child: child!,
+          ),
+          home: const Scaffold(body: Text('Tips')),
+        ),
+      );
+      await t.pumpAndSettle();
+      expect(find.text('Uppdatera appen'), findsNothing);
+
+      remote = const UpgradePolicy(
+        min: '1.0.2',
+        storeUrl: 'https://play.google.com/store/apps/details?id=x',
+      );
+      remoteConfigRevision.value++;
+      await t.pumpAndSettle();
+      expect(find.text('Uppdatera appen'), findsOneWidget);
     });
   });
 

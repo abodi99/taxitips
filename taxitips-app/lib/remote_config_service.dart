@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:firebase_remote_config/firebase_remote_config.dart';
 import 'package:flutter/foundation.dart';
 
@@ -5,6 +7,13 @@ import 'app_version.dart';
 import 'push_service.dart';
 
 FirebaseRemoteConfig? _remoteConfig;
+StreamSubscription<RemoteConfigUpdate>? _realtime;
+
+/// Räknas upp varje gång nya värden aktiverats under körning. Spärren
+/// (widgets/force_upgrade_overlay.dart) lyssnar och prövar om direkt: en
+/// lägsta version som sätts i Firebase ska nå en app som står öppen hela
+/// passet, inte först vid nästa start efter den timslånga hämtcachen.
+final ValueNotifier<int> remoteConfigRevision = ValueNotifier<int>(0);
 
 /// Nycklar i Firebase Remote Config (primär källa för versionsgränser).
 const kRcAndroidMin = 'android_min_version';
@@ -48,9 +57,29 @@ Future<void> initRemoteConfigSafe() async {
       debugPrint('Remote Config fetch skipped: $e');
     }
     _remoteConfig = rc;
+    _listenForUpdates(rc);
   } catch (e) {
     debugPrint('Remote Config init failed: $e');
     _remoteConfig = null;
+  }
+}
+
+void _listenForUpdates(FirebaseRemoteConfig rc) {
+  _realtime?.cancel();
+  try {
+    _realtime = rc.onConfigUpdated.listen(
+      (_) async {
+        try {
+          await rc.activate();
+          remoteConfigRevision.value++;
+        } catch (e) {
+          debugPrint('Remote Config activate failed: $e');
+        }
+      },
+      onError: (Object e) => debugPrint('Remote Config realtime: $e'),
+    );
+  } catch (e) {
+    debugPrint('Remote Config realtime unavailable: $e');
   }
 }
 
@@ -81,5 +110,7 @@ UpgradePolicy? remoteUpgradePolicy(String platform) {
 /// För test: nollställ initierat tillstånd.
 @visibleForTesting
 void resetRemoteConfigForTest() {
+  _realtime?.cancel();
+  _realtime = null;
   _remoteConfig = null;
 }
