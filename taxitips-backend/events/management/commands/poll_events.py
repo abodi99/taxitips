@@ -1,5 +1,6 @@
 """
-Hämtar kommande evenemang i hela Sverige från Ticketmaster.
+Hämtar kommande evenemang i hela Sverige: Ticketmaster (konserter m.m.) och TheSportsDB
+(fotboll, ishockey, handboll). PredictHQ är avslutad sedan 2026-09-26 och hämtas inte.
 
     python manage.py poll_events --dry-run     # visa, skriv inget
     python manage.py poll_events               # hämta, spara, rensa
@@ -10,8 +11,11 @@ Beat kör kommandot var sjätte timme (events.ingest.CADENCE_HOURS). Resultatet
 syns på pipeline-sidan, avsnitt 2c, och i source_status-raden `ticketmaster`.
 
 PredictHQ hämtas och sparas bara när events/rights.py tillåter lagring -- en
-rättighetsreferens till ett skriftligt avtal. Annars görs inget anrop, och skälet
-står i källstatus. Utan avtal visar pipeline-sidan PredictHQ live (events/live.py).
+rättighetsreferens och en källa som inte är avslutad (`retired`). Annars görs inget
+anrop, och skälet står i källstatus.
+
+Varje källa hämtas för sig: ett fel i en källa skrivs i dess källstatus och stoppar
+inte de andra. Kommandot felar ändå (CommandError) efteråt, så att felet syns i Celery.
 """
 
 from __future__ import annotations
@@ -20,7 +24,7 @@ import datetime as dt
 from collections import Counter
 
 from django.conf import settings
-from django.core.management.base import BaseCommand
+from django.core.management.base import BaseCommand, CommandError
 from django.utils import timezone
 
 from core.health import polling
@@ -38,15 +42,29 @@ class Command(BaseCommand):
         parser.add_argument("--source", choices=("all", *ingest.SOURCES), default="all")
 
     def handle(self, *args, **options):
+        from celery.exceptions import SoftTimeLimitExceeded
+
         sources = ingest.SOURCES if options["source"] == "all" else (options["source"],)
+        failed = []
         for source in sources:
-            with polling(source) as status:
-                if source == ingest.PREDICTHQ:
-                    self._poll_predicthq(options, status)
-                elif source == ingest.THESPORTSDB:
-                    self._poll_thesportsdb(options, status)
-                else:
-                    self._poll_ticketmaster(options, status)
+            # En källas fel stoppar aldrig de andra. Fram till 2026-10-09 kastade PredictHQ:s
+            # 402 (prenumerationen gick ut 2026-09-26) ur hela kommandot innan TheSportsDB
+            # hann hämtas -- sporten stod still i två veckor utan att någon källa såg trasig ut.
+            try:
+                with polling(source) as status:
+                    if source == ingest.PREDICTHQ:
+                        self._poll_predicthq(options, status)
+                    elif source == ingest.THESPORTSDB:
+                        self._poll_thesportsdb(options, status)
+                    else:
+                        self._poll_ticketmaster(options, status)
+            except SoftTimeLimitExceeded:
+                raise
+            except Exception as exc:  # polling() har redan skrivit felet i källstatus
+                failed.append(f"{source}: {type(exc).__name__}: {exc}")
+                self.stderr.write(f"{source}: {type(exc).__name__}: {exc}")
+        if failed:
+            raise CommandError("; ".join(failed))
 
     def _poll_ticketmaster(self, options, status):
         rights = rights_for(ingest.TICKETMASTER)
@@ -91,10 +109,11 @@ class Command(BaseCommand):
     def _poll_predicthq(self, options, status):
         rights = rights_for(ingest.PREDICTHQ)
         if not rights.may_store():
-            # Inget anrop alls: utan rätt att lagra finns inget att hämta hit.
+            # Inget anrop alls: utan rätt att lagra finns inget att hämta hit. Avslutad källa
+            # (prenumerationen gick ut 2026-09-26): hämtas inte, lagrade rader ligger kvar.
             status.note = rights.refusal("store")
             status.fetched = False
-            self.stdout.write(f"predicthq: {status.note}")
+            self.stdout.write(f"predicthq: hämtas inte -- {status.note}")
             return
         token = settings.PREDICTHQ_ACCESS_TOKEN
         if not token:

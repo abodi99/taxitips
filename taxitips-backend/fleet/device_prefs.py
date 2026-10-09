@@ -9,6 +9,8 @@ före pairing-fixen 2026-09).
 
 from __future__ import annotations
 
+from django.utils import timezone
+
 from billing.models import Device
 from fleet.models import DeviceApproval
 
@@ -77,23 +79,52 @@ def write_device_prefs(device_id, prefs: dict) -> None:
     Device.objects.filter(id=device_id).update(notify_prefs=prefs)
 
 
+def account_device_ids(license) -> list:
+    """
+    Telefonerna som kör licensen genom KONTOT (kontobaserat medlemskap, 2026-10).
+
+    En sådan telefon har inget `DeviceApproval` -- den hittas via licensens
+    tilldelade konto (`assignee_user_id`) och telefonradens `devices.user_id`,
+    i licensens eget bolag. Bara när kontot har sin öppna app-session på JUST
+    den här licensen: utan session gäller kontots medlemsväg (bolagets län),
+    och med en session på en annan licens är det den licensens län som gäller.
+    """
+    from fleet.models import MembershipSession
+
+    user_id = getattr(license, "assignee_user_id", None)
+    if not user_id:
+        return []
+    if not MembershipSession.objects.filter(
+        user_id=user_id, license_id=license.id, ended_at__isnull=True
+    ).exists():
+        return []
+    return list(
+        Device.objects.filter(user_id=user_id, company_id=license.company_id)
+        .values_list("id", flat=True)
+    )
+
+
 def sync_devices_for_license(license, *, counties: list[str] | tuple[str, ...] | None = None, now=None) -> int:
     """
-    Uppdaterar körområdet på alla telefoner med aktivt godkännande på bilen.
+    Uppdaterar körområdet på alla telefoner som kör licensen: de med aktivt
+    godkännande på bilen, och kontots telefoner när licensen är ett
+    medlemskap som tagits i appen (`account_device_ids`).
 
-    Anropas efter baslänsbyte / provlänsbyte. Returnerar antal telefoner som
-    skrevs om.
+    Anropas efter varje länändring (baslänsbyte, provlän, extra län,
+    beviljande) och när ett medlemskap tas i appen. Returnerar antal telefoner
+    som skrevs om.
     """
     from fleet.pairing import license_counties_for
 
     if counties is None:
-        counties = license_counties_for(license, now)
-    device_ids = list(
+        counties = license_counties_for(license, now or timezone.now())
+    device_ids = set(
         DeviceApproval.objects.filter(
             license_id=license.id,
             status=DeviceApproval.Status.ACTIVE,
         ).values_list("device_id", flat=True)
     )
+    device_ids.update(account_device_ids(license))
     if not device_ids:
         return 0
     changed = 0

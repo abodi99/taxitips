@@ -295,6 +295,11 @@ def activate_extra_county(*, license: License, county_code: str, order=None, now
         subject_type="license", subject_id=license.id,
         detail={"county": county_code, "order_id": str(order.id) if order else None},
     )
+    # Ett nytt län når telefonernas körområde direkt -- inte först när
+    # notissteget läkt dem (samma regel som vid baslänsbyte).
+    from fleet import device_prefs
+
+    device_prefs.sync_devices_for_license(license, now=now)
     return row
 
 

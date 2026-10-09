@@ -858,6 +858,11 @@ def membership_session_start(request):
     # Att ta medlemskapet i appen ÄR aktiveringen: provets klocka startar här,
     # precis som vid första telefonen i bilmodellen (samma funktion).
     _start_trial_on_first_phone(license.company_id)
+    # Kontots telefon kör nu den här platsen: dess körområde följer platsens
+    # län (t.ex. när ett beviljande ersatte provet), inte förra platsens.
+    from fleet import device_prefs
+
+    device_prefs.sync_devices_for_license(license)
     return _json(request, {"ok": True, **result.as_dict()})
 
 

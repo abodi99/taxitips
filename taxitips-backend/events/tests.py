@@ -648,10 +648,32 @@ class RightsTests(SimpleTestCase):
         self.assertFalse(rights.rights_for("okänd källa").may_store())
 
     def test_shipped_defaults(self):
-        """Utan miljövariabler: Ticketmaster lagras enligt villkoren men visas inte i appen; PredictHQ inget."""
-        self.assertTrue(rights.rights_for("ticketmaster").may_store())
-        self.assertFalse(rights.rights_for("ticketmaster").may_show_in_app())
+        """
+        Utan miljövariabler: TheSportsDB lagras och visas i appen på ägarbeslutet 2026-10-09 --
+        och referensen säger att det är ett beslut, inget avtal. Ticketmaster lagras men visas
+        inte i appen förrän det beslutet fattats. PredictHQ: inget.
+        """
+        sports = rights.rights_for("thesportsdb")
+        self.assertTrue(sports.may_store())
+        self.assertTrue(sports.may_show_in_app())
+        self.assertIn("Ägarbeslut 2026-10-09", sports.app_reference)
+        self.assertIn("skriftligt avtal", sports.app_reference)
+        tm = rights.rights_for("ticketmaster")
+        self.assertTrue(tm.may_store())
+        self.assertFalse(tm.may_show_in_app())
         self.assertFalse(rights.rights_for("predicthq").may_store())
+        self.assertFalse(rights.rights_for("predicthq").may_show_in_app())
+
+    def test_a_retired_source_grants_nothing_whatever_the_switches_say(self):
+        r = self.phq(store=True, store_reference="avtal", show_in_app=True, app_reference="avtal",
+                     retired="prenumerationen gick ut")
+        self.assertFalse(r.may_store())
+        self.assertFalse(r.may_show_in_app())
+        self.assertIn("används inte längre", r.refusal("store"))
+        self.assertIn("används inte längre", r.refusal("app"))
+
+    def test_predicthq_is_retired_by_default(self):
+        self.assertIn("402", rights.rights_for("predicthq").retired)
 
 
 class PredictHQStorageTests(TestCase):
@@ -682,8 +704,11 @@ class PredictHQStorageTests(TestCase):
 
 
 # Den egna källan (events/manual.py) får alltid visas. Grindtesterna nedan
-# prövar de externa källornas rättigheter och körs därför utan den.
-WITHOUT_MANUAL = {k: v for k, v in settings.EVENT_SOURCES.items() if k != "manual"}
+# prövar de externa källornas rättigheter och körs därför utan den, och utan
+# ägarbeslutet om visning i appen (2026-10-09).
+WITHOUT_MANUAL = {
+    k: {**v, "show_in_app": False} for k, v in settings.EVENT_SOURCES.items() if k != "manual"
+}
 
 
 class AppGateTests(TestCase):
@@ -800,3 +825,81 @@ class SportKindTests(SimpleTestCase):
         cph = {"title": "Airport Delays - Copenhagen Airport (CPH)", "entities": []}
         billund = {"title": "Airport Delays", "entities": [{"type": "airport", "name": "Billund Airport"}]}
         self.assertEqual((predicthq.is_copenhagen_airport(cph), predicthq.is_copenhagen_airport(billund)), (True, False))
+
+
+# -- Ägarbeslutet 2026-10-09: Ticketmaster och TheSportsDB i appen, PredictHQ avslutad ------------
+
+# Som produktionen hade det före beslutet: PredictHQ med brytare och referenser påslagna.
+PRODUCTION_LIKE = {
+    **settings.EVENT_SOURCES,
+    "predicthq": {**settings.EVENT_SOURCES["predicthq"], "store": True, "store_reference": "ägarbeslut 2026-09-21",
+                  "show_in_app": True, "app_reference": "ägarbeslut 2026-09-21"},
+}
+
+
+def _sports_row(event_id, name, days, hhmm, lat=59.29081, lon=18.08534):
+    from events.sources import thesportsdb as tsdb
+
+    local = (timezone.now().astimezone(timing.STOCKHOLM) + dt.timedelta(days=days)).replace(
+        hour=int(hhmm[:2]), minute=int(hhmm[3:]), second=0, microsecond=0,
+    )
+    stamp = local.astimezone(UTC).strftime("%Y-%m-%dT%H:%M:%S")
+    raw = {"idEvent": event_id, "strTimestamp": stamp, "strTime": stamp[11:], "dateEvent": stamp[:10],
+           "strHomeTeam": name.split(" – ")[0], "strAwayTeam": name.split(" – ")[1], "intRound": "8",
+           "idVenue": "15901", "strStatus": "NS", "league_label": "SHL", "sport_key": "hockey",
+           "venue": {"name": "Hovet", "city": "Stockholm", "lat": lat, "lon": lon, "capacity": 8094}}
+    assert tsdb.normalize(raw) is not None
+    return ingest.build_row(raw, ingest.THESPORTSDB)
+
+
+class OwnerDecisionAppTests(TestCase):
+    def setUp(self):
+        now = timezone.now()
+        until = (now + dt.timedelta(days=30)).date()
+        ingest.save([ingest.build_row(soon("TMC", "Konsert på Avicii Arena", 2, "19:30"))],
+                    source="ticketmaster", now=now, fetched_until=until)
+        ingest.save([_sports_row("H1", "Djurgårdens IF – Frölunda HC", 1, "19:00")],
+                    source="thesportsdb", now=now, fetched_until=until)
+        # En PredictHQ-rad från tiden före avslutet ligger kvar i databasen.
+        with override_settings(EVENT_SOURCES=PHQ_AGREED):
+            ingest.save([ingest.build_row(phq_soon("PHOLD", "Gammal PredictHQ-rad", 3, "19:00", attendance=5000,
+                                                   lat=59.3337, lon=18.0770), ingest.PREDICTHQ)],
+                        source="predicthq", now=now, fetched_until=until)
+
+    def test_sports_are_in_the_app_and_ticketmaster_and_predicthq_are_not(self):
+        with override_settings(EVENT_SOURCES=PRODUCTION_LIKE):
+            body = _entitled_upcoming(counties="01")
+        sources = {e["source"] for e in body["events"]}
+        self.assertEqual(sources, {"thesportsdb"})
+        hockey = next(e for e in body["events"] if e["source"] == "thesportsdb")
+        self.assertEqual((hockey["sport"], hockey["sportLabel"]), ("ishockey", "Ishockey"))
+        self.assertEqual(body["attribution"], "Evenemangsdata från TheSportsDB")
+        self.assertNotIn("PredictHQ", json.dumps(body, ensure_ascii=False))
+        # Avslutad betyder inte raderad: raden ligger kvar.
+        self.assertTrue(Event.objects.filter(source="predicthq", external_id="PHOLD").exists())
+
+
+class PollIsolationTests(TestCase):
+    @override_settings(EVENT_SOURCES=PRODUCTION_LIKE, PREDICTHQ_ACCESS_TOKEN="t", TICKETMASTER_API_KEY="k",
+                       THESPORTSDB_API_KEY="123")
+    def test_predicthq_is_not_called_and_a_failing_source_does_not_stop_the_sports(self):
+        from django.core.management.base import CommandError
+
+        from events.sources import thesportsdb as tsdb
+
+        SourceStatus.objects.create(source="predicthq", ok=False, message="PredictHQError: 402",
+                                    consecutive_failures=36, checked_at=timezone.now())
+        with mock.patch("events.sources.predicthq.fetch_events") as phq, \
+                mock.patch("events.sources.ticketmaster.fetch_events", side_effect=ticketmaster.TicketmasterError("503")), \
+                mock.patch.object(tsdb, "fetch_events", return_value=([], {"leagues": {}, "errors": [], "calls": 1,
+                                                                           "complete": True})) as sports:
+            with self.assertRaises(CommandError) as raised:
+                call_command("poll_events", stdout=mock.MagicMock(), stderr=mock.MagicMock())
+        phq.assert_not_called()
+        sports.assert_called_once()
+        self.assertIn("ticketmaster", str(raised.exception))
+        predicthq_status = SourceStatus.objects.get(source="predicthq")
+        self.assertTrue(predicthq_status.ok)
+        self.assertIn("används inte längre", predicthq_status.message)
+        self.assertTrue(SourceStatus.objects.get(source="thesportsdb").ok)
+        self.assertFalse(SourceStatus.objects.get(source="ticketmaster").ok)

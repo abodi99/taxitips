@@ -73,13 +73,16 @@ class FakeDriverApi extends ApiClient {
     'unrestrictedCounties': false,
   };
 
+  /// Svaret från /api/ferries; null = inga färjor.
+  Map<String, dynamic>? ferriesBody;
+
   @override
   Future<Map<String, dynamic>> ferries({
     double? lat,
     double? lon,
     List<String>? counties,
     List<String>? municipalities,
-  }) async => const {'ferries': [], 'terminals': []};
+  }) async => ferriesBody ?? const {'ferries': [], 'terminals': []};
 
   @override
   Future<Map<String, dynamic>> events({

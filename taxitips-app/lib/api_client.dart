@@ -905,7 +905,10 @@ class ApiClient {
     final backend = _backend;
     if (backend != null && deviceToken != null) {
       try {
-        final status = await backend.fleetStatus(deviceToken: deviceToken);
+        final status = await backend.fleetStatus(
+          deviceToken: deviceToken,
+          accessToken: _accessToken,
+        );
         // Länen licensen omfattar: bilen föraren kör just nu, annars alla
         // bilar telefonen är godkänd för. Filtret erbjuder bara dem.
         final licensed = <String>{
@@ -1217,7 +1220,10 @@ class ApiClient {
   /// Vilka bilar telefonen får köra, vem som har dem, och vilken den kör nu.
   Future<Map<String, dynamic>> fleetStatus() async {
     if (deviceToken == null) await loadTokens();
-    return _fleet.fleetStatus(deviceToken: deviceToken);
+    return _fleet.fleetStatus(
+      deviceToken: deviceToken,
+      accessToken: _accessToken,
+    );
   }
 
   /// Tar bilen. `force: false` först -- servern svarar `takeover_required`

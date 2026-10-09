@@ -1,6 +1,7 @@
 """
 TheSportsDB (https://www.thesportsdb.com): matcher i de svenska ligorna med stor publik --
-fotboll, ishockey och handboll -- där en taxiförare kan räkna med mycket folk utanför arenan.
+fotboll, ishockey och handboll -- där en taxiförare kan räkna med mycket folk utanför arenan,
+och internationella matcher som spelas i Sverige (se LEAGUES).
 
 Bara spelschemat: datum, tid, lag, liga och arena (med arenans koordinater och kapacitet). Inga
 resultat, ingen publiksiffra: kapaciteten säger hur stor arenan är, inte hur många som kommer.
@@ -17,8 +18,8 @@ Uppmätt 2026-09-19 med gratisnyckeln `123` (docs_api_guide):
 - Tiderna (`strTimestamp`) är UTC utan tidszon i strängen.
 
 Villkoren (docs_terms_of_use, hämtade 2026-09-19): "You cannot publish apps to an appstore unless
-you are a paid subscriber", och källan ska anges med länk. Lagring nämns inte. Visning i förarappen
-kräver alltså den betalda planen; se config/settings.py EVENT_SOURCES.
+you are a paid subscriber", och källan ska anges med länk. Lagring nämns inte. Visningen i förarappen
+bygger på ägarbeslutet 2026-10-09, inte på en betald plan; se config/settings.py EVENT_SOURCES.
 """
 
 from __future__ import annotations
@@ -37,14 +38,25 @@ RATE_PAUSE_S = 61
 # Omgångar framåt per liga och körning; fönstret (horisonten) stoppar tidigare.
 MAX_ROUNDS = 8
 
-# Ligorna med stor publik. id enligt `search_all_leagues.php?c=Sweden` 2026-09-19. Superettan
-# finns inte hos TheSportsDB; Damallsvenskan, Division 1, Svenska Cupen och SDHL har för liten
-# publik för att en förare ska vänta vid arenan.
+# Ligorna med stor publik. id enligt `search_all_leagues.php?c=Sweden` 2026-09-19 och 2026-10-09.
+# Ägarbeslut 2026-10-09: också Superettan och Damallsvenskan (fanns inte med 2026-09-19).
+# Handbollsligan (5136) står kvar på säsongen 2025-2026 hos källan och har ännu inga matcher för
+# 2026-2027 (kontrollerat 2026-10-09); den kommer med av sig själv när källan lägger in säsongen.
+#
+# Internationella turneringar (`country`): bara matcher som spelas i Sverige (källans
+# `strCountry`), till exempel landslaget hemma eller svenska lag i Europaspel. Färre omgångar
+# framåt (`rounds`) -- varje omgång är ett anrop, och de flesta matcherna spelas utomlands.
 LEAGUES = (
     {"id": "4347", "sport": "football", "label": "Allsvenskan"},
+    {"id": "4403", "sport": "football", "label": "Superettan"},
+    {"id": "5209", "sport": "football", "label": "Damallsvenskan"},
     {"id": "4419", "sport": "hockey", "label": "SHL"},
     {"id": "5162", "sport": "hockey", "label": "Hockey Allsvenskan"},
     {"id": "5136", "sport": "handball", "label": "Handbollsligan"},
+    {"id": "4490", "sport": "football", "label": "Nations League", "country": "Sweden", "rounds": 6},
+    {"id": "4480", "sport": "football", "label": "Champions League", "country": "Sweden", "rounds": 6},
+    {"id": "4481", "sport": "football", "label": "Europa League", "country": "Sweden", "rounds": 6},
+    {"id": "5071", "sport": "football", "label": "Conference League", "country": "Sweden", "rounds": 6},
 )
 GENRE = {"football": "Soccer", "hockey": "Ice Hockey", "handball": "Handball"}
 # TheSportsDB skriver orterna på engelska eller som stadsdel.
@@ -159,7 +171,8 @@ def fetch_events(client: Client, start: dt.datetime, end: dt.datetime, venues: d
                 report["note"] = "inga kommande matcher hos källan (säsongen kan saknas)"
                 continue
             first_round = _round(upcoming[0].get("intRound"))
-            rounds = [0] if not first_round else range(first_round, first_round + MAX_ROUNDS)
+            depth = league.get("rounds") or MAX_ROUNDS
+            rounds = [0] if not first_round else range(first_round, first_round + depth)
             for number in rounds:
                 games = client.get("eventsround.php", id=league["id"], r=number, s=season).get("events") or []
                 report["rounds"].append({"round": number, "games": len(games)})
@@ -169,6 +182,8 @@ def fetch_events(client: Client, start: dt.datetime, end: dt.datetime, venues: d
                 for game in games:
                     when = _utc(game)
                     if when is None or not (start <= when <= end) or not game.get("idEvent"):
+                        continue
+                    if league.get("country") and (game.get("strCountry") or "") != league["country"]:
                         continue
                     venue_id = game.get("idVenue")
                     if not venue_id or str(venue_id) == "0":

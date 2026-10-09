@@ -274,9 +274,14 @@ def name_similarity(a: str | None, b: str | None) -> float:
     return max(overlap, SequenceMatcher(None, na, nb).ratio())
 
 
+# Källorna som anges under evenemangslistan i appen. PredictHQ är avslutad (events/rights.py)
+# och nämns inte för föraren; TheSportsDB:s villkor vill att källan anges.
+ATTRIBUTED_SOURCES = ("ticketmaster", "thesportsdb")
+
+
 def attribution(sources) -> str:
     present = set(sources)
-    labels = [SOURCE_LABELS[s] for s in ("predicthq", "ticketmaster") if s in present]
+    labels = [SOURCE_LABELS[s] for s in ATTRIBUTED_SOURCES if s in present]
     return "Evenemangsdata från " + " och ".join(labels) if labels else ""
 
 
@@ -310,7 +315,7 @@ def finish(
     if multi_day:
         return None, BASIS_UNKNOWN, "Pågår flera dagar: ingen enskild sluttid."
     if predicted_end and predicted_end > start_at:
-        return predicted_end, BASIS_PREDICTED, "Förutsagd av PredictHQ."
+        return predicted_end, BASIS_PREDICTED, "Förutsagd sluttid."
     minutes = TYPICAL_DURATION_MIN.get(category, TYPICAL_DURATION_MIN["ovrigt"])
     label = CATEGORY_LABELS.get(category, "evenemang").lower()
     if category == "sport" and sport in SPORT_DURATION_MIN:

@@ -40,13 +40,18 @@ ROUNDS = {
     ("4347", 24): [game("3", "2026-11-30T13:00:00", "Malmö FF", "Hammarby", 24)],  # utanför fönstret
     ("4419", 2): [game("4", "2026-09-22T17:00:00", "Rögle BK", "Djurgårdens IF", 2, venue="25328")],
     ("5162", 0): [{**game("5", "2026-09-25T17:00:00", "AIK IF", "Modo Hockey", 0, venue="0"), "idHomeTeam": "137307"}],
+    # Nations League: bara matchen i Sverige ska med.
+    ("4490", 2): [{**game("6", "2026-09-28T18:45:00", "Sweden", "Poland", 2), "strCountry": "Sweden"},
+                  {**game("7", "2026-09-28T18:45:00", "Germany", "Spain", 2, venue="99"), "strCountry": "Germany"}],
 }
 
 
 class FakeSession:
-    def __init__(self, fail=()):
+    def __init__(self, fail=(), seasons=None):
         self.calls = []
         self.fail = set(fail)
+        self.seasons = {"4347": "2026", "4419": "2026-2027", "5162": "2026-2027", "5136": "2025-2026",
+                        **(seasons or {})}
 
     def get(self, url, params=None, timeout=None):
         path = url.rsplit("/", 1)[-1]
@@ -55,10 +60,11 @@ class FakeSession:
         if params.get("id") in self.fail:
             return FakeResponse({}, status=503)
         if path == "lookupleague.php":
-            season = {"4347": "2026", "4419": "2026-2027", "5162": "2026-2027", "5136": "2025-2026"}[params["id"]]
+            # Ligor som inte finns här (t.ex. Superettan) saknar säsong och hoppas över.
+            season = self.seasons.get(params["id"])
             return FakeResponse({"leagues": [{"strCurrentSeason": season}]})
         if path == "eventsnextleague.php":
-            first = {"4347": "22", "4419": "2", "5162": "0"}.get(params["id"])
+            first = {"4347": "22", "4419": "2", "5162": "0", "4490": "2"}.get(params["id"])
             return FakeResponse({"events": [{"intRound": first}] if first is not None else None})
         if path == "eventsround.php":
             return FakeResponse({"events": ROUNDS.get((params["id"], int(params["r"])))})
@@ -96,6 +102,20 @@ class FetchTests(SimpleTestCase):
         self.assertEqual(row["start_at"], dt.datetime(2026, 9, 22, 17, tzinfo=dt.timezone.utc))
         self.assertEqual((row["genre"], row["city"], row["lon"]), ("Ice Hockey", "Ängelholm", 12.845))
         self.assertNotIn("intHomeScore", thesportsdb.trimmed(shl))
+
+    def test_the_owners_leagues_are_all_polled(self):
+        """Ägarbeslut 2026-10-09: fotboll, handboll och ishockey i de svenska ligorna."""
+        labels = {league["label"] for league in thesportsdb.LEAGUES}
+        for wanted in ("Allsvenskan", "Superettan", "Damallsvenskan", "Handbollsligan", "SHL", "Hockey Allsvenskan"):
+            self.assertIn(wanted, labels)
+
+    def test_an_international_tournament_keeps_only_the_games_in_sweden(self):
+        nations = next(league for league in thesportsdb.LEAGUES if league["id"] == "4490")
+        with mock.patch.object(thesportsdb, "LEAGUES", (nations,)):
+            events, stats = thesportsdb.fetch_events(client(FakeSession(seasons={"4490": "2026-2027"})), START, END)
+        self.assertEqual([e["idEvent"] for e in events], ["6"])
+        self.assertEqual(thesportsdb.normalize(events[0])["name"], "Nations League: Sweden – Poland")
+        self.assertEqual(stats["leagues"]["4490"]["games"], 1)
 
     def test_calls_stay_under_thirty_a_minute(self):
         slept = []

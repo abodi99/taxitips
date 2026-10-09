@@ -19,6 +19,17 @@ Utgångsläget (2026-09-14, se docs/data-sources.md):
   förbjuder att "derive revenues".
 * PredictHQ: varken lagring eller visning utan skriftligt avtal (villkor 3.7 d i).
   De publicerade villkoren undantar inte lokal testlagring.
+
+Ägarbeslut som referens: en referens kan också vara ett beslut av ägaren att använda
+källan trots att inget skriftligt avtal finns (PredictHQ 2026-09-21, Ticketmaster och
+TheSportsDB i appen 2026-10-09). Då ska referenstexten säga just det -- att det är
+ägarens beslut och att inget avtal är registrerat -- så att pipeline-sidan inte ger
+sken av ett avtal som inte finns.
+
+Avslutad källa (`retired` i settings.EVENT_SOURCES): källan används inte alls längre,
+oavsett brytare och referenser -- ingen hämtning, ingen lagring, ingen visning.
+PredictHQ sedan prenumerationen gick ut (402 från 2026-09-26). Redan lagrade rader
+raderas inte av det här; de gallras som vanligt när evenemangen passerat.
 """
 
 from __future__ import annotations
@@ -39,8 +50,12 @@ class SourceRights:
     store_reference: str
     show_in_app: bool
     app_reference: str
+    # Varför källan inte används längre; tom = i bruk.
+    retired: str = ""
 
     def may_store(self) -> bool:
+        if self.retired.strip():
+            return False
         return self.store and bool(self.store_reference.strip())
 
     def may_show_in_app(self) -> bool:
@@ -48,6 +63,8 @@ class SourceRights:
 
     def refusal(self, action: str) -> str:
         """Varför handlingen ("store" eller "app") inte är tillåten; tom sträng om den är det."""
+        if self.retired.strip():
+            return f"källan används inte längre: {self.retired.strip()}"
         if action == "store":
             if not self.store:
                 return "lagring är avstängd för källan"
@@ -71,6 +88,7 @@ class SourceRights:
             "mayShowInApp": self.may_show_in_app(),
             "appReference": self.app_reference,
             "appRefusal": self.refusal("app"),
+            "retired": self.retired,
         }
 
 
@@ -82,6 +100,7 @@ def rights_for(source: str) -> SourceRights:
         store_reference=str(config.get("store_reference") or ""),
         show_in_app=bool(config.get("show_in_app")),
         app_reference=str(config.get("app_reference") or ""),
+        retired=str(config.get("retired") or ""),
     )
 
 

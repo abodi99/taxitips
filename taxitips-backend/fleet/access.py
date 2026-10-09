@@ -491,6 +491,16 @@ def resolve(request, now=None) -> Access:
         if device_result.kind != "driver":
             account = payload or _account_payload_for_device(device_result.device_id)
             if account:
+                # Kontot på telefonraden kan hålla ett medlemskap i appen. Då är
+                # det platsens län som gäller -- samma svar som flödet ger när
+                # appen skickar JWT:n. Annars visade `/api/fleet/me` (som bara
+                # skickar enhetstoken) hela bolagets län i länsväljaren, medan
+                # listan bara gav platsens (2026-10-09). Med JWT har
+                # medlemskapsvägen redan prövats ovan.
+                if not payload:
+                    held = _membership_access_for_device(account, device_result.device_id, now)
+                    if held is not None:
+                        return held
                 return _member_access(account, now, device_id=device_result.device_id)
         # En token som är okänd får ändå prövas mot JWT-vägen: en ägare kan ha
         # en gammal token liggande OCH vara inloggad. Men skälet sparas, så att
@@ -582,6 +592,27 @@ def _membership_access(payload: dict, now) -> Access | None:
         counties=license_counties(license.id, now),
         valid_until=window.valid_until, period=window.reason,
     )
+
+
+def _membership_access_for_device(account: dict, device_id, now) -> Access | None:
+    """
+    Medlemskapsvägen för en telefon som bara skickade enhetstoken.
+
+    Kontot kommer från telefonraden (`devices.user_id`). Bara när kontots öppna
+    app-session gäller en plats i telefonens EGET bolag -- en telefon i ett
+    annat bolag ska aldrig få ett annat bolags län (samma regel som
+    `member_company_counties`). `None` = ingen sådan session, och anroparen
+    går vidare som förut.
+    """
+    from fleet import sessions
+
+    session = sessions.active_membership_session_for_user(account.get("sub"))
+    if session is None:
+        return None
+    device_company = Device.objects.filter(id=device_id).values_list("company_id", flat=True).first()
+    if device_company is None or str(device_company) != str(session.license.company_id):
+        return None
+    return _membership_access(account, now)
 
 
 def _driver_access(token: str, now) -> Access:

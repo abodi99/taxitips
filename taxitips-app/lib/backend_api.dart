@@ -544,11 +544,18 @@ class BackendApi {
 
   /// Vad den här telefonen får: godkända bilar, vem som har dem just nu, och
   /// vilken bil telefonen själv kör.
-  Future<Map<String, dynamic>> fleetStatus({String? deviceToken}) async {
+  ///
+  /// [accessToken] är det inloggade kontot. Med den svarar servern med samma
+  /// åtkomst som flödet (medlemskapets län); utan den fick ett konto med ett
+  /// medlemskap bolagets alla län i länsväljaren (2026-10-09).
+  Future<Map<String, dynamic>> fleetStatus({
+    String? deviceToken,
+    String? accessToken,
+  }) async {
     final res = await _client
         .get(
           Uri.parse('$baseUrl/api/fleet/me'),
-          headers: _headers(deviceToken: deviceToken),
+          headers: _headers(deviceToken: deviceToken, accessToken: accessToken),
         )
         .timeout(_timeout);
     return _decode(res, 'fleetStatus');

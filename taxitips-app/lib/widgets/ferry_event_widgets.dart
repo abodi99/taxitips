@@ -83,32 +83,124 @@ String _km(num value) => value < 10
     ? value.toStringAsFixed(1).replaceAll('.', ',')
     : value.round().toString();
 
-/// "Framme ca 19:24 · om 5 min", eller "Vid kaj".
-String ferryEtaText(Map<String, dynamic> f) {
-  if (f['status'] == 'berthed' || f['arrived'] == true) return 'Vid kaj';
-  // relevance.build (pipeline /farjor): expectedAt + hämtningsfönster.
-  if (f['expectedAt'] != null || f['pickupFrom'] != null) {
-    final eta = _clock(f['expectedAt']?.toString());
-    final from = _clock(f['pickupFrom']?.toString());
-    final until = _clock(f['pickupUntil']?.toString());
-    if (from != null && until != null) {
-      return eta == null
-          ? 'Hämtning $from–$until'
-          : 'Framme ca $eta · hämtning $from–$until';
-    }
-    if (eta != null) return 'Framme ca $eta';
-  }
-  final eta = _clock(f['eta']?.toString());
-  final minutes = (f['etaMinutes'] as num?)?.toInt();
-  if (eta == null) return f['statusLabel']?.toString() ?? '';
-  return minutes != null
-      ? 'Framme ca $eta · om $minutes min'
-      : 'Framme ca $eta';
+// --- Färjor ---------------------------------------------------------------
+//
+// Kartan och listan läser samma rader: `rows` i /api/ferries (maritime/views.py).
+// Kortet och bladet visar bara det en förare behöver för att hämta folk: namn,
+// ungefär hur stor färjan är, vid vilken kaj, och när den kommer. Inga källor,
+// inga fartygsnummer, ingen fart eller kurs.
+
+/// Färjorna för både kartan och listan. Äldre servrar utan `rows`: listan fick
+/// ankomsterna och kartan AIS-fartygen -- här blir det deras union, så att
+/// listan ändå har allt kartan visar.
+List<Map<String, dynamic>> ferryRowsOf(Map<String, dynamic> body) {
+  List<Map<String, dynamic>> maps(Object? v) => v is List
+      ? [
+          for (final e in v)
+            if (e is Map) Map<String, dynamic>.from(e),
+        ]
+      : <Map<String, dynamic>>[];
+  if (body['rows'] is List) return maps(body['rows']);
+  final arrivals = maps(body['arrivals']);
+  final ships = maps(body['ferries']);
+  final named = {
+    for (final a in arrivals)
+      ((a['vessel'] as Map?)?['name'] ?? '').toString().toUpperCase(),
+  }..remove('');
+  return [
+    ...arrivals,
+    for (final s in ships)
+      if (!named.contains((s['name'] ?? '').toString().toUpperCase())) s,
+  ];
 }
 
-/// True om raden kommer från relevance.build (tidtabell+AIS), inte bara AIS-live.
-bool isFerryArrival(Map<String, dynamic> f) =>
-    f['kindLabel'] != null || f['headline'] != null;
+String _shipName(Object? v) {
+  final name = (v ?? '').toString().trim();
+  return name.isEmpty || name.toUpperCase().startsWith('MMSI') ? '' : name;
+}
+
+/// Fartygets namn, annars linjen. Aldrig ett fartygsnummer.
+String ferryName(Map<String, dynamic> f) {
+  for (final candidate in [
+    _shipName(f['name']),
+    _shipName((f['vessel'] as Map?)?['name']),
+    (f['route'] ?? '').toString().trim(),
+  ]) {
+    if (candidate.isNotEmpty) return candidate;
+  }
+  return 'Färja';
+}
+
+/// Kajen där föraren ska stå.
+String ferryPort(Map<String, dynamic> f) {
+  final terminal = f['terminal'];
+  return (f['portName'] ??
+          (terminal is Map ? terminal['name'] : null) ??
+          f['terminalName'] ??
+          '')
+      .toString();
+}
+
+/// Ungefär hur stor färjan är, i ord ("Stor färja"). Längden visas inte.
+String ferrySize(Map<String, dynamic> f) {
+  final label = (f['sizeLabel'] ?? '').toString();
+  if (label.isNotEmpty) return label;
+  final length =
+      ((f['vessel'] as Map?)?['lengthM'] as num?) ?? (f['lengthM'] as num?);
+  // Samma band som serverns tips (maritime/tips.py SIZE_BANDS).
+  if (length != null && length >= 170) return 'Stor färja';
+  if (length != null && length >= 130) return 'Medelstor färja';
+  if (length != null && length >= 100) return 'Mindre färja';
+  final kind = (f['kindLabel'] ?? '').toString();
+  if (kind.isEmpty || kind == 'Stort passagerarfartyg') return 'Färja';
+  return kind;
+}
+
+bool ferryArrived(Map<String, dynamic> f) =>
+    f['status'] == 'berthed' || f['arrived'] == true;
+
+/// Var på kartan färjan ritas: fartyget där det är, annars vid kajen.
+(double, double)? ferryPoint(Map<String, dynamic> f) {
+  final lat = (f['lat'] as num?)?.toDouble();
+  final lon = (f['lon'] as num?)?.toDouble();
+  if (lat != null && lon != null) return (lat, lon);
+  final v = f['vessel'];
+  if (v is Map && v['lat'] is num && v['lon'] is num) {
+    return ((v['lat'] as num).toDouble(), (v['lon'] as num).toDouble());
+  }
+  final t = f['terminal'];
+  if (t is Map && t['lat'] is num && t['lon'] is num) {
+    return ((t['lat'] as num).toDouble(), (t['lon'] as num).toDouble());
+  }
+  return null;
+}
+
+/// "Anländer ca 19:24 · om 5 min", "Anländer nu" eller "Vid kaj".
+String ferryEtaText(Map<String, dynamic> f, {DateTime? now}) {
+  if (ferryArrived(f)) return 'Vid kaj';
+  final iso = (f['expectedAt'] ?? f['eta'])?.toString();
+  final at = iso == null ? null : DateTime.tryParse(iso)?.toLocal();
+  if (at == null) return 'På väg in';
+  final clock = _clock(iso)!;
+  final minutes =
+      (f['etaMinutes'] as num?)?.toInt() ??
+      at.difference(now ?? DateTime.now()).inMinutes;
+  if (minutes <= 0) return 'Anländer nu';
+  return 'Anländer ca $clock · om $minutes min';
+}
+
+/// "Från Visby" när det är känt.
+String ferryFromText(Map<String, dynamic> f) {
+  final from = (f['from'] ?? '').toString().trim();
+  return from.isEmpty ? '' : 'Från $from';
+}
+
+/// "14:10–14:45": när resenärerna kommer ut, om det är känt.
+String ferryPickupText(Map<String, dynamic> f) {
+  final from = _clock(f['pickupFrom']?.toString());
+  final until = _clock(f['pickupUntil']?.toString());
+  return from == null || until == null ? '' : '$from–$until';
+}
 
 /// "lör 20 sep · 19:30", "i dag · 19:30", "Pågår nu".
 String eventWhenText(Map<String, dynamic> e) {
@@ -236,8 +328,7 @@ class _CardShell extends StatelessWidget {
   }
 }
 
-/// En färja på väg in, som lägger till eller ligger vid kaj — eller en
-/// tidtabellsankomst från relevance (samma som pipeline /farjor).
+/// En färja: namn, storlek, kaj och när den kommer. Inget annat.
 class FerryCard extends StatelessWidget {
   const FerryCard({super.key, required this.ferry, this.onTap});
 
@@ -246,29 +337,10 @@ class FerryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    if (isFerryArrival(ferry)) return _arrivalCard();
-    return _aisCard();
-  }
-
-  Widget _arrivalCard() {
-    final kind = ferry['kindLabel']?.toString() ?? 'Färja';
-    final vessel = ferry['vessel'] as Map?;
-    final name =
-        vessel?['name']?.toString() ??
-        ferry['route']?.toString() ??
-        ferry['headline']?.toString() ??
-        'Färja';
-    final terminal = (ferry['terminal'] as Map?)?['name']?.toString() ?? '';
-    final length = (vessel?['lengthM'] as num?)?.toInt();
-    final traits =
-        (ferry['traits'] as List?)
-            ?.map((t) => t.toString())
-            .where((t) => t.isNotEmpty)
-            .toList() ??
-        const [];
-    final color = ferry['arrived'] == true
-        ? ferryColor('berthed')
-        : ferryColor('approaching');
+    final arrived = ferryArrived(ferry);
+    final color = ferryColor(arrived ? 'berthed' : ferry['status']?.toString());
+    final port = ferryPort(ferry);
+    final from = ferryFromText(ferry);
     return _CardShell(
       onTap: onTap,
       accent: color,
@@ -290,7 +362,7 @@ class FerryCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  name,
+                  ferryName(ferry),
                   style: const TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w800,
@@ -299,78 +371,10 @@ class FerryCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  terminal.isEmpty ? kind : '$kind · $terminal',
-                  style: TextStyle(fontSize: 14, color: Colors.grey.shade800),
-                ),
-                if ((ferry['headline']?.toString() ?? '').isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    ferry['headline'].toString(),
-                    style: TextStyle(fontSize: 13, color: Colors.grey.shade600),
-                  ),
-                ],
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    _InfoChip(
-                      Icons.schedule,
-                      ferryEtaText(ferry),
-                      strong: ferry['arrived'] != true,
-                    ),
-                    if (length != null)
-                      _InfoChip(Icons.directions_boat_outlined, '$length m'),
-                    for (final t in traits.take(2))
-                      _InfoChip(Icons.label_outline, t),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _aisCard() {
-    final status = ferry['status']?.toString();
-    final color = ferryColor(status);
-    final berthed = status == 'berthed';
-    final distance = ferry['distanceKm'] as num?;
-    final knots = ferry['knots'] as num?;
-    final length = (ferry['lengthM'] as num?)?.toInt();
-    return _CardShell(
-      onTap: onTap,
-      accent: color,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.12),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(Icons.directions_boat_filled, color: color, size: 24),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  ferry['name']?.toString() ?? 'Färja',
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w800,
-                    color: TbColors.ink,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  '${ferry['statusLabel'] ?? ''} ${berthed ? 'i' : 'mot'} ${ferry['terminalName'] ?? ''}',
+                  [
+                    ferrySize(ferry),
+                    port,
+                  ].where((s) => s.isNotEmpty).join(' · '),
                   style: TextStyle(fontSize: 14, color: Colors.grey.shade800),
                 ),
                 const SizedBox(height: 8),
@@ -381,14 +385,9 @@ class FerryCard extends StatelessWidget {
                     _InfoChip(
                       Icons.schedule,
                       ferryEtaText(ferry),
-                      strong: !berthed,
+                      strong: !arrived,
                     ),
-                    if (!berthed && distance != null)
-                      _InfoChip(Icons.straighten, '${_km(distance)} km kvar'),
-                    if (!berthed && knots != null)
-                      _InfoChip(Icons.speed, '${_km(knots)} knop'),
-                    if (length != null)
-                      _InfoChip(Icons.directions_boat_outlined, '$length m'),
+                    if (from.isNotEmpty) _InfoChip(Icons.place_outlined, from),
                   ],
                 ),
               ],
@@ -481,7 +480,7 @@ class EventCard extends StatelessWidget {
     ].where((s) => s.isNotEmpty).join(', ');
     final end = event['endLocal']?.toString();
     final leave = event['leaveUntilLocal']?.toString();
-    // Publikprognos (PredictHQ) när den finns, annars arenans storlek (TheSportsDB) -- en
+    // Publikprognos när servern har en, annars arenans storlek (TheSportsDB) -- en
     // kapacitet, inte en siffra på hur många som kommer.
     final capacity = (event['venueCapacity'] as num?)?.toInt();
     final attendance = (event['attendanceText']?.toString() ?? '').isNotEmpty
@@ -752,100 +751,16 @@ Widget _sheet(BuildContext context, List<Widget> children) {
   );
 }
 
-/// [harborLat]/[harborLon]: terminalens läge, för "Kör till hamnen". Fartygets
-/// egen position är ute på vattnet och går inte att köra till.
+/// [harborLat]/[harborLon]: kajens läge, för "Kör dit". Fartygets egen
+/// position är ute på vattnet och går inte att köra till.
 Future<void> showFerrySheet(
   BuildContext context,
   Map<String, dynamic> f, {
-  String attribution = '',
   double? harborLat,
   double? harborLon,
 }) {
-  final harbor = ActionRow(
-    lat: harborLat,
-    lon: harborLon,
-    driveLabel: 'Kör till hamnen',
-  );
-  if (isFerryArrival(f)) {
-    final vessel = f['vessel'] as Map?;
-    final why =
-        (f['why'] as List?)?.map((e) => e.toString()).toList() ?? const [];
-    final name =
-        vessel?['name']?.toString() ??
-        f['route']?.toString() ??
-        f['headline']?.toString() ??
-        'Färja';
-    final terminal = (f['terminal'] as Map?)?['name']?.toString() ?? '';
-    return showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: TbColors.foam,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) => _sheet(ctx, [
-        Text(
-          name,
-          style: const TextStyle(
-            fontSize: 20,
-            fontWeight: FontWeight.w800,
-            color: TbColors.ink,
-          ),
-        ),
-        const SizedBox(height: 6),
-        Text(
-          [
-            if ((f['kindLabel']?.toString() ?? '').isNotEmpty) f['kindLabel'],
-            if (terminal.isNotEmpty) terminal,
-          ].join(' · '),
-          style: TextStyle(fontSize: 15, color: Colors.grey.shade800),
-        ),
-        if ((f['headline']?.toString() ?? '').isNotEmpty) ...[
-          const SizedBox(height: 4),
-          Text(
-            f['headline'].toString(),
-            style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
-          ),
-        ],
-        const SizedBox(height: 12),
-        harbor,
-        const SizedBox(height: 12),
-        _DetailRow('Ankomst', ferryEtaText(f)),
-        _DetailRow('Riktning', f['direction']?.toString() ?? ''),
-        _DetailRow('Tidpunkt', f['expectedBasis']?.toString() ?? ''),
-        _DetailRow(
-          'Längd',
-          vessel?['lengthM'] == null ? '' : '${vessel!['lengthM']} m',
-        ),
-        for (final line in why) ...[
-          const SizedBox(height: 8),
-          Text(
-            line,
-            style: TextStyle(
-              fontSize: 13,
-              height: 1.35,
-              color: Colors.grey.shade800,
-            ),
-          ),
-        ],
-        const SizedBox(height: 12),
-        Text(
-          'Samma urval som pipeline-sidan /farjor. Passagerarantal saknas i källorna.'
-          '${attribution.isEmpty ? '' : ' $attribution'}',
-          style: TextStyle(
-            fontSize: 12,
-            height: 1.4,
-            color: Colors.grey.shade700,
-          ),
-        ),
-      ]),
-    );
-  }
-
-  final age = ((f['ageSeconds'] as num?) ?? 0) ~/ 60;
-  final knots = f['knots'] as num?;
-  final course = f['course'] as num?;
-  final distance = f['distanceKm'] as num?;
+  final port = ferryPort(f);
+  final pickup = ferryPickupText(f);
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -854,62 +769,26 @@ Future<void> showFerrySheet(
       borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
     ),
     builder: (ctx) => _sheet(ctx, [
-      Row(
-        children: [
-          SizedBox(
-            width: 34,
-            height: 34,
-            child: FerryArrow(
-              status: f['status']?.toString(),
-              course: course,
-              size: 26,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              f['name']?.toString() ?? 'Färja',
-              style: const TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: TbColors.ink,
-              ),
-            ),
-          ),
-        ],
+      Text(
+        ferryName(f),
+        style: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w800,
+          color: TbColors.ink,
+        ),
       ),
       const SizedBox(height: 6),
       Text(
-        '${f['statusLabel'] ?? ''} ${f['status'] == 'berthed' ? 'i' : 'mot'} ${f['terminalName'] ?? ''}',
+        [ferrySize(f), port].where((s) => s.isNotEmpty).join(' · '),
         style: TextStyle(fontSize: 15, color: Colors.grey.shade800),
       ),
       const SizedBox(height: 12),
-      harbor,
+      ActionRow(lat: harborLat, lon: harborLon, driveLabel: 'Kör dit'),
       const SizedBox(height: 12),
-      _DetailRow(
-        'Beräknad ankomst',
-        f['status'] == 'berthed' ? 'Ligger vid kaj' : ferryEtaText(f),
-      ),
-      _DetailRow(
-        'Kvar till terminalen',
-        distance == null ? '' : '${_km(distance)} km',
-      ),
-      _DetailRow('Fart', knots == null ? 'saknas' : '${_km(knots)} knop'),
-      _DetailRow('Kurs', course == null ? 'saknas' : '${course.round()}°'),
-      _DetailRow('Längd', f['lengthM'] == null ? '' : '${f['lengthM']} m'),
-      _DetailRow('AIS-destination', f['destination']?.toString() ?? ''),
-      _DetailRow('Senaste position', age < 1 ? 'nyss' : 'för $age min sedan'),
-      const SizedBox(height: 12),
-      Text(
-        'Beräknad ankomst = sträcka till terminalen × farledens krokighet / farten. '
-        'Fartygets egen ETA i AIS är handinmatad och visas inte som tid.'
-        '${attribution.isEmpty ? '' : ' $attribution.'}',
-        style: TextStyle(
-          fontSize: 12,
-          height: 1.4,
-          color: Colors.grey.shade700,
-        ),
-      ),
+      _DetailRow('Ankomst', ferryEtaText(f)),
+      _DetailRow('Kaj', port),
+      _DetailRow('Folk kommer ut', pickup),
+      _DetailRow('Kommer från', (f['from'] ?? '').toString()),
     ]),
   );
 }

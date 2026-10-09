@@ -10,6 +10,7 @@ import '../net_status.dart';
 import '../signal_kinds.dart' show countyShort;
 import '../theme.dart';
 import '../widgets/brand_icons.dart';
+import '../widgets/county_checklist.dart';
 import '../widgets/notify_prefs_sheet.dart';
 import '../widgets/settings_ui.dart';
 import 'membership_county_screen.dart';
@@ -211,20 +212,47 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// Länväljaren (MembershipCountyScreen) byter medlemskapets län med
-  /// setMembershipCounty, eller skapar/bytar provets län med chooseTrialCounty
-  /// när kontot inte redan har en plats. Skärmen äger anropen; här tar vi bara
-  /// reda på vilken licens som redan är aktiv och läser om länen efteråt.
+  /// "Dina län": en kryssruta per län i medlemskapet (CountyPickerSheet),
+  /// alla förbockade tills föraren väljer bort något. Länen läses från
+  /// servern varje gång, så ett län admin lagt till syns direkt.
+  ///
+  /// Ett prov får dessutom "Byt provets län" -- där väljer kunden själv länet
+  /// (MembershipCountyScreen, setMembershipCounty/chooseTrialCounty). En betald
+  /// eller beviljad plats får sina län av företagets admin, och förut öppnade
+  /// tryck här en lista med ett enda val bland alla 21 län, som servern sedan
+  /// nekade ("Medlemskapet är betalt").
   Future<void> _openCountyPicker() async {
     final navigator = Navigator.of(context);
-    final licenseId = await _activeLicenseId();
+    final membership = await _activeMembership();
     if (!mounted) return;
-    await navigator.push<void>(
-      MaterialPageRoute(
-        builder: (_) => MembershipCountyScreen(
+    final trial = membership != null && membership['trial'] == true;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: TbColors.foam,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+      ),
+      builder: (ctx) => ConstrainedBox(
+        constraints: BoxConstraints(
+          maxHeight: MediaQuery.of(ctx).size.height * 0.8,
+        ),
+        child: CountyPickerSheet(
           api: widget.api,
-          licenseId: licenseId,
-          onDone: () => navigator.pop(),
+          onChangeTrialCounty: trial
+              ? () {
+                  Navigator.of(ctx).pop();
+                  navigator.push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => MembershipCountyScreen(
+                        api: widget.api,
+                        licenseId: membership['licenseId']?.toString(),
+                        onDone: () => navigator.pop(),
+                      ),
+                    ),
+                  );
+                }
+              : null,
         ),
       ),
     );
@@ -235,17 +263,20 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
-  /// Den aktiva licensens id, om kontot redan har ett medlemskap. Null när
-  /// kontot är nytt (länväljaren tar provvägen) eller anropet inte är inloggat.
-  Future<String?> _activeLicenseId() async {
+  /// Kontots aktiva medlemskap (`licenseId`, `trial`), eller null när kontot
+  /// inte har något eller anropet inte är inloggat.
+  Future<Map<String, dynamic>?> _activeMembership() async {
     try {
       final data = await widget.api.memberships();
+      final list = (data['memberships'] as List? ?? const [])
+          .whereType<Map>()
+          .map((m) => Map<String, dynamic>.from(m))
+          .toList();
       final active = data['activeLicenseId']?.toString();
-      if (active != null && active.isNotEmpty) return active;
-      final list = data['memberships'] as List? ?? const [];
-      if (list.isNotEmpty && list.first is Map) {
-        return Map<String, dynamic>.from(list.first as Map)['licenseId']?.toString();
+      for (final m in list) {
+        if (active != null && m['licenseId']?.toString() == active) return m;
       }
+      return list.isNotEmpty ? list.first : null;
     } catch (_) {
       // Ingen inloggning eller inget medlemskap -- se ovan.
     }
@@ -375,9 +406,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   List<Widget> _accountSection() {
     if (_isOffice) {
       return [
-        const SettingsSectionHeader(
-          title: 'Konto',
-        ),
+        const SettingsSectionHeader(title: 'Konto'),
         SettingsGroup(
           children: [
             if (widget.onLogout != null)
@@ -715,7 +744,7 @@ class _Footer extends StatelessWidget {
 }
 
 /// Översikt över medlemskapets län -- de län platsen omfattar. Ett tryck
-/// öppnar länväljaren (MembershipCountyScreen), som byter län på medlemskapet.
+/// öppnar "Dina län" (CountyPickerSheet): en kryssruta per län i medlemskapet.
 /// Notisfiltret nås i stället via "Notiser"-raden.
 class _CountiesOverview extends StatelessWidget {
   const _CountiesOverview({
@@ -794,8 +823,8 @@ class _CountiesOverview extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 licenseLabels.length == 1
-                    ? 'Tips och notiser i det här länet. Tryck för att byta.'
-                    : 'Tips och notiser i alla dina län. Tryck för att byta.',
+                    ? 'Tips och notiser i det här länet.'
+                    : 'Tips och notiser i dina län. Tryck för att välja vilka.',
                 style: const TextStyle(
                   fontSize: 13,
                   color: TbColors.muted,

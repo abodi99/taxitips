@@ -82,7 +82,9 @@ def fetch(now: dt.datetime, days: int) -> dict:
         "rateLimitRemaining": stats["rateLimitRemaining"],
         "matchedTicketmaster": len(pairs),
         "events": rows,
-        "attribution": timing.attribution({ingest.PREDICTHQ}),
+        # Bara pipeline-sidan (DEBUG). PredictHQ:s villkor 4.8 kräver attribuering där den visas;
+        # förarappen visar inte PredictHQ längre (events/rights.py, avslutad källa).
+        "attribution": "Evenemangsdata från PredictHQ",
     }
 
 

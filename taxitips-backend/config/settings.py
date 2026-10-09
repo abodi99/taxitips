@@ -207,6 +207,20 @@ THESPORTSDB_API_KEY = os.environ.get("THESPORTSDB_API_KEY", "123")
 # appen. Se events/api.py.
 EVENTS_APP_PREVIEW = os.environ.get("EVENTS_APP_PREVIEW") == "1"
 
+# Ägarbesluten om visning i förarappen (events/rights.py: ett ägarbeslut är en giltig referens
+# bara om texten säger att det är ett beslut och inte ett avtal). En tom *_APP_REFERENCE i miljön
+# faller tillbaka hit; stäng av visningen med *_SHOW_IN_APP=0.
+TICKETMASTER_OWNER_DECISION = (
+    "Ägarbeslut (förberett, inte påslaget): Ticketmasters evenemang i förarappen. Inget skriftligt avtal med "
+    "Ticketmaster är registrerat; villkoren förbjuder att \"derive revenues\" utan avtal, så visningen "
+    "sker på ägarens beslut och ansvar."
+)
+THESPORTSDB_OWNER_DECISION = (
+    "Ägarbeslut 2026-10-09: TheSportsDB:s matcher visas i förarappen. Ingen betald prenumeration eller "
+    "skriftligt avtal är registrerat här; villkoren kräver betald prenumeration för appar i appbutiker, "
+    "så visningen sker på ägarens beslut och ansvar."
+)
+
 EVENT_SOURCES = {
     "ticketmaster": {
         "store": os.environ.get("EVENTS_TICKETMASTER_STORE", "1") == "1",
@@ -215,9 +229,12 @@ EVENT_SOURCES = {
             'Ticketmaster Discovery API Terms of Use: lagring "for reasonable periods in order '
             'to provide the service" (hämtade 2026-09-12)',
         ),
+        # Visas i förarappen sedan ägarbeslutet 2026-10-09. Referensen säger rakt ut att det är
+        # ägarens beslut: villkoren förbjuder att "derive revenues" och inget avtal finns.
+        # Av som standard: ägaren bad om sportmatcherna (TheSportsDB), inte Ticketmaster.
+        # Slå på med EVENTS_TICKETMASTER_SHOW_IN_APP=1 när beslutet är fattat.
         "show_in_app": os.environ.get("EVENTS_TICKETMASTER_SHOW_IN_APP", "0") == "1",
-        # Tom med avsikt: villkoren förbjuder att "derive revenues" -- betald app kräver avtal.
-        "app_reference": os.environ.get("EVENTS_TICKETMASTER_APP_REFERENCE", ""),
+        "app_reference": os.environ.get("EVENTS_TICKETMASTER_APP_REFERENCE") or TICKETMASTER_OWNER_DECISION,
     },
     "predicthq": {
         "store": os.environ.get("EVENTS_PREDICTHQ_STORE", "0") == "1",
@@ -225,6 +242,13 @@ EVENT_SOURCES = {
         "store_reference": os.environ.get("EVENTS_PREDICTHQ_STORE_REFERENCE", ""),
         "show_in_app": os.environ.get("EVENTS_PREDICTHQ_SHOW_IN_APP", "0") == "1",
         "app_reference": os.environ.get("EVENTS_PREDICTHQ_APP_REFERENCE", ""),
+        # Avslutad: varken hämtning, lagring eller visning, oavsett variablerna ovan (events/rights.py).
+        # Lagrade rader ligger kvar tills de passerat. Sätt EVENTS_PREDICTHQ_RETIRED= (tomt) först
+        # när en ny prenumeration finns.
+        "retired": os.environ.get(
+            "EVENTS_PREDICTHQ_RETIRED",
+            "PredictHQ-prenumerationen gick ut; API:t svarar 402 sedan 2026-09-26",
+        ),
     },
     "thesportsdb": {
         "store": os.environ.get("EVENTS_THESPORTSDB_STORE", "1") == "1",
@@ -232,10 +256,11 @@ EVENT_SOURCES = {
             "EVENTS_THESPORTSDB_STORE_REFERENCE",
             "TheSportsDB Terms of Use (hämtade 2026-09-19): lagring nämns inte; källan anges med länk",
         ),
-        "show_in_app": os.environ.get("EVENTS_THESPORTSDB_SHOW_IN_APP", "0") == "1",
-        # Tom med avsikt: "You cannot publish apps to an appstore unless you are a paid subscriber".
-        # Fylls i med prenumerationen när den finns.
-        "app_reference": os.environ.get("EVENTS_THESPORTSDB_APP_REFERENCE", ""),
+        # Visas i förarappen sedan ägarbeslutet 2026-10-09. Villkoren: "You cannot publish apps to
+        # an appstore unless you are a paid subscriber" -- referensen säger att ingen betald
+        # prenumeration är registrerad här. Byt till prenumerationens referens när den finns.
+        "show_in_app": os.environ.get("EVENTS_THESPORTSDB_SHOW_IN_APP", "1") == "1",
+        "app_reference": os.environ.get("EVENTS_THESPORTSDB_APP_REFERENCE") or THESPORTSDB_OWNER_DECISION,
     },
     # Evenemang som personalen lagt in i adminwebben (events/manual.py). Eget
     # innehåll: ingen tredje parts villkor begränsar lagring eller visning.

@@ -235,6 +235,9 @@ def _set_grant_counties(
     Alla rader blir EXTRA (baslänet är vad kort och listor visar, inte en
     rättighet vid sidan av de andra). De räknas ändå aldrig mot fakturan:
     `extra_county_count` hoppar över platser med ett öppet beviljande.
+    En beviljad plats utan BASE-rad är alltså avsiktlig: alla läsare
+    (`access.license_counties`, `membership.county_codes`,
+    `pairing.license_counties_for`) tar unionen av raderna oavsett sort.
     """
     if all_counties:
         from core.coverage import offerable_county_codes
@@ -259,6 +262,12 @@ def _set_grant_counties(
             base_county=codes[0], scheduled_base_county=""
         )
     license.refresh_from_db()
+    # Telefonen som kör platsen får de nya länen direkt: ett tillkommet län
+    # läggs till, ett borttaget tas bort, förarens bortval står kvar
+    # (fleet/device_prefs.align_prefs_to_entitlement).
+    from fleet import device_prefs
+
+    device_prefs.sync_devices_for_license(license, counties=codes, now=now)
     return codes
 
 

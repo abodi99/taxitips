@@ -14,6 +14,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../analytics.dart';
 import '../api_client.dart';
 import '../config.dart';
+import '../county_selection.dart';
 import '../feed_cache.dart';
 import '../follow_up.dart';
 import '../widgets/follow_up_card.dart';
@@ -32,6 +33,7 @@ import '../widgets/brand_icons.dart';
 import '../followed_events.dart';
 import '../signal_kinds.dart';
 import '../widgets/category_bar.dart';
+import '../widgets/county_checklist.dart';
 import '../widgets/driver_tour.dart';
 import '../widgets/guided_tour.dart';
 import '../widgets/map_legend_sheet.dart';
@@ -202,6 +204,22 @@ class _DriverScreenState extends State<DriverScreen>
   /// avgör ändå.
   Set<String>? _licensedCounties;
 
+  /// Licensens län när körområdet senast sparades (lib/county_selection.dart).
+  /// Null = okänt, t.ex. ett val sparat av en äldre app.
+  Set<String>? _countiesLicensedAtChoice;
+
+  /// Körområdet har stämts av mot licensen minst en gång sedan start. Förut
+  /// skickades det sparade valet till servern vid start, FÖRE avstämningen --
+  /// ett gammalt val med ett län skrev då över de län admin just gett
+  /// (2026-10-09).
+  bool _areaReconciled = false;
+  bool _areaSyncPending = false;
+
+  /// Licensen är känd och har län: körområdet är en avsmalning av den, och
+  /// tomt val betyder alla licensens län.
+  bool get _licenseCountiesKnown =>
+      _licensedCounties != null && _licensedCounties!.isNotEmpty;
+
   /// Länen föraren kan välja i filtret: bara licensens, när de är kända.
   Iterable<MapEntry<String, String>> get _pickableCounties =>
       _countyNames.entries.where(
@@ -211,6 +229,7 @@ class _DriverScreenState extends State<DriverScreen>
   Set<String> _regions = {};
   Set<String> _cities = {};
   // Körområde i län (SCB-kod). Styr listan när platsen saknas och alla notiser.
+  // Med känd licens betyder tomt "alla licensens län" (lib/county_selection.dart).
   Set<String> _counties = {};
   // Olästa svar i supportchatten: en prick på kugghjulet.
   int _supportUnread = 0;
@@ -225,12 +244,10 @@ class _DriverScreenState extends State<DriverScreen>
   bool _needsVehicle = false;
   StreamSubscription<RemoteMessage>? _pushSub;
   StreamSubscription<void>? _openedSub;
-  // Färjor: `arrivals` = relevance (tidtabell+AIS, samma som /farjor);
-  // `_ferryShips` = AIS-live för kartans nålar.
+  // Färjor: EN lista för både kartan och listan (`rows` i /api/ferries) --
+  // allt kartan visar ska finnas i listan (ferryRowsOf).
   List<Map<String, dynamic>> _ferries = const [];
-  List<Map<String, dynamic>> _ferryShips = const [];
   List<Map<String, dynamic>> _ferryTerminals = const [];
-  String _ferryAttribution = '';
   List<Map<String, dynamic>> _events = const [];
   bool _eventsPreview = false;
   String _eventsPreviewNote = '';
@@ -321,6 +338,9 @@ class _DriverScreenState extends State<DriverScreen>
       final cities = prefs.getStringList(_prefsCitiesKey);
       final counties = prefs.getStringList(_prefsCountiesKey);
       final municipalities = prefs.getStringList(_prefsMunicipalitiesKey);
+      final countiesLicensed = prefs.getStringList(
+        CountySelectionStore.licensedKey,
+      );
       // Äldre envärdesnycklar → set, så befintliga sparade filter inte tappas.
       final legacyRegion = prefs.getString(_prefsRegionKey);
       final legacyPlace = prefs.getString(_prefsPlaceKey);
@@ -371,6 +391,9 @@ class _DriverScreenState extends State<DriverScreen>
         }
         if (counties != null) _counties = counties.toSet();
         if (municipalities != null) _municipalities = municipalities.toSet();
+        if (countiesLicensed != null) {
+          _countiesLicensedAtChoice = countiesLicensed.toSet();
+        }
         if (cities != null) {
           _cities = cities.toSet();
         } else if (legacyPlace != null && legacyPlace.isNotEmpty) {
@@ -423,6 +446,16 @@ class _DriverScreenState extends State<DriverScreen>
         _prefsMunicipalitiesKey,
         _municipalities.toList()..sort(),
       );
+      // Licensens län när valet sparades: så skiljs ett bortvalt län från ett
+      // som admin lägger till senare (lib/county_selection.dart). Bara efter
+      // avstämningen -- annars antecknades ett nytt län som bortvalt.
+      if (_areaReconciled && _licenseCountiesKnown) {
+        _countiesLicensedAtChoice = {..._licensedCounties!};
+        await prefs.setStringList(
+          CountySelectionStore.licensedKey,
+          _licensedCounties!.toList()..sort(),
+        );
+      }
       await prefs.remove(_prefsRegionKey);
       await prefs.remove(_prefsPlaceKey);
     } catch (_) {
@@ -445,7 +478,18 @@ class _DriverScreenState extends State<DriverScreen>
   /// telefon utan län får inga notiser alls (core/notify.py, `no_area`).
   Future<void> _syncNotifyRegionsFromFilter() async {
     if (widget.api.deviceToken == null) return;
-    final fromLicense = _counties.isEmpty && _municipalities.isEmpty;
+    // Före första avstämningen mot licensen kan valet vara gammalt (admin har
+    // lagt till län sedan dess). Skickas det då, antecknar servern de nya
+    // länen som bortvalda. Skickas efter avstämningen i stället.
+    if (!_areaReconciled) {
+      _areaSyncPending = true;
+      return;
+    }
+    _areaSyncPending = false;
+    // Med känd licens: tomt val = alla licensens län, även när kommuner
+    // förfinar något av dem.
+    final fromLicense =
+        _counties.isEmpty && (_licenseCountiesKnown || _municipalities.isEmpty);
     final counties = fromLicense ? _licensedCounties : _counties;
     // Inga län att skicka (okänt, eller licensen har inga än): skicka inget,
     // så att en tom lista inte skriver över länen parkopplingen satt.
@@ -648,7 +692,9 @@ class _DriverScreenState extends State<DriverScreen>
   }
 
   void _onRefreshRequested() {
-    if (mounted) unawaited(_load());
+    if (!mounted) return;
+    // Inställningarna kan ha ändrat "Dina län": läs valet innan listan hämtas.
+    unawaited(_reloadCountySelection().then((_) => mounted ? _load() : null));
   }
 
   void _schedulePoll() {
@@ -1040,14 +1086,17 @@ class _DriverScreenState extends State<DriverScreen>
         municipalities: _municipalityParam,
       );
       if (!mounted) return;
-      final arrivals = _asMaps(body['arrivals']);
-      final ships = _asMaps(body['ferries']);
       setState(() {
-        // Lista: pipeline-urvalet. Saknas arrivals (äldre server) → AIS.
-        _ferries = arrivals.isNotEmpty ? arrivals : ships;
-        _ferryShips = ships;
+        // Samma rader på kartan och i listan. Kartan ritar raden där
+        // fartyget är, eller vid kajen när positionen saknas.
+        _ferries = [
+          for (final f in ferryRowsOf(body))
+            if (ferryPoint(f) case final p?)
+              {...f, 'lat': p.$1, 'lon': p.$2}
+            else
+              f,
+        ];
         _ferryTerminals = _asMaps(body['terminals']);
-        _ferryAttribution = body['attribution']?.toString() ?? '';
       });
     } catch (e) {
       debugPrint('DriverScreen[_loadFerries] $e');
@@ -1096,13 +1145,7 @@ class _DriverScreenState extends State<DriverScreen>
 
   void _openFerry(Map<String, dynamic> f) {
     final harbor = _harborFor(f);
-    showFerrySheet(
-      context,
-      f,
-      attribution: _ferryAttribution,
-      harborLat: harbor?.$1,
-      harborLon: harbor?.$2,
-    );
+    showFerrySheet(context, f, harborLat: harbor?.$1, harborLon: harbor?.$2);
   }
 
   /// Historiken: de senaste timmarnas tips i samma område som listan, också
@@ -1221,6 +1264,26 @@ class _DriverScreenState extends State<DriverScreen>
         for (final c in (result['licensedCounties'] as List?) ?? const [])
           c.toString(),
       };
+      // Ett val sparat av en äldre app saknar anteckningen om licensens län.
+      // Servern har sin egen (`entitledCounties` på telefonen) och har redan
+      // stämt av valet mot licensen -- den får avgöra en gång.
+      Map<String, dynamic>? serverPrefs;
+      if (licensed.isNotEmpty &&
+          _countiesLicensedAtChoice == null &&
+          _counties.isNotEmpty &&
+          !_counties.containsAll(licensed)) {
+        try {
+          final data = await widget.api.getNotifyPrefs();
+          if (data['prefs'] is Map) {
+            serverPrefs = Map<String, dynamic>.from(data['prefs'] as Map);
+          }
+        } catch (e) {
+          debugPrint('DriverScreen[_checkEntitlement] prefs: $e');
+        }
+        if (!mounted) return;
+      }
+      var areaChanged = false;
+      var saveArea = false;
       setState(() {
         _entitled = result['entitled'] == true;
         _entitlementReason = result['reason']?.toString();
@@ -1235,17 +1298,13 @@ class _DriverScreenState extends State<DriverScreen>
         }
         if (licensed.isNotEmpty) {
           _licensedCounties = licensed;
-          // Sparade val utanför licensen hade bara gett en tom lista.
-          final before = _counties.length + _municipalities.length;
-          _counties.removeWhere((c) => !licensed.contains(c));
-          _municipalities.removeWhere(
-            (m) => !licensed.contains(m.substring(0, 2)),
-          );
-          if (_counties.length + _municipalities.length != before) {
-            WidgetsBinding.instance.addPostFrameCallback(
-              (_) => _saveFilters(reloadFeed: true),
-            );
-          }
+          final outcome = _reconcileArea(licensed, serverPrefs);
+          areaChanged = outcome.changed;
+          saveArea = outcome.save;
+        } else {
+          // Bolag utan licensmodell: inget att stämma av.
+          saveArea = !_areaReconciled && _areaSyncPending;
+          _areaReconciled = true;
         }
         // Godkänd men utan bil är inte "provperioden slut". Backend säger
         // vilket av dem det är; skärmen ska inte gissa.
@@ -1254,9 +1313,96 @@ class _DriverScreenState extends State<DriverScreen>
           _needsVehicle = true;
         }
       });
+      // Nytt körområde: spara (med licensens län som anteckning), skicka till
+      // servern och hämta om listan med de avstämda länen.
+      if (saveArea) {
+        WidgetsBinding.instance.addPostFrameCallback(
+          (_) => _saveFilters(reloadFeed: areaChanged),
+        );
+      }
     } catch (e) {
       // Nätverksfel etc — behåll senast kända status hellre än att larma i onödan.
       debugPrint('DriverScreen[_checkEntitlement] error: $e');
+    }
+  }
+
+  /// Stämmer av körområdet mot licensens län -- samma regel som servern
+  /// (lib/county_selection.dart, fleet/device_prefs.py). Anropas i setState.
+  ///
+  /// [serverPrefs] är telefonens sparade notisområde från servern, hämtat
+  /// när det lokala valet saknar anteckning (sparat av en äldre app).
+  ({bool changed, bool save}) _reconcileArea(
+    Set<String> licensed,
+    Map<String, dynamic>? serverPrefs,
+  ) {
+    Set<String> codes(Object? raw) => {
+      for (final c in (raw is List ? raw : const [])) c.toString(),
+    };
+    var chosen = {..._counties};
+    var municipalities = {..._municipalities};
+    Set<String>? recorded = _countiesLicensedAtChoice;
+    var settled = true;
+    if (recorded == null &&
+        chosen.isNotEmpty &&
+        !chosen.containsAll(licensed)) {
+      final serverCounties = codes(serverPrefs?['counties']);
+      if (serverCounties.isNotEmpty) {
+        chosen = serverCounties;
+        municipalities = codes(serverPrefs?['municipalities']);
+        recorded = serverPrefs?['entitledCounties'] is List
+            ? codes(serverPrefs?['entitledCounties'])
+            : {...licensed};
+      } else {
+        // Inget svar från servern: släpp bara län utanför licensen (som
+        // förut) och försök igen vid nästa kontroll.
+        settled = false;
+      }
+    }
+    final Set<String> next;
+    if (settled) {
+      next = reconcileCounties(
+        chosen: chosen,
+        licensed: licensed,
+        recorded: recorded,
+      );
+    } else {
+      final kept = chosen.intersection(licensed);
+      next = kept.containsAll(licensed) ? <String>{} : kept;
+    }
+    final nextMunicipalities = keepMunicipalities(
+      municipalities,
+      chosen: next,
+      licensed: licensed,
+    );
+    final changed =
+        !sameCounties(next, _counties) ||
+        !sameCounties(nextMunicipalities, _municipalities);
+    _counties = next;
+    _municipalities = nextMunicipalities;
+    if (!settled) return (changed: changed, save: changed);
+    final firstTime = !_areaReconciled;
+    _areaReconciled = true;
+    final markerStale = !sameCounties(_countiesLicensedAtChoice, licensed);
+    return (
+      changed: changed,
+      save: changed || markerStale || (firstTime && _areaSyncPending),
+    );
+  }
+
+  /// Läser om körområdet från telefonen: "Dina län" i Inställningar sparar
+  /// där (lib/county_selection.dart), och förarskärmen ligger kvar under.
+  Future<void> _reloadCountySelection() async {
+    try {
+      final stored = await CountySelectionStore.load();
+      if (!mounted) return;
+      setState(() {
+        _counties = stored.counties;
+        _municipalities = stored.municipalities;
+        _countiesLicensedAtChoice =
+            stored.licensed ?? _countiesLicensedAtChoice;
+      });
+    } catch (_) {
+      // Behåll valet i minnet.
     }
   }
 
@@ -1673,8 +1819,14 @@ class _DriverScreenState extends State<DriverScreen>
       _showFerries &&
       (_category == null || _category == SignalCategory.ferry.key);
 
-  /// Terminalens läge för en färja -- dit föraren kör, inte till fartyget.
+  /// Kajens läge för en färja -- dit föraren kör, inte till fartyget.
   (double, double)? _harborFor(Map<String, dynamic> f) {
+    if (f['portLat'] is num && f['portLon'] is num) {
+      return (
+        (f['portLat'] as num).toDouble(),
+        (f['portLon'] as num).toDouble(),
+      );
+    }
     final t = f['terminal'];
     if (t is Map && t['lat'] is num && t['lon'] is num) {
       return ((t['lat'] as num).toDouble(), (t['lon'] as num).toDouble());
@@ -1980,6 +2132,41 @@ class _DriverScreenState extends State<DriverScreen>
               _saveFilters(reloadFeed: true);
             }
 
+            // Kommunvalet under ett valt län. Utan katalog: hela länet.
+            Widget? municipalityPicker(String county) {
+              final rows = _municipalityCatalog[county] ?? const [];
+              if (rows.isEmpty) return null;
+              return Padding(
+                padding: const EdgeInsets.only(left: 40),
+                child: ExpansionTile(
+                  title: Text(
+                    _municipalitiesIn(county).isEmpty
+                        ? 'Hela länet · välj kommuner'
+                        : '${_municipalitiesIn(county).length} kommuner valda',
+                    style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
+                  ),
+                  children: [
+                    for (final row in rows)
+                      CheckboxListTile(
+                        dense: true,
+                        controlAffinity: ListTileControlAffinity.leading,
+                        title: Text(row['name']?.toString() ?? ''),
+                        value: _municipalities.contains(row['code']),
+                        activeColor: TbColors.taxiDeep,
+                        onChanged: (on) => apply(() {
+                          final code = row['code'].toString();
+                          if (on == true) {
+                            _municipalities.add(code);
+                          } else {
+                            _municipalities.remove(code);
+                          }
+                        }),
+                      ),
+                  ],
+                ),
+              );
+            }
+
             return SafeArea(
               child: SizedBox(
                 height: MediaQuery.of(context).size.height * 0.72,
@@ -2070,81 +2257,63 @@ class _DriverScreenState extends State<DriverScreen>
                               child: Text(
                                 _licensedCounties!.isEmpty
                                     ? 'Välj bil först. Då visas bilens län här.'
-                                    : 'Du kan bara välja bilens län.',
+                                    : 'Alla dina län är valda. Bocka ur dem du '
+                                          'inte vill se.',
                                 style: TextStyle(
                                   color: Colors.grey.shade700,
                                   fontWeight: FontWeight.w600,
                                 ),
                               ),
                             ),
-                          for (final county in _pickableCounties) ...[
-                            CheckboxListTile(
-                              dense: true,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 8,
-                              ),
-                              controlAffinity: ListTileControlAffinity.leading,
-                              title: Text(
-                                county.value,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              value: _counties.contains(county.key),
-                              activeColor: TbColors.taxiDeep,
-                              onChanged: (on) => apply(() {
-                                if (on == true) {
-                                  _counties.add(county.key);
-                                } else {
-                                  _counties.remove(county.key);
-                                  _municipalities.removeWhere(
-                                    (m) => m.startsWith(county.key),
-                                  );
-                                }
+                          // En kryssruta per län i licensen, alla förbockade
+                          // tills föraren väljer bort något. Tillkommer ett
+                          // län (admin) bockas det i direkt.
+                          if (_licenseCountiesKnown)
+                            CountyChecklist(
+                              licensed: _licensedCounties!.toList(),
+                              names: _countyNames,
+                              selected: _counties,
+                              onChanged: (next) => apply(() {
+                                _counties = next;
+                                _municipalities = keepMunicipalities(
+                                  _municipalities,
+                                  chosen: next,
+                                  licensed: _licensedCounties!,
+                                );
                               }),
-                            ),
-                            if (_counties.contains(county.key) &&
-                                (_municipalityCatalog[county.key] ?? const [])
-                                    .isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 40),
-                                child: ExpansionTile(
-                                  title: Text(
-                                    _municipalitiesIn(county.key).isEmpty
-                                        ? 'Hela länet · välj kommuner'
-                                        : '${_municipalitiesIn(county.key).length} kommuner valda',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      color: Colors.grey.shade700,
-                                    ),
-                                  ),
-                                  children: [
-                                    for (final row
-                                        in _municipalityCatalog[county.key]!)
-                                      CheckboxListTile(
-                                        dense: true,
-                                        controlAffinity:
-                                            ListTileControlAffinity.leading,
-                                        title: Text(
-                                          row['name']?.toString() ?? '',
-                                        ),
-                                        value: _municipalities.contains(
-                                          row['code'],
-                                        ),
-                                        activeColor: TbColors.taxiDeep,
-                                        onChanged: (on) => apply(() {
-                                          final code = row['code'].toString();
-                                          if (on == true) {
-                                            _municipalities.add(code);
-                                          } else {
-                                            _municipalities.remove(code);
-                                          }
-                                        }),
-                                      ),
-                                  ],
+                              below: municipalityPicker,
+                            )
+                          else
+                            for (final county in _pickableCounties) ...[
+                              CheckboxListTile(
+                                dense: true,
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 8,
                                 ),
+                                controlAffinity:
+                                    ListTileControlAffinity.leading,
+                                title: Text(
+                                  county.value,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                value: _counties.contains(county.key),
+                                activeColor: TbColors.taxiDeep,
+                                onChanged: (on) => apply(() {
+                                  if (on == true) {
+                                    _counties.add(county.key);
+                                  } else {
+                                    _counties.remove(county.key);
+                                    _municipalities.removeWhere(
+                                      (m) => m.startsWith(county.key),
+                                    );
+                                  }
+                                }),
                               ),
-                          ],
+                              if (_counties.contains(county.key))
+                                ?municipalityPicker(county.key),
+                            ],
                         ],
                       ),
                     ),
@@ -2735,7 +2904,7 @@ class _DriverScreenState extends State<DriverScreen>
                         ? GoogleSignalMap(
                             items: _mapItems,
                             focus: _mapFocus,
-                            ferries: _mapShowsFerries ? _ferryShips : const [],
+                            ferries: _mapShowsFerries ? _ferries : const [],
                             ferryTerminals: _mapShowsFerries
                                 ? _ferryTerminals
                                 : const [],
@@ -2745,7 +2914,7 @@ class _DriverScreenState extends State<DriverScreen>
                         : SignalMap(
                             items: _mapItems,
                             mapController: _mapController,
-                            ferries: _mapShowsFerries ? _ferryShips : const [],
+                            ferries: _mapShowsFerries ? _ferries : const [],
                             ferryTerminals: _mapShowsFerries
                                 ? _ferryTerminals
                                 : const [],
@@ -3451,7 +3620,8 @@ class _DriverScreenState extends State<DriverScreen>
                   'Kan inte hämta event just nu.',
                   icon: Icons.cloud_off_rounded,
                 ),
-        ...events.take(30).map(eventCard),
+        // Alla, inte de 30 första: kartan ritar alla (_mapItems).
+        ...events.map(eventCard),
         if (events.isNotEmpty)
           pad(
             OutlinedButton.icon(
@@ -3490,7 +3660,6 @@ class _DriverScreenState extends State<DriverScreen>
               },
             ),
           ),
-        if (_ferryAttribution.isNotEmpty) _sourceNote(_ferryAttribution),
       ];
     }
 
@@ -3533,7 +3702,7 @@ class _DriverScreenState extends State<DriverScreen>
                 if (ferries > 0)
                   _ShortcutChip(
                     icon: Icons.directions_boat_rounded,
-                    label: '$ferries färjor på väg in',
+                    label: '$ferries färjor',
                     onTap: () => _selectCategory(SignalCategory.ferry.key),
                   ),
               ],
@@ -3582,6 +3751,41 @@ class _DriverScreenState extends State<DriverScreen>
                 icon: Icons.check_circle_outline_rounded,
               ),
       );
+    }
+    // Under Alla ritar kartan också färjorna och dagens event (_mapItems,
+    // _mapShowsFerries). Allt kartan visar ska finnas i listan.
+    if (lens == null) {
+      if (_ferriesVisible.isNotEmpty) {
+        out.add(
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: _SectionTitle('Färjor'),
+          ),
+        );
+        for (final f in _ferriesVisible) {
+          out.add(
+            pad(
+              FerryCard(
+                ferry: f,
+                onTap: () {
+                  _focusOpportunity(f);
+                  _openFerry(f);
+                },
+              ),
+            ),
+          );
+        }
+      }
+      final today = _eventsToday;
+      if (today.isNotEmpty) {
+        out.add(
+          const Padding(
+            padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: _SectionTitle('Event i dag'),
+          ),
+        );
+        out.addAll(today.map(eventCard));
+      }
     }
     if (lens != SignalCategory.road && (_hiddenWeak > 0 || _showWeak)) {
       out.add(_weakToggleRow());

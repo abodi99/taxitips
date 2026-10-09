@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:taxitips_app/membership_copy.dart';
 import 'package:taxitips_app/screens/settings_screen.dart';
 import 'package:taxitips_app/theme.dart';
+import 'package:taxitips_app/widgets/county_checklist.dart';
 import 'package:taxitips_app/widgets/settings_ui.dart';
 
 import 'driver_test_support.dart';
@@ -129,7 +130,7 @@ void main() {
     expect(find.text('Visa genomgången igen'), findsNothing);
   });
 
-  testWidgets('"Dina län" öppnar länväljaren, inte notisfiltret', (
+  testWidgets('"Dina län" visar en kryssruta per län i medlemskapet', (
     tester,
   ) async {
     await pumpSettings(tester, api: FakeDriverApi());
@@ -137,8 +138,16 @@ void main() {
     await reveal(tester, county);
     await tester.tap(county);
     await tester.pumpAndSettle();
-    // MembershipCountyScreen:s egen rubrik -- beviset att länväljaren öppnats.
-    expect(find.text('Var vill du köra?'), findsOneWidget);
+    // Länen i licensen (FakeDriverApi: bara 14), förbockade -- inte provets
+    // väljare med ett enda val bland alla 21 län.
+    expect(find.byType(CountyPickerSheet), findsOneWidget);
+    final boxes = tester.widgetList<CheckboxListTile>(
+      find.byType(CheckboxListTile),
+    );
+    expect(boxes.map((b) => b.value), [true]);
+    expect(find.text('Var vill du köra?'), findsNothing);
+    // Inget prov: ingen genväg till provets länbyte.
+    expect(find.text('Byt provets län'), findsNothing);
   });
 
   testWidgets('föraren kan inte koppla bort telefonen -- bara logga ut', (

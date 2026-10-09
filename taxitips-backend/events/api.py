@@ -112,7 +112,7 @@ def event_row(event, now: dt.datetime, lat: float | None = None, lon: float | No
         "status": event.source_status,
         "statusLabel": timing.status_label(event.source_status),
         "happening": timing.is_happening(event.source_status),
-        # En förutsägelse, inte en räkning: visas avrundad. Bara PredictHQ har den.
+        # En förutsägelse, inte en räkning: visas avrundad. Bara den avslutade PredictHQ hade den.
         "attendance": attendance,
         "attendanceText": timing.attendance_text(attendance),
         "sizeLevel": size,
@@ -155,22 +155,30 @@ def event_row(event, now: dt.datetime, lat: float | None = None, lon: float | No
     }
 
 
+# Vilken källas rad som bär ett evenemang som finns i flera källor, i den ordningen. De andra
+# bidrar med sina länkar. TheSportsDB före Ticketmaster: matchens lag, liga och arena är
+# strukturerade, medan Ticketmaster säljer biljetter till samma match under eget namn.
+PRIMARY_ORDER = ("predicthq", "thesportsdb")
+
+
 def _merged(events: list) -> list[tuple]:
     """
     En rad per verkligt evenemang, i visible_upcoming:s ordning. Finns samma evenemang
-    hos PredictHQ och en annan källa paras de (events/matching.py): PredictHQ-raden bär
-    besökarprognosen, den andra bidrar med sin länk.
+    hos flera källor paras de (events/matching.py) enligt PRIMARY_ORDER: den första
+    källans rad visas, de andra bidrar med sina länkar.
     """
-    primaries = [e for e in events if e.source == "predicthq"]
-    others = [e for e in events if e.source != "predicthq"]
-    if not primaries or not others:
-        return [(event, ()) for event in events]
-    pairs = matching.pair(primaries, others)
     also: dict[int, list] = {}
-    for j, (i, _note) in pairs.items():
-        also.setdefault(id(primaries[i]), []).append(others[j])
-    paired = {id(others[j]) for j in pairs}
-    return [(event, tuple(also.get(id(event), ()))) for event in events if id(event) not in paired]
+    absorbed: set[int] = set()
+    for index, source in enumerate(PRIMARY_ORDER):
+        primaries = [e for e in events if e.source == source and id(e) not in absorbed]
+        later = PRIMARY_ORDER[: index + 1]
+        others = [e for e in events if e.source not in later and id(e) not in absorbed]
+        if not primaries or not others:
+            continue
+        for j, (i, _note) in matching.pair(primaries, others).items():
+            also.setdefault(id(primaries[i]), []).append(others[j])
+            absorbed.add(id(others[j]))
+    return [(event, tuple(also.get(id(event), ()))) for event in events if id(event) not in absorbed]
 
 
 PREVIEW_NOTE = (

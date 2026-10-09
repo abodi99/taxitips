@@ -164,7 +164,9 @@ def write_tip(vessel, port: Port, assessment: Assessment, reason: str) -> str:
         "severity_tier": assessment.tier,
         "level": thresholds.stored_level(assessment.tier, assessment.score),
         "title": f"{title_name} {verb} i {port.name}",
-        "summary": f"{assessment.band.capitalize()} ({vessel.length_m} m) {verb} kl {local:%H:%M}.",
+        # Storleken i ord, inte längden: föraren behöver "stor färja", inte metertal
+        # (ägarkrav 2026-10-09). Längden finns kvar i skälen och i källhändelsen.
+        "summary": f"{assessment.band.capitalize()} {verb} kl {local:%H:%M}.",
         # Terminalen, inte fartygets position: det är dit föraren kör.
         "lat": port.lat,
         "lon": port.lon,
