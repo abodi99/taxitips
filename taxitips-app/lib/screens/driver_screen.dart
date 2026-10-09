@@ -22,6 +22,7 @@ import '../net_status.dart';
 import '../widgets/offline_banner.dart';
 import '../widgets/ferry_event_widgets.dart';
 import 'events_screen.dart';
+import 'history_screen.dart';
 import 'support_chat_screen.dart';
 import '../push_service.dart';
 import '../severity_labels.dart';
@@ -1101,6 +1102,26 @@ class _DriverScreenState extends State<DriverScreen>
       attribution: _ferryAttribution,
       harborLat: harbor?.$1,
       harborLon: harbor?.$2,
+    );
+  }
+
+  /// Historiken: de senaste timmarnas tips i samma område som listan, också
+  /// de som tagit slut. Bara att titta i -- tipsbladet öppnas utan Spara, och
+  /// ett avslutat tips har ingen "Kör dit" (tip_sheet.dart).
+  Future<void> _openHistory() async {
+    unawaited(logAnalyticsEvent('history_opened'));
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => HistoryScreen(
+          api: widget.api,
+          lat: _userLat,
+          lon: _userLon,
+          counties: _countyParam,
+          municipalities: _municipalityParam,
+          areaLabel: _counties.isEmpty ? 'Nära dig' : _areaFilterSummary,
+          onOpenTip: (a) => _openAlertDetail(a, readOnly: true),
+        ),
+      ),
     );
   }
 
@@ -2595,14 +2616,22 @@ class _DriverScreenState extends State<DriverScreen>
     return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
   }
 
-  Future<void> _openAlertDetail(Map<String, dynamic> a) async {
+  /// [readOnly]: öppnat från historiken -- ingen Spara-knapp.
+  Future<void> _openAlertDetail(
+    Map<String, dynamic> a, {
+    bool readOnly = false,
+  }) async {
     final url = a['url']?.toString();
     final kind = (a['kind'] ?? a['sourceKind'] ?? 'unknown').toString();
     final score = a['score'];
     unawaited(
       logAnalyticsEvent(
         'tip_opened',
-        params: {'kind': kind, if (score is num) 'score': score.round()},
+        params: {
+          'kind': kind,
+          if (score is num) 'score': score.round(),
+          if (readOnly) 'from': 'history',
+        },
       ),
     );
     await showModalBottomSheet<void>(
@@ -2637,7 +2666,7 @@ class _DriverScreenState extends State<DriverScreen>
               api: widget.api,
               scrollController: scrollController,
               distanceKm: _distanceFor(a),
-              onToggleFavorite: widget.api.supportsFavorites
+              onToggleFavorite: widget.api.supportsFavorites && !readOnly
                   ? (v) => _toggleFavorite(a, v)
                   : null,
               onOpenSourcePage: url == null || url.isEmpty
@@ -2791,26 +2820,45 @@ class _DriverScreenState extends State<DriverScreen>
                                             )
                                           else
                                             const SizedBox(width: 48),
-                                          if (widget.onOpenSettings != null)
-                                            IconButton(
-                                              key: _tourKeys.settings,
-                                              icon: Badge(
-                                                isLabelVisible:
-                                                    _supportUnread > 0,
-                                                backgroundColor:
-                                                    TbColors.danger,
-                                                child: const Icon(
-                                                  Icons.settings_outlined,
+                                          // Sällan använt, därför här uppe och
+                                          // inte bland kartknapparna där tummen är.
+                                          Row(
+                                            mainAxisSize: MainAxisSize.min,
+                                            children: [
+                                              IconButton(
+                                                key: const ValueKey(
+                                                  'map_legend_button',
                                                 ),
+                                                icon: const Icon(
+                                                  Icons.help_outline_rounded,
+                                                ),
+                                                tooltip:
+                                                    'Vad betyder symbolerna?',
+                                                color: TbColors.ink,
+                                                onPressed: () =>
+                                                    showMapLegend(context),
                                               ),
-                                              tooltip: _supportUnread > 0
-                                                  ? 'Inställningar – nytt svar från supporten'
-                                                  : 'Inställningar',
-                                              color: TbColors.ink,
-                                              onPressed: widget.onOpenSettings!,
-                                            )
-                                          else
-                                            const SizedBox(width: 48),
+                                              if (widget.onOpenSettings != null)
+                                                IconButton(
+                                                  key: _tourKeys.settings,
+                                                  icon: Badge(
+                                                    isLabelVisible:
+                                                        _supportUnread > 0,
+                                                    backgroundColor:
+                                                        TbColors.danger,
+                                                    child: const Icon(
+                                                      Icons.settings_outlined,
+                                                    ),
+                                                  ),
+                                                  tooltip: _supportUnread > 0
+                                                      ? 'Inställningar – nytt svar från supporten'
+                                                      : 'Inställningar',
+                                                  color: TbColors.ink,
+                                                  onPressed:
+                                                      widget.onOpenSettings!,
+                                                ),
+                                            ],
+                                          ),
                                         ],
                                       ),
                                     ],
@@ -2904,10 +2952,17 @@ class _DriverScreenState extends State<DriverScreen>
                     ),
                   ),
 
-                  // 3. Kartknapparna nere till höger, där tummen når: filter och min position.
-                  // De följer listans överkant och tonas bort när listan dras upp
-                  // -- annars hamnar de under statusraden. Filtret finns då i
-                  // listans rubrik i stället.
+                  // 3. Knapparna nere, där tummen når. Två grupper:
+                  //    vänster: det som ändrar VAD som visas -- Historik och
+                  //    Filter, med ord och ikon (inte alla förare läser
+                  //    svenska snabbt, en ikon ensam räcker inte);
+                  //    höger: kartan -- zoom och min position, störst och
+                  //    närmast tummen.
+                  // Förklaringen (?) och Inställningar ligger i raden överst:
+                  // de används sällan och ska inte ta tummens plats.
+                  // Knapparna följer listans överkant och tonas bort när
+                  // listan dras upp -- annars hamnar de under statusraden.
+                  // Filter och Historik finns då i listans rubrik i stället.
                   Positioned(
                     left: 12,
                     right: 12,
@@ -2920,44 +2975,42 @@ class _DriverScreenState extends State<DriverScreen>
                         duration: const Duration(milliseconds: 150),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            Badge(
-                              key: _tourKeys.filter,
-                              isLabelVisible: _filtersActive,
-                              smallSize: 12,
-                              backgroundColor: TbColors.taxiDeep,
-                              child: FloatingActionButton.extended(
-                                heroTag: 'filter_fab',
-                                onPressed: _openFilters,
-                                backgroundColor: Colors.white,
-                                foregroundColor: TbColors.ink,
-                                elevation: 4,
-                                icon: const Icon(Icons.tune),
-                                label: const Text(
-                                  'Filter',
-                                  style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w700,
+                            Column(
+                              key: const ValueKey('map_view_buttons'),
+                              mainAxisSize: MainAxisSize.min,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _MapLabelButton(
+                                  key: _tourKeys.history,
+                                  heroTag: 'history_fab',
+                                  icon: Icons.history_rounded,
+                                  label: 'Historik',
+                                  onPressed: _openHistory,
+                                ),
+                                const SizedBox(height: 10),
+                                Badge(
+                                  key: _tourKeys.filter,
+                                  isLabelVisible: _filtersActive,
+                                  smallSize: 12,
+                                  backgroundColor: TbColors.taxiDeep,
+                                  child: _MapLabelButton(
+                                    heroTag: 'filter_fab',
+                                    icon: Icons.tune,
+                                    label: 'Filter',
+                                    onPressed: _openFilters,
                                   ),
                                 ),
-                              ),
+                              ],
                             ),
                             Column(
+                              key: const ValueKey('map_action_buttons'),
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 _ZoomButtons(
                                   onZoomIn: () => _zoomBy(1),
                                   onZoomOut: () => _zoomBy(-1),
-                                ),
-                                const SizedBox(height: 10),
-                                FloatingActionButton.small(
-                                  heroTag: 'legend_fab',
-                                  onPressed: () => showMapLegend(context),
-                                  backgroundColor: Colors.white,
-                                  foregroundColor: TbColors.ink,
-                                  elevation: 4,
-                                  tooltip: 'Vad betyder symbolerna?',
-                                  child: const Icon(Icons.help_outline_rounded),
                                 ),
                                 const SizedBox(height: 10),
                                 FloatingActionButton(
@@ -2973,6 +3026,7 @@ class _DriverScreenState extends State<DriverScreen>
                                     _userLat != null
                                         ? Icons.my_location
                                         : Icons.location_searching,
+                                    size: 28,
                                   ),
                                 ),
                               ],
@@ -3107,6 +3161,8 @@ class _DriverScreenState extends State<DriverScreen>
           Expanded(
             child: Text(
               '$title · $count',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
               style: const TextStyle(
                 fontFamily: kDisplayFont,
                 fontSize: 20,
@@ -3115,6 +3171,12 @@ class _DriverScreenState extends State<DriverScreen>
               ),
             ),
           ),
+          if (_sheetHigh)
+            IconButton(
+              tooltip: 'Historik',
+              onPressed: _openHistory,
+              icon: const Icon(Icons.history_rounded, color: TbColors.midnatt),
+            ),
           if (_sheetHigh)
             Badge(
               isLabelVisible: _filtersActive,
@@ -3846,7 +3908,43 @@ class _EntitlementBanner extends StatelessWidget {
   }
 }
 
-/// Plus och minus i en stapel, samma vita stil som kartans andra knappar.
+/// En kartknapp med ikon OCH ord ("Historik", "Filter"): vit, 52 hög, så att
+/// den går att träffa i en bil som rör sig.
+class _MapLabelButton extends StatelessWidget {
+  const _MapLabelButton({
+    super.key,
+    required this.heroTag,
+    required this.icon,
+    required this.label,
+    required this.onPressed,
+  });
+
+  final Object heroTag;
+  final IconData icon;
+  final String label;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      height: 52,
+      child: FloatingActionButton.extended(
+        heroTag: heroTag,
+        onPressed: onPressed,
+        backgroundColor: Colors.white,
+        foregroundColor: TbColors.ink,
+        elevation: 4,
+        icon: Icon(icon, size: 24),
+        label: Text(
+          label,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+      ),
+    );
+  }
+}
+
+/// Plus och minus i en stapel, samma vita stil och bredd som Min position.
 class _ZoomButtons extends StatelessWidget {
   const _ZoomButtons({required this.onZoomIn, required this.onZoomOut});
 
@@ -3866,18 +3964,18 @@ class _ZoomButtons extends StatelessWidget {
           IconButton(
             tooltip: 'Zooma in',
             onPressed: onZoomIn,
-            iconSize: 26,
+            iconSize: 28,
             color: TbColors.ink,
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            constraints: const BoxConstraints(minWidth: 56, minHeight: 52),
             icon: const Icon(Icons.add),
           ),
-          Container(width: 28, height: 1, color: TbColors.line),
+          Container(width: 32, height: 1, color: TbColors.line),
           IconButton(
             tooltip: 'Zooma ut',
             onPressed: onZoomOut,
-            iconSize: 26,
+            iconSize: 28,
             color: TbColors.ink,
-            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            constraints: const BoxConstraints(minWidth: 56, minHeight: 52),
             icon: const Icon(Icons.remove),
           ),
         ],

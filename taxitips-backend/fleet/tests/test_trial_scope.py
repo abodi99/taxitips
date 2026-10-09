@@ -203,6 +203,17 @@ class TrialScopeTests(FleetTestCase):
         self.assertEqual(body["features"]["hiddenCounts"], {"flight": 1, "ferry": 1})
         self.assertIn("events", body["features"]["locked"])
 
+    def test_the_history_shows_train_and_bus_and_counts_the_rest(self):
+        ended = timezone.now() - timedelta(hours=2)
+        tip(kind="flight", mode="flight", title="Planen som landade", end_time=ended)
+        tip(title="Tåget som ställdes in", end_time=ended)
+        body = self.get("/api/alerts/history", **MALMO).json()
+        self.assertEqual(
+            {a["title"] for a in body["alerts"]}, {"Inställt tåg", "Tåget som ställdes in"},
+        )
+        self.assertEqual(body["features"]["plan"], "trial")
+        self.assertEqual(body["features"]["hiddenCounts"], {"flight": 2, "ferry": 1})
+
     def test_a_direct_link_to_a_locked_tip_is_refused(self):
         response = self.get(f"/api/opportunities/{self.flight.id}")
         self.assertEqual(response.status_code, 403)

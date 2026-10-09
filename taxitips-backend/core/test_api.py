@@ -22,7 +22,7 @@ import hmac
 import json
 import time
 import uuid
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from django.core.cache import cache
 from django.db import connection
@@ -729,3 +729,122 @@ class MunicipalityFeedTests(ApiTestCase):
         municipality = self.client.get("/api/alerts", {"counties": "01", "municipalities": "0180"}, headers=headers).json()
         self.assertEqual({a["title"] for a in county["alerts"]}, {"Stockholm", "Södertälje"})
         self.assertEqual([a["title"] for a in municipality["alerts"]], ["Stockholm"])
+
+
+class HistoryTests(ApiTestCase):
+    """
+    GET /api/alerts/history: hur det sett ut i länet de senaste timmarna.
+
+    Samma åtkomst och samma sorters tips som flödet; bara tidsfönstret skiljer.
+    """
+
+    def get_history(self, token=DEVICE_TOKEN, **params):
+        return self.client.get(
+            "/api/alerts/history", {"counties": "12", **params},
+            headers={"x-device-token": token} if token else {},
+        ).json()
+
+    def aged(self, o: Opportunity, hours: float) -> Opportunity:
+        """Som om pipelinen först såg tipset för `hours` timmar sedan."""
+        at = timezone.now() - timedelta(hours=hours)
+        Opportunity.objects.filter(id=o.id).update(computed_at=at)
+        return o
+
+    def test_an_entitlement_is_required(self):
+        opportunity()
+        body = self.get_history(token="not-a-token")
+        self.assertEqual(body["alerts"], [])
+        self.assertFalse(body["entitled"])
+        self.assertEqual(body["reason"], "unknown_device_token")
+        self.assertFalse(self.get_history(token=None)["entitled"])
+
+    def test_ended_tips_are_included_newest_first(self):
+        now = timezone.now()
+        self.aged(opportunity(
+            title="Slut i natt", start_time=now - timedelta(hours=9),
+            end_time=now - timedelta(hours=8),
+        ), 9)
+        self.aged(opportunity(title="Pågår", start_time=now - timedelta(hours=1)), 1)
+        body = self.get_history()
+        self.assertTrue(body["entitled"])
+        self.assertEqual([a["title"] for a in body["alerts"]], ["Pågår", "Slut i natt"])
+        ended = body["alerts"][1]
+        self.assertFalse(ended["is_active"])
+        # Styrkan medan tipset pågick, inte "Svag" för att det tagit slut.
+        self.assertEqual(ended["level"], "low")
+        self.assertEqual(ended["history_level"], "high")
+        self.assertIsNotNone(ended["history_at"])
+        # Flödet visar inte det som tog slut för åtta timmar sedan.
+        self.assertEqual([a["title"] for a in self.get_alerts()["alerts"]], ["Pågår"])
+
+    def test_the_window_bounds(self):
+        now = timezone.now()
+        opportunity(title="Slut för 30 timmar sedan", start_time=now - timedelta(hours=31),
+                    end_time=now - timedelta(hours=30))
+        opportunity(title="Slut för 10 timmar sedan", start_time=now - timedelta(hours=11),
+                    end_time=now - timedelta(hours=10))
+        opportunity(title="Börjar om en timme", start_time=now + timedelta(hours=1),
+                    end_time=now + timedelta(hours=3))
+        self.assertEqual(
+            [a["title"] for a in self.get_history()["alerts"]], ["Slut för 10 timmar sedan"],
+        )
+        self.assertEqual(
+            [a["title"] for a in self.get_history(hours=6)["alerts"]], [],
+        )
+        self.assertEqual(
+            {a["title"] for a in self.get_history(hours=48)["alerts"]},
+            {"Slut för 30 timmar sedan", "Slut för 10 timmar sedan"},
+        )
+
+    def test_hours_are_capped(self):
+        body = self.get_history(hours=1000)
+        self.assertEqual(body["hours"], thresholds.HISTORY_MAX_HOURS)
+        self.assertEqual(self.get_history(hours="x")["hours"], thresholds.HISTORY_DEFAULT_HOURS)
+        self.assertEqual(self.get_history(hours=0)["hours"], 1)
+
+    def test_a_long_running_tip_counts_from_when_it_was_first_seen(self):
+        # SL:s publiceringsfönster: starttiden kan ligga veckor bak.
+        now = timezone.now()
+        self.aged(opportunity(title="Sedan augusti", start_time=now - timedelta(days=40)), 3)
+        row = self.get_history()["alerts"][0]
+        seen = datetime.fromisoformat(row["history_at"])
+        self.assertLess(abs((now - timedelta(hours=3) - seen).total_seconds()), 120)
+
+    def test_the_same_tips_as_the_feed_are_left_out(self):
+        now = timezone.now()
+        ended = now - timedelta(hours=2)
+        opportunity(title="Dold av admin", end_time=ended, suppressed_at=now)
+        opportunity(title="Vägarbete", kind="road", mode="road", demand_score=5, end_time=ended,
+                    severity_tier=SeverityTier.ROAD_WORK, rule_id="road.road_work.minor")
+        opportunity(title="Olycka E22", kind="road", mode="road", demand_score=15, end_time=ended,
+                    severity_tier=SeverityTier.ROAD_ACCIDENT_OR_CLOSURE,
+                    rule_id="road.road_accident_or_closure.accident")
+        opportunity(title="Trafiken går som vanligt", severity_tier="ignore", demand_score=0,
+                    end_time=ended)
+        self.assertEqual([a["title"] for a in self.get_history()["alerts"]], ["Olycka E22"])
+
+    def test_the_chosen_county_decides(self):
+        opportunity(title="Skånetips")
+        opportunity(title="Stockholmstips", lat=59.3293, lon=18.0686, region="sl")
+        self.assertEqual([a["title"] for a in self.get_history()["alerts"]], ["Skånetips"])
+        self.assertEqual(
+            [a["title"] for a in self.get_history(counties="01")["alerts"]], ["Stockholmstips"],
+        )
+
+    def test_without_area_or_position_it_asks_for_an_area(self):
+        opportunity()
+        body = self.client.get(
+            "/api/alerts/history", headers={"x-device-token": DEVICE_TOKEN},
+        ).json()
+        self.assertTrue(body["needsArea"])
+        self.assertEqual(body["alerts"], [])
+
+    def test_the_result_is_capped(self):
+        from unittest import mock
+
+        for i in range(4):
+            opportunity(title=f"Tips {i}")
+        with mock.patch.object(thresholds, "HISTORY_LIMIT", 3):
+            body = self.get_history()
+        self.assertEqual(len(body["alerts"]), 3)
+        self.assertTrue(body["truncated"])

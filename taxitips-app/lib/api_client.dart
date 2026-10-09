@@ -717,8 +717,10 @@ class ApiClient {
       _owner('memberships/trial', {'baseCounty': baseCounty});
 
   /// Byt län på ett medlemskap som redan är tilldelat kontot.
-  Future<Map<String, dynamic>> setMembershipCounty(String licenseId, String base) =>
-      _owner('memberships/$licenseId/county', {'base': base});
+  Future<Map<String, dynamic>> setMembershipCounty(
+    String licenseId,
+    String base,
+  ) => _owner('memberships/$licenseId/county', {'base': base});
 
   /// Tar bort en provbil och frigör platsen i provet.
   Future<Map<String, dynamic>> removeTrialVehicle(String licenseId) =>
@@ -1599,6 +1601,55 @@ class ApiClient {
       deviceToken: deviceToken,
       accessToken: _accessToken,
     );
+  }
+
+  /// Historiken: de senaste [hours] timmarnas tips i förarens område,
+  /// avslutade inräknade, nyast först (Django-backenden, /api/alerts/history).
+  ///
+  /// Raderna har samma form som flödets (`_alertFromRow`) plus `history_at`
+  /// (när tipset blev aktuellt) och `history_level` (styrkan medan det
+  /// pågick -- `level` säger Svag för ett tips som tagit slut). Utan
+  /// Django-backenden finns ingen historik: tom lista, `unavailable: true`.
+  Future<Map<String, dynamic>> alertHistory({
+    int hours = 24,
+    double? lat,
+    double? lon,
+    List<String>? counties,
+    List<String>? municipalities,
+  }) async {
+    final backend = _backend;
+    if (backend == null) {
+      return const {'alerts': <Map<String, dynamic>>[], 'unavailable': true};
+    }
+    try {
+      final body = await backend.alertHistory(
+        hours: hours,
+        lat: lat,
+        lon: lon,
+        counties: counties,
+        municipalities: municipalities,
+        deviceToken: deviceToken,
+        accessToken: _accessToken,
+      );
+      final rows = [
+        for (final r in (body['alerts'] as List?) ?? const [])
+          if (r is Map)
+            {
+              ..._alertFromRow(Map<String, dynamic>.from(r)),
+              'history_at': r['history_at'],
+              'history_level': r['history_level'],
+            },
+      ];
+      return {
+        ...body,
+        'alerts': rows,
+        'features': body['features'] is Map
+            ? Map<String, dynamic>.from(body['features'] as Map)
+            : null,
+      };
+    } catch (e, st) {
+      _rethrowAsApiException(e, stackTrace: st, operation: 'alertHistory');
+    }
   }
 
   /// Kommande evenemang i förarens område (Django-backenden).

@@ -91,6 +91,32 @@ class FakeDriverApi extends ApiClient {
     String? to,
   }) async => const {'events': []};
 
+  /// Varje anrop till historiken, med antalet timmar.
+  final historyCalls = <int>[];
+
+  /// Svaret från /api/alerts/history; null = två tips, ett pågående och ett
+  /// avslutat (se [sampleHistory]).
+  Map<String, dynamic>? historyBody;
+
+  @override
+  Future<Map<String, dynamic>> alertHistory({
+    int hours = 24,
+    double? lat,
+    double? lon,
+    List<String>? counties,
+    List<String>? municipalities,
+  }) async {
+    historyCalls.add(hours);
+    return historyBody ??
+        {
+          'alerts': sampleHistory(),
+          'hours': hours,
+          'entitled': true,
+          'needsArea': false,
+          'truncated': false,
+        };
+  }
+
   @override
   Future<void> refreshPresence({double? lat, double? lon}) async {}
 
@@ -197,4 +223,29 @@ Future<void> settleDriverScreen(WidgetTester tester) async {
 Future<void> disposeScreen(WidgetTester tester) async {
   await tester.pumpWidget(const SizedBox());
   await tester.pump(const Duration(milliseconds: 100));
+}
+
+/// Historiken så som appen läser den (api_client `alertHistory`): ett tåg som
+/// pågår och ett flyg som tog slut i natt, med styrkan medan det pågick.
+List<Map<String, dynamic>> sampleHistory({DateTime? now}) {
+  final at = (now ?? DateTime.now()).toUtc();
+  String iso(Duration d) => at.add(d).toIso8601String();
+  final tips = sampleTips();
+  return [
+    {
+      ...tips[0],
+      'history_at': iso(const Duration(minutes: -25)),
+      'history_level': 'high',
+    },
+    {
+      ...tips[1],
+      'title': 'Många plan landar',
+      'is_active': false,
+      'level': 'low',
+      'history_level': 'medium',
+      'start_time': iso(const Duration(hours: -5)),
+      'end_time': iso(const Duration(hours: -4)),
+      'history_at': iso(const Duration(hours: -5)),
+    },
+  ];
 }

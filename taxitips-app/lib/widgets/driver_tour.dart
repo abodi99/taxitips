@@ -16,6 +16,9 @@ class DriverTourKeys {
 
   final categories = GlobalKey(debugLabel: 'tour_categories');
   final filter = GlobalKey(debugLabel: 'tour_filter');
+
+  /// Historik-knappen, ovanför Filter.
+  final history = GlobalKey(debugLabel: 'tour_history');
   final settings = GlobalKey(debugLabel: 'tour_settings');
 }
 
@@ -83,7 +86,8 @@ List<TourStep> driverTourSteps({
       title: 'Filter och län',
       text:
           'Med Filter väljer du län, hur starka tips du vill se och vad som '
-          'ska döljas. Välj ditt län här så får du tips därifrån.',
+          'ska döljas. Välj ditt län här så får du tips därifrån. '
+          'Historik, ovanför, visar tipsen från det senaste dygnet.',
       keys: [keys.filter],
     ),
     TourStep(

@@ -378,6 +378,36 @@ class BackendApi {
     return _decode(res, 'ferries');
   }
 
+  /// De senaste timmarnas tips i förarens område, avslutade inräknade, nyast
+  /// först. Samma åtkomst och länsgrind som flödet. Se core/api.py
+  /// (`alert_history`). Ingen ETag: historiken öppnas för hand.
+  Future<Map<String, dynamic>> alertHistory({
+    int hours = 24,
+    double? lat,
+    double? lon,
+    List<String>? counties,
+    List<String>? municipalities,
+    String? deviceToken,
+    String? accessToken,
+  }) async {
+    final uri = Uri.parse('$baseUrl/api/alerts/history').replace(
+      queryParameters: {
+        'hours': '$hours',
+        ..._areaQuery(counties, municipalities),
+      },
+    );
+    final res = await _client
+        .get(
+          uri,
+          headers: {
+            ..._headers(deviceToken: deviceToken, accessToken: accessToken),
+            'X-TT-Position': ?_position(lat, lon),
+          },
+        )
+        .timeout(_timeout);
+    return _decode(res, 'alertHistory');
+  }
+
   /// Kommande evenemang i förarens område. Se events/api.py.
   Future<Map<String, dynamic>> events({
     double? lat,

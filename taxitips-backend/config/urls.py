@@ -27,6 +27,8 @@ urlpatterns = [
     # Förar-API:t (Spår B). Samma fältnamn som Supabase-RPC:erna, se
     # core/api.py -- appen byter väg utan att kortens kod skrivs om.
     path("api/alerts", api.alerts),
+    # Historiken: de senaste timmarnas tips i förarens område, avslutade inräknade.
+    path("api/alerts/history", api.alert_history),
     path("api/events", events_api.upcoming),
     path("api/opportunities/<uuid:opportunity_id>", api.opportunity_detail),
     path("api/feedback", api.feedback),

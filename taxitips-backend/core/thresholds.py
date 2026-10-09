@@ -92,6 +92,14 @@ MARKET_RADIUS_KM = 150
 FEED_ENDED_GRACE_MINUTES = 15
 FEED_HORIZON_HOURS = 2
 
+# Historiken (GET /api/alerts/history): hur det sett ut i länet de senaste
+# timmarna, avslutade tips inräknade. Inte flödet -- föraren agerar inte på den,
+# hen tittar. Tipsen gallras sju dygn efter sluttiden (purge_old), så 48 timmar
+# finns alltid kvar. Taket skyddar telefonen en natt med många störningar.
+HISTORY_DEFAULT_HOURS = 24
+HISTORY_MAX_HOURS = 48
+HISTORY_LIMIT = 500
+
 # Vilka tiers som faktiskt strandar folk. Vägtiers är medvetet uteslutna:
 # en olycka försenar dem som redan sitter i bil, den lämnar ingen
 # fotgängare utan transport. Samma uppdelning som severity_labels.dart

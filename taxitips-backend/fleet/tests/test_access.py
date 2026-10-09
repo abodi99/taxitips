@@ -117,6 +117,30 @@ class DriverAccessTests(FleetTestCase):
         self.assertEqual([a["title"] for a in body["alerts"]], ["I bilens län"])
         self.assertEqual(body["counties"], ["12"])
 
+    def test_the_history_follows_the_same_county_gate(self):
+        """Historiken är ingen väg runt länsrättigheten (§5): samma grind som flödet."""
+        ended = timezone.now() - timedelta(hours=3)
+        tip(title="Stockholm i natt", area_codes=["01"], lat=STOCKHOLM["lat"],
+            lon=STOCKHOLM["lon"], region="sl", end_time=ended)
+        tip(title="I bilens län i natt", end_time=ended)
+        body = self.client.get(
+            "/api/alerts/history", {"counties": "01", **STOCKHOLM},
+            headers={"x-device-token": self.secret},
+        ).json()
+        self.assertTrue(body["entitled"], body)
+        self.assertEqual([a["title"] for a in body["alerts"]], ["I bilens län i natt"])
+        self.assertEqual(body["counties"], ["12"])
+
+    def test_the_history_needs_an_active_session(self):
+        tip(end_time=timezone.now() - timedelta(hours=1))
+        session = sessions.active_session_for_device(self.data["device"].id)
+        sessions.end_session(session, reason="driver_end")
+        body = self.client.get(
+            "/api/alerts/history", MALMO, headers={"x-device-token": self.secret},
+        ).json()
+        self.assertFalse(body["entitled"])
+        self.assertEqual(body["alerts"], [])
+
     def test_gps_position_alone_grants_nothing(self):
         """
         §5: GPS-position ger inte automatisk behörighet. Föraren står i

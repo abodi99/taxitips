@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import logging
+from dataclasses import dataclass
 from datetime import timedelta
 
 from django.core.cache import cache
@@ -400,6 +401,124 @@ def _apply_combinations(rows: list[dict], now) -> list[dict]:
     return [row for row in rows if row["_external_id"] not in hidden]
 
 
+def _shown_tips(rows):
+    """
+    Det som aldrig når föraren, oavsett tid och plats: gemensamt för flödet och
+    historiken, så att de två aldrig visar olika sorters tips.
+
+    "Övrigt" (severity_tier ignore, poäng 0) följer med längst ner i listan i
+    stället för att döljas: ägaren såg giltiga störningar i Göteborg --
+    indragna spårvagnslinjer, hinder på E6, bärgning -- som aldrig syntes, och
+    när de starka tipsen är få är de det enda som finns (2026-10-03). De ger
+    aldrig notiser (core/notify.py kräver poäng och en notisvärd tier).
+    Meddelanden om att störningen redan är över, och om hissar och hållplatser,
+    är däremot inget att visa.
+    """
+    from django.db.models import Q
+
+    return (
+        rows.filter(Q(demand_score__gt=0) | Q(severity_tier="ignore"))
+        .exclude(
+            Q(severity_tier="ignore")
+            & (Q(title__iregex=_RESOLVED_RE) | Q(summary__iregex=_RESOLVED_RE))
+        )
+        .exclude(
+            Q(severity_tier="ignore")
+            & (Q(title__iregex=_FACILITY_RE) | Q(summary__iregex=_FACILITY_RE))
+        )
+        .filter(suppressed_at__isnull=True)
+        # Bara de väghändelser föraren ska se, se thresholds.ROAD_SHOWN_CONDITIONS.
+        # Vägens "Övrigt" (hinder, djur, bärgning) följer med som sammanhang.
+        .exclude(
+            Q(kind="road") & ~Q(rule_id__regex=_ROAD_SHOWN_RE) & ~Q(severity_tier="ignore")
+        )
+    )
+
+
+@dataclass(frozen=True)
+class _FeedArea:
+    """
+    Var föraren kör: körområdet (län och kommuner), äldre marknadsnycklar eller
+    positionen -- i den ordningen. Samma avgörande i flödet och historiken.
+    """
+
+    lat: float | None
+    lon: float | None
+    home_region: str | None
+    regions: tuple[str, ...]
+    counties: tuple[str, ...]
+    municipalities: tuple[str, ...]
+    codes: tuple[str, ...]
+
+    @classmethod
+    def of(cls, lat, lon, regions, counties, municipalities) -> "_FeedArea":
+        chosen_regions = [str(r) for r in (regions or []) if str(r).strip()]
+        # Körområde i län (P0-B1). Äldre klienter skickar marknader; de översätts.
+        chosen_counties = sorted({str(c) for c in (counties or []) if str(c) in areas.COUNTY_NAMES})
+        if not chosen_counties and chosen_regions:
+            chosen_counties = areas.device_counties({"regions": chosen_regions})
+        chosen_municipalities = areas.device_municipalities({"municipalities": municipalities or []})
+        # Län och kommuner som koder att snitta mot tipsens area_codes; en vald kommun
+        # ersätter sitt län. Se core/areas.device_area_codes.
+        codes = areas.device_area_codes({"counties": chosen_counties, "municipalities": chosen_municipalities})
+        return cls(
+            lat=lat, lon=lon, home_region=thresholds.market_region(lat, lon),
+            regions=tuple(chosen_regions), counties=tuple(chosen_counties),
+            municipalities=tuple(chosen_municipalities), codes=tuple(codes),
+        )
+
+    @property
+    def unknown(self) -> bool:
+        return not self.codes and not self.regions and (self.lat is None or self.lon is None)
+
+    def distance_km(self, o) -> float | None:
+        if o.lat is None or o.lon is None or self.lat is None or self.lon is None:
+            return None
+        return round(haversine_km(self.lat, self.lon, o.lat, o.lon), 1)
+
+    def prefilter(self, rows):
+        """Vidare än `contains`, aldrig snävare: bara för att läsa färre rader."""
+        from django.db.models import Q
+
+        if self.codes:
+            # Tomma area_codes: rader skrivna innan länen fanns (se backfill_areas).
+            return rows.filter(Q(area_codes__has_any_keys=list(self.codes)) | Q(area_codes=[]))
+        if not self.regions and self.lat is not None and self.lon is not None:
+            import math
+
+            dlat = thresholds.MARKET_RADIUS_KM / 110.57
+            dlon = thresholds.MARKET_RADIUS_KM / (111.32 * max(math.cos(math.radians(self.lat)), 0.01))
+            return rows.filter(
+                Q(lat__isnull=True)
+                | Q(lon__isnull=True)
+                | Q(lat__range=(self.lat - dlat, self.lat + dlat), lon__range=(self.lon - dlon, self.lon + dlon))
+            )
+        return rows
+
+    def contains(self, o, distance_km: float | None, include_all: bool = False) -> bool:
+        """
+        Det slutliga avgörandet. `include_all` (pipeline-sidan, `all=1`) hoppar
+        över körområde och radie, men aldrig regionnyckeln för tips utan koordinat.
+        """
+        if self.codes and not include_all:
+            # Körområdet äger geografin -- inte var telefonen står just nu.
+            # Tipsets län och kommun inklusive grannar inom buffertarna, se core/areas.py.
+            return bool(set(notify.tip_area_codes(o)) & set(self.codes))
+        if self.regions and not include_all:
+            # Bara marknader utan motsvarande län, t.ex. enbart "rail".
+            return notify.list_matches_regions(o.region, o.lat, o.lon, list(self.regions))
+        if distance_km is not None:
+            return include_all or distance_km <= thresholds.MARKET_RADIUS_KM
+        if o.lat is None or o.lon is None:
+            # Utan koordinat avgör regionnyckeln. `region` är NULL, aldrig
+            # tom sträng, när marknaden är okänd -- fallbacken 'skane'
+            # ärvs från RPC:n så att befintlig data beter sig likadant.
+            return bool(self.home_region) and (o.region or "skane") == self.home_region
+        # Tipset har koordinat men föraren ingen position (och inget område):
+        # samma som förut -- släpps igenom.
+        return True
+
+
 def feed_for(
     lat: float | None,
     lon: float | None,
@@ -430,18 +549,10 @@ def feed_for(
     en Malmö-GPS Stockholm/Göteborg innan listfiltret kunde matcha dem.
     """
     now = now or timezone.now()
-    home_region = thresholds.market_region(lat, lon)
-    chosen_regions = [str(r) for r in (regions or []) if str(r).strip()]
-    # Körområde i län (P0-B1). Äldre klienter skickar marknader; de översätts.
-    chosen_counties = sorted({str(c) for c in (counties or []) if str(c) in areas.COUNTY_NAMES})
-    if not chosen_counties and chosen_regions:
-        chosen_counties = areas.device_counties({"regions": chosen_regions})
-    chosen_municipalities = areas.device_municipalities({"municipalities": municipalities or []})
-    # Län och kommuner som koder att snitta mot tipsens area_codes; en vald kommun
-    # ersätter sitt län. Se core/areas.device_area_codes.
-    chosen_area = areas.device_area_codes({"counties": chosen_counties, "municipalities": chosen_municipalities})
+    area = _FeedArea.of(lat, lon, regions, counties, municipalities)
+    home_region = area.home_region
 
-    if not include_all and not chosen_area and not chosen_regions and (lat is None or lon is None):
+    if not include_all and area.unknown:
         # Varken körområde eller position: vi vet inte var föraren kör. Tidigare
         # kom då varje tips med koordinat i hela landet med. Nu ber appen föraren
         # välja län i stället -- favoriterna följer ändu med.
@@ -458,28 +569,12 @@ def feed_for(
 
     from django.db.models import Q
 
-    rows = (
+    rows = _shown_tips(
         Opportunity.objects.filter(
             # Pågående tips, plus de som tagit slut den senaste kvarten (appen
             # visar dem gråmarkerade som "Nyss slut"). Inget som börjar mer än
             # två timmar fram: det är inte förarens affär än.
             end_time__gt=now - timedelta(minutes=thresholds.FEED_ENDED_GRACE_MINUTES),
-        )
-        # "Övrigt" (severity_tier ignore, poäng 0) följer med längst ner i
-        # listan i stället för att döljas: ägaren såg giltiga störningar i
-        # Göteborg -- indragna spårvagnslinjer, hinder på E6, bärgning -- som
-        # aldrig syntes, och när de starka tipsen är få är de det enda som
-        # finns (2026-10-03). De ger aldrig notiser (core/notify.py kräver
-        # poäng och en notisvärd tier). Meddelanden om att störningen redan
-        # är över är däremot inget att visa.
-        .filter(Q(demand_score__gt=0) | Q(severity_tier="ignore"))
-        .exclude(
-            Q(severity_tier="ignore")
-            & (Q(title__iregex=_RESOLVED_RE) | Q(summary__iregex=_RESOLVED_RE))
-        )
-        .exclude(
-            Q(severity_tier="ignore")
-            & (Q(title__iregex=_FACILITY_RE) | Q(summary__iregex=_FACILITY_RE))
         )
         # "Övrigt" är det som hänt nyss, inte ett vägarbete som pågått sedan
         # augusti: bara meddelanden som började de senaste 12 timmarna.
@@ -491,58 +586,19 @@ def feed_for(
             Q(start_time__isnull=True)
             | Q(start_time__lte=now + timedelta(hours=thresholds.FEED_HORIZON_HOURS))
         )
-        .filter(suppressed_at__isnull=True)
-        # Bara de väghändelser föraren ska se, se thresholds.ROAD_SHOWN_CONDITIONS.
-        # Vägens "Övrigt" (hinder, djur, bärgning) följer med som sammanhang.
-        .exclude(
-            Q(kind="road") & ~Q(rule_id__regex=_ROAD_SHOWN_RE) & ~Q(severity_tier="ignore")
-        )
     )
 
     # Förfilter i SQL: läs bara tips som kan hamna i svaret. Slingan nedan fäller
     # fortfarande det slutliga avgörandet med exakt avstånd och län -- filtret får
     # bara vara vidare än den, aldrig snävare.
     if not include_all:
-        if chosen_area:
-            # Tomma area_codes: rader skrivna innan länen fanns (se backfill_areas).
-            rows = rows.filter(Q(area_codes__has_any_keys=chosen_area) | Q(area_codes=[]))
-        elif not chosen_regions and lat is not None and lon is not None:
-            import math
-
-            dlat = thresholds.MARKET_RADIUS_KM / 110.57
-            dlon = thresholds.MARKET_RADIUS_KM / (111.32 * max(math.cos(math.radians(lat)), 0.01))
-            rows = rows.filter(
-                Q(lat__isnull=True)
-                | Q(lon__isnull=True)
-                | Q(lat__range=(lat - dlat, lat + dlat), lon__range=(lon - dlon, lon + dlon))
-            )
+        rows = area.prefilter(rows)
 
     out = []
     for o in rows:
-        distance_km = None
-        if o.lat is not None and o.lon is not None and lat is not None and lon is not None:
-            distance_km = round(haversine_km(lat, lon, o.lat, o.lon), 1)
-
-        if chosen_area and not include_all:
-            # Körområdet äger geografin -- inte var telefonen står just nu.
-            # Tipsets län och kommun inklusive grannar inom buffertarna, se core/areas.py.
-            if not set(notify.tip_area_codes(o)) & set(chosen_area):
-                continue
-        elif chosen_regions and not include_all:
-            # Bara marknader utan motsvarande län, t.ex. enbart "rail".
-            if not notify.list_matches_regions(
-                o.region, o.lat, o.lon, chosen_regions
-            ):
-                continue
-        elif o.lat is not None and o.lon is not None and lat is not None and lon is not None:
-            if not include_all and distance_km > thresholds.MARKET_RADIUS_KM:
-                continue
-        elif o.lat is None or o.lon is None:
-            # Utan koordinat avgör regionnyckeln. `region` är NULL, aldrig
-            # tom sträng, när marknaden är okänd -- fallbacken 'skane'
-            # ärvs från RPC:n så att befintlig data beter sig likadant.
-            if not home_region or (o.region or "skane") != home_region:
-                continue
+        distance_km = area.distance_km(o)
+        if not area.contains(o, distance_km, include_all):
+            continue
         row = _serialize(o, distance_km, now)
         # Bara en tiebreak, inte huvudordningen -- poängen avgör om det är
         # värt att köra dit, inte hur nytt tipset är. Utan den här raden
@@ -599,8 +655,8 @@ def feed_for(
         "context": context,
         "favorites": favorites,
         "homeRegion": home_region,
-        "counties": chosen_counties,
-        "municipalities": chosen_municipalities,
+        "counties": list(area.counties),
+        "municipalities": list(area.municipalities),
         "needsArea": False,
         "generatedAt": _iso(now),
     }
@@ -696,18 +752,13 @@ def tip_within_entitlement(ent, opportunity) -> bool:
     return any(code in entitled or code[:2] in entitled for code in codes)
 
 
-@require_GET
-@gzip_page
-def alerts(request):
-    """GET /api/alerts?lat=..&lon=..  (X-Device-Token eller Bearer-JWT)"""
-    ent = entitlement_for_request(request)
-    if not ent.ok:
-        # Tomt flöde, inte 403: en obetald/okänd token ska se "inga tips",
-        # precis som RPC:n returnerade '[]'. `reason` finns med för att
-        # felsökning inte ska kräva en databasfråga -- det var just det som
-        # gjorde ägar-buggen osynlig i ett halvår.
-        return _json(request, {"alerts": [], "entitled": False, "reason": ent.reason})
-
+def _request_area(request, ent):
+    """
+    Förarens område för ett listanrop, efter länsrättigheten: (lat, lon,
+    regions, counties, municipalities), eller None när licensen inte har något
+    län som matchar filtret. Delas av flödet och historiken -- en andra kopia av
+    grinden hade kunnat släppa igenom ett län den första spärrar (§5).
+    """
     raw_regions = request.GET.get("regions") or ""
     regions = [r.strip() for r in raw_regions.split(",") if r.strip()]
     counties = [c.strip() for c in (request.GET.get("counties") or "").split(",") if c.strip()]
@@ -747,11 +798,31 @@ def alerts(request):
                 municipalities = areas.device_municipalities(device.notify_prefs)
         counties, municipalities = county_gate(ent, counties, municipalities)
         if not counties and not municipalities:
-            return _json(request, {
-                "alerts": [], "context": [], "favorites": [],
-                "entitled": False, "reason": "no_entitled_county",
-                "message": "Billicensen har inget län som matchar ditt filter.",
-            })
+            return None
+
+    return lat, lon, regions, counties, municipalities
+
+
+@require_GET
+@gzip_page
+def alerts(request):
+    """GET /api/alerts?lat=..&lon=..  (X-Device-Token eller Bearer-JWT)"""
+    ent = entitlement_for_request(request)
+    if not ent.ok:
+        # Tomt flöde, inte 403: en obetald/okänd token ska se "inga tips",
+        # precis som RPC:n returnerade '[]'. `reason` finns med för att
+        # felsökning inte ska kräva en databasfråga -- det var just det som
+        # gjorde ägar-buggen osynlig i ett halvår.
+        return _json(request, {"alerts": [], "entitled": False, "reason": ent.reason})
+
+    area = _request_area(request, ent)
+    if area is None:
+        return _json(request, {
+            "alerts": [], "context": [], "favorites": [],
+            "entitled": False, "reason": "no_entitled_county",
+            "message": "Billicensen har inget län som matchar ditt filter.",
+        })
+    lat, lon, regions, counties, municipalities = area
 
     shared = shared_feed(
         lat, lon, include_all=request.GET.get("all") == "1", regions=regions, counties=counties,
@@ -796,6 +867,136 @@ def alerts(request):
         })
     response["ETag"] = etag
     # Personligt svar som alltid omvalideras: ingen delad cache får spara det.
+    response["Cache-Control"] = "private, no-cache"
+    return response
+
+
+def history_for(
+    lat: float | None,
+    lon: float | None,
+    hours: int,
+    now=None,
+    regions: list[str] | None = None,
+    counties: list[str] | None = None,
+    municipalities: list[str] | None = None,
+) -> dict:
+    """
+    Hur det sett ut i förarens område de senaste `hours` timmarna, nyast först.
+
+    Samma tips som flödet kan visa (`_shown_tips`) och samma område
+    (`_FeedArea`) -- bara tidsfönstret skiljer: ett tips är med om det var
+    aktivt någon gång i fönstret (sluttid efter fönstrets början) och redan
+    hade börjat. Avslutade tips följer med; `is_active` säger vilka.
+
+    `history_at` är när tipset blev aktuellt: när vi först såg det
+    (`computed_at`), eller starttiden om den kom senare. Inte starttiden rakt
+    av -- SL:s publiceringsfönster har median 53 dygn (AGENTS.md §7), och ett
+    tips "från augusti" säger inget om i går kväll. Kan ligga före fönstret
+    för tips som pågick redan när det började; appen visar dem för sig.
+
+    `history_level` är styrkan medan tipset pågick. `level` blir Svag när ett
+    tips tagit slut (thresholds.effective_level), och då hade historiken bara
+    visat Svag.
+    """
+    from django.db.models import F, Q
+    from django.db.models.functions import Coalesce, Greatest
+
+    now = now or timezone.now()
+    hours = max(1, min(int(hours), thresholds.HISTORY_MAX_HOURS))
+    since = now - timedelta(hours=hours)
+    area = _FeedArea.of(lat, lon, regions, counties, municipalities)
+    if area.unknown:
+        return {
+            "alerts": [], "hours": hours, "since": _iso(since), "needsArea": True,
+            "counties": [], "municipalities": [], "truncated": False, "generatedAt": _iso(now),
+        }
+
+    rows = area.prefilter(
+        _shown_tips(
+            Opportunity.objects.filter(end_time__gt=since)
+            .filter(Q(start_time__isnull=True) | Q(start_time__lte=now))
+        )
+        # Inget filter på history_at <= now: computed_at sätts av databasens
+        # klocka, och en klocka som går några sekunder före hade gömt det
+        # nyaste tipset. Framtida starttider är redan bortfiltrerade ovan.
+        .annotate(history_at=Greatest(Coalesce("start_time", "computed_at"), F("computed_at")))
+        # "Övrigt" bara när det kom inom fönstret, som i flödet: ett vägarbete
+        # som pågått sedan augusti är ingen historia om i går kväll.
+        .exclude(Q(severity_tier="ignore") & Q(history_at__lt=since))
+        .order_by("-history_at", "-computed_at")
+    )
+
+    out = []
+    truncated = False
+    for o in rows.iterator(chunk_size=500):
+        distance_km = area.distance_km(o)
+        if not area.contains(o, distance_km):
+            continue
+        if len(out) >= thresholds.HISTORY_LIMIT:
+            truncated = True
+            break
+        row = _serialize(o, distance_km, now)
+        row["history_at"] = _iso(o.history_at)
+        row["history_level"] = thresholds.effective_level(o, True)
+        row["_external_id"] = o.external_id
+        out.append(row)
+
+    out = _apply_combinations(out, now)
+    out = _one_per_road_situation(out)
+    for row in out:
+        del row["_external_id"]
+
+    return {
+        "alerts": out,
+        "hours": hours,
+        "since": _iso(since),
+        "needsArea": False,
+        "counties": list(area.counties),
+        "municipalities": list(area.municipalities),
+        "truncated": truncated,
+        "generatedAt": _iso(now),
+    }
+
+
+@require_GET
+@gzip_page
+def alert_history(request):
+    """
+    GET /api/alerts/history?hours=24  (X-Device-Token eller Bearer-JWT)
+
+    Samma åtkomst som flödet: `entitlement_for_request`, länsrättigheten via
+    `_request_area` och provets kategorier via `features.filter_rows`. Ingen
+    delad cache -- historiken öppnas för hand, inte var 60:e sekund.
+    """
+    ent = entitlement_for_request(request)
+    if not ent.ok:
+        return _json(request, {"alerts": [], "entitled": False, "reason": ent.reason})
+
+    try:
+        hours = int(request.GET.get("hours") or thresholds.HISTORY_DEFAULT_HOURS)
+    except ValueError:
+        hours = thresholds.HISTORY_DEFAULT_HOURS
+
+    area = _request_area(request, ent)
+    if area is None:
+        return _json(request, {
+            "alerts": [], "entitled": False, "reason": "no_entitled_county",
+            "message": "Billicensen har inget län som matchar ditt filter.",
+        })
+    lat, lon, regions, counties, municipalities = area
+
+    history = history_for(
+        lat, lon, hours, regions=regions or None, counties=counties or None,
+        municipalities=municipalities or None,
+    )
+    plan = features.of(ent)
+    shown, hidden = features.filter_rows(plan, history["alerts"])
+    response = _json(request, {
+        **history,
+        "alerts": shown,
+        "entitled": True,
+        "features": {**plan.as_dict(), "hiddenCounts": hidden},
+    })
     response["Cache-Control"] = "private, no-cache"
     return response
 
