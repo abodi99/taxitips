@@ -161,6 +161,10 @@ class RegionCompensationRule(models.Model):
         ),
     )
     source_url = models.TextField(blank=True)
+    # Huvudmannens namn som resenären känner det ("SL", "Skånetrafiken"), ur
+    # docs/transit-compensation-rules.md §3. Visas för föraren bredvid länken
+    # (core/api._serialize: compensation_source / compensation_url).
+    source_name = models.CharField(max_length=80, blank=True, default="", db_default="")
     note = models.TextField(
         blank=True, help_text="Flaggar osäkra/obekräftade siffror -- se docs/.",
     )
@@ -369,12 +373,26 @@ class Opportunity(models.Model):
     # sig, och de AI-satta kolumnerna (poäng, nivå, typ, konfidens, skäl,
     # platser) behålls i stället för att skrivas över och räknas om igen.
     # Skiljer de sig har texten eller regeln ändrats, och AI:n får läsa om.
+    #
+    # För fritextkällorna är `rule_key` textens nyckel (core/tip_text.text_key):
+    # reglerna är deterministiska givet texten, och samma text under flera
+    # external_id (SL: ofta tre) ska kosta EN modelläsning. Insamlingen hämtar
+    # en sparad läsning med `ai_rule_key = rule_key` för varje rad med samma
+    # text (core/places_ai.facts_for) -- därför indexet.
     rule_key = models.CharField(max_length=40, null=True, blank=True)
     ai_rule_key = models.CharField(max_length=40, null=True, blank=True)
     ai_facts = models.JSONField(
         null=True, blank=True,
         help_text="Det granskningen läste ut (core/tip_facts.TipFacts) -- förarbeskedets underlag.",
     )
+
+    # Linjen och platsen som föraren ska se först: "Buss 725", "Tumba station".
+    # Ur källans struktur (SL:s/Västtrafiks linjefält, Trafikverkets station)
+    # eller ordagrant ur texten (core/tip_text.py), annars ur modellens läsning
+    # -- som måste stå ordagrant i texten (core/places_ai.py). Tom = okänt.
+    # db_default så att varje skrivväg som inte nämner kolumnerna fungerar.
+    line = models.CharField(max_length=60, blank=True, default="", db_default="")
+    station = models.CharField(max_length=120, blank=True, default="", db_default="")
 
     computed_at = models.DateTimeField(db_default=models.functions.Now())
     updated_at = models.DateTimeField(db_default=models.functions.Now())
@@ -398,6 +416,9 @@ class Opportunity(models.Model):
         indexes = [
             models.Index(fields=["end_time", "severity_tier"]),
             models.Index(fields=["lat", "lon"]),
+            # Bara ett vanligt b-träd (db_index hade gett ett andra *_like-index
+            # som ingen fråga använder, på tabellen som skrivs varje pollrunda).
+            models.Index(fields=["rule_key"], name="opportunities_rule_key_idx"),
         ]
         constraints = [
             models.CheckConstraint(

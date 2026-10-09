@@ -34,7 +34,7 @@ RULES = [
     # Skånetrafiken -- ensam om 1/20 av prisbasbeloppet, dubbelt mot alla andra.
     # "Kostnaden för taxi ersätts med ett maximalt belopp som motsvarar 1/20 av
     # gällande prisbasbelopp. Nämnda maxbelopp gäller per betalande resenär."
-    dict(region="skane", threshold_minutes=20, taxi_cap_kr=2960, filing_deadline_days=60,
+    dict(region="skane", source_name="Skånetrafiken", threshold_minutes=20, taxi_cap_kr=2960, filing_deadline_days=60,
          # per betalande resenär -- källan skriver det ordagrant.
          cap_per_person=True,
          source_url="https://www.skanetrafiken.se/sa-reser-du-med-oss/villkor/villkor-for-ersattning-vid-forsening/",
@@ -44,7 +44,7 @@ RULES = [
               "kräver blankett. Verifierad mot sidans egen text 2026-09-08."),
 
     # SL -- avviker med tre månaders reklamationsfrist, inte två.
-    dict(region="sl", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=90,
+    dict(region="sl", source_name="SL", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=90,
          # 'Ersättningen blir inte högre om du samåker med någon annan'.
          cap_per_person=False,
          source_url="https://sl.se/kundservice/forseningsersattning",
@@ -61,7 +61,7 @@ RULES = [
     # både "1 500 kr per person" och "1 500 kr per bil oavsett antal
     # resenärer" om samma ersättning. Att välja en av dem hade varit att
     # gissa åt en förare som kan komma att citera siffran för en resenär.
-    dict(region="vt", threshold_minutes=20, taxi_cap_kr=1500, filing_deadline_days=60,
+    dict(region="vt", source_name="Västtrafik", threshold_minutes=20, taxi_cap_kr=1500, filing_deadline_days=60,
          source_url="https://www.vasttrafik.se/kundservice/forseningsersattning/",
          note="Fast 1 500 kr/person för taxi (1 500 kr per bil oavsett antal "
               "resenärer), inte prisbasbeloppsformel. Samma villkor för buss, "
@@ -70,7 +70,7 @@ RULES = [
               "sjukresor, abonnerad trafik, museispårvagnar och sightseeingbussar "
               "-- inget av det fångas av excluded_modes, som bara känner färdsätt."),
 
-    dict(region="ul", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
+    dict(region="ul", source_name="UL", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
          source_url="https://www.ul.se/kundservice/forseningsersattning/",
          note="'Vi ersätter dig då för utlägg upp till 1480 kronor.' Två månader. "
               "Undantar planerade störningar annonserade minst tre dagar i "
@@ -78,7 +78,7 @@ RULES = [
               "Dricks ersätts inte."),
 
     # Östgötatrafiken -- URL flyttad sedan förra omgången.
-    dict(region="otraf", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
+    dict(region="otraf", source_name="Östgötatrafiken", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
          # maxbeloppet per person mot delat taxameterkvitto.
          cap_per_person=True,
          source_url="https://www.ostgotatrafiken.se/kontakt-och-hjalp/forseningsersattning",
@@ -90,7 +90,7 @@ RULES = [
               "prisavdraget; taxistycket säger bara 'på grund av förseningen' -- "
               "samma tröskel är rimlig men inte ordagrant bekräftad."),
 
-    dict(region="klt", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
+    dict(region="klt", source_name="Kalmar länstrafik", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
          # per resenär, får summeras vid samåkning.
          cap_per_person=True,
          source_url="https://kalmarlanstrafik.se/Kundservice/ansok-om-forseningsersattning/",
@@ -101,7 +101,7 @@ RULES = [
 
     # Värmlandstrafik -- ovanlig kombination: anropsstyrd trafik OMFATTAS,
     # båtbusstrafiken gör det inte. Därav boat i excluded_modes.
-    dict(region="varm", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
+    dict(region="varm", source_name="Värmlandstrafik", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
          excluded_modes=[TransportMode.BOAT],
          source_url="https://www.varmlandstrafik.se/varmlandstrafik/kundservice/forseningsersattning",
          note="'Maximalt belopp som vi ersätter för utlägg för taxi eller egen "
@@ -110,7 +110,7 @@ RULES = [
               "'Båtbusstrafiken omfattas inte av förseningsersättningen', "
               "därav excluded_modes=[boat]. Två månader. Dricks ersätts inte."),
 
-    dict(region="krono", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
+    dict(region="krono", source_name="Länstrafiken Kronoberg", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
          source_url="https://lanstrafikenkron.se/forseningsersattning",
          note="'Högsta ersättningsbeloppet är 1 480 kronor vid kontant "
               "utbetalning' (värdekod ger +10 %). Taxameterkvitto i original "
@@ -118,7 +118,7 @@ RULES = [
               "Två månader. Ingen ersättning vid störning annonserad tre dygn "
               "i förväg."),
 
-    dict(region="jlt", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
+    dict(region="jlt", source_name="Jönköpings Länstrafik", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
          # 'Maxbeloppet gäller per person'.
          cap_per_person=True,
          source_url="https://www.jlt.se/kundservice/forseningsersattning/",
@@ -128,7 +128,7 @@ RULES = [
               "15 mil lag 2015:953, över 15 mil EU 2021/782."),
 
     # Örebro -- URL flyttad sedan förra omgången.
-    dict(region="orebro", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
+    dict(region="orebro", source_name="Länstrafiken Örebro", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
          source_url="https://www.lanstrafiken.se/kundservice/forsenad-och-kvarglomd/vad-galler-for-forseningsersattning/",
          note="'Har du valt att ta en taxi så ersätter vi dig upp till högst "
               "1480 kronor.' Två månader. Taxitaket är lika för buss och tåg; "
@@ -138,7 +138,7 @@ RULES = [
 
     # Blekingetrafiken -- fristen är nu BEKRÄFTAD, till skillnad från
     # föregående omgång som flaggade den som obekräftad.
-    dict(region="blekinge", threshold_minutes=20, taxi_cap_kr=1500, filing_deadline_days=60,
+    dict(region="blekinge", source_name="Blekingetrafiken", threshold_minutes=20, taxi_cap_kr=1500, filing_deadline_days=60,
          # per resenär, får summeras vid samåkning.
          cap_per_person=True,
          source_url="https://www.blekingetrafiken.se/kundservice/forseningsersattning/",
@@ -152,7 +152,7 @@ RULES = [
     # Dalatrafik -- operatören motsäger sig själv. Vi tar det LÄGRE av de två
     # publicerade beloppen, aldrig formelbeloppet, för att inte lova en förare
     # mer än vad huvudmannen själv skrivit ut för just taxi.
-    dict(region="dt", threshold_minutes=20, taxi_cap_kr=1470, filing_deadline_days=60,
+    dict(region="dt", source_name="Dalatrafik", threshold_minutes=20, taxi_cap_kr=1470, filing_deadline_days=60,
          source_url="https://www.dalatrafik.se/kundservice/vanliga-arenden/forsenad-eller-utebliven-tur/",
          note="MOTSTRIDIG KÄLLA: FAQ-sidan säger 'Högsta ersättning för resa "
               "med taxi är 1470 kronor per resenär' men samtidigt 1480 kronor "
@@ -166,7 +166,7 @@ RULES = [
               "samma tröskel och samma tak."),
 
     # X-trafik -- den enda huvudmannen som helt nekar taxi vid tågförsening.
-    dict(region="xt", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
+    dict(region="xt", source_name="X-trafik", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
          # '1480 kr per resa'.
          cap_per_person=False,
          excluded_modes=[TransportMode.TRAIN],
@@ -178,7 +178,7 @@ RULES = [
               "lyder under EU 2021/782, som bara ersätter ersättningsresa med "
               "tåg eller buss -- inte taxi. Två månader."),
 
-    dict(region="vastmanland", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
+    dict(region="vastmanland", source_name="VL", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
          source_url="https://vl.se/biljetter/villkor-och-ersattning/forseningsersattning/",
          note="HÄRLETT BELOPP: villkoren (punkt 7.1/7.3) anger bara formeln "
               "'1/40 av det prisbasbelopp ... som gäller för det år då resan "
@@ -189,7 +189,7 @@ RULES = [
               "Skolkort/avgiftsfri linje ger bara ersättning för annan "
               "transport, inget prisavdrag."),
 
-    dict(region="gotland", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
+    dict(region="gotland", source_name="Region Gotland", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
          source_url="https://gotland.se/trafik-gator-och-parker/kollektivtrafik/vanliga-fragor-om-kollektivtrafiken/forseningsersattning",
          note="HÄRLETT BELOPP: sidan anger regeln som '1/40 av prisbasbeloppet "
               "enligt 2 kap. 7 § socialförsäkringsbalken' men exemplifierar "
@@ -202,7 +202,7 @@ RULES = [
 
     # Din Tur (Västernorrland) -- ny rad. `dintur` är Trafiklabs operatörskod
     # och därmed vad trafiklab.py sätter som alert["region"].
-    dict(region="dintur", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
+    dict(region="dintur", source_name="Din Tur", threshold_minutes=20, taxi_cap_kr=1480, filing_deadline_days=60,
          excluded_modes=[TransportMode.TRAIN],
          source_url="https://www.dintur.se/det-har-galler-for-ersattning-vid-forsening/",
          note="'Den högsta ersättning du kan få är 1/40 av prisbasbeloppet "

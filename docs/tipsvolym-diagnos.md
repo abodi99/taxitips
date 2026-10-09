@@ -283,6 +283,10 @@ Bättre användning av samma kvot, i ordning (ur `bearbetning-optimeringar.md` �
 och klockslag ur SL:s fritext (77 % av SL-tipsen saknar plats), sedan `ai_gate`, sedan
 sammanslagningen ovan.
 
+**Steg 1 är byggt (2026-10-09):** linje och hållplats ur fritexten med regler
+för varje tips och Genkit bara för resten, en läsning per text, och minst en
+rad "Därför" på varje tips — se `docs/genkit-bedomning.md`.
+
 ## 8. Efter driftsättning: så syns det
 
 ```sql

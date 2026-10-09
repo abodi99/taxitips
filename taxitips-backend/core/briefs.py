@@ -136,6 +136,11 @@ def _fact_lines(o: Opportunity) -> list[str]:
     facts = getattr(o, "ai_facts", None)
     if not isinstance(facts, dict):
         return []
+    # Läsningen gäller texten den gjordes på: har texten ändrats sedan dess
+    # (ny rule_key) är faktan en annan störnings.
+    rule_key, ai_rule_key = getattr(o, "rule_key", None), getattr(o, "ai_rule_key", None)
+    if rule_key and ai_rule_key and rule_key != ai_rule_key:
+        return []
     raw = f"{o.title or ''} {o.summary or ''}"
     out = []
     for key, label in _FACT_LABELS:

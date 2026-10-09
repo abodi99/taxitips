@@ -848,3 +848,51 @@ class HistoryTests(ApiTestCase):
             body = self.get_history()
         self.assertEqual(len(body["alerts"]), 3)
         self.assertTrue(body["truncated"])
+
+
+class LineStationCompensationTests(ApiTestCase):
+    """Linje, hållplats och huvudmannens ersättningssida i varje tips."""
+
+    def setUp(self):
+        super().setUp()
+        from core.models import RegionCompensationRule
+
+        RegionCompensationRule.objects.create(
+            region="skane", taxi_cap_kr=2960, source_name="Skånetrafiken",
+            source_url="https://www.skanetrafiken.se/sa-reser-du-med-oss/villkor/villkor-for-ersattning-vid-forsening/",
+        )
+
+    def test_line_and_station_are_in_the_feed(self):
+        opportunity(line="Buss 725", station="Tumba station")
+        row = self.get_alerts()["alerts"][0]
+        self.assertEqual((row["line"], row["station"]), ("Buss 725", "Tumba station"))
+
+    def test_unknown_is_an_empty_string(self):
+        opportunity()
+        row = self.get_alerts()["alerts"][0]
+        self.assertEqual((row["line"], row["station"]), ("", ""))
+
+    def test_the_operators_own_page_for_its_county(self):
+        opportunity(region="skane", compensation_eligible=True)
+        row = self.get_alerts()["alerts"][0]
+        self.assertEqual(row["compensation_source"], "Skånetrafiken")
+        self.assertTrue(row["compensation_url"].startswith("https://www.skanetrafiken.se/"))
+
+    def test_a_rail_tip_follows_the_product_on_the_board(self):
+        opportunity(region="rail", line="Pågatågen 1612", title="Pågatågen 1612 07:12 är inställt från Malmö C")
+        row = self.get_alerts()["alerts"][0]
+        self.assertEqual(row["compensation_source"], "Skånetrafiken")
+
+    def test_no_rule_no_link(self):
+        opportunity(region="rail", line="SJ 537", title="SJ 537 07:12 är inställt från Malmö C")
+        row = self.get_alerts()["alerts"][0]
+        self.assertEqual((row["compensation_url"], row["compensation_source"]), ("", ""))
+
+    def test_history_keeps_the_reasons_of_an_ended_tip(self):
+        now = timezone.now()
+        opportunity(title="Slut", start_time=now - timedelta(hours=3), end_time=now - timedelta(hours=2),
+                    factors=[{"text": "Avgång 16:58 från Tumba station", "sign": "+"}])
+        body = self.client.get(
+            "/api/alerts/history", {"counties": "12"}, headers={"x-device-token": DEVICE_TOKEN},
+        ).json()
+        self.assertEqual(body["alerts"][0]["factors"][0]["text"], "Avgång 16:58 från Tumba station")

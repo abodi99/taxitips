@@ -60,6 +60,9 @@ _OPPORTUNITY_COLUMNS: Sequence[str] = (
     "departure_at",
     "destination",
     "delay_minutes",
+    "line",
+    "station",
+    "rule_key",
     "county_code",
     "municipality_code",
     "area_codes",
@@ -95,6 +98,11 @@ def upsert_opportunities(rows: Iterable[dict]) -> int:
         row.setdefault("departure_at", None)
         row.setdefault("destination", "")
         row.setdefault("delay_minutes", None)
+        # Linje, plats och textnyckel: bara fritextkällorna och tågen sätter dem
+        # (core/tip_text.py). Övriga källor skriver tomt -- inte NULL, samma skäl.
+        row.setdefault("line", "")
+        row.setdefault("station", "")
+        row.setdefault("rule_key", None)
         if not isinstance(row["factors"], str):
             row["factors"] = json.dumps(row["factors"], ensure_ascii=False)
         # Länet räknas här, inte hos varje källa: alla vägar in i tabellen

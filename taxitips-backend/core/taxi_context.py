@@ -153,6 +153,53 @@ def delay_factor(minutes: int) -> Factor:
     return Factor(f"Försenat {human_minutes(minutes)}", "+" if minutes >= 30 else "-", 20)
 
 
+# --- Vad texten säger, som rader ---------------------------------------------
+#
+# Varje tips ska bära minst en rad "Därför" (docs/genkit-bedomning.md §3). De här
+# raderna kommer ur trafikbolagets egen text (core/tip_text.py, och en
+# modelläsning som rensats mot texten): klockslag och minuter står där ordagrant.
+
+_VEHICLE = {
+    "bus": ("Bussen", "försenad"), "train": ("Tåget", "försenat"),
+    "metro": ("Tunnelbanan", "försenad"), "tram": ("Spårvagnen", "försenad"),
+    "boat": ("Båten", "försenad"),
+}
+# Lägets allmänna förseningsrad, som en rad med minuter ersätter.
+GENERIC_DELAY_TEXTS = frozenset({"Bussen är försenad", "Förseningar i trafiken"})
+
+
+def departure_factor(clock: str | None, station: str | None, *, cancelled: bool = False) -> Factor | None:
+    """"Avgång 16:58 från Tumba station" -- där och när resenärerna står."""
+    if not clock or not station:
+        return None
+    text = f"Avgång {clock} från {station}"
+    if cancelled:
+        text += " är inställd"
+    return Factor(text[:90], "+", 0)
+
+
+def text_delay_factor(minutes: int | None, qualifier: str = "", mode: str = "") -> Factor | None:
+    """"Bussen är cirka 9 min försenad" -- trafikbolagets egen siffra och ordval."""
+    if not minutes:
+        return None
+    noun, adjective = _VEHICLE.get(mode, ("Trafiken", "försenad"))
+    amount = f"{qualifier} {human_minutes(minutes)}" if qualifier else human_minutes(minutes)
+    return Factor(f"{noun} är {amount} {adjective}", "+" if minutes >= 30 else "-", 20)
+
+
+def ignore_factor(reasons: list[str] | None) -> Factor:
+    """
+    Raden på ett "Övrigt"-tips: varför det inte är en körning. Utan den låg
+    tusentals tips i listan utan ett enda "Därför" (mätt 2026-10-08: 1 850 av
+    3 316 SL-tips hade tomma `factors`, alla av typen ignore).
+    """
+    first = next((r for r in reasons or [] if r and r.strip()), "")
+    text = first.strip().replace(" — ", " – ").replace("--", "–")
+    if not text:
+        text = "Ingen störning som lämnar resenärer kvar"
+    return Factor(text[:1].upper() + text[1:90], "-", 0)
+
+
 # --- Omständigheterna --------------------------------------------------------
 
 

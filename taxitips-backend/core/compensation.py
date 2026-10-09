@@ -159,3 +159,46 @@ def rail_compensation_signal(
     if wait_minutes is None:
         return None
     return _signal(region, "train", wait_minutes)
+
+
+# --- Vems villkor: länken föraren kan visa resenären --------------------------
+
+
+def rule_region_for(opportunity) -> str | None:
+    """
+    Vems ersättningsregler tipsets resenärer reser på, eller None.
+
+    Fritextkällorna bär huvudmannen i `region` (sl, skane, otraf ...). Tågen
+    skrivs som region="rail" (AGENTS §6 invariant 14); där avgör produkten på
+    tavlan ("Pågatågen 1612") och, för tåg som kör åt flera huvudmän,
+    stationens län -- samma regel som rail_region().
+    """
+    region = getattr(opportunity, "region", None) or ""
+    if region and region != "rail":
+        return region
+    if region != "rail":
+        return None
+    label = (getattr(opportunity, "line", "") or getattr(opportunity, "title", "") or "").strip()
+    for product, product_region in sorted(RAIL_PRODUCT_REGION.items(), key=lambda kv: -len(kv[0])):
+        if label.startswith(product + " ") or label == product:
+            return product_region
+    if any(label.startswith(product) for product in RAIL_COUNTY_PRODUCTS):
+        return COUNTY_REGION.get(getattr(opportunity, "county_code", None) or "")
+    return None
+
+
+def rules_by_region() -> dict[str, RegionCompensationRule]:
+    return {rule.region: rule for rule in RegionCompensationRule.objects.all()}
+
+
+def source_for(opportunity, rules: dict[str, RegionCompensationRule]) -> tuple[str, str]:
+    """
+    (url, huvudman) för huvudmannens egen sida om förseningsersättning, eller
+    ("", ""). Länken är den källbelagda i docs/transit-compensation-rules.md
+    (RegionCompensationRule.source_url) -- aldrig en gissad adress.
+    """
+    region = rule_region_for(opportunity)
+    rule = rules.get(region or "")
+    if rule is None or not rule.source_url:
+        return "", ""
+    return rule.source_url, rule.source_name or ""

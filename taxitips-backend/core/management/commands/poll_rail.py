@@ -45,6 +45,14 @@ def close_vanished(current_ids: list[str], now) -> int:
     )
 
 
+def rail_line(a) -> str:
+    """Produkt + tågnummer, som i rubriken (core/sources/trafikverket_rail.py)."""
+    brand = a.product or a.information_owner or a.operator
+    if not a.train:
+        return brand or ""
+    return f"{brand} {a.train}" if brand else f"Tåg {a.train}"
+
+
 class Command(BaseCommand):
     help = "Hämtar och poängsätter järnvägsstörningar från Trafikverket"
 
@@ -160,6 +168,10 @@ class Command(BaseCommand):
                 "factors": json.dumps(o.factors, ensure_ascii=False),
                 "title": a.header,
                 "summary": a.description,
+                # Linjen som på tavlan ("Pågatågen 1612") och stationen -- samma
+                # ord som rubriken, ur Trafikverkets egna fält.
+                "line": rail_line(a)[:60],
+                "station": (a.station or "")[:120],
                 "lat": a.lat, "lon": a.lon,
                 "h3_index": "",
                 "places": json.dumps([a.station], ensure_ascii=False),

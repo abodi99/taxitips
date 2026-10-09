@@ -304,6 +304,9 @@ CELERY_BEAT_SCHEDULE = {
     "poll-events": {"task": "core.tasks.poll_events_task", "schedule": 6 * 60 * 60},
     "refresh-sites": {"task": "core.tasks.refresh_sites_task", "schedule": 24 * 60 * 60},
     "review-uncertain": {"task": "core.tasks.review_uncertain_task", "schedule": 5 * 60},
+    # Linje och hållplats ur fritexten där reglerna inte räckte (core/places_ai.py):
+    # en modelläsning per unik text, högst AI_PLACES_MAX_PER_RUN per körning.
+    "read-places": {"task": "core.tasks.read_places_task", "schedule": 2 * 60},
     # Förarbesked: en rad per tips på medel- eller stark nivå (core/briefs.py).
     "write-briefs": {"task": "core.tasks.write_briefs_task", "schedule": 2 * 60},
     # Nattrapporten: varje timme, men byggs bara en gång per dygn efter klockan fem.

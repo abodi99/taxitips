@@ -108,6 +108,12 @@ def review_uncertain_task() -> None:
     _run("review_uncertain")
 
 
+@shared_task(name="core.tasks.read_places_task")
+def read_places_task() -> None:
+    """Linje och hållplats som reglerna inte fick ut -- se core/places_ai.py."""
+    _run("read_places")
+
+
 @shared_task(name="core.tasks.write_briefs_task")
 def write_briefs_task() -> None:
     """Förarbesked -- se core/briefs.py."""

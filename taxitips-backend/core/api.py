@@ -300,6 +300,23 @@ def owner_key_for(request) -> str | None:
     return None
 
 
+# Ersättningsreglerna, en fråga per anrop: nyckeln är anropets egen `now`
+# (samma objekt för varje tips i svaret), så att ingen rad i en cache överlever
+# en ändring i admin eller ett annat anrop.
+_compensation_rules: tuple = (None, {})
+
+
+def _rules_for(now) -> dict:
+    global _compensation_rules
+    stamp, rules = _compensation_rules
+    if stamp is not now:
+        from core.compensation import rules_by_region
+
+        rules = rules_by_region()
+        _compensation_rules = (now, rules)
+    return rules
+
+
 def _serialize(o: Opportunity, distance_km: float | None, now) -> dict:
     """
     Ett tips som appen läser det.
@@ -314,6 +331,9 @@ def _serialize(o: Opportunity, distance_km: float | None, now) -> dict:
     # poängens. Se 20260905000006_drop_reachability_from_score.sql.
     worth_it = o.demand_score if is_active else 0
     level = thresholds.effective_level(o, is_active)
+    from core.compensation import source_for
+
+    compensation_url, compensation_source = source_for(o, _rules_for(now))
     return {
         "id": str(o.id),
         "title": o.title,
@@ -335,6 +355,10 @@ def _serialize(o: Opportunity, distance_km: float | None, now) -> dict:
         "countyName": areas.COUNTY_NAMES.get(o.county_code or ""),
         "municipality": o.municipality_code,
         "places": o.places,
+        # Linjen och hållplatsen, i förarens ord: "Buss 725", "Tumba station".
+        # Ur källans fält eller ordagrant ur texten (core/tip_text.py); "" = okänt.
+        "line": o.line or "",
+        "station": o.station or "",
         "start_time": _iso(o.start_time),
         "end_time": _iso(o.end_time),
         "demand_score": o.demand_score,
@@ -361,6 +385,11 @@ def _serialize(o: Opportunity, distance_km: float | None, now) -> dict:
         "compensation_eligible": o.compensation_eligible,
         "compensation_amount_kr": o.compensation_amount_kr,
         "compensation_per_person": o.compensation_per_person,
+        # Huvudmannens egen sida om förseningsersättning och namnet resenären
+        # känner ("SL", "Skånetrafiken") -- när tipsets resenärer reser på en
+        # huvudmans villkor vi har källbelagda (docs/transit-compensation-rules.md).
+        "compensation_url": compensation_url,
+        "compensation_source": compensation_source,
         # "Vad gör resenären i stället?" -- den fråga som avgör om det är
         # värt att köra dit. Formuleringen görs här, inte i appen, se
         # core/alternatives.py.
@@ -938,6 +967,10 @@ def history_for(
         row = _serialize(o, distance_km, now)
         row["history_at"] = _iso(o.history_at)
         row["history_level"] = thresholds.effective_level(o, True)
+        # "Därför" som det lät medan tipset pågick -- samma skäl som history_level.
+        # Flödet tömmer raderna för ett avslutat tips (det är gråmarkerat och på
+        # väg bort); i historiken är skälen själva poängen.
+        row["factors"] = list(o.factors or [])
         row["_external_id"] = o.external_id
         out.append(row)
 

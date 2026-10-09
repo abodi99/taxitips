@@ -19,7 +19,7 @@ from typing import Sequence
 from django.db.models import Q
 from django.utils import timezone
 
-from core import taxi_context
+from core import places_ai, taxi_context, tip_text
 from core.alternatives import alternative_from_text
 from core.compensation import compensation_signal
 from core.geo import REGION_ANCHOR, resolve_coords
@@ -181,8 +181,8 @@ def end_time_for(alert: dict, result: Assessment, when: datetime) -> datetime | 
 
 def assess(alerts: list[dict]) -> list[Assessed]:
     """alert -> (alert, taxi, Assessment, lat, lon, precision) för varje larm."""
-    out = []
     now = timezone.now()
+    classified = []
     for alert in alerts:
         # Samma fält som SL fyller från sin tidtabell (sl.enrich_next_departures):
         # då tar glappregeln i classify_transit_alert över, och kortet visar tiden.
@@ -192,9 +192,58 @@ def assess(alerts: list[dict]) -> list[Assessed]:
                 alert["next_departure_at"], alert["next_departure_minutes"] = stated
         taxi = enrich_alert(alert)
         result = classify_transit_alert(alert, taxi)
+        if result.mode != "road":
+            # Linje, hållplats och klockslag ur texten (core/tip_text.py), och
+            # textens nyckel: samma meddelande under flera external_id läses en gång.
+            alert["_rule_key"] = tip_text.text_key(alert.get("header"), alert.get("description"))
+            alert["_text"] = tip_text.extract(
+                alert.get("header"), alert.get("description"),
+                route_label=alert.get("route_label"), mode=result.mode,
+            )
+        classified.append((alert, taxi, result))
+
+    # Modellens sparade läsning för samma text (core/places_ai.py) fyller det
+    # reglerna inte hittade -- varje pollrunda, så att den överlever upserten.
+    read = places_ai.facts_for(a.get("_rule_key") for a, _t, _r in classified)
+    out = []
+    for alert, taxi, result in classified:
+        facts = read.get(alert.get("_rule_key") or "")
+        if facts and alert.get("_text") is not None:
+            text = f"{alert.get('header') or ''}\n{alert.get('description') or ''}"
+            alert["_text"] = places_ai.merge(alert["_text"], facts, text, mode=result.mode)
         lat, lon, precision = resolve_coords(alert, taxi)
+        station = alert["_text"].station if alert.get("_text") is not None else ""
+        if station and precision in ("region", "none", "gazetteer"):
+            # Hållplatsen där resenärerna står, ur registret och inom länet --
+            # aldrig en gissad punkt. Slår gazetteerns längsta namn i texten,
+            # som lika gärna kan vara slutmålet.
+            hit = tip_text.registry_coords(station, alert.get("region"))
+            if hit:
+                lat, lon, precision = hit[0], hit[1], "stop"
         out.append((alert, taxi, result, lat, lon, precision))
     return out
+
+
+def text_factors(alert: dict, result: Assessment) -> list:
+    """
+    Raderna ur texten som läget börjar med: avgången och förseningen, med
+    trafikbolagets egna siffror. Ersätter lägets allmänna förseningsrad när
+    texten anger minuterna.
+    """
+    tf = alert.get("_text")
+    situation = list(result.factors)
+    if tf is None:
+        return situation
+    detail = [
+        taxi_context.departure_factor(
+            tf.departure_clock, tf.station, cancelled=result.tier == SeverityTier.VEHICLE_CANCELLED,
+        ),
+        taxi_context.text_delay_factor(tf.delay_minutes, tf.delay_qualifier, result.mode),
+    ]
+    detail = [f for f in detail if f is not None]
+    if tf.delay_minutes:
+        situation = [f for f in situation if f.text not in taxi_context.GENERIC_DELAY_TEXTS]
+    return [*detail, *situation]
 
 
 def _reasons_with_precision(result: Assessment, precision: str, alert: dict) -> list[str]:
@@ -318,12 +367,18 @@ def write(
         now = timezone.now()
         when = affected_time(alert, result, now)
         end_time = end_time_for(alert, result, when)
-        if result.tier == SeverityTier.IGNORE or kind == "road":
+        if kind == "road" or (result.tier == SeverityTier.IGNORE and result.mode == "road"):
             score, level, factors = result.score, None, []
+        elif result.tier == SeverityTier.IGNORE:
+            # "Övrigt" bär också en rad: varför det inte är en körning.
+            score, level = result.score, None
+            factors = [taxi_context.ignore_factor(result.reasons).as_dict()]
         else:
             weather = nearest_weather(lat, lon, region_weather)
+            situation = result.situation()
+            situation.factors = text_factors(alert, result)
             outcome = taxi_context.assess(
-                result.situation(), when=when, weather=weather,
+                situation, when=when, weather=weather,
                 compensation=comp, has_alternative=has_alt,
             )
             score, level, factors = outcome.score, outcome.level, outcome.factors
@@ -335,9 +390,16 @@ def write(
         if level is None:
             level = taxi_context.final_level(score, False, has_alt, result.confidence)
 
+        tf = alert.get("_text")
+        places = taxi.get("places") or (tf.places if tf is not None else [])
         return {
             "external_id": alert["id"],
             "kind": kind,
+            # Linjen och hållplatsen föraren ser först (core/tip_text.py).
+            "line": (tf.line if tf is not None else "")[:60],
+            "station": (tf.station if tf is not None else "")[:120],
+            "destination": (tf.destination if tf is not None else "")[:200],
+            "rule_key": alert.get("_rule_key"),
             "mode": result.mode,
             "severity_tier": result.tier,
             # Styrkan räknas här, med full kännedom om läge och
@@ -349,7 +411,9 @@ def write(
             "lat": lat,
             "lon": lon,
             "h3_index": "",
-            "places": json.dumps(taxi.get("places") or [], ensure_ascii=False),
+            # Ortlistans platser när texten nämner en ort eller knutpunkt, annars
+            # hållplatserna ur texten -- ordagranna (core/tip_text.py).
+            "places": json.dumps(places, ensure_ascii=False),
             # NULL, inte "", när marknaden är okänd -- get_smart_alerts gör
             # coalesce(region,'skane') för tips utan koordinat, och "" hade
             # matchat ingen marknad alls. Se Opportunity.region.

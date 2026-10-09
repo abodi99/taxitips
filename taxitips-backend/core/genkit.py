@@ -286,8 +286,12 @@ def apply_facts(
     reuse_assessment: RailAssessment | None = None,
 ) -> RailAssessment:
     """Fakta -> reglernas poäng (core/tip_facts.py) -> tipset."""
-    from core.tip_facts import classify_from_facts
+    from core.tip_facts import classify_from_facts, sanitize
 
+    # Bara det som står i tipsets egen text: en hållplats, ett klockslag eller
+    # en försening som modellen läst in men som inte står där kastas här.
+    facts = sanitize(facts, f"{opportunity.title or ''}\n{opportunity.summary or ''}")
+    _remember_facts(opportunity, facts)
     verdict = classify_from_facts(facts, opportunity.mode or "", opportunity.demand_score)
     return _apply(
         opportunity,
@@ -304,6 +308,40 @@ def apply_facts(
         facts=facts,
         condition=verdict.condition,
     )
+
+
+def _remember_facts(opportunity: Opportunity, facts: dict) -> None:
+    """
+    Läsningen på tipset (`ai_facts`, `ai_rule_key`), så att insamlingen kan
+    hämta den för samma text nästa pollrunda (core/places_ai.facts_for), och
+    linje/plats där tipset står tomt. Aldrig poäng -- det gör _apply.
+    """
+    if not opportunity.pk:
+        return
+    updates: dict = {"ai_facts": facts}
+    if opportunity.rule_key:
+        updates["ai_rule_key"] = opportunity.rule_key
+    if not opportunity.line or not opportunity.station:
+        from core.places_ai import merge
+        from core.tip_text import extract
+
+        merged = merge(
+            extract(opportunity.title, opportunity.summary, mode=opportunity.mode or ""),
+            facts, f"{opportunity.title or ''}\n{opportunity.summary or ''}", mode=opportunity.mode or "",
+        )
+        if not opportunity.line and merged.line:
+            updates["line"] = opportunity.line = merged.line[:60]
+        if not opportunity.station and merged.station:
+            updates["station"] = opportunity.station = merged.station[:120]
+    unchanged = (
+        opportunity.ai_facts == facts
+        and opportunity.ai_rule_key == updates.get("ai_rule_key", opportunity.ai_rule_key)
+        and not ({"line", "station"} & set(updates))
+    )
+    if not unchanged:  # cachen tillämpas varje pollrunda; skriv bara när något ändrats
+        Opportunity.objects.filter(pk=opportunity.pk).update(**updates)
+    opportunity.ai_facts = facts
+    opportunity.ai_rule_key = updates.get("ai_rule_key", opportunity.ai_rule_key)
 
 
 def apply_cached(opportunity: Opportunity, *, reclassify: bool = True) -> RailAssessment | None:
@@ -384,6 +422,15 @@ def review(
             return hit
 
     if facts:
+        # Samma text redan läst (core/places_ai.py, eller ett annat external_id
+        # med samma meddelande): räkna om från den läsningen, inget nytt anrop.
+        if not bypass_cache and opportunity.rule_key:
+            from core.places_ai import facts_for
+
+            read = facts_for([opportunity.rule_key]).get(opportunity.rule_key)
+            if read:
+                log.info("genkit: läsning för samma text finns för %s", opportunity.external_id)
+                return apply_facts(opportunity, read, reclassify=reclassify)
         return _review_facts(opportunity, call_model, reclassify=reclassify)
 
     prompt = _prompt_for(opportunity)

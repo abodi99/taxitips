@@ -48,6 +48,11 @@ class TipFacts(BaseModel):
     mode: str = Field(default="", description="train | metro | tram | bus | boat, eller tomt")
     line: str = ""
     train_no: str = ""
+    # Ordagrant ur texten -- valideras som delsträngar (`sanitize`) och kastas annars.
+    lines: list[str] = Field(default_factory=list, description="linjer/tåg som texten nämner, ordagrant")
+    stops: list[str] = Field(
+        default_factory=list, description="hållplatser/stationer som texten nämner, ordagrant, den drabbade först",
+    )
     from_station: str = ""
     to_station: str = ""
     departure_clock: str = Field(default="", description="HH:MM för den drabbade avgången, eller tomt")
@@ -84,6 +89,12 @@ texten inte något, lämna fältet tomt. Du sätter ingen poäng -- det gör reg
 ## Övriga fält
 - mode: train, metro, tram, bus eller boat -- bara om det framgår, annars tomt
 - line, train_no: linjenummer eller tågnummer om de står
+- lines: varje linje eller tåg som texten nämner, kopierat ORDAGRANT ur texten
+  ("buss linje 725", "Pågatåg 1612", "tunnelbanans gröna linje"); tom lista annars
+- stops: varje hållplats eller station som texten nämner, kopierat ORDAGRANT
+  ("Tumba station", "Karolinska sjukhuset norra"). Den där resenärerna står först,
+  slutmålet ("mot X") sist. Aldrig en gata där en ersättningshållplats står, aldrig
+  ett ord som "Inställd". Står inget namn i texten: tom lista
 - from_station, to_station: bara själva namnet ("Lund C"), aldrig ord som "Inställd"
 - departure_clock: den drabbade avgångens klockslag (HH:MM), annars tomt
 - next_departure_clock: nästa avgångs klockslag (HH:MM) om texten anger det, annars tomt
@@ -102,6 +113,63 @@ Alternativanteckning: {alternative_note}
 ## Rå källkontext
 {context_block}
 """
+
+
+def _norm(value: str) -> str:
+    return re.sub(r"\s+", " ", value or "").strip().lower()
+
+
+def _literal(value: str, text: str) -> bool:
+    value = _norm(value).strip(" .,;:")
+    return bool(value) and value in _norm(text)
+
+
+def sanitize(facts: dict | TipFacts, text: str) -> dict:
+    """
+    Modellens läsning, rensad mot källtexten. Det som inte står där kastas.
+
+    * `lines`, `stops`, `from_station`, `to_station`, `line`, `train_no`: måste
+      vara ordagranna delsträngar av texten (skiftläge och blanksteg oräknade).
+      En plats som inte står i texten är påhittad -- och en påhittad plats ger
+      en bomresa (AGENTS §6 invariant 2).
+    * Klockslag: måste stå i texten (16:58 eller 16.58).
+    * `delay_minutes`: talet måste stå i texten, annars 0 (= anges inte).
+
+    Händelsetyp och alternativ är klassningar, inte citat, och lämnas orörda.
+    """
+    data = facts.model_dump() if isinstance(facts, TipFacts) else dict(facts or {})
+    try:
+        parsed = TipFacts.model_validate(data)
+    except Exception:
+        parsed = TipFacts()
+    out = parsed.model_dump()
+    out["lines"] = _unique([v for v in parsed.lines if isinstance(v, str) and _literal(v, text)])[:4]
+    out["stops"] = _unique([v for v in parsed.stops if isinstance(v, str) and _literal(v, text) and len(v) <= 60])[:6]
+    for key in ("from_station", "to_station", "line", "train_no"):
+        if not _literal(out.get(key) or "", text):
+            out[key] = ""
+    for key in ("departure_clock", "next_departure_clock"):
+        minutes = _clock_minutes(out.get(key) or "")
+        if minutes is None:
+            out[key] = ""
+            continue
+        hour, minute = divmod(minutes, 60)
+        candidates = {f"{hour}:{minute:02d}", f"{hour:02d}:{minute:02d}", f"{hour}.{minute:02d}", f"{hour:02d}.{minute:02d}"}
+        out[key] = f"{hour:02d}:{minute:02d}" if any(c in (text or "") for c in candidates) else ""
+    delay = out.get("delay_minutes") or 0
+    if not (isinstance(delay, int) and delay > 0 and re.search(rf"(?<!\d){delay}(?!\d)", text or "")):
+        out["delay_minutes"] = 0
+    return out
+
+
+def _unique(values: list[str]) -> list[str]:
+    seen, out = set(), []
+    for value in values:
+        cleaned = re.sub(r"\s+", " ", value).strip().strip(".,;:")
+        if cleaned and cleaned.lower() not in seen:
+            seen.add(cleaned.lower())
+            out.append(cleaned)
+    return out
 
 
 @dataclass(frozen=True)

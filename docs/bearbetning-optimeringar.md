@@ -157,7 +157,8 @@ ordningen given av vad rådatan faktiskt visar:
 Mätt: 3 926 SL-rader, **3 030 (77 %) har tomma `areas`** och **0 har `geometry`**
 → dagens SL-tips är platslösa. Men **3 268 (83 %) har " från " i `description`**
 och **1 657 (42 %) har både `kl HH:MM` och " från "**. Det är exakt vad en modell
-kan läsa ur en mening: `places` + avgångstid. Effekt: platslösa tips blir
+kan läsa ur en mening: `places` + avgångstid. *(Byggt 2026-10-09, regler först och
+Genkit för resten: `docs/genkit-bedomning.md`.)* Effekt: platslösa tips blir
 placerade, kan mätas mot körområdet och får en "Kör dit"-väg i appen. Grind:
 `places` får bara fyllas med strängar som finns i texten (samma princip som
 `briefs.valid`). Kostnad: en `extract`-insats på de tips som saknar `places`.

@@ -14,6 +14,8 @@ En förändring här ska synas i förarens telefon utan att någon rör Dart.
 
 from __future__ import annotations
 
+import os
+
 from core.geo import REGION_ANCHOR, haversine_km, resolve_place_coords
 from core.taxi_context import final_level
 
@@ -49,13 +51,23 @@ AI_PRICE_USD_PER_MTOK = {
 # Okänd modell räknas med det dyraste priset: budgetspärren ska hellre slå till tidigt.
 AI_PRICE_FALLBACK = (1.50, 7.50)
 AI_USD_SEK = 10.0
-# Budgeten är 500 kr/mån; spärren slår till vid 400 så att marginalen finns kvar.
-AI_MONTHLY_BUDGET_KR = 400
+# Budgeten är 500 kr/mån (ägarbeslut 2026-10-09); spärren slår till vid 450 så att
+# marginalen finns kvar. Räkningen: docs/genkit-bedomning.md §4.
+AI_MONTHLY_BUDGET_KR = 450
 # Dagstak på antal anrop som GICK FRAM: skyddar mot en loop som anropar om och
 # om igen. Mätt 2026-10-04: ~825 unika kollektivtrafiktexter per dygn. Fel
 # räknas inte (core/ai_client.spend): 2026-10-05 åt ~2 500 felanrop utan en
 # enda token hela taket och stängde granskningen för resten av dygnet.
-AI_DAILY_CALL_CAP = 3000
+def _env_int(name: str, default: int) -> int:
+    """Ett tak som driften kan höja i Coolify utan deploy (env + omstart)."""
+    try:
+        value = int(os.environ.get(name, "").strip() or default)
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+AI_DAILY_CALL_CAP = _env_int("AI_DAILY_CALL_CAP", 3000)
 # Felpaus: så många misslyckade anrop på en minut och AI:n vilar tills minuten
 # gått. Ett fel som upprepas sex gånger på rad (kvot, nät, filhandtag) blir
 # inte rätt av ett sjunde försök, och varje försök är en rad i ai_call.
@@ -653,6 +665,16 @@ AI_BRIEF_MAX_PER_RUN = 30
 # Google tillåter 15 per minut och modell (mätt 2026-10-04: 429 efter 15 anrop),
 # och stötar -- granskningen tar 40 tips, beskeden 30 -- slog i taket direkt.
 # Det som inte hinner med i en körning tas i nästa. Med betald nivå kan taket höjas.
-AI_MAX_CALLS_PER_MINUTE = 12
+#
+# Miljövariabeln AI_MAX_CALLS_PER_MINUTE höjer taket när faktureringen är på
+# (betald nivå: hundratals per minut) -- se docs/genkit-bedomning.md §5.
+AI_MAX_CALLS_PER_MINUTE = _env_int("AI_MAX_CALLS_PER_MINUTE", 12)
 # Av dem hålls så många fria för grinden före en notis (core/ai_gate.py).
 AI_GATE_RESERVED_PER_MINUTE = 3
+
+# Linje och hållplats som reglerna inte fick ut (core/places_ai.py, beat
+# "read-places" varannan minut): så många TEXTER per körning (en text kan vara
+# flera tips), och så lång väntan per anrop. Mätt 2026-10-08: ~825 unika
+# kollektivtrafiktexter per dygn, varav reglerna läser linje+plats i de flesta.
+AI_PLACES_MAX_PER_RUN = _env_int("AI_PLACES_MAX_PER_RUN", 20)
+AI_PLACES_TIMEOUT_S = 15.0
