@@ -285,12 +285,16 @@ class _InfoChip extends StatelessWidget {
         children: [
           Icon(icon, size: 14, color: TbColors.ink),
           const SizedBox(width: 5),
-          Text(
-            text,
-            style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: strong ? FontWeight.w800 : FontWeight.w600,
-              color: TbColors.ink,
+          // Flexible: med stor text bryts raden i stället för att spilla
+          // över kortets kant.
+          Flexible(
+            child: Text(
+              text,
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: strong ? FontWeight.w800 : FontWeight.w600,
+                color: TbColors.ink,
+              ),
             ),
           ),
         ],

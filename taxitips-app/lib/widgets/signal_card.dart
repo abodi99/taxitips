@@ -340,9 +340,16 @@ class MetaItem extends StatelessWidget {
       children: [
         Icon(icon, size: 16, color: color ?? TbColors.skiffer),
         const SizedBox(width: 4),
-        Text(
-          text,
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700, color: c),
+        // Flexible: med stor text bryts raden i stället för att spilla över.
+        Flexible(
+          child: Text(
+            text,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w700,
+              color: c,
+            ),
+          ),
         ),
       ],
     );

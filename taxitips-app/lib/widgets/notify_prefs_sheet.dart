@@ -7,6 +7,20 @@ import '../net_status.dart';
 import '../signal_kinds.dart';
 import '../theme.dart';
 
+/// Öppnar notisinställningarna som ett blad, så som Inställningar gör.
+Future<void> showNotifyPrefsSheet(BuildContext context, ApiClient api) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    backgroundColor: TbColors.foam,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
+    ),
+    builder: (ctx) => NotifyPrefsSheet(api: api),
+  );
+}
+
 /// Notisinställningarna -- så korta som möjligt: på/av, paus, vilka
 /// kategorier och hur viktiga tipsen ska vara. Servern äger reglerna
 /// (core/notify_prefs.py); samma rattar finns i kundportalen och adminwebben.
@@ -285,7 +299,6 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
     );
   }
 
-
   @override
   Widget build(BuildContext context) {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
@@ -480,8 +493,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                     // Typer som aldrig kan ge notis (varken starka eller
                     // svagare) visas inte: ett reglage utan verkan är dött.
                     for (final t in _catalog.where(
-                      (t) =>
-                          t['notifiable'] != false || t['weakOnly'] != false,
+                      (t) => t['notifiable'] != false || t['weakOnly'] != false,
                     )) ...[
                       Material(
                         color: Colors.white,
@@ -492,9 +504,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                           ),
                           title: Text(
                             t['label']?.toString() ?? '',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                            ),
+                            style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                           // En svag typ som inte rörts är PÅ när svagare tips
                           // är påslaget (core/notify.type_enabled).
@@ -540,4 +550,3 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
     );
   }
 }
-

@@ -196,15 +196,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   }
 
   Future<void> _openNotify() async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: TbColors.foam,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
-      ),
-      builder: (ctx) => NotifyPrefsSheet(api: widget.api),
-    );
+    await showNotifyPrefsSheet(context, widget.api);
     if (mounted) {
       try {
         await _loadCounties();
@@ -229,6 +221,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      // Aldrig under statusfältet eller notchen.
+      useSafeArea: true,
       backgroundColor: TbColors.foam,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
@@ -514,10 +508,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
                 await _load();
               },
               child: ListView(
+                // Liggande: inte under kamerahålet på sidorna.
                 padding: EdgeInsets.fromLTRB(
-                  16,
+                  16 + MediaQuery.paddingOf(context).left,
                   8,
-                  16,
+                  16 + MediaQuery.paddingOf(context).right,
                   24 + MediaQuery.paddingOf(context).bottom,
                 ),
                 children: [

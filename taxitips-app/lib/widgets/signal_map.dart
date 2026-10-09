@@ -172,30 +172,50 @@ class _SignalMapState extends State<SignalMap> {
       if (group.length == 1) {
         final selected = first.id == widget.selectedId;
         final head = pinHead(first.strength) + (selected ? 6 : 0);
+        final w = head + 12;
+        final h = first.hazard ? head + 8 : head + 9;
         out.add(
           Marker(
             point: first.point,
-            width: first.hazard ? head + 12 : head + 12,
-            height: first.hazard ? head + 8 : head + 9,
+            // Tryckytan är minst 48x48 (Android/iOS riktlinjer) även när
+            // nålen ritas mindre; nålen står kvar med spetsen på platsen.
+            width: w < 48 ? 48 : w,
+            height: h < 48 ? 48 : h,
             // Nålens spets pekar på platsen; triangeln står mitt på den.
             alignment: first.hazard ? Alignment.center : Alignment.topCenter,
-            child: GestureDetector(
-              behavior: HitTestBehavior.opaque,
-              onTap: first.onTap,
-              child: first.hazard
-                  ? HazardSign(
-                      icon: first.icon,
-                      strength: first.strength,
-                      followed: first.followed,
-                      selected: selected,
-                    )
-                  : SignalPin(
-                      icon: first.icon,
-                      strength: first.strength,
-                      category: first.category,
-                      followed: first.followed,
-                      selected: selected,
-                    ),
+            child: Semantics(
+              button: true,
+              // Skärmläsaren säger kategori och styrka, t.ex. "Flyg, Stark".
+              label:
+                  '${first.category.label}, '
+                  '${strengthWord(first.strength, category: first.category)}',
+              child: GestureDetector(
+                behavior: HitTestBehavior.opaque,
+                onTap: first.onTap,
+                child: Align(
+                  alignment: first.hazard
+                      ? Alignment.center
+                      : Alignment.bottomCenter,
+                  child: SizedBox(
+                    width: w,
+                    height: h,
+                    child: first.hazard
+                        ? HazardSign(
+                            icon: first.icon,
+                            strength: first.strength,
+                            followed: first.followed,
+                            selected: selected,
+                          )
+                        : SignalPin(
+                            icon: first.icon,
+                            strength: first.strength,
+                            category: first.category,
+                            followed: first.followed,
+                            selected: selected,
+                          ),
+                  ),
+                ),
+              ),
             ),
           ),
         );
@@ -211,15 +231,19 @@ class _SignalMapState extends State<SignalMap> {
           point: center,
           width: 64,
           height: 64,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: () => _openCluster(group),
-            child: Center(
-              child: ClusterBubble(
-                count: group.length,
-                strength: first.strength,
-                hazard: first.hazard,
-                category: categories.length == 1 ? categories.first : null,
+          child: Semantics(
+            button: true,
+            label: '${group.length} saker här',
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _openCluster(group),
+              child: Center(
+                child: ClusterBubble(
+                  count: group.length,
+                  strength: first.strength,
+                  hazard: first.hazard,
+                  category: categories.length == 1 ? categories.first : null,
+                ),
               ),
             ),
           ),
@@ -278,15 +302,19 @@ class _SignalMapState extends State<SignalMap> {
       ferryMarkers.add(
         Marker(
           point: LatLng(lat, lon),
-          width: 44,
-          height: 44,
-          child: GestureDetector(
-            behavior: HitTestBehavior.opaque,
-            onTap: widget.onSelectFerry == null
-                ? null
-                : () => widget.onSelectFerry!(f),
-            child: Center(
-              child: FerryArrow(status: status, course: f['course'] as num?),
+          width: 48,
+          height: 48,
+          child: Semantics(
+            button: widget.onSelectFerry != null,
+            label: 'Färja ${ferryName(f)}',
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: widget.onSelectFerry == null
+                  ? null
+                  : () => widget.onSelectFerry!(f),
+              child: Center(
+                child: FerryArrow(status: status, course: f['course'] as num?),
+              ),
             ),
           ),
         ),
@@ -320,20 +348,26 @@ class _SignalMapState extends State<SignalMap> {
           ),
         // Egen liten stil: annars ärver raden skärmens 15 px och blir bredare
         // än en smal telefon vid stor text.
-        DefaultTextStyle.merge(
-          style: const TextStyle(
-            fontFamily: kBodyFont,
-            fontSize: 11,
-            color: TbColors.midnatt,
-          ),
-          child: SimpleAttributionWidget(
-            source: Text(
-              kCartoKey.isNotEmpty
-                  ? '© CARTO · OpenStreetMap'
-                  : '© Esri · OpenStreetMap',
+        // Upphovsraden växer högst 1,3 gånger med textstorleken: den är en
+        // rad i hörnet, inte något föraren läser, och vid 2,0 spillde den
+        // över kartans kant.
+        MediaQuery.withClampedTextScaling(
+          maxScaleFactor: 1.3,
+          child: DefaultTextStyle.merge(
+            style: const TextStyle(
+              fontFamily: kBodyFont,
+              fontSize: 11,
+              color: TbColors.midnatt,
             ),
-            alignment: Alignment.bottomLeft,
-            backgroundColor: TbColors.vit.withValues(alpha: 0.7),
+            child: SimpleAttributionWidget(
+              source: Text(
+                kCartoKey.isNotEmpty
+                    ? '© CARTO · OpenStreetMap'
+                    : '© Esri · OpenStreetMap',
+              ),
+              alignment: Alignment.bottomLeft,
+              backgroundColor: TbColors.vit.withValues(alpha: 0.7),
+            ),
           ),
         ),
         if (ferryLines.isNotEmpty) PolylineLayer(polylines: ferryLines),

@@ -41,6 +41,46 @@ import 'tip_report_button.dart';
 ///      till ansvarigt trafikbolag (`SJ`, `Skånetrafiken`, `Västtrafik`, `SL` m.fl.)
 ///      och berörda parter.
 /// 4. **Mer om tipset**: Alternativ trafik, källa och tekniska tidsdetaljer.
+/// Öppnar tipsbladet som appen gör det: ett dragbart blad (0,35 -- 0,85 --
+/// 0,96) där innehållets rullning och bladets drag är samma gest. Bladet
+/// hålls nedanför statusfältet och notchen (useSafeArea) -- annars hamnade
+/// krysset och snabbknapparna under dem när bladet drogs upp helt.
+Future<void> showTipSheet(
+  BuildContext context, {
+  required Widget Function(BuildContext ctx, ScrollController controller)
+  builder,
+}) {
+  return showModalBottomSheet<void>(
+    context: context,
+    isScrollControlled: true,
+    useSafeArea: true,
+    // DraggableScrollableSheet hanterar bakgrund och hörn; transparent
+    // här så att inget double-clip på hörnen sker.
+    backgroundColor: Colors.transparent,
+    builder: (ctx) {
+      // DraggableScrollableSheet koordinerar scroll och sheet-drag som
+      // EN mekanism via scrollController. Utan detta konkurrerar
+      // BottomSheets drag-detektor med SingleChildScrollView om
+      // gesterna: föraren försöker skrolla ner i en lång text men
+      // sheetet stängs istället. initialChildSize 0.85 visar vad, var,
+      // hur bråttom och styrkan. Användaren drar upp till 0.96 när
+      // "Mer om tipset" är utfällt.
+      return DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.85,
+        minChildSize: 0.35,
+        maxChildSize: 0.96,
+        snap: true,
+        snapSizes: const [0.35, 0.85, 0.96],
+        // true: om föraren drar ner förbi minsta storlek stängs sheetet
+        // automatiskt (samma känsla som en vanlig modal bottom sheet).
+        shouldCloseOnMinExtent: true,
+        builder: (_, scrollController) => builder(ctx, scrollController),
+      );
+    },
+  );
+}
+
 class TipSheetBody extends StatefulWidget {
   const TipSheetBody({
     super.key,
@@ -646,9 +686,10 @@ class _TopActionBarState extends State<_TopActionBar> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Expanded(
+          // Knapparna ritas 36 höga men tar emot tryck på 48 (padded), så
+          // raderna står 12 isär utan extra radavstånd.
           child: Wrap(
             spacing: 6,
-            runSpacing: 6,
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               // Kör dit / Öppna navigering
@@ -664,7 +705,7 @@ class _TopActionBarState extends State<_TopActionBar> {
                             vertical: 7,
                           ),
                           minimumSize: const Size(0, 36),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          tapTargetSize: MaterialTapTargetSize.padded,
                           shape: compactShape,
                         ),
                         icon: const Icon(Icons.navigation_outlined, size: 16),
@@ -686,7 +727,7 @@ class _TopActionBarState extends State<_TopActionBar> {
                             vertical: 7,
                           ),
                           minimumSize: const Size(0, 36),
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                          tapTargetSize: MaterialTapTargetSize.padded,
                           shape: compactShape,
                         ),
                         icon: const Icon(Icons.navigation_rounded, size: 16),
@@ -718,7 +759,7 @@ class _TopActionBarState extends State<_TopActionBar> {
                       vertical: 7,
                     ),
                     minimumSize: const Size(0, 36),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    tapTargetSize: MaterialTapTargetSize.padded,
                     shape: compactShape,
                   ),
                   icon: Icon(
@@ -750,7 +791,7 @@ class _TopActionBarState extends State<_TopActionBar> {
                       vertical: 7,
                     ),
                     minimumSize: const Size(0, 36),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    tapTargetSize: MaterialTapTargetSize.padded,
                     shape: compactShape,
                   ),
                   icon: Icon(
@@ -780,7 +821,7 @@ class _TopActionBarState extends State<_TopActionBar> {
                       vertical: 7,
                     ),
                     minimumSize: const Size(0, 36),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    tapTargetSize: MaterialTapTargetSize.padded,
                     shape: compactShape,
                   ),
                   icon: Icon(
@@ -814,7 +855,7 @@ class _TopActionBarState extends State<_TopActionBar> {
                       vertical: 7,
                     ),
                     minimumSize: const Size(0, 36),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    tapTargetSize: MaterialTapTargetSize.padded,
                     shape: compactShape,
                   ),
                   icon: Icon(
@@ -843,7 +884,7 @@ class _TopActionBarState extends State<_TopActionBar> {
                       vertical: 7,
                     ),
                     minimumSize: const Size(0, 36),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    tapTargetSize: MaterialTapTargetSize.padded,
                     shape: compactShape,
                   ),
                   icon: const Icon(Icons.open_in_new, size: 15),
@@ -1182,13 +1223,15 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
                 color: TbColors.skiffer,
               ),
               const SizedBox(width: 5),
-              Text(
-                route.to != null ? 'STRÄCKA / STATIONER' : 'STATION / PLATS',
-                style: const TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.6,
-                  color: TbColors.skiffer,
+              Flexible(
+                child: Text(
+                  route.to != null ? 'STRÄCKA / STATIONER' : 'STATION / PLATS',
+                  style: const TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.6,
+                    color: TbColors.skiffer,
+                  ),
                 ),
               ),
             ],
@@ -1912,7 +1955,7 @@ class _CompensationBoxState extends State<CompensationBox> {
                     foregroundColor: TbColors.midnatt,
                     minimumSize: const Size(0, 40),
                     padding: const EdgeInsets.symmetric(horizontal: 4),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    tapTargetSize: MaterialTapTargetSize.padded,
                     textStyle: const TextStyle(
                       fontFamily: kBodyFont,
                       fontSize: 13.5,

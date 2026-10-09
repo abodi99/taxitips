@@ -196,10 +196,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
         onRefresh: _load,
         child: ListView(
           physics: const AlwaysScrollableScrollPhysics(),
+          // Liggande: inte under kamerahålet på sidorna.
           padding: EdgeInsets.fromLTRB(
-            16,
+            16 + MediaQuery.paddingOf(context).left,
             4,
-            16,
+            16 + MediaQuery.paddingOf(context).right,
             32 + MediaQuery.paddingOf(context).bottom,
           ),
           children: [_hourPicker(), const SizedBox(height: 12), ..._body(now)],

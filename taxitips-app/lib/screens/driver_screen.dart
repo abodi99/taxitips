@@ -2783,65 +2783,38 @@ class _DriverScreenState extends State<DriverScreen>
         },
       ),
     );
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      // DraggableScrollableSheet hanterar bakgrund och hörn; transparent
-      // här så att inget double-clip på hörnen sker.
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        // DraggableScrollableSheet koordinerar scroll och sheet-drag som
-        // EN mekanism via scrollController. Utan detta konkurrerar
-        // BottomSheets drag-detektor med SingleChildScrollView om
-        // gesterna: föraren försöker skrolla ner i en lång text men
-        // sheetet stängs istället. initialChildSize 0.85 visar vad, var,
-        // hur bråttom och styrkan; knapparna ligger fast i nederkanten.
-        // Användaren drar upp till 0.96 när "Mer om tipset" är utfällt.
-        return DraggableScrollableSheet(
-          expand: false,
-          initialChildSize: 0.85,
-          minChildSize: 0.35,
-          maxChildSize: 0.96,
-          snap: true,
-          snapSizes: const [0.35, 0.85, 0.96],
-          // true: om föraren drar ner förbi minsta storlek stängs sheetet
-          // automatiskt (samma känsla som en vanlig modal bottom sheet).
-          shouldCloseOnMinExtent: true,
-          builder: (_, scrollController) {
-            // Innehållet och ordningen bor i TipSheetBody (widgets/tip_sheet.dart):
-            // vad och var, hur bråttom, värt att köra dit, vad gör jag nu, mer.
-            return TipSheetBody(
-              alert: a,
-              api: widget.api,
-              scrollController: scrollController,
-              distanceKm: _distanceFor(a),
-              onToggleFavorite: widget.api.supportsFavorites && !readOnly
-                  ? (v) => _toggleFavorite(a, v)
-                  : null,
-              onOpenSourcePage: url == null || url.isEmpty
-                  ? null
-                  : () async {
-                      final uri = Uri.tryParse(url);
-                      if (uri != null) {
-                        await launchUrl(
-                          uri,
-                          mode: LaunchMode.externalApplication,
-                        );
-                      }
-                    },
-              // Huvudmannens regler för taxiersättning (compensation_url):
-              // information, inget köp. Öppnas utanför appen.
-              onOpenUrl: (link) async {
-                final uri = Uri.tryParse(link);
-                if (uri == null ||
-                    (uri.scheme != 'https' && uri.scheme != 'http')) {
-                  return;
-                }
-                await launchUrl(uri, mode: LaunchMode.externalApplication);
-              },
-              onClose: () => Navigator.pop(ctx),
-            );
+    await showTipSheet(
+      context,
+      builder: (ctx, scrollController) {
+        // Innehållet och ordningen bor i TipSheetBody (widgets/tip_sheet.dart):
+        // vad och var, hur bråttom, värt att köra dit, vad gör jag nu, mer.
+        return TipSheetBody(
+          alert: a,
+          api: widget.api,
+          scrollController: scrollController,
+          distanceKm: _distanceFor(a),
+          onToggleFavorite: widget.api.supportsFavorites && !readOnly
+              ? (v) => _toggleFavorite(a, v)
+              : null,
+          onOpenSourcePage: url == null || url.isEmpty
+              ? null
+              : () async {
+                  final uri = Uri.tryParse(url);
+                  if (uri != null) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                },
+          // Huvudmannens regler för taxiersättning (compensation_url):
+          // information, inget köp. Öppnas utanför appen.
+          onOpenUrl: (link) async {
+            final uri = Uri.tryParse(link);
+            if (uri == null ||
+                (uri.scheme != 'https' && uri.scheme != 'http')) {
+              return;
+            }
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
           },
+          onClose: () => Navigator.pop(ctx),
         );
       },
     );
@@ -3139,9 +3112,10 @@ class _DriverScreenState extends State<DriverScreen>
                   // Knapparna följer listans överkant och tonas bort när
                   // listan dras upp -- annars hamnar de under statusraden.
                   // Filter finns då i listans rubrik i stället.
+                  // Liggande: inte under kamerahålet på sidorna.
                   Positioned(
-                    left: 12,
-                    right: 12,
+                    left: 12 + MediaQuery.paddingOf(context).left,
+                    right: 12 + MediaQuery.paddingOf(context).right,
                     bottom:
                         MediaQuery.of(context).size.height * _sheetExtent + 12,
                     child: IgnorePointer(
@@ -3237,30 +3211,41 @@ class _DriverScreenState extends State<DriverScreen>
                             child: ListView(
                               controller: scrollController,
                               physics: const AlwaysScrollableScrollPhysics(),
+                              // Nederst ovanför gestfältet, och liggande
+                              // inte under kamerahålet på sidorna.
                               padding: EdgeInsets.only(
+                                left: MediaQuery.paddingOf(context).left,
+                                right: MediaQuery.paddingOf(context).right,
                                 bottom:
                                     24 + MediaQuery.paddingOf(context).bottom,
                               ),
                               children: [
                                 // Handtaget: tryck för att växla mellan lista och karta.
-                                GestureDetector(
-                                  behavior: HitTestBehavior.opaque,
-                                  onTap: () => _expandSheet(
-                                    _sheetExtent < 0.5 ? 0.9 : 0.42,
-                                  ),
-                                  child: Center(
+                                // Tryckytan är 48 hög (Android/iOS riktlinjer), med
+                                // ett namn för skärmläsaren.
+                                Semantics(
+                                  button: true,
+                                  label: _sheetExtent < 0.5
+                                      ? 'Visa hela listan'
+                                      : 'Visa kartan',
+                                  child: GestureDetector(
+                                    behavior: HitTestBehavior.opaque,
+                                    onTap: () => _expandSheet(
+                                      _sheetExtent < 0.5 ? 0.9 : 0.42,
+                                    ),
                                     child: Container(
-                                      margin: const EdgeInsets.fromLTRB(
-                                        0,
-                                        12,
-                                        0,
-                                        8,
-                                      ),
-                                      width: 64,
-                                      height: 6,
-                                      decoration: BoxDecoration(
-                                        color: Colors.grey.shade400,
-                                        borderRadius: BorderRadius.circular(3),
+                                      height: 48,
+                                      alignment: Alignment.topCenter,
+                                      child: Container(
+                                        margin: const EdgeInsets.only(top: 12),
+                                        width: 64,
+                                        height: 6,
+                                        decoration: BoxDecoration(
+                                          color: Colors.grey.shade400,
+                                          borderRadius: BorderRadius.circular(
+                                            3,
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
@@ -3971,28 +3956,35 @@ class _ScorePresetChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Material(
-      color: selected ? TbColors.taxi.withValues(alpha: 0.35) : Colors.white,
-      borderRadius: BorderRadius.circular(12),
-      child: InkWell(
-        onTap: onTap,
+    // Minst 48 hög (tryckyta i bilen). Vald syns på fältet och kanten; texten
+    // är mörk i båda lägena -- gul text på ljusgult nådde bara 1,9:1.
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: selected ? TbColors.taxi.withValues(alpha: 0.35) : Colors.white,
         borderRadius: BorderRadius.circular(12),
-        child: Container(
-          alignment: Alignment.center,
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(
-              color: selected ? TbColors.taxiDeep : TbColors.line,
-              width: 1.5,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            alignment: Alignment.center,
+            constraints: const BoxConstraints(minHeight: 48),
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: selected ? TbColors.taxiDeep : TbColors.line,
+                width: 1.5,
+              ),
             ),
-          ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-              color: selected ? TbColors.taxiDeep : TbColors.ink,
+            child: Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+                color: TbColors.ink,
+              ),
             ),
           ),
         ),
