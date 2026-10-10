@@ -78,5 +78,6 @@ urlpatterns = [
     path("membership-session/end", api.membership_session_end),
     path("memberships/<uuid:license_id>/assign", api.membership_assign),
     path("memberships/<uuid:license_id>/unassign", api.membership_unassign),
+    path("memberships/<uuid:license_id>/resend-invite", api.membership_resend_invite),
     path("memberships/<uuid:license_id>/county", api.membership_county),
 ]

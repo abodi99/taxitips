@@ -229,16 +229,34 @@ function trialBanner(data) {
   </div>`;
 }
 
+/** En provplats som text: registreringsnumret, eller kontoplatsens län. */
+function continueItem(c) {
+  return c.plate ? c.plate : `Medlemskap · ${countyName(c.baseCounty)}`;
+}
+
+/**
+ * Månadspriset för fortsättningen. Beloppet kommer från servern
+ * (`continueOffer`, fleet/pricing.py) -- vyn räknar inget själv.
+ */
+function continuePrice(data) {
+  const offer = data.continueOffer;
+  if (!offer) return "";
+  return `<p class="continue-price"><b>${esc(money(offer.monthlyOre, offer.currency))}</b> i månaden exkl. moms
+    <span class="muted">(${esc(money(offer.monthlyTotalOre, offer.currency))} inkl. moms)</span></p>`;
+}
+
 function continueCard(data) {
   const state = continueState(data);
   if (!state) return "";
   const { cars, trial } = state;
-  const n = cars.length;
+  const items = cars.map((c) => `<b>${esc(continueItem(c))}</b>`).join(", ");
+  const price = continuePrice(data);
 
   if (state.kind === "card_on_file") {
     return `<div class="card continue-card" id="fortsatt">
       <h2>Auto-förnyelse är klar</h2>
-      <p>${cars.map((c) => `<b>${esc(c.plate)}</b>`).join(", ")}</p>
+      <p>${items}</p>
+      ${price}
       <p class="muted">Kortet är sparat. Första dragningen sker
         ${esc(date(trial.firstChargeAt || trial.endsAt))} när provet tar slut,
         sedan varje månad tills ni säger upp.</p>
@@ -251,7 +269,8 @@ function continueCard(data) {
   if (state.kind === "finish_card") {
     return `<div class="card continue-card" id="fortsatt">
       <h2>Spara kortet för att fortsätta</h2>
-      <p>${cars.map((c) => `<b>${esc(c.plate)}</b>`).join(", ")}</p>
+      <p>${items}</p>
+      ${price}
       <p class="muted">Ni har bekräftat medlemskapen. Öppna Stripes sida och spara
         kortet — ingen dragning sker förrän provet tar slut
         (${esc(date(trial.endsAt))}).</p>
@@ -265,8 +284,9 @@ function continueCard(data) {
   if (state.kind === "commit") {
     return `<div class="card continue-card" id="fortsatt">
       <h2>Fortsätt med medlemskap</h2>
-      <p>${cars.map((c) => `<b>${esc(c.plate)}</b>`).join(", ")} ·
+      <p>${items} ·
         provet slutar ${esc(date(trial.endsAt))}</p>
+      ${price}
       <p class="muted">Bekräfta medlemskapen och spara kortet hos Stripe. Inget dras
         under provet — första dragningen sker när det tar slut, sedan varje månad.</p>
       <div class="btn-row"><button class="btn btn-primary btn-lg" data-action="continue-trial">Bekräfta medlemskap och spara kort</button></div>
@@ -276,7 +296,8 @@ function continueCard(data) {
   // Prov slut utan kort: betala nu (gamla flödet).
   return `<div class="card continue-card" id="fortsatt">
       <h2>Fortsätt med medlemskap</h2>
-      <p>${cars.map((c) => `<b>${esc(c.plate)}</b>`).join(", ")}</p>
+      <p>${items}</p>
+      ${price}
       <p class="muted">Provet är slut. Du ser priset innan du godkänner.
         Betalningen sker på Stripes betalsida.</p>
       <div class="btn-row"><button class="btn btn-primary btn-lg" data-action="continue-trial">Visa pris och betala</button></div>
@@ -475,8 +496,9 @@ function inviteAccountsCard(rows, canAssign) {
     .join("");
   return `<div class="card invite-primary">
     <h2>Bjud in ett konto</h2>
-    <p class="muted">Personen får platsen på sin e-postadress. När hen loggar
-      in i appen binds kontot och platsen är redo att tas.</p>
+    <p class="muted">Personen får ett mejl med en länk där hen väljer lösenord.
+      När hen loggar in i appen med e-post och lösenord är platsen hens --
+      inget eget företagskonto behövs.</p>
     <form id="membershipInviteForm">
       <label for="membership-invite-for">Medlemskap</label>
       <select id="membership-invite-for" name="licenseId" required>${options}</select>
@@ -576,6 +598,11 @@ function membershipSlotCard(row, opts, userId) {
       canAssign
         ? `<div class="btn-row">
              <button class="btn btn-quiet" type="button" data-action="assign-membership-self" data-license="${esc(row.licenseId)}">Tilldela mig</button>
+             ${
+               row.assigneeEmail && !row.assigneeUserId
+                 ? `<button class="btn btn-quiet" type="button" data-action="resend-membership-invite" data-license="${esc(row.licenseId)}" data-email="${esc(row.assigneeEmail)}">Skicka inbjudan igen</button>`
+                 : ""
+             }
              ${assigned ? `<button class="btn btn-quiet" type="button" data-action="unassign-membership" data-license="${esc(row.licenseId)}">Ta bort tilldelning</button>` : ""}
            </div>`
         : ""
@@ -812,7 +839,7 @@ function joinSv(words) {
 /** Nästa steg: starta medlemskapet, slutföra kortet, eller inget alls. */
 function membershipAction(data, stage, plan) {
   const cs = continueState(data);
-  const plates = cs ? cs.cars.map((c) => `<b>${esc(c.plate)}</b>`).join(", ") : "";
+  const plates = cs ? cs.cars.map((c) => `<b>${esc(continueItem(c))}</b>`).join(", ") : "";
   const theMemberships = cs?.cars.length === 1 ? "medlemskapet" : "medlemskapen";
   const trial = data.trial;
   const unlocked = joinSv(plan.locked.map((k) => (CATEGORY_TEXT[k] ?? [k])[0].toLowerCase()));

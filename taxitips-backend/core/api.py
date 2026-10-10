@@ -1776,10 +1776,20 @@ def device_session(request):
         .order_by("created_at")
         .first()
     )
-    if member is None:
-        return _json(request, {"error": "no_company"}, status=403)
+    if member is not None:
+        company_id = member.company_id
+    else:
+        # Ett konto som fått en plats (fleet/membership.py, §14) är inte medlem
+        # i bolaget -- en förare inbjuden med e-post. Telefonen hör då till
+        # platsens bolag; utan det fick hen tips i appen men aldrig en notis.
+        from fleet import access as fleet_access
+        from fleet import membership
 
-    company_id = member.company_id
+        fleet_access._maybe_claim_memberships(jwt_payload or {}, now)
+        seats = membership.memberships_for_user(user_id, now=now)
+        if not seats:
+            return _json(request, {"error": "no_company"}, status=403)
+        company_id = seats[0].company_id
     ent = entitlement_for_request(request)
     display_label = f"{label} ({platform})" if platform else label
 

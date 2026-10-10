@@ -531,18 +531,30 @@ def consume_invite(invite: SalesInvite, *, company_id, now=None) -> SalesInvite:
     return invite
 
 
-def continue_vehicles(company_id) -> list[dict]:
+def continue_vehicles(company_id, trial: Trial | None = None) -> list[dict]:
     """
-    Bilarna kunden fortsätter med i kundportalen ("Fortsätt med provbilarna"):
-    det pågående provets bilar, eller -- när provet löpt ut utan beställning --
-    bilarna i det senaste provet. Mejlen före och efter provslut länkar hit,
+    Det kunden fortsätter med i kundportalen ("Fortsätt med provet"): det
+    pågående provets platser, eller -- när provet löpt ut utan beställning --
+    platserna i det senaste provet. Mejlen före och efter provslut länkar hit,
     så båda fallen måste ge en lista. Tomt när bolaget redan betalar.
+
+    Två sorters provplatser:
+
+    * **Provbil** (`kind: vehicle`): fortsätter via sitt registreringsnummer.
+    * **Kontoplats** (`kind: membership`, §14): en plats utan bil, tilldelad ett
+      konto. Det är vad registreringen i appen skapar
+      (`membership.ensure_trial_membership`). Förut listades bara provbilar,
+      så en kund som registrerat sig i appen fick ett tomt kort och mejl utan
+      pris. Fortsättningen bär `licenseId`; beställningen tar över platsen
+      (orders.apply_order) så att samma konto behåller åtkomsten och länet.
+      En plats utan valt län hoppas över: den har inget att prissätta och
+      har aldrig gett några tips.
     """
     from fleet import licensing, sessions
 
     if licensing.active_licenses(company_id).exists():
         return []
-    trial = active_trial(company_id) or (
+    trial = trial or active_trial(company_id) or (
         Trial.objects.filter(company_id=company_id, status=Trial.Status.ENDED)
         .order_by("-created_at").first()
     )
@@ -554,12 +566,67 @@ def continue_vehicles(company_id) -> list[dict]:
     )
     out, seen = [], set()
     for license in License.objects.filter(trial=trial, status__in=wanted).order_by("created_at"):
-        vehicle = sessions.current_vehicle(license) or (
-            license.assignments.order_by("-started_at").first().vehicle
-            if license.assignments.exists() else None
-        )
-        if vehicle is None or vehicle.plate in seen:
+        if license.assignments.exists():
+            vehicle = sessions.current_vehicle(license) or (
+                license.assignments.order_by("-started_at").first().vehicle
+            )
+            if vehicle is None or vehicle.plate in seen:
+                continue
+            seen.add(vehicle.plate)
+            out.append({
+                "kind": "vehicle", "plate": vehicle.plate, "baseCounty": license.base_county,
+                "licenseId": str(license.id),
+            })
             continue
-        seen.add(vehicle.plate)
-        out.append({"plate": vehicle.plate, "baseCounty": license.base_county})
+        if not license.base_county:
+            continue
+        out.append({
+            "kind": "membership", "plate": "", "baseCounty": license.base_county,
+            "licenseId": str(license.id),
+            "assigneeEmail": license.assignee_email,
+            "assigned": bool(license.assignee_user_id or license.assignee_email),
+        })
     return out
+
+
+def continue_specs(rows: list[dict]) -> list:
+    """`continue_vehicles` som beställningens platser -- samma som portalen skickar."""
+    from fleet import orders
+
+    return [
+        orders.VehicleSpec(
+            plate=row["plate"], base_county=row["baseCounty"],
+            continue_license_id=row["licenseId"] if row["kind"] == "membership" else "",
+        )
+        for row in rows
+    ]
+
+
+def continue_offer(company_id, trial: Trial | None = None) -> dict | None:
+    """
+    Vad fortsättningen kostar i månaden -- räknat med samma motor och samma
+    anrop som offerten i portalen (orders.plan_change -> fleet/pricing.py), så
+    att mejlet, kortet i portalen och betalsidan aldrig visar olika belopp.
+    None när det inte finns något att fortsätta med eller uträkningen fallerar:
+    hellre inget pris än fel pris.
+    """
+    import logging
+
+    from fleet import orders
+
+    rows = continue_vehicles(company_id, trial)
+    if not rows:
+        return None
+    try:
+        plan = orders.plan_change(company_id, add_vehicles=continue_specs(rows))
+    except Exception as exc:  # ett mejl eller en översikt får aldrig fällas av priset
+        logging.getLogger(__name__).warning("trials: kunde inte räkna fortsättningens pris: %s", exc)
+        return None
+    return {
+        "count": len(rows),
+        "plates": sorted(r["plate"] for r in rows if r["plate"]),
+        "counties": [r["baseCounty"] for r in rows if r["kind"] == "membership"],
+        "monthly_ore": plan.quote.next_period.amount_ore,
+        "monthly_total_ore": plan.quote.next_period.total_ore,
+        "currency": plan.quote.next_period.currency,
+    }

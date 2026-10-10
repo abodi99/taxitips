@@ -5,8 +5,9 @@ genom de riktiga vägarna -- HTTP-vyerna, signerade Stripe-webhooks mot
 (`core.notify.run_push_cycle` med en låtsassändare och `fleet/push_gate.py`).
 
     registrera i appen -> logga in -> provets notiser -> provet tar slut ->
-    betala i portalen -> köp bilar och bjud in förare -> betalningen faller,
-    paus och uppsägning
+    fortsätt med provets plats i portalen och betala -> köp bilar och bjud in
+    förare -> ge en plats till en ny e-post -> betalningen faller, paus och
+    uppsägning
 
 Varje steg har egna, noggrannare tester. Det här finns för att fånga när
 stegen var för sig fungerar men inte längre hänger ihop -- det kunden märker
@@ -354,6 +355,11 @@ class FullCustomerChainTests(ChainBase):
         for row in reminders:
             self.assertEqual(row.to_address, OWNER_EMAIL)
             self.assertIn(PORTAL_CONTINUE, row.body)
+            # Platsen från appen har ingen bil, men mejlet har ändå ett pris
+            # (förut: trial_offer None och mejl utan pris).
+            self.assertIn("i månaden exkl. moms", row.body)
+            self.assertIn("Skåne län", row.body)
+            self.assertGreater(row.payload["offer"]["monthly_ore"], 0)
         last_day = next(r for r in reminders if r.payload["stage"] == "card_missing_1d")
         self.assertIn("inom ett dygn", last_day.body)
         self.assertNotEqual(last_day.subject, reminders[0].subject)
@@ -384,18 +390,29 @@ class FullCustomerChainTests(ChainBase):
         self.assertEqual(len(ended), 1)
         self.assertEqual(ended[0].to_address, OWNER_EMAIL)
         self.assertIn(PORTAL_CONTINUE, ended[0].body)
+        self.assertIn("i månaden exkl. moms", ended[0].body)
 
         # ------------------------------------------------------------------
         # 6. Betalning i portalen: beställ, betala, allt öppnas
         # ------------------------------------------------------------------
-        # Portalens "Lägg till medlemskap": ägarens egen plats, Skåne + Västra Götaland.
-        # (Kortet "Fortsätt med provbilarna" bygger på `continueVehicles`, som bara
-        # listar provplatser med bil -- en provplats från appen har ingen.)
-        change = {"addVehicles": [
-            {"plate": "", "baseCounty": "12", "label": "", "extraCounties": ["14"], "assignSelf": True},
-        ]}
+        # Kortet "Fortsätt med provet" (portal#fortsatt, dit mejlen länkar):
+        # provets plats från appen, utan bil, med länet och priset.
+        overview = self.ok(self.call("get", "/api/fleet/company", user=owner, email=OWNER_EMAIL))
+        self.assertEqual(overview["continueVehicles"], [{
+            "kind": "membership", "plate": "", "baseCounty": "12",
+            "licenseId": seat["licenseId"], "assigneeEmail": "", "assigned": True,
+        }])
+        offer = overview["continueOffer"]
+        self.assertEqual(offer["monthlyTotalOre"], ended[0].payload["offer"]["monthly_total_ore"])
+        # Samma ändring som portalens continueChange() skickar.
+        change = {"addVehicles": [{
+            "plate": "", "baseCounty": "12", "label": "", "extraCounties": [],
+            "continueLicenseId": seat["licenseId"],
+        }]}
         quote = self.ok(self.call("post", "/api/fleet/quote", change, user=owner, email=OWNER_EMAIL))
         self.assertGreater(quote["now"]["totalOre"], 0)
+        # Kortet, mejlet och offerten visar samma månadsbelopp (fleet/pricing.py).
+        self.assertEqual(quote["nextPeriod"]["totalOre"], offer["monthlyTotalOre"])
         placed = self.ok(self.call(
             "post", "/api/fleet/orders", {**change, "accepted": True}, user=owner, email=OWNER_EMAIL,
         ))
@@ -445,10 +462,15 @@ class FullCustomerChainTests(ChainBase):
         self.assertEqual(overview["features"]["plan"], "full")
         self.assertEqual(overview["features"]["locked"], [])
 
-        # Den betalda platsen är ägarens; appen tar den (provplatsen är avslutad).
+        # Den betalda platsen tog över provets: samma konto, samma län. Provet
+        # var slut, så provplatsen var avslutad och den betalda är en ny rad
+        # med samma innehavare -- appen tar den.
         paid_seat = License.objects.get(company_id=company_id, status=License.Status.ACTIVE)
+        self.assertNotEqual(str(paid_seat.id), seat["licenseId"])
         self.assertEqual(str(paid_seat.assignee_user_id), owner)
-        self.assertEqual(access.license_counties(paid_seat.id), ("12", "14"))
+        self.assertEqual(access.license_counties(paid_seat.id), ("12",))
+        self.assertEqual(overview["continueVehicles"], [])
+        self.assertIsNone(overview["continueOffer"])
         self.ok(self.call("post", "/api/fleet/membership-session", {
             "licenseId": str(paid_seat.id), "deviceId": str(owner_device.id),
         }, user=owner, email=OWNER_EMAIL))
@@ -456,26 +478,28 @@ class FullCustomerChainTests(ChainBase):
         self.assertTrue(feed["entitled"])
         self.assertEqual(feed["features"]["plan"], "full")
         me = self.ok(self.call("get", "/api/fleet/me", device=owner_phone["device_token"]))
-        self.assertEqual(me["counties"], ["12", "14"])
+        self.assertEqual(me["counties"], ["12"])
 
-        ferry = self.tip("14", kind="ferry", mode="ferry")
+        ferry = self.tip("12", kind="ferry", mode="ferry")
         flight = self.tip("12", kind="flight", mode="flight")
-        vgr = self.tip("14")
+        self.tip("14")  # Västra Götaland: inte platsens län
         self.tip("01")
         self.push_cycle()
         # Tipset från när provet var slut ligger kvar omarkerat (ingen telefon
         # fick väckas då) och når ägaren nu, medan det fortfarande gäller.
         self.assertEqual(
             self.pushed(owner_device),
-            {str(ferry.id), str(flight.id), str(vgr.id), str(transit.id)},
+            {str(ferry.id), str(flight.id), str(transit.id)},
         )
 
         # ------------------------------------------------------------------
-        # 7. Två bilar till, två förare inbjudna med e-post
+        # 7. Två bilar och en plats till, två förare inbjudna med e-post
         # ------------------------------------------------------------------
         cars = {"addVehicles": [
             {"plate": "KED111", "baseCounty": "12", "label": "Bil 1", "extraCounties": []},
             {"plate": "KED222", "baseCounty": "12", "label": "Bil 2", "extraCounties": ["14"]},
+            # "Lägg till medlemskap" utan tilldelning: ges bort i steg 7b.
+            {"plate": "", "baseCounty": "14", "label": "", "extraCounties": []},
         ]}
         upgrade = self.ok(self.call(
             "post", "/api/fleet/orders", {**cars, "accepted": True}, user=owner, email=OWNER_EMAIL,
@@ -551,7 +575,60 @@ class FullCustomerChainTests(ChainBase):
         self.push_cycle()
         self.assertEqual(self.pushed(anna_phone), {str(skane_tip.id)})
         self.assertEqual(self.pushed(bo_phone), {str(skane_tip.id), str(vgr_tip.id)})
-        self.assertEqual(self.pushed(owner_device), {str(skane_tip.id), str(vgr_tip.id)})
+        self.assertEqual(self.pushed(owner_device), {str(skane_tip.id)})
+
+        # ------------------------------------------------------------------
+        # 7b. Ägaren ger en plats till en ny e-post (portalens "Bjud in ett konto")
+        # ------------------------------------------------------------------
+        newcomer = "cecilia@forare.test"
+        free_seat = License.objects.get(
+            company_id=company_id, status=License.Status.ACTIVE, base_county="14",
+            assignee_user_id__isnull=True, assignee_email="",
+        )
+        self.ok(self.call("post", f"/api/fleet/memberships/{free_seat.id}/assign", {
+            "mode": "email", "email": newcomer,
+        }, user=owner, email=OWNER_EMAIL))
+        invitation = self.outbox("membership_invite", to_address=newcomer)
+        self.assertEqual(len(invitation), 1, "ingen fick veta att platsen väntade")
+        link = self.auth_links[-1]
+        self.assertEqual(link["email"], newcomer)
+        self.assertEqual(link["redirect_to"], DRIVER_PAGE)
+        self.assertIn(f"redirect_to={DRIVER_PAGE}", invitation[0].body)
+        self.assertEqual(invitation[0].payload["button"]["label"], "Välj lösenord")
+        self.assertIn("Västra Götalands län", invitation[0].body)
+        # Mejlet går till en förare: inga priser, inga köplänkar (§9c).
+        for word in ("moms", "kr i månaden", "portal", "stripe", "betal", "pris"):
+            self.assertNotIn(word, invitation[0].body.lower())
+        # "Skicka igen": ett nytt mejl med en ny länk.
+        self.ok(self.call(
+            "post", f"/api/fleet/memberships/{free_seat.id}/resend-invite", {}, user=owner, email=OWNER_EMAIL,
+        ))
+        self.assertEqual(len(self.outbox("membership_invite", to_address=newcomer)), 2)
+        self.assertEqual(self.auth_links[-1]["email"], newcomer)
+        cecilia = self.auth_links[-1]["user_id"]
+        # Innan hen loggat in: ingenting.
+        self.assertFalse(self.ok(self.call("get", "/api/alerts", user=cecilia, email=newcomer))["entitled"])
+        # Hen har valt lösenord via länken och loggar in i appen: listan löser
+        # in platsen (claim_for_email), sedan tar appen den.
+        mine = self.ok(self.call("get", "/api/fleet/memberships", user=cecilia, email=newcomer))
+        self.assertEqual([m["licenseId"] for m in mine["memberships"]], [str(free_seat.id)])
+        self.assertEqual(mine["memberships"][0]["counties"], ["14"])
+        cecilia_phone = self.ok(self.call("post", "/api/device/session", {
+            "installation_id": "install-cecilia-01", "platform": "android",
+            "push_token": "fcm-cecilia", "label": "Cecilias telefon",
+        }, user=cecilia, email=newcomer))
+        cecilia_device = Device.objects.get(id=cecilia_phone["device_id"])
+        self.ok(self.call("post", "/api/fleet/membership-session", {
+            "licenseId": str(free_seat.id), "deviceId": str(cecilia_device.id),
+        }, user=cecilia, email=newcomer))
+        feed = self.ok(self.call("get", "/api/alerts", user=cecilia, email=newcomer))
+        self.assertTrue(feed["entitled"], feed)
+        self.assertEqual(feed["features"]["plan"], "full")
+        vgr_only = self.tip("14")
+        skane_only = self.tip("12", kind="flight", mode="flight")
+        self.push_cycle()
+        self.assertEqual(self.pushed(cecilia_device), {str(vgr_only.id)})
+        self.assertIn(str(skane_only.id), self.pushed(owner_device))
 
         # ------------------------------------------------------------------
         # 8. Paus, betalningsfel och uppsägning
@@ -793,3 +870,158 @@ class ChainFocusedTests(ChainBase):
         # Utan val: portalen, som också är en godkänd sida.
         self.assertEqual(calls[3]["redirect_to"], "https://taxitips.se/portal")
         self.assertEqual(default["kind"], "recovery")
+
+
+class TrialSeatContinuationTests(ChainBase):
+    """
+    "Fortsätt med provet" för en kund som registrerat sig i appen: provplatsen
+    har ingen bil (§14). Förut var `continueVehicles` tom för den, kortet i
+    portalen visade ingenting och mejlen saknade pris.
+    """
+
+    def start_app_trial(self, owner):
+        reg = self.ok(self.call("post", "/api/fleet/register", {
+            "orgNumber": ORG, "contactName": "Ali", "contactPhone": "070-812 34 91",
+        }, user=owner, email=OWNER_EMAIL), status=201)
+        seat = self.ok(self.call(
+            "post", "/api/fleet/memberships/trial", {"baseCounty": "12"}, user=owner, email=OWNER_EMAIL,
+        ))["membership"]
+        self.ok(self.call("post", "/api/fleet/membership-session", {
+            "licenseId": seat["licenseId"],
+        }, user=owner, email=OWNER_EMAIL))
+        return reg["companyId"], seat
+
+    def test_card_and_mail_show_the_seat_and_the_same_price(self):
+        from fleet import notifications
+
+        owner = str(uuid.uuid4())
+        company_id, seat = self.start_app_trial(owner)
+        overview = self.ok(self.call("get", "/api/fleet/company", user=owner, email=OWNER_EMAIL))
+        self.assertEqual(len(overview["continueVehicles"]), 1)
+        row = overview["continueVehicles"][0]
+        self.assertEqual((row["kind"], row["licenseId"], row["baseCounty"]), ("membership", seat["licenseId"], "12"))
+        offer = overview["continueOffer"]
+        self.assertGreater(offer["monthlyOre"], 0)
+        mail = notifications.trial_ending(
+            company_id, OWNER_EMAIL, Trial.objects.get(company_id=company_id), stage="3d",
+        )
+        self.assertEqual(mail.payload["offer"]["monthly_ore"], offer["monthlyOre"])
+        self.assertIn("er plats (Skåne län)", mail.body)
+
+    def test_commit_during_the_trial_keeps_the_same_seat_for_the_same_person(self):
+        from fleet import orders
+        from fleet.models import MembershipSession
+
+        def collect(order, *, trial_end, success_url, cancel_url):
+            url = f"https://checkout.stripe.com/c/{order.id}"
+            Order.objects.filter(id=order.id).update(stripe_payment_url=url)
+            return url
+
+        self._patch("fleet.stripe_sync.collect_trial_commit", side_effect=collect)
+        owner = str(uuid.uuid4())
+        company_id, seat = self.start_app_trial(owner)
+        change = {"addVehicles": [{
+            "plate": "", "baseCounty": "12", "label": "", "extraCounties": [],
+            "continueLicenseId": seat["licenseId"],
+        }]}
+        committed = self.ok(self.call(
+            "post", "/api/fleet/trial/commit", {**change, "accepted": True}, user=owner, email=OWNER_EMAIL,
+        ))
+        self.assertTrue(committed["paymentUrl"].startswith("https://checkout.stripe.com/"))
+        order = Order.objects.get(id=committed["orderId"])
+        self.assertTrue(order.request["trial_commit"])
+        self.assertEqual(order.request["addVehicles"][0]["continueLicenseId"], seat["licenseId"])
+
+        # Stripe drar vid provslut: beställningen verkställs.
+        orders.mark_order_paid(order)
+        license = License.objects.get(id=seat["licenseId"])
+        self.assertEqual(license.status, License.Status.ACTIVE)
+        self.assertEqual(str(license.assignee_user_id), owner)
+        self.assertEqual(access.license_counties(license.id), ("12",))
+        self.assertEqual(License.objects.filter(company_id=company_id).count(), 1, "en andra plats skapades")
+        # Appens öppna session på platsen gäller fortfarande: personen märker inget.
+        self.assertTrue(MembershipSession.objects.filter(
+            license_id=license.id, user_id=owner, ended_at__isnull=True,
+        ).exists())
+        self.assertEqual(Trial.objects.get(company_id=company_id).status, Trial.Status.CONVERTED)
+
+    def test_only_the_companys_own_trial_seat_can_be_continued(self):
+        owner = str(uuid.uuid4())
+        self.start_app_trial(owner)
+        other = self.full_setup()
+        for bogus in (str(other["license"].id), "inte-ett-id", str(uuid.uuid4())):
+            response = self.call("post", "/api/fleet/quote", {"addVehicles": [{
+                "plate": "", "baseCounty": "12", "continueLicenseId": bogus,
+            }]}, user=owner, email=OWNER_EMAIL)
+            self.assertEqual(response.status_code, 404, response.content)
+            self.assertEqual(response.json()["reason"], "unknown_trial_seat")
+
+
+class MembershipInvitationTests(ChainBase):
+    """En plats som tilldelas en e-post ger ett mejl med lösenordslänk (som förarinbjudan)."""
+
+    def paid_seat(self):
+        data = self.full_setup()
+        from fleet import licensing
+
+        seat = licensing.create_membership_license(company_id=data["company"].id, base_county="01")
+        return data, seat
+
+    def test_a_known_account_is_bound_and_still_told(self):
+        from fleet.models import KnownAccount
+
+        data, seat = self.paid_seat()
+        known = uuid.uuid4()
+        KnownAccount.objects.create(user_id=known, email="kalle@forare.test", last_seen_at=timezone.now())
+        self.ok(self.call("post", f"/api/fleet/memberships/{seat.id}/assign", {
+            "mode": "email", "email": "Kalle@Forare.test",
+        }, user=str(data["owner"].user_id)))
+        seat.refresh_from_db()
+        self.assertEqual(seat.assignee_user_id, known)
+        mail = self.outbox("membership_invite", to_address="kalle@forare.test")
+        self.assertEqual(len(mail), 1)
+        self.assertIn("Stockholms län", mail[0].body)
+        self.assertEqual(self.auth_links[-1]["redirect_to"], DRIVER_PAGE)
+        # Bunden direkt: inget kvar att skicka igen.
+        again = self.call(
+            "post", f"/api/fleet/memberships/{seat.id}/resend-invite", {}, user=str(data["owner"].user_id),
+        )
+        self.assertEqual(again.status_code, 409, again.content)
+
+    def test_reassigning_revokes_the_first_address(self):
+        data, seat = self.paid_seat()
+        owner = str(data["owner"].user_id)
+        for email in ("forst@forare.test", "sedan@forare.test"):
+            self.ok(self.call("post", f"/api/fleet/memberships/{seat.id}/assign", {
+                "mode": "email", "email": email,
+            }, user=owner))
+            self.assertEqual(len(self.outbox("membership_invite", to_address=email)), 1)
+        first = str(uuid.uuid4())
+        mine = self.ok(self.call("get", "/api/fleet/memberships", user=first, email="forst@forare.test"))
+        self.assertEqual(mine["memberships"], [])
+        # Borttagen tilldelning: inget att skicka igen.
+        self.ok(self.call("post", f"/api/fleet/memberships/{seat.id}/unassign", {}, user=owner))
+        again = self.call("post", f"/api/fleet/memberships/{seat.id}/resend-invite", {}, user=owner)
+        self.assertEqual(again.status_code, 409, again.content)
+
+    def test_a_blocked_address_is_not_invited(self):
+        from fleet.models import AccountBlock
+
+        data, seat = self.paid_seat()
+        AccountBlock.objects.create(kind=AccountBlock.Kind.EMAIL, value="sparrad@forare.test", reason="test")
+        refused = self.call("post", f"/api/fleet/memberships/{seat.id}/assign", {
+            "mode": "email", "email": "sparrad@forare.test",
+        }, user=str(data["owner"].user_id))
+        self.assertEqual(refused.status_code, 403, refused.content)
+        self.assertEqual(self.outbox("membership_invite"), [])
+
+    def test_staff_assignment_in_admin_sends_the_same_mail(self):
+        data, seat = self.paid_seat()
+        staff = str(uuid.uuid4())
+        StaffRole.objects.create(user_id=staff, role=StaffRole.Role.PLATFORM_ADMIN)
+        self.ok(self.call("post", f"/api/admin/licenses/{seat.id}/assign", {
+            "email": "ny@forare.test",
+        }, user=staff))
+        mail = self.outbox("membership_invite", to_address="ny@forare.test")
+        self.assertEqual(len(mail), 1)
+        self.assertIn(f"redirect_to={DRIVER_PAGE}", mail[0].body)

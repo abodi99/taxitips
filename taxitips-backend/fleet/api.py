@@ -595,6 +595,7 @@ def company_overview(request):
         ).order_by("effective_at")
     ]
 
+    continue_rows = trials.continue_vehicles(company_id)
     return _json(request, {
         "ok": True,
         "company": {
@@ -648,8 +649,16 @@ def company_overview(request):
         # och låsta kategorier läser det härifrån (fleet/features.py).
         "features": features.for_company(company_id, now).as_dict(),
         "licenses": rows,
-        # "Fortsätt med provbilarna" -- dit mejlen före och efter provslut länkar.
-        "continueVehicles": trials.continue_vehicles(company_id),
+        # "Fortsätt med provet" -- dit mejlen före och efter provslut länkar.
+        # Provbilar och kontoplatser från appen (fleet/trials.py).
+        "continueVehicles": continue_rows,
+        # Månadspriset för fortsättningen, från fleet/pricing.py (samma uträkning
+        # som mejlen och offerten). Bara för den som får se priser -- appen
+        # visar aldrig ett pris (§9c), och föraren har inte den rätten.
+        "continueOffer": (
+            _continue_offer_view(company_id, continue_rows)
+            if Perm.VIEW_BILLING in principal.permissions else None
+        ),
         "licenseCount": licensing.billable_license_count(company_id),
         "extraCountyCount": licensing.extra_county_count(company_id, now),
         "pendingChanges": pending,
@@ -666,6 +675,20 @@ def company_overview(request):
 # ---------------------------------------------------------------------------
 # Bilar och telefoner
 # ---------------------------------------------------------------------------
+
+
+def _continue_offer_view(company_id, rows) -> dict | None:
+    if not rows:
+        return None
+    offer = trials.continue_offer(company_id)
+    if not offer:
+        return None
+    return {
+        "count": offer["count"],
+        "currency": offer["currency"],
+        "monthlyOre": offer["monthly_ore"],
+        "monthlyTotalOre": offer["monthly_total_ore"],
+    }
 
 
 def _access_summary(company_id, now) -> dict:
@@ -900,7 +923,11 @@ def membership_assign(request, license_id):
     body = _body(request)
     mode = str(body.get("mode") or "self").strip().lower()
     if mode == "email":
-        email = body.get("email") or body.get("assignee_email") or ""
+        email = membership.normalize_email(body.get("email") or body.get("assignee_email") or "")
+        # Samma regler som förarinbjudan: en spärrad adress bjuds inte in, och
+        # mejlen bromsas per företag (personen får ett mejl med lösenordslänk).
+        accounts.assert_email_allowed(email)
+        ratelimit.enforce(ratelimit.DRIVER_INVITE_SEND, str(principal.company_id))
         updated = membership.assign_to_email(
             license=license, email=email, actor_user_id=principal.user_id,
         )
@@ -909,6 +936,27 @@ def membership_assign(request, license_id):
             license=license, user_id=principal.user_id, actor_user_id=principal.user_id,
         )
     return _json(request, {"ok": True, "membership": membership.view(updated)})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def membership_resend_invite(request, license_id):
+    """
+    POST /api/fleet/memberships/<id>/resend-invite -- "Skicka igen".
+
+    Nytt mejl med en ny lösenordslänk till e-posten som platsen väntar på.
+    Återkalla = ta bort tilldelningen (`unassign`) eller tilldela någon annan:
+    då löser den gamla adressen inte längre in något.
+    """
+    principal = _principal(request, Perm.MANAGE_DEVICES)
+    license = _company_license(principal, license_id)
+    if license.assignee_email:
+        accounts.assert_email_allowed(license.assignee_email)
+    ratelimit.enforce(ratelimit.DRIVER_INVITE_RESEND, f"membership:{license.id}")
+    ratelimit.enforce(ratelimit.DRIVER_INVITE_SEND, str(principal.company_id))
+    membership.resend_invite(license, actor_user_id=principal.user_id)
+    return _json(request, {"ok": True, "membership": membership.view(license)})
 
 
 @csrf_exempt
@@ -1208,6 +1256,8 @@ def _plan_from_body(company_id, body: dict, now=None) -> orders.ChangePlan:
             # (kontot som köper, eller en annan e-post) följer med ordern.
             assign_self=bool(v.get("assignSelf")),
             assignee_email=(v.get("assigneeEmail") or "").strip(),
+            # "Fortsätt med provet": provplatsen (utan bil) som platsen tar över.
+            continue_license_id=str(v.get("continueLicenseId") or "").strip(),
         )
         for v in (body.get("addVehicles") or [])
     ]

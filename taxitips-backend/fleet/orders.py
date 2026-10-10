@@ -118,9 +118,14 @@ class VehicleSpec:
     # Varken eller = otilldelad, den tilldelas i portalen efteråt.
     assign_self: bool = False
     assignee_email: str = ""
+    # Provplatsen (en licens utan bil) som den här platsen FORTSÄTTER: kundens
+    # "Fortsätt med provet" i portalen. Den betalda platsen tar över provets
+    # plats -- samma konto behåller åtkomsten och länet följer med -- i stället
+    # för att en ny, otilldelad plats skapas (`apply_order`).
+    continue_license_id: str = ""
 
     def as_dict(self) -> dict:
-        return {
+        out = {
             "plate": licensing.normalize_plate(self.plate),
             "baseCounty": self.base_county,
             "label": self.label,
@@ -128,6 +133,10 @@ class VehicleSpec:
             "assignSelf": self.assign_self,
             "assigneeEmail": self.assignee_email,
         }
+        if self.continue_license_id:
+            # Bara när den är satt: äldre beställningars request är oförändrad.
+            out["continueLicenseId"] = str(self.continue_license_id)
+        return out
 
 
 @dataclass
@@ -195,6 +204,7 @@ def plan_change(
         licensing.assert_county_available(spec.base_county)
         for county in spec.extra_counties:
             licensing.assert_county_available(county)
+    _check_continued_seats(company_id, add_vehicles)
     for item in add_counties:
         licensing.assert_county_available(item.get("county"))
     for item in base_county_changes:
@@ -291,6 +301,44 @@ def plan_change(
         current_extra_counties=current_extra, new_extra_counties=new_extra,
         effective_at=quote.effective_at,
     )
+
+
+def continued_seat(company_id, license_id) -> License | None:
+    """
+    Provplatsen utan bil som en beställning fortsätter, eller None.
+
+    Bara bolagets egen, bara en plats som hört till ett prov, och bara en
+    kontoplats (en provbil fortsätter via sitt registreringsnummer).
+    """
+    import uuid as _uuid
+
+    try:
+        _uuid.UUID(str(license_id))
+    except (TypeError, ValueError):
+        return None
+    seat = License.objects.filter(
+        id=license_id, company_id=company_id, trial__isnull=False,
+    ).first()
+    if seat is None or seat.assignments.exists():
+        return None
+    return seat
+
+
+def _check_continued_seats(company_id, add_vehicles: list[VehicleSpec]) -> None:
+    seen = set()
+    for spec in add_vehicles:
+        seat_id = str(spec.continue_license_id or "")
+        if not seat_id:
+            continue
+        if spec.plate or seat_id in seen:
+            raise OrderError("invalid_change", "Provplatsen kan bara fortsätta en gång.")
+        seen.add(seat_id)
+        seat = continued_seat(company_id, seat_id)
+        if seat is None or seat.status not in (License.Status.TRIAL, License.Status.CANCELED):
+            raise OrderError(
+                "unknown_trial_seat", "Provplatsen finns inte eller har redan fortsatt.",
+                status=404,
+            )
 
 
 def _extra_counties_on(license_ids: list[str], now) -> int:
@@ -554,6 +602,52 @@ def _assign_new_license(license, spec: dict, actor_user_id, now) -> None:
         )
 
 
+def _continue_trial_seat(order: Order, spec: dict, now) -> License | None:
+    """
+    Provplatsen utan bil går över i den betalda platsen.
+
+    Under provet (platsen är fortfarande `trial`) byter den bara status, som en
+    provbil som beställs vidare: samma licens, samma konto, samma län och samma
+    öppna app-session -- personen märker ingenting. Efter provslut är platsen
+    avslutad (trials.end_trial); då blir det en ny plats i samma län, tilldelad
+    samma konto (eller samma väntande e-post), så att samma person fortsätter.
+    """
+    seat = continued_seat(order.company_id, spec.get("continueLicenseId"))
+    if seat is None:
+        return None
+    if seat.status == License.Status.TRIAL:
+        License.objects.filter(id=seat.id).update(status=License.Status.ACTIVE)
+        # Län som provades men inte beställdes följer inte med (som för provbilen).
+        LicenseCounty.objects.filter(
+            license=seat, kind=LicenseCounty.Kind.EXTRA
+        ).exclude(county_code__in=list(spec.get("extraCounties", []))).exclude(
+            active_to__lte=now
+        ).update(active_to=now)
+        seat.refresh_from_db()
+        audit.record(
+            "trial_seat_continued", company_id=order.company_id, actor_kind="system",
+            subject_type="license", subject_id=seat.id,
+            detail={"order_id": str(order.id), "reused": True},
+        )
+        return seat
+    from fleet import membership
+
+    license = licensing.create_membership_license(
+        company_id=order.company_id,
+        base_county=seat.base_county or spec.get("baseCounty", ""),
+        status=License.Status.ACTIVE, actor_user_id=order.created_by, now=now,
+    )
+    membership.carry_over_assignee(
+        source=seat, target=license, actor_user_id=order.created_by, now=now,
+    )
+    audit.record(
+        "trial_seat_continued", company_id=order.company_id, actor_kind="system",
+        subject_type="license", subject_id=license.id,
+        detail={"order_id": str(order.id), "reused": False, "from_license": str(seat.id)},
+    )
+    return license
+
+
 def apply_order(order: Order, *, now=None) -> Order:
     """
     Verkställer en BETALD beställning: skapar bilar och licenser, aktiverar
@@ -588,11 +682,17 @@ def apply_order(order: Order, *, now=None) -> Order:
         if not plate:
             # Kontobaserat medlemskap (§14): en plats för ett KONTO, ingen bil.
             # Portalen köper "ett län" -- man anger inget registreringsnummer,
-            # och platsen hör till kontot tills vidare.
-            license = licensing.create_membership_license(
-                company_id=locked.company_id, base_county=spec.get("baseCounty", ""),
-                status=License.Status.ACTIVE, actor_user_id=locked.created_by, now=now,
+            # och platsen hör till kontot tills vidare. "Fortsätt med provet"
+            # tar över provets plats i stället för att skapa en ny.
+            license = (
+                _continue_trial_seat(locked, spec, now)
+                if spec.get("continueLicenseId") else None
             )
+            if license is None:
+                license = licensing.create_membership_license(
+                    company_id=locked.company_id, base_county=spec.get("baseCounty", ""),
+                    status=License.Status.ACTIVE, actor_user_id=locked.created_by, now=now,
+                )
         else:
             vehicle = licensing.create_vehicle(
                 company_id=locked.company_id, plate=plate,

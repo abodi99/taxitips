@@ -237,8 +237,11 @@ function continueChange() {
   const cars = state.data?.continueVehicles ?? [];
   if (!cars.length) return null;
   return {
+    // En kontoplats från appen (ingen bil) bär sitt licens-id: den betalda
+    // platsen tar över provets plats, så att samma konto behåller åtkomsten.
     addVehicles: cars.map((c) => ({
       plate: c.plate, baseCounty: c.baseCounty, label: "", extraCounties: [],
+      ...(c.kind === "membership" ? { continueLicenseId: c.licenseId } : {}),
     })),
   };
 }
@@ -583,7 +586,10 @@ async function inviteAccount(form) {
   try {
     await api.assignMembership(licenseId, { mode: "email", email });
     await refresh();
-    showNotice(`Medlemskapet väntar nu på ${email}. Personen loggar in i appen och tar platsen.`);
+    showNotice(
+      `Vi har mejlat en inbjudan till ${email}. Personen väljer lösenord via länken ` +
+        "och loggar in i appen -- då är platsen hens.",
+    );
   } catch (error) {
     showError(error);
   } finally {
@@ -688,6 +694,12 @@ async function handle(action, ctx) {
       await api.assignMembership(ctx.license, { mode: "self" });
       await refresh();
       showNotice("Platsen ligger på ditt konto.");
+      return;
+    }
+    case "resend-membership-invite": {
+      await api.resendMembershipInvite(ctx.license);
+      await refresh();
+      showNotice(`Inbjudan är skickad igen till ${ctx.email || "personen"}.`);
       return;
     }
     case "unassign-membership": {

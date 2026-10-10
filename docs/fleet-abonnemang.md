@@ -622,6 +622,31 @@ licenses/<id>/assign` (adminwebben, `fleet/admin_api.py:assign_membership`,
 samma väg som kundens). Appen bjuder aldrig in: den väljer bara län och tar
 platsen.
 
+**Den som får platsen får ett mejl** (2026-10-11, `membership.send_invite`,
+utkorgskategori `membership_invite`). Samma väg som förarinbjudan: en
+Supabase-länk (`auth_admin.invite_link`, `invite` eller `recovery` för ett
+befintligt konto) till `taxitips.se/forare`, där personen väljer lösenord och
+sedan loggar in i appen -- `claim_for_email` binder platsen (GET
+`/api/fleet/memberships` eller första anropet med token). Inget eget företag
+behövs. Mejlet har **inga priser och inga köplänkar** (det går till en förare).
+Gäller portalen, adminens tilldelning och en order med `assigneeEmail`. "Skicka
+igen": `POST /api/fleet/memberships/<id>/resend-invite` (ny länk, nytt mejl,
+samma bromsar som förarinbjudan). Återkalla = ta bort tilldelningen eller ge
+platsen till någon annan; den gamla adressen löser då inte in något. En spärrad
+adress nekas (403) och får inget mejl. Ett konto som bara har en plats (inte
+`CompanyMember`) registrerar telefonen för notiser med `/api/device/session`
+mot platsens bolag.
+
+**"Fortsätt med provet" för en plats från appen** (2026-10-11). Provplatsen utan
+bil listas i `continueVehicles` (`kind: membership`, `licenseId`, `baseCounty`;
+en plats utan valt län hoppas över) och portalen visar månadspriset ur
+`continueOffer` (samma `trials.continue_offer` -> `orders.plan_change` ->
+fleet/pricing.py som mejlen; bara med VIEW_BILLING). Beställningen bär
+`continueLicenseId`: under provet byter platsen bara status till `active`
+(samma licens, konto, län och app-session); efter provslut skapas en ny plats i
+samma län med samma innehavare. Provmejlen ("Provperioden slutar snart", "Spara
+kort ..." och "Provperioden är slut") har därmed prisraden även utan provbil.
+
 Migreringen `fleet/0024` är EXPAND: bara nya kolumner och en ny tabell. Inga
 befintliga rader får en session, så åtkomsten beter sig exakt som förut tills
 appen börjar ta en session. Kolumnen backfillas från aktiva godkända telefoner

@@ -117,6 +117,8 @@ export const api = {
     request(`/api/fleet/memberships/${licenseId}/assign`, { method: "POST", body }),
   unassignMembership: (licenseId) =>
     request(`/api/fleet/memberships/${licenseId}/unassign`, { method: "POST", body: {} }),
+  resendMembershipInvite: (licenseId) =>
+    request(`/api/fleet/memberships/${licenseId}/resend-invite`, { method: "POST", body: {} }),
   setMembershipCounty: (licenseId, county) =>
     request(`/api/fleet/memberships/${licenseId}/county`, {
       method: "POST",

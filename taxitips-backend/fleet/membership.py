@@ -6,7 +6,9 @@ Det nya är vem som håller den: i stället för att knytas till en registrerad 
 tilldelas medlemskapet ett konto -- `assignee_user_id`. Ägaren gör det på sig
 själv (`assign_to_self`) eller tilldelar det till någon annan
 (`assign_to_email`, som löses in när kontot med den adressen loggar in:
-`claim_for_email`). Länen väljs med `set_county` -- provet byter direkt, en
+`claim_for_email`). Den som får platsen får ett mejl med en länk där hen
+väljer lösenord (`send_invite`, samma väg som förarinbjudan), så att en person
+utan konto kan logga in i appen utan att registrera ett eget företag. Länen väljs med `set_county` -- provet byter direkt, en
 betald licens byter via en beställning (fleet/orders.py), samma regel som förut.
 
 **En app-session per konto.** Att "ta" medlemskapet i appen är en rad i
@@ -20,6 +22,7 @@ oförändrade. Den här modulen rör aldrig fleet/pricing.py eller Stripe.
 
 from __future__ import annotations
 
+import logging
 import re
 
 from django.db import transaction
@@ -27,6 +30,8 @@ from django.utils import timezone
 
 from fleet import audit, licensing
 from fleet.models import License, LicenseCounty, MembershipSession
+
+log = logging.getLogger(__name__)
 
 _EMAIL = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
@@ -131,28 +136,122 @@ def assign_to_self(*, license: License, user_id, email: str = "", actor_user_id=
 
 
 @transaction.atomic
-def assign_to_email(*, license: License, email: str, actor_user_id=None, now=None) -> License:
+def assign_to_email(
+    *, license: License, email: str, actor_user_id=None, now=None, notify: bool = True,
+) -> License:
     """
     Tilldela medlemskapet till någon annans e-post. Kontot kan redan finnas --
     då binds det direkt om vi känner igen adressen -- annars väntar det tills
     personen loggar in (`claim_for_email`).
+
+    Personen får ett mejl i båda fallen (`send_invite`): utan det visste ingen
+    att platsen väntade, och den som saknade konto kom inte in utan att
+    registrera ett nytt företag. `notify=False` bara när platsen flyttas utan
+    att någon ny bjuds in (en fortsättning efter provet).
     """
     email = normalize_email(email)
     now = now or timezone.now()
     known = _known_user_for_email(email)
     if known is not None:
-        return _assign(license=license, user_id=known, email=email, actor_user_id=actor_user_id, now=now, via="email_known")
-    _settle_previous_sessions(license, reason=MembershipSession.EndReason.UNASSIGNED, now=now)
-    License.objects.filter(id=license.id).update(
-        assignee_user_id=None, assignee_email=email, assigned_at=now, assigned_by=actor_user_id,
-    )
-    license.refresh_from_db()
-    audit.record(
-        "membership_assigned", company_id=license.company_id, actor_user_id=actor_user_id,
-        actor_kind="admin", subject_type="license", subject_id=license.id,
-        detail={"assignee_email": email, "pending": True},
-    )
+        license = _assign(license=license, user_id=known, email=email, actor_user_id=actor_user_id, now=now, via="email_known")
+    else:
+        _settle_previous_sessions(license, reason=MembershipSession.EndReason.UNASSIGNED, now=now)
+        License.objects.filter(id=license.id).update(
+            assignee_user_id=None, assignee_email=email, assigned_at=now, assigned_by=actor_user_id,
+        )
+        license.refresh_from_db()
+        audit.record(
+            "membership_assigned", company_id=license.company_id, actor_user_id=actor_user_id,
+            actor_kind="admin", subject_type="license", subject_id=license.id,
+            detail={"assignee_email": email, "pending": True},
+        )
+    if notify:
+        send_invite(license, email=email, actor_user_id=actor_user_id, now=now)
     return license
+
+
+# ---------------------------------------------------------------------------
+# Inbjudan: mejlet till den som fått platsen
+# ---------------------------------------------------------------------------
+
+
+def _password_link(email: str) -> str:
+    """
+    Länken där personen väljer lösenord -- samma Supabase-länk som
+    förarinbjudan (fleet/driver_invites.py): `invite` skapar kontot, ett konto
+    som redan finns får `recovery`. Landar på taxitips.se/forare. Tom sträng
+    utan Supabase Auth (lokalt) eller om anropet fallerar; mejlet hänvisar då
+    till "Glömt lösenord?" i appen, som ger en likadan länk.
+    """
+    from fleet import auth_admin, driver_invites
+
+    if not auth_admin.configured():
+        return ""
+    try:
+        return auth_admin.invite_link(email, driver_invites._redirect_url()).url
+    except auth_admin.AuthAdminError as exc:
+        log.warning("membership: ingen lösenordslänk för %s: %s", email, exc)
+        return ""
+
+
+def send_invite(license: License, *, email: str, actor_user_id=None, now=None):
+    """
+    Köar inbjudningsmejlet till den som fått platsen (fleet/notifications.py:
+    `membership_invite`). Inga priser och inga köplänkar -- mejlet går till en
+    förare. Varje utskick är ett eget mejl med en ny länk ("Skicka igen").
+    En spärrad adress får inget mejl.
+    """
+    from billing.models import Company
+    from fleet import accounts, notifications
+    from fleet.models import OutboxMessage
+
+    now = now or timezone.now()
+    if accounts.account_block(email=email) is not None:
+        return None
+    send_no = OutboxMessage.objects.filter(
+        category="membership_invite", payload__licenseId=str(license.id), to_address__iexact=email,
+    ).count() + 1
+    company = Company.objects.filter(id=license.company_id).first()
+    row = notifications.membership_invite(
+        license, email=email, company_name=company.name if company else "",
+        counties=county_codes(license, now=now), link=_password_link(email), send_no=send_no,
+    )
+    audit.record(
+        "membership_invite_sent", company_id=license.company_id, actor_user_id=actor_user_id,
+        actor_kind="admin", subject_type="license", subject_id=license.id,
+        detail={"email": email, "send_no": send_no},
+    )
+    return row
+
+
+def resend_invite(license: License, *, actor_user_id=None, now=None):
+    """"Skicka igen": nytt mejl och ny länk till en tilldelning som inte lösts in än."""
+    if license.assignee_user_id or not license.assignee_email:
+        raise MembershipError(
+            "nothing_to_resend", "Platsen väntar inte på någon inbjudan.", status=409,
+        )
+    if license.status not in OPEN_STATUSES:
+        raise MembershipError("membership_closed", "Medlemskapet är avslutat.", status=409)
+    return send_invite(license, email=license.assignee_email, actor_user_id=actor_user_id, now=now)
+
+
+def carry_over_assignee(*, source: License, target: License, actor_user_id=None, now=None) -> License:
+    """
+    Den nya platsen får samma innehavare som den gamla (provplatsen som
+    fortsätter efter provslut, fleet/orders.py). Inget mejl: ingen ny bjuds in.
+    """
+    now = now or timezone.now()
+    if source.assignee_user_id:
+        return _assign(
+            license=target, user_id=source.assignee_user_id, email="",
+            actor_user_id=actor_user_id, now=now, via="continued",
+        )
+    if source.assignee_email:
+        return assign_to_email(
+            license=target, email=source.assignee_email, actor_user_id=actor_user_id,
+            now=now, notify=False,
+        )
+    return target
 
 
 @transaction.atomic

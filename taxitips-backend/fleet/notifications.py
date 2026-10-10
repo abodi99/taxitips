@@ -177,33 +177,31 @@ def portal_url(anchor: str = "") -> str:
 
 def trial_offer(company_id, trial) -> dict | None:
     """
-    Vad det kostar att fortsätta med provbilarna -- räknat med samma motor och
-    samma anrop som offerten i portalen (orders.plan_change), så att mejlet och
-    betalsidan aldrig visar olika belopp. None om det inte går att räkna (inga
-    provbilar, eller ett fel): då skickas mejlet utan pris hellre än med fel pris.
+    Vad det kostar att fortsätta med provets platser -- provbilar och
+    kontoplatser från appen (fleet/trials.py: `continue_offer`, samma uträkning
+    som kortet i portalen och offerten). None om det inte går att räkna: då
+    skickas mejlet utan pris hellre än med fel pris.
     """
-    from fleet import orders, sessions
-    from fleet.models import License
+    from fleet import trials
 
-    specs, plates = [], []
-    for license in License.objects.filter(trial=trial, status=License.Status.TRIAL):
-        vehicle = sessions.current_vehicle(license)
-        if vehicle is None:
-            continue
-        specs.append(orders.VehicleSpec(plate=vehicle.plate, base_county=license.base_county))
-        plates.append(vehicle.plate)
-    if not specs:
-        return None
-    try:
-        plan = orders.plan_change(company_id, add_vehicles=specs)
-    except Exception as exc:  # en påminnelse får aldrig fällas av prisuträkningen
-        log.warning("fleet.notifications: kunde inte räkna provets pris: %s", exc)
-        return None
-    return {
-        "count": len(specs), "plates": sorted(plates),
-        "monthly_ore": plan.quote.next_period.amount_ore,
-        "monthly_total_ore": plan.quote.next_period.total_ore,
-    }
+    return trials.continue_offer(company_id, trial)
+
+
+def _county_name(code: str) -> str:
+    from core.areas import COUNTIES
+
+    return dict(COUNTIES).get(str(code), str(code))
+
+
+def _offer_items(offer: dict) -> str:
+    """"era 2 bilar (ABC123, DEF456)" / "er plats (Skåne län)"."""
+    plates = list(offer.get("plates") or [])
+    counties = [_county_name(c) for c in offer.get("counties") or []]
+    n = offer["count"]
+    if plates and not counties:
+        return f"era {n} {'bil' if n == 1 else 'bilar'} ({', '.join(plates)})"
+    what = "er plats" if n == 1 else f"era {n} platser"
+    return f"{what} ({', '.join(plates + counties)})"
 
 
 def _offer_lines(offer: dict | None) -> str:
@@ -212,9 +210,8 @@ def _offer_lines(offer: dict | None) -> str:
             "Vill ni fortsätta bekräftar ni bilarna och sparar kort i kundportalen. "
             "Första månadsbeloppet dras när provet tar slut:\n"
         )
-    cars = f"{offer['count']} {'bil' if offer['count'] == 1 else 'bilar'}"
     return (
-        f"Vill ni fortsätta med era {cars} ({', '.join(offer['plates'])})? Det kostar "
+        f"Vill ni fortsätta med {_offer_items(offer)}? Det kostar "
         f"{_money(offer['monthly_ore'])} i månaden exkl. moms "
         f"({_money(offer['monthly_total_ore'])} inkl. moms). Ni sparar kort i "
         "kundportalen; första dragningen sker när provet tar slut, sedan automatiskt "
@@ -329,7 +326,14 @@ def trial_ending(company_id, to_address: str, trial, *, stage: str = "3d") -> Ou
 
 
 def trial_ended(company_id, to_address: str, trial) -> OutboxMessage | None:
-    """Provet löpte ut utan kort/commit. Dörren står öppen: samma länk."""
+    """Provet löpte ut utan kort/commit. Dörren står öppen: samma länk, och priset."""
+    offer = trial_offer(company_id, trial)
+    price = (
+        f"Att fortsätta med {_offer_items(offer)} kostar {_money(offer['monthly_ore'])} "
+        f"i månaden exkl. moms ({_money(offer['monthly_total_ore'])} inkl. moms). "
+        "Ni ser beloppet igen innan ni godkänner.\n\n"
+        if offer else ""
+    )
     return queue(
         category="trial_ended", company_id=company_id, to_address=to_address,
         subject="Provperioden är slut",
@@ -339,9 +343,11 @@ def trial_ended(company_id, to_address: str, trial) -> OutboxMessage | None:
             "tips förrän ni har valt vilka bilar som ska fortsätta och betalat i "
             "kundportalen. Med abonnemang får förarna också flyg, färjor, evenemang "
             "och trafikolyckor -- inte bara tåg och buss.\n\n"
-            f"Fortsätt när ni vill: {portal_url('fortsatt')}\n"
+            + price
+            + f"Fortsätt när ni vill: {portal_url('fortsatt')}\n"
             + _SIGNATURE
         ),
+        payload={"offer": offer or {}},
         key_parts=(company_id, trial.id),
     )
 
@@ -437,6 +443,53 @@ def driver_invite(invite, *, company_name: str, plate: str, link: str = "") -> O
             **({"button": {"url": link, "label": "Välj lösenord"}} if link else {}),
         },
         key_parts=(invite.id, invite.send_count),
+    )
+
+
+def membership_invite(
+    license, *, email: str, company_name: str, counties: list[str], link: str = "", send_no: int = 1,
+) -> OutboxMessage | None:
+    """
+    Någon har fått en plats (fleet/membership.py: `send_invite`). Samma tre
+    steg som förarinbjudan: välj lösenord via länken, hämta appen, logga in med
+    e-post och lösenord -- då binds platsen till kontot (`claim_for_email`).
+
+    Mejlet går till en förare: **inga priser och inga köplänkar** (§9c). Varje
+    utskick får en egen rad (`send_no` i nyckeln): "Skicka igen" ger ett nytt
+    mejl med en ny länk.
+    """
+    who = company_name or "Ditt taxibolag"
+    names = [_county_name(c) for c in counties]
+    area = f" i {', '.join(names)}" if names else ""
+    if link:
+        step_one = f"1. Välj ett lösenord här:\n{link}\n"
+    else:
+        step_one = (
+            "1. Öppna appen, tryck \"Logga in\" och sedan \"Glömt lösenord?\". "
+            f"Skriv {email} så får du en länk där du väljer lösenord.\n"
+        )
+    return queue(
+        category="membership_invite", company_id=license.company_id, to_address=email,
+        subject=f"{who} har gett dig en plats i Taxi Tips",
+        body=(
+            "Hej!\n\n"
+            f"{who} har gett dig en plats i Taxi Tips{area}. "
+            "Taxi Tips visar var det finns folk som behöver taxi just nu.\n\n"
+            "Så kommer du igång:\n"
+            + step_one
+            + "2. Hämta appen Taxi Tips i App Store eller Google Play.\n"
+            f"3. Öppna appen, tryck \"Logga in\" och skriv {email} och ditt lösenord. "
+            "Platsen finns på ditt konto när du loggat in.\n\n"
+            "Har du redan ett lösenord kan du hoppa över steg 1. Länken fungerar en gång; "
+            "har den gått ut: tryck \"Glömt lösenord?\" i appen. Väntade du dig inte "
+            "det här mejlet kan du strunta i det.\n"
+            + _SIGNATURE
+        ),
+        payload={
+            "licenseId": str(license.id), "kind": "membership_invite",
+            **({"button": {"url": link, "label": "Välj lösenord"}} if link else {}),
+        },
+        key_parts=(license.id, email, send_no),
     )
 
 
