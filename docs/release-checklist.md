@@ -58,7 +58,7 @@ Supabase -- bygg aldrig en butiksversion utan filen.
 
 ## 3. iOS
 
-* Bundle id `se.taxitips.app`, team `SMKZ5MCAFP`, namnet på hemskärmen
+* Bundle id `se.taxitips.app`, team `YY88NFX4D7` (A2M Tech AB; var felaktigt `SMKZ5MCAFP`, ett annat team, till 2026-10-10), namnet på hemskärmen
   `Taxitips`, iPhone och iPad. **Lägsta iOS är nu 15.0** (var 13.0, och då
   vägrade `pod install`: google_maps_flutter_ios kräver 14, Firebase 12
   kräver 15). Samma värde i `Podfile` och `Runner.xcodeproj`.
@@ -76,6 +76,22 @@ Supabase -- bygg aldrig en butiksversion utan filen.
   förbi `pod install` och in i Xcode-kompileringen, men stoppades av full disk
   på Macen -- inget fel i projektet. Kör det igen med några GB ledigt innan du
   arkiverar. Ett signerat arkiv kräver ditt Apple-konto i Xcode.
+
+**Signering (2026-10-10).** Release signeras manuellt med "Apple Distribution: A2M Tech AB"
+och profilen "Taxitips App Store" (push i produktionsläge), skapade med App Store Connect
+API-nyckeln `7SL8TDFVJN` (Issuer `d5b5f9e4-…`; nyckelfilen i `~/.appstoreconnect/private_keys`,
+certifikatets privata nyckel i `~/.appstoreconnect/signing` -- aldrig i git). Debug behåller
+automatisk signering. Första bygget (1.0.1+3) laddades upp till App Store Connect 2026-10-10.
+
+```bash
+cd taxitips-app
+flutter build ios --release --config-only --dart-define-from-file=dart_defines.local.json
+xcodebuild -workspace ios/Runner.xcworkspace -scheme Runner -configuration Release \
+  -destination 'generic/platform=iOS' -archivePath build/ios/archive/Runner.xcarchive archive
+xcodebuild -exportArchive -archivePath build/ios/archive/Runner.xcarchive \
+  -exportOptionsPlist ExportOptions.plist -exportPath build/ios/ipa   # method app-store-connect, manual
+xcrun altool --upload-app -f build/ios/ipa/Taxitips.ipa -t ios --apiKey 7SL8TDFVJN --apiIssuer <issuer>
+```
 
 Bygg och ladda upp (Mac med Xcode):
 
