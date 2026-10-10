@@ -57,17 +57,7 @@ export async function loadRuntimeConfig() {
   }
 }
 
-/** Listmonk public launch list — proxied via /api/subscribe (CORS). */
-export const listmonk = {
-  listUuid: "e2f8a9bc-674d-47a0-8dd8-77d1272cbfa5",
-  subscribePath: "/api/subscribe",
-};
-
-/** Twenty CRM workspace (leads land here via /api/lead when server env is set). */
-export const twenty = {
-  workspaceUrl: "https://taxitips.tw.a2m-tech.com",
-  leadPath: "/api/lead",
-};
+/** Twenty finns kvar som historisk importkälla. Formulären skriver till Django-CRM. */
 
 /**
  * Kundportalen (portal.html): Supabase Auth för inloggningen och

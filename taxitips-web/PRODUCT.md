@@ -59,7 +59,7 @@ Not a dispatch/ride-hailing platform and not a generic navigation app. The mecha
 3. Never claim something not yet true: no store download links, no live weather signal, no fabricated social proof.
 4. Brand restraint: five colors, two fonts, one icon language — consistency over novelty.
 - The web's only job now is to earn a conversation (email) or make the case for the app the company will actually use — not to replicate app functionality.
-- Interest capture: early-access / newsletter via Listmonk (`Taxi Tips — lanseringslista`), contact form → `/api/lead` (Listmonk private leads + optional Twenty CRM at taxitips.tw.a2m-tech.com), live chat via Chatwoot when website token is configured. Analytics: Firebase GA4 + Umami after consent; errors via GlitchTip when DSN is set.
+- Interest capture: both the newsletter form and the contact form POST to Django `POST /api/crm/lead` (`kind` `newsletter` or `contact`). The TaxiTips server writes the CRM deal and the Hostinger Reach contact. The static web server does not handle the forms. Live chat via Chatwoot when a website token is configured. Analytics: Firebase GA4 + Umami after consent; errors via GlitchTip when DSN is set.
 
 ## Accessibility & Inclusion
 

@@ -308,3 +308,70 @@ class ImportSalesListTests(FleetTestCase):
             )["rows"]
         }
         self.assertEqual(names, {"Testtaxi Malmö"})
+
+
+class WebLeadApiTests(FleetTestCase):
+    def setUp(self):
+        super().setUp()
+        self.client = Client()
+
+    def post_lead(self, body, origin="https://taxitips.se"):
+        return self.client.post(
+            "/api/crm/lead",
+            data=json.dumps(body),
+            content_type="application/json",
+            HTTP_ORIGIN=origin,
+        )
+
+    def test_newsletter_writes_crm_and_reach(self):
+        with mock.patch("fleet.crm_ingest.reach.save_contact", return_value={"ok": True, "created": True}) as save:
+            res = self.post_lead({
+                "kind": "newsletter",
+                "email": "nyhet@example.test",
+                "company": "Nyhetsbolaget",
+            })
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res["Access-Control-Allow-Origin"], "https://taxitips.se")
+        body = res.json()
+        self.assertTrue(body["ok"])
+        self.assertTrue(body["reach"]["created"])
+        deal = CrmDeal.objects.get(id=body["leadId"])
+        self.assertEqual(deal.source, "taxitips_web_newsletter")
+        self.assertIn("nyhetsbrevet", deal.notes_summary)
+        save.assert_called_once()
+        self.assertEqual(save.call_args.kwargs["email"], "nyhet@example.test")
+        self.assertEqual(save.call_args.kwargs["tag"], "8b16c070-1283-4fde-875e-8ffe497183eb")
+
+    def test_contact_requires_a_message_and_uses_the_meeting_tag(self):
+        short = self.post_lead({
+            "kind": "contact",
+            "name": "Ada",
+            "email": "ada@example.test",
+            "message": "kort",
+        })
+        self.assertEqual(short.status_code, 422)
+
+        with mock.patch("fleet.crm_ingest.reach.save_contact", return_value={"ok": True, "created": True}) as save:
+            res = self.post_lead({
+                "kind": "contact",
+                "name": "Ada",
+                "email": "ada@example.test",
+                "company": "Ada Taxi",
+                "message": "Vi vill boka en genomgång nästa vecka.",
+            })
+        self.assertEqual(res.status_code, 200)
+        deal = CrmDeal.objects.get(id=res.json()["leadId"])
+        self.assertEqual(deal.source, "taxitips_web_contact")
+        self.assertIn("genomgång", deal.notes_summary)
+        self.assertEqual(save.call_args.kwargs["tag"], "624a0bc8-1dc9-4933-9686-f192e8fb27d8")
+
+    def test_reach_failure_keeps_the_crm_lead(self):
+        with mock.patch("fleet.crm_ingest.reach.save_contact", side_effect=RuntimeError("reach_500")):
+            res = self.post_lead({
+                "kind": "newsletter",
+                "email": "fel@example.test",
+            })
+        self.assertEqual(res.status_code, 200)
+        self.assertTrue(res.json()["ok"])
+        self.assertEqual(res.json()["reach"]["reason"], "reach_failed")
+        self.assertTrue(CrmDeal.objects.filter(person__email="fel@example.test").exists())

@@ -1,4 +1,4 @@
-import { listmonk, twenty, site } from "./config.js";
+import { portal, site } from "./config.js";
 import { trackEvent } from "./analytics.js";
 
 function setStatus(el, message, kind) {
@@ -6,6 +6,10 @@ function setStatus(el, message, kind) {
   el.textContent = message;
   el.dataset.kind = kind || "";
   el.hidden = !message;
+}
+
+function leadUrl() {
+  return `${String(portal.apiBaseUrl || "").replace(/\/$/, "")}/api/crm/lead`;
 }
 
 async function postJson(path, body) {
@@ -48,18 +52,16 @@ export function setupForms() {
       setStatus(status, "Skickar…", "pending");
 
       try {
-        await postJson(listmonk.subscribePath, {
+        await postJson(leadUrl(), {
+          kind: "newsletter",
           email,
           name: company || "",
-          list_uuids: [listmonk.listUuid],
+          company,
+          page: window.location.href,
         });
         trackEvent("early_access_subscribe", { company: company ? 1 : 0 });
         earlyForm.reset();
-        setStatus(
-          status,
-          "Tack! Kolla mejlen och bekräfta prenumerationen — vi hör av oss när appen släpps.",
-          "ok"
-        );
+        setStatus(status, "Tack! Du är med på listan.", "ok");
       } catch (err) {
         console.warn("[subscribe]", err);
         setStatus(
@@ -94,28 +96,15 @@ export function setupForms() {
       setStatus(status, "Skickar…", "pending");
 
       try {
-        // Prefer server lead endpoint (Twenty CRM + Listmonk leads list).
-        // Falls back to public list subscribe if /api/lead is not configured.
-        try {
-          await postJson(twenty.leadPath, {
-            name,
-            email,
-            company,
-            message,
-            source: "taxitips_web_contact",
-            page: window.location.href,
-          });
-        } catch (leadErr) {
-          if (leadErr.status === 404 || leadErr.status === 501) {
-            await postJson(listmonk.subscribePath, {
-              email,
-              name: [name, company].filter(Boolean).join(" · "),
-              list_uuids: [listmonk.listUuid],
-            });
-          } else {
-            throw leadErr;
-          }
-        }
+        await postJson(leadUrl(), {
+          kind: "contact",
+          name,
+          email,
+          company,
+          message,
+          source: "taxitips_web_contact",
+          page: window.location.href,
+        });
 
         trackEvent("contact_submit", { has_company: company ? 1 : 0 });
         contactForm.reset();

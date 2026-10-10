@@ -64,6 +64,7 @@ def _cors(response, request):
     from django.conf import settings
 
     allowed = [o for o in getattr(settings, "APP_API_ALLOWED_ORIGINS", []) if o]
+    allowed.extend(o for o in getattr(settings, "WEB_FORM_ORIGINS", []) if o and o not in allowed)
     origin = request.headers.get("Origin", "")
     # I DEBUG släpps vilken localhost-port som helst in: `flutter run -d
     # chrome` väljer port själv, och att jaga porten i en lista är en

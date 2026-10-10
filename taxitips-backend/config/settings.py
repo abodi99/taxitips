@@ -473,7 +473,30 @@ FLEET_SMTP_HOST = os.environ.get("FLEET_SMTP_HOST", "smtp.hostinger.com")
 FLEET_SMTP_PORT = int(os.environ.get("FLEET_SMTP_PORT", "465") or 465)
 FLEET_SMTP_USER = os.environ.get("FLEET_SMTP_USER", "")
 FLEET_SMTP_PASSWORD = os.environ.get("FLEET_SMTP_PASSWORD", "")
-# Webleads från taxitips-web → fleet/crm_ingest.py (POST /api/crm/lead).
+# Webbformulären på taxitips.se anropar POST /api/crm/lead direkt.
+# Origins som får göra det (CORS), utöver APP_API_ALLOWED_ORIGINS.
+WEB_FORM_ORIGINS = [
+    o.strip()
+    for o in os.environ.get(
+        "WEB_FORM_ORIGINS",
+        "https://taxitips.se,https://www.taxitips.se,"
+        "http://localhost:5173,http://127.0.0.1:5173",
+    ).split(",")
+    if o.strip()
+]
+# Hostinger Reach (fleet/reach.py). Tom token = CRM skrivs, Reach hoppas över.
+HOSTINGER_API_TOKEN = os.environ.get("HOSTINGER_API_TOKEN", "")
+HOSTINGER_API_BASE = os.environ.get("HOSTINGER_API_BASE", "https://developers.hostinger.com")
+REACH_PROFILE_UUID = os.environ.get(
+    "REACH_PROFILE_UUID", "134eb837-ac0e-49bc-8540-aa02aed832e1"
+)
+REACH_TAG_NEWSLETTER = os.environ.get(
+    "REACH_TAG_NEWSLETTER", "8b16c070-1283-4fde-875e-8ffe497183eb"
+)
+REACH_TAG_CONTACT = os.environ.get(
+    "REACH_TAG_CONTACT", "624a0bc8-1dc9-4933-9686-f192e8fb27d8"
+)
+# Kvar för äldre anrop. Formuläret kräver den inte.
 CRM_LEAD_INGEST_SECRET = os.environ.get("CRM_LEAD_INGEST_SECRET", "")
 TWENTY_API_KEY = os.environ.get("TWENTY_API_KEY", "")
 TWENTY_BASE_URL = os.environ.get("TWENTY_BASE_URL", "https://taxitips.tw.a2m-tech.com")

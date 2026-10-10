@@ -66,6 +66,10 @@ REGISTRY_LOOKUP_ALL = Limit("registry_lookup_all", limit=2000, window_seconds=36
 CLIENT_LOG = Limit("client_log", limit=30, window_seconds=600)
 CLIENT_LOG_ANON = Limit("client_log_anon", limit=10, window_seconds=3600)
 CLIENT_LOG_ALL = Limit("client_log_all", limit=3000, window_seconds=3600)
+# Webbformulären på taxitips.se. Per IP, och ett tak för alla tillsammans,
+# så att ett formulär utan inloggning inte kan fylla CRM.
+WEB_LEAD = Limit("web_lead", limit=8, window_seconds=3600)
+WEB_LEAD_ALL = Limit("web_lead_all", limit=200, window_seconds=3600)
 
 
 def _bucket(limit: Limit, identity: str) -> str:

@@ -1,16 +1,7 @@
 /**
  * Tiny production server for the static Vite build.
- * Serves dist/ and exposes:
- *   POST /api/subscribe  → Listmonk public subscription (CORS-safe)
- *   POST /api/lead       → Listmonk private leads + optional Django CRM (native)
- *
- * Coolify env (optional for CRM/leads):
- *   LISTMONK_URL=https://lm.a2m-tech.com
- *   LISTMONK_USER=...
- *   LISTMONK_TOKEN=...
- *   LISTMONK_LEADS_LIST_ID=7
- *   CRM_LEAD_BACKEND_URL=https://backend.taxitips.se
- *   CRM_LEAD_INGEST_SECRET=...   (samma som på taxitips-backend)
+ * Formulären på taxitips.se anropar Django (backend.taxitips.se/api/crm/lead),
+ * inte den här processen.
  */
 
 import http from "node:http";
@@ -22,15 +13,6 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST = path.join(__dirname, "dist");
 const PORT = Number(process.env.PORT || 80);
 
-const LISTMONK_URL = (process.env.LISTMONK_URL || "https://lm.a2m-tech.com").replace(/\/$/, "");
-const LISTMONK_USER = process.env.LISTMONK_USER || "";
-const LISTMONK_TOKEN = process.env.LISTMONK_TOKEN || "";
-const LISTMONK_LEADS_LIST_ID = Number(process.env.LISTMONK_LEADS_LIST_ID || 7);
-const PUBLIC_LIST_UUID =
-  process.env.LISTMONK_PUBLIC_LIST_UUID || "e2f8a9bc-674d-47a0-8dd8-77d1272cbfa5";
-
-const CRM_LEAD_BACKEND_URL = (process.env.CRM_LEAD_BACKEND_URL || "").replace(/\/$/, "");
-const CRM_LEAD_INGEST_SECRET = process.env.CRM_LEAD_INGEST_SECRET || "";
 const CHATWOOT_WEBSITE_TOKEN = process.env.CHATWOOT_WEBSITE_TOKEN || "";
 const GLITCHTIP_DSN = process.env.GLITCHTIP_DSN || "";
 
@@ -71,31 +53,6 @@ function cors(res, origin) {
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Accept");
 }
 
-function readBody(req) {
-  return new Promise((resolve, reject) => {
-    const chunks = [];
-    let size = 0;
-    req.on("data", (c) => {
-      size += c.length;
-      if (size > 32_000) {
-        reject(new Error("body_too_large"));
-        req.destroy();
-        return;
-      }
-      chunks.push(c);
-    });
-    req.on("end", () => {
-      try {
-        const raw = Buffer.concat(chunks).toString("utf8");
-        resolve(raw ? JSON.parse(raw) : {});
-      } catch {
-        reject(new Error("invalid_json"));
-      }
-    });
-    req.on("error", reject);
-  });
-}
-
 function json(res, status, payload) {
   const body = JSON.stringify(payload);
   res.writeHead(status, {
@@ -103,75 +60,6 @@ function json(res, status, payload) {
     "Content-Length": Buffer.byteLength(body),
   });
   res.end(body);
-}
-
-function isEmail(v) {
-  return typeof v === "string" && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) && v.length <= 254;
-}
-
-async function listmonkPublicSubscribe({ email, name, listUuids }) {
-  const res = await fetch(`${LISTMONK_URL}/api/public/subscription`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({
-      email,
-      name: name || "",
-      list_uuids: listUuids?.length ? listUuids : [PUBLIC_LIST_UUID],
-    }),
-  });
-  const text = await res.text();
-  if (!res.ok) {
-    const err = new Error(`listmonk_public_${res.status}`);
-    err.detail = text;
-    throw err;
-  }
-  return text ? JSON.parse(text) : { ok: true };
-}
-
-async function listmonkPrivateLead({ email, name, attribs }) {
-  if (!LISTMONK_USER || !LISTMONK_TOKEN) {
-    return { skipped: true, reason: "listmonk_auth_missing" };
-  }
-  const auth = `token ${LISTMONK_USER}:${LISTMONK_TOKEN}`;
-  const res = await fetch(`${LISTMONK_URL}/api/subscribers`, {
-    method: "POST",
-    headers: {
-      Authorization: auth,
-      "Content-Type": "application/json",
-      Accept: "application/json",
-    },
-    body: JSON.stringify({
-      email,
-      name: name || "",
-      status: "enabled",
-      lists: [LISTMONK_LEADS_LIST_ID],
-      attribs: attribs || {},
-      preconfirm_subscriptions: true,
-    }),
-  });
-  if (res.ok || res.status === 409) {
-    return { ok: true, status: res.status };
-  }
-  return { ok: false, status: res.status, body: await res.text() };
-}
-
-async function djangoCrmLead({ name, email, company, message, source, page }) {
-  if (!CRM_LEAD_BACKEND_URL || !CRM_LEAD_INGEST_SECRET) {
-    return { skipped: true, reason: "crm_backend_not_configured" };
-  }
-  const res = await fetch(`${CRM_LEAD_BACKEND_URL}/api/crm/lead`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "X-Crm-Lead-Secret": CRM_LEAD_INGEST_SECRET,
-    },
-    body: JSON.stringify({ name, email, company, message, source, page }),
-  });
-  const payload = await res.json().catch(() => ({}));
-  if (!res.ok) {
-    return { ok: false, status: res.status, body: payload };
-  }
-  return { ok: true, leadId: payload.leadId };
 }
 
 // Adminwebben har en egen värd. På den värden är `/` adminsidan, inte
@@ -302,85 +190,7 @@ const server = http.createServer(async (req, res) => {
       ok: true,
       chatwootWebsiteToken: CHATWOOT_WEBSITE_TOKEN || null,
       glitchtipDsn: GLITCHTIP_DSN || null,
-      listmonkPublicList: PUBLIC_LIST_UUID,
     });
-    return;
-  }
-
-  if (url === "/api/subscribe" || url === "/api/lead") {
-    cors(res, origin);
-    if (req.method === "OPTIONS") {
-      res.writeHead(204);
-      res.end();
-      return;
-    }
-    if (req.method !== "POST") {
-      json(res, 405, { ok: false, error: "method_not_allowed" });
-      return;
-    }
-
-    try {
-      const body = await readBody(req);
-
-      if (url === "/api/subscribe") {
-        const email = String(body.email || "").trim().toLowerCase();
-        const name = String(body.name || "").trim().slice(0, 200);
-        if (!isEmail(email)) {
-          json(res, 422, { ok: false, error: "invalid_email" });
-          return;
-        }
-        const result = await listmonkPublicSubscribe({
-          email,
-          name,
-          listUuids: body.list_uuids,
-        });
-        json(res, 200, { ok: true, listmonk: result });
-        return;
-      }
-
-      // /api/lead
-      const name = String(body.name || "").trim().slice(0, 200);
-      const email = String(body.email || "").trim().toLowerCase();
-      const company = String(body.company || "").trim().slice(0, 200);
-      const message = String(body.message || "").trim().slice(0, 5000);
-      const source = String(body.source || "taxitips_web").slice(0, 100);
-      const page = String(body.page || "").slice(0, 500);
-
-      if (!name || !isEmail(email) || message.length < 10) {
-        json(res, 422, { ok: false, error: "invalid_fields" });
-        return;
-      }
-
-      const [listmonkResult, crmResult] = await Promise.all([
-        listmonkPrivateLead({
-          email,
-          name: company ? `${name} · ${company}` : name,
-          attribs: { source, company, message: message.slice(0, 1000), page },
-        }),
-        djangoCrmLead({ name, email, company, message, source, page }),
-      ]);
-
-      // Always also put them on the public launch list (double opt-in).
-      let publicSub = null;
-      try {
-        publicSub = await listmonkPublicSubscribe({
-          email,
-          name: company || name,
-        });
-      } catch {
-        publicSub = { ok: false };
-      }
-
-      json(res, 200, {
-        ok: true,
-        listmonk_leads: listmonkResult,
-        listmonk_public: publicSub,
-        crm: crmResult,
-      });
-    } catch (err) {
-      console.error("[api]", err);
-      json(res, 500, { ok: false, error: err.message || "server_error" });
-    }
     return;
   }
 
