@@ -307,9 +307,27 @@ def set_county(*, license: License, base: str, extras: list[str] | None = None, 
             "paid_license",
             "Medlemskapet är betalt. Län ändras via en beställning.",
         )
-    base, extra_codes = licensing.set_trial_counties(
-        license, base=base, extras=extras, now=now,
-    )
+    if license.base_county:
+        # Ett byte: samma regler som provbilens länbyte (fleet/county_changes.py)
+        # -- inte fler län än platsen har (§7: självregistrerat prov = ett län)
+        # och två byten per kalendermånad (§8). Förut gick den här vägen förbi
+        # båda, och en provplats kunde få alla län gratis.
+        from fleet import county_changes
+
+        result = county_changes.change_trial_counties(
+            license, base=base, extras=extras, actor_user_id=actor_user_id, now=now,
+        )
+        base, extra_codes = result["base"], result["extras"]
+    else:
+        # Första valet efter registreringen är inget byte, men ger inga extra län.
+        chosen = licensing.assert_county_available(str(base or ""))
+        if {str(c) for c in (extras or [])} - {chosen}:
+            raise licensing.LicensingError(
+                "trial_extra_county",
+                "Under provet ingår ett län per plats. Fler län ordnar en säljare hos TaxiTips.",
+            )
+        base, extra_codes = licensing.set_trial_counties(license, base=chosen, extras=[], now=now)
+    license.refresh_from_db()
     audit.record(
         "membership_county_set", company_id=license.company_id, actor_user_id=actor_user_id,
         actor_kind="admin", subject_type="license", subject_id=license.id,

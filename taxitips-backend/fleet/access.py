@@ -603,6 +603,15 @@ def _membership_access(payload: dict, now) -> Access | None:
             session, reason=MembershipSession.EndReason.UNASSIGNED, now=now
         )
         return None
+    if license.status not in (
+        License.Status.ACTIVE, License.Status.TRIAL, License.Status.PENDING_CANCEL
+    ):
+        # En avslutad plats (provplatsen när provet tog slut, en uppsagd licens)
+        # ger ingenting, samma prövning som notisgrinden
+        # (push_gate._membership_license). Förut räckte det att BOLAGET hade en
+        # period: betalade det för en annan plats fick den gamla provplatsens
+        # innehavare fortsätta gratis, med provplatsens län.
+        return None
     # Ett spärrat eller pausat KONTO får inga tips i appen, även med en plats.
     # Sessionen lämnas öppen: en hävd spärr/paus ska återställa exakt det som fanns.
     stop = _account_stop(payload)

@@ -70,10 +70,30 @@ def queue(
     existing = OutboxMessage.objects.filter(dedupe_key=key).first()
     if existing is not None:
         return existing
+    if not (to_address or "").strip() and company_id:
+        # Företagets mejl (betalningsfel, orderbekräftelse, uppsägning, spärrad
+        # telefon) köades förut utan mottagare, och avsändaren gav upp dem som
+        # permanenta fel: kunden fick aldrig veta att betalningen föll.
+        to_address = company_address(company_id)
     return OutboxMessage.objects.create(
         company_id=company_id, category=category, to_address=to_address,
         subject=subject, body=body, payload=payload or {}, dedupe_key=key,
     )
+
+
+def company_address(company_id) -> str:
+    """Faktureringsadressen, annars kontaktens, annars företagets e-post."""
+    from billing.models import Company
+    from fleet.models import CompanyProfile
+
+    profile = CompanyProfile.objects.filter(company_id=company_id).first()
+    for candidate in (
+        getattr(profile, "billing_email", ""), getattr(profile, "contact_email", ""),
+    ):
+        if candidate and "@" in candidate:
+            return candidate.strip()
+    company = Company.objects.filter(id=company_id).first()
+    return ((company.email if company else "") or "").strip()
 
 
 def send_pending(limit: int = 50, sender=None) -> dict:
@@ -251,13 +271,24 @@ def trial_ending(company_id, to_address: str, trial, *, stage: str = "3d") -> Ou
     Påminnelse före provslut: `3d` / `1d`, samt `card_missing*` när kort saknas.
     """
     offer = trial_offer(company_id, trial)
-    when = "i morgon" if stage.endswith("1d") or stage == "1d" else f"{trial.ends_at:%Y-%m-%d}"
+    # Svensk tid: ett prov som slutar 00:30 svensk tid slutar inte "i går" i UTC.
+    ends = timezone.localtime(trial.ends_at)
+    last_day = stage.endswith("1d")
+    when = "i morgon" if last_day else f"{ends:%Y-%m-%d}"
     if stage.startswith("card_missing"):
-        subject = "Spara kort så ni behåller tipsen efter provet"
+        # Sista dygnet ska gå att skilja från påminnelsen tre dagar före. Förut
+        # fick kunden utan kort två likadana mejl, och inget av dem sa att
+        # tipsen försvinner inom ett dygn.
+        if last_day:
+            subject = "Sista dygnet med provet – spara kort för att behålla tipsen"
+            opening = f"Provperioden slutar inom ett dygn ({ends:%Y-%m-%d %H:%M}). "
+        else:
+            subject = "Spara kort så ni behåller tipsen efter provet"
+            opening = f"Provperioden gäller till {ends:%Y-%m-%d}. "
         body = (
             "Hej!\n\n"
-            f"Provperioden gäller till {trial.ends_at:%Y-%m-%d}. "
-            "Ni har ännu inte sparat kort för auto-förnyelse.\n\n"
+            + opening
+            + "Ni har ännu inte sparat kort för auto-förnyelse.\n\n"
             + _TRIAL_SCOPE + "\n"
             + _offer_lines(offer)
             + f"\nBekräfta bilarna och spara kort här: {portal_url('fortsatt')}\n\n"

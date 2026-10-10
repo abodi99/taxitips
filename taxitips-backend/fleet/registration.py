@@ -159,6 +159,13 @@ def register(
         # vänta på att telefonerna delas ut skapade bara supportärenden om
         # förlängning. start_trial är atomiskt och idempotent.
         trial = trials.start_trial(trial, now=now)
+        # Välkomstmejlet med vägen till portalen. Förut skickades det bara när
+        # provet startade vid första telefonen (api._start_trial_on_first_phone),
+        # och den vägen ser aldrig ett prov som redan är igång -- en
+        # självregistrerad kund fick inget välkomstmejl alls.
+        from fleet import notifications
+
+        notifications.trial_started(company.id, email, trial)
         message = f"Provperioden på {trials.TRIAL_DAYS} dagar har startat."
     else:
         message = f"{check.message} Kontakta TaxiTips för att komma igång."
