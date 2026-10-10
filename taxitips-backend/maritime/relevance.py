@@ -67,6 +67,17 @@ KINDS = {
     "road": ("Vägfärja", "Trafikverkets bilfärjor. De flesta kör egen bil av, men gående resenärer finns."),
 }
 
+# Samma sorter i förarens ord, för färjekortet i appen (maritime/views.ferry_rows). KINDS ovan är
+# regeln för pipeline-sidan (längdgränser, avstånd); här står bara vad det betyder för den som hämtar.
+DRIVER_KINDS = {
+    "big": "Många kliver av, ofta med bagage och utan bil.",
+    "pendulum": "Går hela dagen: en jämn ström av gående, färre per ankomst.",
+    "island": "Resenärerna kommer från en ö eller en längre båttur och behöver ta sig vidare från hamnen.",
+    "commuter": "Kort tur: många åker kollektivt vidare, men inte alla.",
+    "loop": "Samma brygga som start och mål, ofta turister som kliver av där de klev på.",
+    "road": "Bilfärja: de flesta kör egen bil av, men gående resenärer finns.",
+}
+
 TRAITS = {
     "no_road": "Ingen buss, spårvagn eller tåg inom 600 m från bryggan: troligen bilfri ö, kolla att taxin når fram",
     "transit_both": "Buss eller spårvagn vid båda bryggorna",
@@ -321,7 +332,11 @@ def build(now: dt.datetime, voyages: dict, ships: list[dict] | None = None) -> d
                          if first.departure_at else f"Kommer in till {last.stop_name}",
             "international": False,
             "agency": agency_label(first.agency),
+            # Rederiet som föraren känner igen; tomt när tidtabellen bara har ett nummer.
+            "operator": "" if first.agency.isdigit() else first.agency,
             "route": first.route_name,
+            # Buss, spårvagn eller tåg inom 600 m från kajen (importens stop_has_road).
+            "transitAtQuay": bool(last.stop_has_road),
             "vessel": vessel,
             "plannedAt": _iso(planned),
             "plannedDeparture": _iso(first.departure_at),
@@ -404,7 +419,9 @@ def build(now: dt.datetime, voyages: dict, ships: list[dict] | None = None) -> d
                           if heading_in else f"Lade till i {port.name} {_clock(expected)} (AIS såg den komma in)"),
             "international": True,
             "agency": "",
+            "operator": "",
             "route": "",
+            "transitAtQuay": None,
             "vessel": {
                 "name": ship["name"], "lengthM": ship["lengthM"], "lat": ship["lat"], "lon": ship["lon"],
                 "knots": ship["knots"], "course": ship["course"], "ageSeconds": ship["ageSeconds"],

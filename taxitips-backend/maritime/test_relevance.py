@@ -61,6 +61,18 @@ class RelevanceTests(TestCase):
                          dt.timedelta(minutes=10))
         self.assertEqual(item["expectedBasis"], "tidtabell (ingen AIS-position)")
 
+    def test_the_operator_and_the_quay_transit_come_from_the_timetable(self):
+        self.trip("Destination Gotland", ("Visby hamnterminal", 57.6347, 18.2794),
+                  ("Nynäshamns färjeterminal", 58.9010, 17.9531))
+        self.trip("114", ("Saltholmen", 57.6600, 11.8400), ("Brännö Rödsten", 57.6350, 11.7700))
+        FerryTimetableCall.objects.filter(stop_name="Brännö Rödsten").update(stop_has_road=False)
+        by_from = {i["from"]: i for i in self.build()["items"]}
+        self.assertEqual(by_from["Visby hamnterminal"]["operator"], "Destination Gotland")
+        self.assertTrue(by_from["Visby hamnterminal"]["transitAtQuay"])
+        # Ett rederi som bara är ett nummer i tidtabellen har inget namn att visa föraren.
+        self.assertEqual(by_from["Saltholmen"]["operator"], "")
+        self.assertFalse(by_from["Saltholmen"]["transitAtQuay"])
+
     def ship(self, status, mmsi=219000001, terminal="goteborg", terminal_name="Göteborg Stena Line", eta_in=20):
         return {"mmsi": mmsi, "name": "STENA DANICA", "lengthM": 155, "lat": 57.7, "lon": 11.9, "knots": 12.0,
                 "course": 90.0, "ageSeconds": 30, "status": status, "terminal": terminal, "terminalName": terminal_name,

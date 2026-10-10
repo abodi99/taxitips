@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../navigation.dart';
+import '../severity_labels.dart' show humanMinutes;
 import '../signal_kinds.dart';
 import '../theme.dart';
 import 'signal_card.dart' show FollowButton;
@@ -86,9 +87,11 @@ String _km(num value) => value < 10
 // --- Färjor ---------------------------------------------------------------
 //
 // Kartan och listan läser samma rader: `rows` i /api/ferries (maritime/views.py).
-// Kortet och bladet visar bara det en förare behöver för att hämta folk: namn,
-// ungefär hur stor färjan är, vid vilken kaj, och när den kommer. Inga källor,
-// inga fartygsnummer, ingen fart eller kurs.
+// Kortet och bladet visar det en förare behöver för ett underbyggt beslut
+// (ägarkrav 2026-10-11): när den lägger till och när folk kommer ut, hur säker
+// tiden är, var kajen är och hur långt dit, vilka som kliver av och vad mer som
+// händer vid kajen. Inga källor, inga fartygsnummer, ingen fart eller kurs och
+// inga passagerarantal. Det servern inte vet visas inte alls.
 
 /// Färjorna för både kartan och listan. Äldre servrar utan `rows`: listan fick
 /// ankomsterna och kartan AIS-fartygen -- här blir det deras union, så att
@@ -175,18 +178,36 @@ bool ferryArrived(Map<String, dynamic> f) =>
   return null;
 }
 
-/// "Anländer ca 19:24 · om 5 min", "Anländer nu" eller "Vid kaj".
+DateTime? _time(Object? iso) =>
+    iso == null ? null : DateTime.tryParse(iso.toString())?.toLocal();
+
+/// Fartygets läge är sett och kopplat till turen. `null` på äldre servrar.
+bool? ferryConfirmed(Map<String, dynamic> f) =>
+    f['confirmed'] is bool ? f['confirmed'] as bool : null;
+
+/// Sorten i ord ("Stor färja", "Öbåt"), annars storleken.
+String ferryKind(Map<String, dynamic> f) {
+  final kind = (f['kindLabel'] ?? '').toString().trim();
+  return kind.isNotEmpty ? kind : ferrySize(f);
+}
+
+/// "Lägger till 14:35 · om 25 min", "Lägger till nu", "Vid kaj sedan 14:30".
+/// Utan sett fartyg säger en passerad tid bara vad tidtabellen sa.
 String ferryEtaText(Map<String, dynamic> f, {DateTime? now}) {
-  if (ferryArrived(f)) return 'Vid kaj';
   final iso = (f['expectedAt'] ?? f['eta'])?.toString();
-  final at = iso == null ? null : DateTime.tryParse(iso)?.toLocal();
+  final at = _time(iso);
+  if (ferryArrived(f)) {
+    if (at == null) return 'Vid kaj';
+    return ferryConfirmed(f) == false
+        ? 'Skulle lägga till ${_clock(iso)} enligt tidtabell'
+        : 'Vid kaj sedan ${_clock(iso)}';
+  }
   if (at == null) return 'På väg in';
-  final clock = _clock(iso)!;
   final minutes =
       (f['etaMinutes'] as num?)?.toInt() ??
       at.difference(now ?? DateTime.now()).inMinutes;
-  if (minutes <= 0) return 'Anländer nu';
-  return 'Anländer ca $clock · om $minutes min';
+  if (minutes <= 0) return 'Lägger till nu';
+  return 'Lägger till ${_clock(iso)} · om ${humanMinutes(minutes)}';
 }
 
 /// "Från Visby" när det är känt.
@@ -195,11 +216,111 @@ String ferryFromText(Map<String, dynamic> f) {
   return from.isEmpty ? '' : 'Från $from';
 }
 
+/// "Visby, avgick 11:15" (tidtabellens avgång), annars bara orten.
+String ferryOriginText(Map<String, dynamic> f, {DateTime? now}) {
+  final from = (f['departedFrom'] ?? f['from'] ?? '').toString().trim();
+  if (from.isEmpty) return '';
+  final iso = f['departedAt']?.toString();
+  final at = _time(iso);
+  if (at == null) return from;
+  final verb = at.isAfter(now ?? DateTime.now()) ? 'avgår' : 'avgick';
+  return '$from, $verb ${_clock(iso)}';
+}
+
 /// "14:10–14:45": när resenärerna kommer ut, om det är känt.
 String ferryPickupText(Map<String, dynamic> f) {
   final from = _clock(f['pickupFrom']?.toString());
   final until = _clock(f['pickupUntil']?.toString());
   return from == null || until == null ? '' : '$from–$until';
+}
+
+/// "Folk kommer ut 14:45–15:20", eller "Folk kommer ut nu, till 15:20".
+String ferryPickupLine(Map<String, dynamic> f, {DateTime? now}) {
+  final start = _time(f['pickupFrom']);
+  final end = _time(f['pickupUntil']);
+  if (start == null || end == null) return '';
+  final t = now ?? DateTime.now();
+  if (!t.isBefore(end)) return '';
+  if (!t.isBefore(start)) {
+    return 'Folk kommer ut nu, till ${_clock(f['pickupUntil'].toString())}';
+  }
+  return 'Folk kommer ut ${ferryPickupText(f)}';
+}
+
+/// "12 min sen", "5 min tidig", "I tid". Tom när förseningen inte är känd --
+/// en tur utan sett fartyg är inte "i tid", den är okänd.
+String ferryDelayText(Map<String, dynamic> f) {
+  final delay = (f['delayMinutes'] as num?)?.round();
+  if (delay == null) return '';
+  if (delay >= 3) return '${humanMinutes(delay)} sen';
+  if (delay <= -3) return '${humanMinutes(-delay)} tidig';
+  return 'I tid';
+}
+
+/// Hur säker tiden är, utan källnamn. [short]: för kortets chip.
+String ferryConfidenceText(Map<String, dynamic> f, {bool short = false}) {
+  final confirmed = ferryConfirmed(f);
+  if (confirmed == null) return '';
+  if (!confirmed) return 'Enligt tidtabell';
+  if (short) return 'Bekräftad';
+  return ferryArrived(f)
+      ? 'Bekräftad – fartyget ligger vid kaj'
+      : 'Bekräftad – fartyget är på väg in';
+}
+
+/// Sorten och vad den betyder för den som hämtar: "Stor färja – många kliver
+/// av, ofta med bagage och utan bil."
+String ferryKindDetailText(Map<String, dynamic> f) {
+  final label = (f['kindLabel'] ?? '').toString().trim();
+  final detail = (f['kindDetail'] ?? '').toString().trim();
+  if (detail.isEmpty) return label;
+  final lower = '${detail[0].toLowerCase()}${detail.substring(1)}';
+  return label.isEmpty ? detail : '$label – $lower';
+}
+
+/// "1 färja till anländer 14:50" / "2 färjor till anländer, första 14:50".
+String ferrySameTerminalText(Map<String, dynamic> f) {
+  final soon = f['sameTerminalSoon'];
+  if (soon is! Map) return '';
+  final count = (soon['count'] as num?)?.toInt() ?? 0;
+  if (count <= 0) return '';
+  final at = _clock(soon['nextAt']?.toString());
+  if (count == 1) {
+    return at == null ? '1 färja till anländer' : '1 färja till anländer $at';
+  }
+  return at == null
+      ? '$count färjor till anländer'
+      : '$count färjor till anländer, första $at';
+}
+
+// Körtiden räknas grovt ur avståndet fågelvägen: vägen är sällan rak (x1,3)
+// och snittet i stad och förort ungefär 45 km/h. Den visas alltid som "ca".
+const _roadFactor = 1.3;
+const _avgKmh = 45.0;
+
+/// Ungefärlig körtid i minuter ur avståndet fågelvägen.
+int ferryDriveMinutes(num km) =>
+    math.max(1, (km * _roadFactor / _avgKmh * 60).round());
+
+/// "12 km · ca 21 min med bil".
+String ferryDistanceText(num? km) {
+  if (km == null) return '';
+  return '${distanceText(km)} · ca ${humanMinutes(ferryDriveMinutes(km))} med bil';
+}
+
+/// Hinner föraren dit? Jämför ungefärlig framkomst med när folk kommer ut.
+String ferryReachText(Map<String, dynamic> f, num? km, {DateTime? now}) {
+  if (km == null) return '';
+  final t = now ?? DateTime.now();
+  final there = t.add(Duration(minutes: ferryDriveMinutes(km)));
+  final clock =
+      '${there.hour.toString().padLeft(2, '0')}:${there.minute.toString().padLeft(2, '0')}';
+  final start = _time(f['pickupFrom']);
+  final end = _time(f['pickupUntil']);
+  if (start == null || end == null) return 'Framme ca $clock';
+  if (!there.isAfter(start)) return 'Framme ca $clock – före folk kommer ut';
+  if (there.isBefore(end)) return 'Framme ca $clock – medan folk kommer ut';
+  return 'Framme ca $clock – efter att de flesta gått';
 }
 
 /// "lör 20 sep · 19:30", "i dag · 19:30", "Pågår nu".
@@ -332,19 +453,37 @@ class _CardShell extends StatelessWidget {
   }
 }
 
-/// En färja: namn, storlek, kaj och när den kommer. Inget annat.
+/// En färja i listan: namn och sort, när den lägger till, när folk kommer ut,
+/// hur säker tiden är, avstånd och varifrån den kommer. Allt i bladet
+/// (showFerrySheet); här bara det som avgör om föraren ska öppna det.
 class FerryCard extends StatelessWidget {
-  const FerryCard({super.key, required this.ferry, this.onTap});
+  const FerryCard({
+    super.key,
+    required this.ferry,
+    this.onTap,
+    this.distanceKm,
+    this.now,
+  });
 
   final Map<String, dynamic> ferry;
   final VoidCallback? onTap;
+
+  /// Fågelvägen från föraren till kajen, när appen har en position.
+  final double? distanceKm;
+
+  /// För tester; annars nu.
+  final DateTime? now;
 
   @override
   Widget build(BuildContext context) {
     final arrived = ferryArrived(ferry);
     final color = ferryColor(arrived ? 'berthed' : ferry['status']?.toString());
     final port = ferryPort(ferry);
-    final from = ferryFromText(ferry);
+    final pickup = ferryPickupLine(ferry, now: now);
+    final delay = ferryDelayText(ferry);
+    final confidence = ferryConfidenceText(ferry, short: true);
+    final origin = ferryOriginText(ferry, now: now);
+    final late = ((ferry['delayMinutes'] as num?) ?? 0) >= 3;
     return _CardShell(
       onTap: onTap,
       accent: color,
@@ -376,24 +515,86 @@ class FerryCard extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   [
-                    ferrySize(ferry),
+                    ferryKind(ferry),
                     port,
                   ].where((s) => s.isNotEmpty).join(' · '),
                   style: TextStyle(fontSize: 14, color: Colors.grey.shade800),
                 ),
                 const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: [
-                    _InfoChip(
-                      Icons.schedule,
-                      ferryEtaText(ferry),
-                      strong: !arrived,
-                    ),
-                    if (from.isNotEmpty) _InfoChip(Icons.place_outlined, from),
-                  ],
+                Text(
+                  ferryEtaText(ferry, now: now),
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    color: arrived ? TbColors.ink : color,
+                  ),
                 ),
+                if (pickup.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Padding(
+                        padding: EdgeInsets.only(top: 2),
+                        child: Icon(
+                          Icons.local_taxi,
+                          size: 15,
+                          color: TbColors.ink,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Expanded(
+                        child: Text(
+                          pickup,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: TbColors.ink,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                if (delay.isNotEmpty ||
+                    confidence.isNotEmpty ||
+                    distanceKm != null) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    children: [
+                      if (delay.isNotEmpty)
+                        _InfoChip(
+                          late ? Icons.hourglass_bottom : Icons.check,
+                          delay,
+                          strong: late,
+                        ),
+                      if (confidence.isNotEmpty)
+                        _InfoChip(
+                          ferryConfirmed(ferry) == true
+                              ? Icons.verified_outlined
+                              : Icons.event_note_outlined,
+                          confidence,
+                        ),
+                      if (distanceKm != null)
+                        _InfoChip(
+                          Icons.near_me_outlined,
+                          ferryDistanceText(distanceKm),
+                        ),
+                    ],
+                  ),
+                ],
+                if (origin.isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'Från $origin',
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                ],
               ],
             ),
           ),
@@ -701,28 +902,36 @@ class _DetailRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     if (value.isEmpty) return const SizedBox.shrink();
+    final labelText = Text(
+      label,
+      style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+    );
+    final valueText = Text(
+      value,
+      style: const TextStyle(
+        fontSize: 14,
+        fontWeight: FontWeight.w700,
+        color: TbColors.ink,
+      ),
+    );
+    // Med stor text: etiketten ovanför värdet, så att ingen av dem bryts
+    // en bokstav i taget i en smal kolumn.
+    if (MediaQuery.textScalerOf(context).scale(14) > 14 * 1.3) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 5),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [labelText, valueText],
+        ),
+      );
+    }
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 5),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(
-            width: 130,
-            child: Text(
-              label,
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
-            ),
-          ),
-          Expanded(
-            child: Text(
-              value,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w700,
-                color: TbColors.ink,
-              ),
-            ),
-          ),
+          SizedBox(width: 130, child: labelText),
+          Expanded(child: valueText),
         ],
       ),
     );
@@ -755,16 +964,61 @@ Widget _sheet(BuildContext context, List<Widget> children) {
   );
 }
 
+class _SheetSection extends StatelessWidget {
+  const _SheetSection(this.title, this.rows);
+
+  final String title;
+  final List<_DetailRow> rows;
+
+  @override
+  Widget build(BuildContext context) {
+    final shown = rows.where((r) => r.value.isNotEmpty).toList();
+    if (shown.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Semantics(
+            header: true,
+            child: Text(
+              title,
+              style: const TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 0.4,
+                color: TbColors.skiffer,
+              ),
+            ),
+          ),
+          const SizedBox(height: 2),
+          ...shown,
+        ],
+      ),
+    );
+  }
+}
+
 /// [harborLat]/[harborLon]: kajens läge, för "Kör dit". Fartygets egen
 /// position är ute på vattnet och går inte att köra till.
+/// [distanceKm]: fågelvägen från föraren till kajen, när appen har en position.
+///
+/// Fyra avsnitt: När, Var, Vilka kliver av, Sammanhang. En rad utan data visas
+/// inte, och ett avsnitt utan rader visas inte.
 Future<void> showFerrySheet(
   BuildContext context,
   Map<String, dynamic> f, {
   double? harborLat,
   double? harborLon,
+  double? distanceKm,
+  DateTime? now,
 }) {
   final port = ferryPort(f);
-  final pickup = ferryPickupText(f);
+  final pickupLine = ferryPickupLine(f, now: now);
+  final scheduled = _clock(f['scheduledAt']?.toString());
+  final size = ferrySize(f);
+  final kind = (f['kindLabel'] ?? '').toString().trim();
+  final route = (f['route'] ?? '').toString().trim();
   return showModalBottomSheet<void>(
     context: context,
     isScrollControlled: true,
@@ -783,16 +1037,38 @@ Future<void> showFerrySheet(
       ),
       const SizedBox(height: 6),
       Text(
-        [ferrySize(f), port].where((s) => s.isNotEmpty).join(' · '),
+        [ferryKind(f), port].where((s) => s.isNotEmpty).join(' · '),
         style: TextStyle(fontSize: 15, color: Colors.grey.shade800),
       ),
       const SizedBox(height: 12),
       ActionRow(lat: harborLat, lon: harborLon, driveLabel: 'Kör dit'),
-      const SizedBox(height: 12),
-      _DetailRow('Ankomst', ferryEtaText(f)),
-      _DetailRow('Kaj', port),
-      _DetailRow('Folk kommer ut', pickup),
-      _DetailRow('Kommer från', (f['from'] ?? '').toString()),
+      _SheetSection('När', [
+        _DetailRow('Ankomst', ferryEtaText(f, now: now)),
+        _DetailRow(
+          'Folk kommer ut',
+          pickupLine.replaceFirst('Folk kommer ut ', ''),
+        ),
+        _DetailRow('Tidtabell', scheduled ?? ''),
+        _DetailRow('Försening', ferryDelayText(f)),
+        _DetailRow('Hur säkert', ferryConfidenceText(f)),
+      ]),
+      _SheetSection('Var', [
+        _DetailRow('Kaj', port),
+        _DetailRow('Avstånd', ferryDistanceText(distanceKm)),
+        _DetailRow('Hinner du', ferryReachText(f, distanceKm, now: now)),
+      ]),
+      _SheetSection('Vilka kliver av', [
+        _DetailRow('Sort', ferryKindDetailText(f)),
+        _DetailRow('Storlek', size == kind ? '' : size),
+        _DetailRow('Kommer från', ferryOriginText(f, now: now)),
+        _DetailRow('Rederi', (f['operator'] ?? '').toString().trim()),
+        _DetailRow('Linje', route == ferryName(f) ? '' : route),
+        _DetailRow('Trafik', f['international'] == true ? 'Utrikes' : ''),
+      ]),
+      _SheetSection('Sammanhang', [
+        _DetailRow('Samma kaj ±30 min', ferrySameTerminalText(f)),
+        _DetailRow('Vid kajen', (f['terminalNote'] ?? '').toString().trim()),
+      ]),
     ]),
   );
 }

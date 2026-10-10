@@ -1145,7 +1145,20 @@ class _DriverScreenState extends State<DriverScreen>
 
   void _openFerry(Map<String, dynamic> f) {
     final harbor = _harborFor(f);
-    showFerrySheet(context, f, harborLat: harbor?.$1, harborLon: harbor?.$2);
+    showFerrySheet(
+      context,
+      f,
+      harborLat: harbor?.$1,
+      harborLon: harbor?.$2,
+      distanceKm: _ferryDistance(f),
+    );
+  }
+
+  /// Fågelvägen från föraren till kajen (inte till fartyget ute på vattnet).
+  double? _ferryDistance(Map<String, dynamic> f) {
+    final harbor = _harborFor(f);
+    if (harbor == null || _userLat == null || _userLon == null) return null;
+    return _km(_userLat!, _userLon!, harbor.$1, harbor.$2);
   }
 
   /// Historiken: de senaste timmarnas tips i samma område som listan, också
@@ -3639,6 +3652,7 @@ class _DriverScreenState extends State<DriverScreen>
           pad(
             FerryCard(
               ferry: f,
+              distanceKm: _ferryDistance(f),
               onTap: () {
                 _focusOpportunity(f);
                 _openFerry(f);
@@ -3752,6 +3766,7 @@ class _DriverScreenState extends State<DriverScreen>
             pad(
               FerryCard(
                 ferry: f,
+                distanceKm: _ferryDistance(f),
                 onTap: () {
                   _focusOpportunity(f);
                   _openFerry(f);

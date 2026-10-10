@@ -153,7 +153,7 @@ räkna anslutningarna över alla miljöer, AISStream tillåter tre per konto och
 ankomsten avgörs i hamnrutan, och hamnar med `tips=False` visas bara på kartan. Färjor på väg in
 visas live i pipeline-sidans avsnitt 2c (`/api/pipeline/ferries`, bara med DEBUG,
 `maritime/approach.py`).
-I appen: `/api/ferries` (förarens område, samma behörighet som flödet) och `/api/events`
+I appen: `/api/ferries` (förarens område, samma behörighet som flödet; `rows` bär beslutsfälten kindLabel/kindDetail, scheduledAt/delayMinutes, confirmed, operator, route, departedFrom/At, international, sameTerminalSoon och terminalNote -- se `maritime/views.ferry_rows`, aldrig hamnregistrets `note` med passagerarsiffror) och `/api/events`
 (län och kommuner, `from`/`to` upp till 120 dagar, `dayCounts` per dag; förhandsvisning bara med
 DEBUG och `EVENTS_APP_PREVIEW=1`). Appens sida: `lib/screens/events_screen.dart`.
 

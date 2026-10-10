@@ -368,7 +368,11 @@ final _screens = <_Screen>[
             for (var i = 0; i < 3; i++)
               Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: FerryCard(ferry: _ferryRow(i), onTap: () {}),
+                child: FerryCard(
+                  ferry: _ferryRow(i),
+                  distanceKm: 8.5,
+                  onTap: () {},
+                ),
               ),
           ],
         ),
@@ -392,6 +396,7 @@ final _screens = <_Screen>[
         },
         harborLat: 57.70,
         harborLon: 11.95,
+        distanceKm: 8.5,
       ),
     ),
     open: _tapOpener,
@@ -670,6 +675,35 @@ Map<String, dynamic> _ferryRow(int n) {
     'arrived': false,
     'expectedAt': at.toUtc().toIso8601String(),
     'etaMinutes': 10 + n,
+    // Beslutsfälten (maritime/views.ferry_rows): kortet och bladet ska bära dem
+    // också med stor text.
+    'kindLabel': 'Stor färja',
+    'kindDetail': 'Många kliver av, ofta med bagage och utan bil.',
+    'scheduledAt': at
+        .subtract(const Duration(minutes: 12))
+        .toUtc()
+        .toIso8601String(),
+    'delayMinutes': 12,
+    'confirmed': true,
+    'pickupFrom': at.add(const Duration(minutes: 10)).toUtc().toIso8601String(),
+    'pickupUntil': at
+        .add(const Duration(minutes: 45))
+        .toUtc()
+        .toIso8601String(),
+    'operator': 'Stena Line',
+    'route': 'Frederikshavn - Göteborg',
+    'departedFrom': n == 0 ? 'Frederikshavn' : 'Kiel',
+    'departedAt': at
+        .subtract(const Duration(hours: 3, minutes: 15))
+        .toUtc()
+        .toIso8601String(),
+    'international': true,
+    'sameTerminalSoon': {
+      'count': 2,
+      'nextAt': at.add(const Duration(minutes: 20)).toUtc().toIso8601String(),
+    },
+    'terminalNote':
+        'Buss, spårvagn eller tåg finns nära kajen: en del åker kollektivt vidare.',
   };
 }
 

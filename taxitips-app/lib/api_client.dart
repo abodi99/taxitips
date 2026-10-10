@@ -437,15 +437,25 @@ class ApiClient {
 
   /// "Glömt lösenord?": Supabase mejlar en länk till sidan där man väljer
   /// ett nytt lösenord. Samma sida för förare och ägare som inbjudans länk.
+  ///
+  /// Implicit flöde, inte appens PKCE: länken öppnas i en webbläsare
+  /// (taxitips.se/forare) som saknar telefonens code_verifier. Med PKCE kom
+  /// föraren alltid till "länken fungerar inte längre" (2026-10-11).
   Future<void> sendPasswordReset(String email) async {
-    await ensureInitialized();
+    final auth = GoTrueClient(
+      url: '$supabaseUrl/auth/v1',
+      headers: {'apikey': supabaseAnonKey},
+      flowType: AuthFlowType.implicit,
+    );
     try {
-      await _sb.auth.resetPasswordForEmail(
+      await auth.resetPasswordForEmail(
         email.trim().toLowerCase(),
         redirectTo: _passwordPage,
       );
     } catch (e) {
       throw asApiIfNetwork(e);
+    } finally {
+      auth.dispose();
     }
   }
 

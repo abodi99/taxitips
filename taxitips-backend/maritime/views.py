@@ -13,9 +13,10 @@ Före 2026-10-09 ritade kartan `ferries` (alla AIS-fartyg) och listan `arrivals`
 ankomsterna i tidsfönstret): sex färjor på kartan, en i listan. `ferries` och
 `arrivals` skickas kvar för äldre appar.
 
-En rad bär bara det föraren behöver: namn, storlek, kaj, väntad ankomst och var den
-syns på kartan. Inga källnamn, MMSI, fart eller kurs i text (kursen följer med bara för
-pilen på kartan). `/api/pipeline/ferries` är hela snapshoten, bara med DEBUG.
+En rad bär det föraren behöver för att bestämma sig: namn, sort, kaj, väntad ankomst mot
+tidtabell, hur säker tiden är, varifrån den kommer, andra färjor till samma kaj och var den
+syns på kartan (se ferry_rows). Inga källnamn, MMSI, fart eller kurs i text (kursen följer
+med bara för pilen på kartan), och inga passagerarantal. `/api/pipeline/ferries` är hela snapshoten, bara med DEBUG.
 """
 
 from __future__ import annotations
@@ -117,11 +118,81 @@ def _minutes_until(iso: str | None, now) -> int | None:
     return max(0, round((when - now).total_seconds() / 60))
 
 
+def _when(iso: str | None):
+    import datetime as dt
+
+    if not iso:
+        return None
+    try:
+        return dt.datetime.fromisoformat(iso)
+    except ValueError:
+        return None
+
+
+# Andra färjor till samma kaj inom så här lång tid före eller efter: fler att hämta, eller fler taxibilar.
+SAME_TERMINAL_WINDOW_MIN = 30
+# Samma kaj: samma hamn i registret och kajpunkter inom så här långt från varandra.
+SAME_TERMINAL_KM = 0.5
+TRANSIT_NOTE = "Buss, spårvagn eller tåg finns nära kajen: en del åker kollektivt vidare."
+NO_TRANSIT_NOTE = ("Ingen buss, spårvagn eller tåg nära kajen: resenärerna behöver skjuts. "
+                   "Kan vara en bilfri ö, kolla att taxin når fram.")
+
+
+def _terminal_note(item: dict) -> str | None:
+    """
+    Vad kajen har för kollektivtrafik, bara när tidtabellen säger det (`transitAtQuay`).
+    Hamnregistrets `note` (Trafikanalys passagerarsiffror, kartkällor) visas aldrig för
+    föraren: den bär passagerarantal (invariant 15) och källnamn.
+    """
+    transit = item.get("transitAtQuay")
+    if transit is None:
+        return None
+    return TRANSIT_NOTE if transit else NO_TRANSIT_NOTE
+
+
+def _same_terminal(a: dict, b: dict) -> bool:
+    if a["terminal"] != b["terminal"]:
+        return False
+    if None in (a["portLat"], a["portLon"], b["portLat"], b["portLon"]):
+        return True
+    return haversine_km(a["portLat"], a["portLon"], b["portLat"], b["portLon"]) <= SAME_TERMINAL_KM
+
+
+def _add_same_terminal(rows: list[dict]) -> None:
+    """`sameTerminalSoon`: hur många andra färjor som anländer till samma kaj inom ±30 min, och när den första av dem kommer."""
+    import datetime as dt
+
+    window = dt.timedelta(minutes=SAME_TERMINAL_WINDOW_MIN)
+    times = [(_when(r["expectedAt"]), r) for r in rows]
+    for at, row in times:
+        others = sorted(
+            other_at for other_at, other in times
+            if other is not row and at is not None and other_at is not None
+            and abs(other_at - at) <= window and _same_terminal(row, other)
+        )
+        row["sameTerminalSoon"] = {"count": len(others), "nextAt": others[0].isoformat()} if others else None
+
+
 def ferry_rows(ships: list[dict], arrivals: list[tuple[str, dict]], terminals: dict[str, dict], now) -> list[dict]:
     """
     En rad per färja, för både kartan och listan. `arrivals` är (terminalnyckel, ankomst)
     ur relevance.build; `ships` är AIS-fartygen för samma terminaler.
+
+    Beslutsfälten (ägarkrav 2026-10-11, "underbyggda beslut"), alla bara ur befintlig data
+    och None/tomma när de inte är kända:
+
+    * `kindLabel`/`kindDetail`: sorten och vad den betyder för den som hämtar (relevance.DRIVER_KINDS).
+    * `scheduledAt`: tidtabellens ankomst; `delayMinutes`: förväntad mot tidtabell, bara när
+      fartyget är kopplat till turen (annars okänd, aldrig 0).
+    * `confirmed`: fartygets läge är sett och kopplat; annars gäller tidtabellen.
+    * `operator`, `route`, `departedFrom`, `departedAt` (tidtabellens avgång), `international`.
+    * `sameTerminalSoon`: {count, nextAt} för andra färjor till samma kaj inom ±30 min.
+    * `terminalNote`: kollektivtrafik vid kajen enligt tidtabellsimporten.
+
+    Inga passagerarantal (invariant 15), inga källnamn, MMSI, fart eller kurs i text.
     """
+    from maritime.relevance import BIG_M, DRIVER_KINDS
+
     by_mmsi = {s["mmsi"]: s for s in ships}
     used: set = set()
     rows: list[dict] = []
@@ -146,10 +217,14 @@ def ferry_rows(ships: list[dict], arrivals: list[tuple[str, dict]], terminals: d
         status = (ship or {}).get("status") or (approach.BERTHED if arrived else approach.APPROACHING)
         name = (_ship_name((ship or {}).get("name")) or _ship_name(vessel.get("name"))
                 or (item.get("route") or "").strip() or "Färja")
+        confirmed = ship is not None or bool(vessel)
+        kind = item.get("kind") or ""
         rows.append({
             "id": item.get("id"),
             "name": name,
-            "sizeLabel": size_label(vessel.get("lengthM") or (ship or {}).get("lengthM"), item.get("kind")),
+            "sizeLabel": size_label(vessel.get("lengthM") or (ship or {}).get("lengthM"), kind),
+            "kindLabel": item.get("kindLabel") or None,
+            "kindDetail": DRIVER_KINDS.get(kind),
             "from": item.get("from") or "",
             "terminal": key,
             "portName": term.get("name") or port.get("name") or "",
@@ -164,18 +239,30 @@ def ferry_rows(ships: list[dict], arrivals: list[tuple[str, dict]], terminals: d
             "arrived": arrived or status == approach.BERTHED,
             "expectedAt": item.get("expectedAt"),
             "etaMinutes": None if arrived else _minutes_until(item.get("expectedAt"), now),
+            "scheduledAt": item.get("plannedAt"),
+            "delayMinutes": item.get("delayMinutes") if confirmed else None,
+            "confirmed": confirmed,
             "pickupFrom": item.get("pickupFrom"),
             "pickupUntil": item.get("pickupUntil"),
+            "operator": item.get("operator") or None,
+            "route": (item.get("route") or "").strip() or None,
+            "departedFrom": item.get("from") or None,
+            "departedAt": item.get("plannedDeparture"),
+            "international": item.get("international") if "international" in item else None,
+            "terminalNote": _terminal_note(item),
         })
     for ship in ships:
         if ship["mmsi"] in used or ship["status"] not in ROW_STATUSES:
             continue
         port = terminals.get(ship["terminal"]) or {}
         berthed = ship["status"] == approach.BERTHED
+        big = (ship.get("lengthM") or 0) >= BIG_M
         rows.append({
             "id": f"ais:{ship['mmsi']}",
             "name": _ship_name(ship.get("name")) or "Färja",
             "sizeLabel": size_label(ship.get("lengthM")),
+            "kindLabel": "Stort passagerarfartyg" if big else None,
+            "kindDetail": DRIVER_KINDS["big"] if big else None,
             "from": "",
             "terminal": ship["terminal"],
             "portName": ship.get("terminalName") or port.get("name") or "",
@@ -189,9 +276,19 @@ def ferry_rows(ships: list[dict], arrivals: list[tuple[str, dict]], terminals: d
             "arrived": berthed,
             "expectedAt": None if berthed else ship.get("eta"),
             "etaMinutes": None if berthed else ship.get("etaMinutes"),
+            "scheduledAt": None,
+            "delayMinutes": None,
+            "confirmed": True,
             "pickupFrom": None,
             "pickupUntil": None,
+            "operator": None,
+            "route": None,
+            "departedFrom": None,
+            "departedAt": None,
+            "international": None,
+            "terminalNote": None,
         })
+    _add_same_terminal(rows)
     order = {approach.DOCKING: 0, approach.APPROACHING: 1, approach.BERTHED: 2}
     rows.sort(key=lambda r: (
         r["arrived"], r["expectedAt"] or "9999", order.get(r["status"], 3), r["name"],

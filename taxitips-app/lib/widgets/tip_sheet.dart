@@ -1643,12 +1643,16 @@ class _MetaChip extends StatelessWidget {
           ),
           if (detail != null && detail!.isNotEmpty) ...[
             const SizedBox(width: 5),
-            Text(
-              '· $detail',
-              style: const TextStyle(
-                fontSize: 13.5,
-                fontWeight: FontWeight.w600,
-                color: TbColors.skiffer,
+            // Flexible: med stor text och en lång detalj ("1 tim 6 min sedan")
+            // bryts detaljen i stället för att spilla över skärmkanten.
+            Flexible(
+              child: Text(
+                '· $detail',
+                style: const TextStyle(
+                  fontSize: 13.5,
+                  fontWeight: FontWeight.w600,
+                  color: TbColors.skiffer,
+                ),
               ),
             ),
           ],
