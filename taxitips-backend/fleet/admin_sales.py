@@ -20,6 +20,8 @@ behörighet, tolkning av anropet och svarets form.
 
 from __future__ import annotations
 
+import logging
+
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
 from django.views.decorators.csrf import csrf_exempt
@@ -31,6 +33,8 @@ from fleet import audit, commerce, discounts, orders, pricing, sales, stripe_syn
 from fleet.admin_api import _body, _company_or_404, _iso, _staff, handle
 from fleet.models import CompanyDiscount, Coupon, CouponRedemption, Order, RiskConfig
 from fleet.roles import Perm
+
+log = logging.getLogger(__name__)
 
 
 def _order_or_404(order_id) -> Order:
@@ -536,12 +540,22 @@ def create_coupon(request):
         valid_until=_parse_until(body.get("validUntil")),
         actor_user_id=principal.user_id,
     )
-    return _json(request, {"ok": True, "coupon": _coupon_row(coupon)})
+    # Samma kod i Stripe-kassan ("Lägg till kampanjkod"). Ett Stripe-fel stoppar
+    # inte kupongen: säljaren kan fortfarande lösa in den, och svaret säger varför.
+    stripe = _coupon_stripe_step(lambda: stripe_sync.publish_coupon(coupon))
+    return _json(request, {"ok": True, "coupon": _coupon_row(coupon), "stripe": stripe})
 
 
-@csrf_exempt
-@require_POST
-@handle
+def _coupon_stripe_step(action) -> dict:
+    if not stripe_sync.available():
+        return {"synced": False, "message": "Stripe är inte kopplat här; koden fungerar inte i kassan."}
+    try:
+        return {"synced": True, **(action() or {})}
+    except Exception as exc:  # noqa: BLE001 - stripe.error.StripeError och nätverksfel
+        log.warning("admin_sales: kupongen kunde inte synkas till Stripe: %s", exc)
+        return {"synced": False, "message": f"Stripe svarade med ett fel: {str(exc)[:200]}"}
+
+
 @csrf_exempt
 @require_POST
 @handle
@@ -595,6 +609,9 @@ def list_discounts(request, company_id):
     })
 
 
+@csrf_exempt
+@require_POST
+@handle
 def deactivate_coupon(request, coupon_id):
     """POST /api/admin/coupons/<id>/deactivate"""
     principal = _staff(request, Perm.ADMIN_MANAGE)
@@ -602,7 +619,8 @@ def deactivate_coupon(request, coupon_id):
     if coupon is None:
         raise sales.SalesError("unknown_coupon", "Kupongen finns inte.", status=404)
     coupon = sales.deactivate_coupon(coupon, actor_user_id=principal.user_id)
-    return _json(request, {"ok": True, "coupon": _coupon_row(coupon)})
+    stripe = _coupon_stripe_step(lambda: {"closed": stripe_sync.unpublish_coupon(coupon)})
+    return _json(request, {"ok": True, "coupon": _coupon_row(coupon), "stripe": stripe})
 
 
 # ---------------------------------------------------------------------------

@@ -697,6 +697,71 @@ def checkout_first_subscription(order: Order, *, customer_id: str, success_url: 
     return url
 
 
+COUPON_META = "taxitips_coupon_id"
+
+
+def coupon_months(days: int) -> int:
+    """Gratisdagarna som hela månader i Stripe: 30 dagar = 1 månad, minst 1."""
+    return max(1, round(int(days) / 30))
+
+
+def _promotion_codes_for(stripe, coupon, *, active=None) -> list:
+    params = {"code": coupon.code, "limit": 20}
+    if active is not None:
+        params["active"] = active
+    found = stripe.PromotionCode.list(**params)
+    rows = getattr(found, "data", None) or (found.get("data") if hasattr(found, "get") else []) or []
+    return [r for r in rows if (r.get("metadata") or {}).get(COUPON_META) == str(coupon.id)]
+
+
+def publish_coupon(coupon) -> dict:
+    """
+    Kupongen från adminwebben som kampanjkod i Stripe-kassan.
+
+    Gratisdagarna blir 100 % rabatt i `coupon_months(days)` månader; sedan
+    dras kortet. Kampanjkoden har samma namn som kupongen, och bär antal
+    inlösen och sista dag. Antal bilar och "en inlösen per företag" går inte att
+    uttrycka i Stripe -- de gäller bara när säljaren löser in kupongen.
+    Idempotent: finns kampanjkoden redan görs inget.
+    """
+    stripe = _client()
+    if not coupon.is_active:
+        return {"published": False, "reason": "inactive"}
+    if _promotion_codes_for(stripe, coupon):
+        return {"published": True, "reason": "exists"}
+    months = coupon_months(coupon.days)
+    meta = {COUPON_META: str(coupon.id)}
+    remote = stripe.Coupon.create(
+        percent_off=100, duration="repeating", duration_in_months=months,
+        name=f"{coupon.code}: {coupon.days} dagar gratis"[:40], metadata=meta,
+        idempotency_key=f"coupon:{coupon.id}",
+    )
+    params = {"coupon": remote.id, "code": coupon.code, "metadata": meta}
+    if coupon.max_redemptions:
+        params["max_redemptions"] = int(coupon.max_redemptions)
+    if coupon.valid_until:
+        expires = int(coupon.valid_until.timestamp())
+        if expires <= int(timezone.now().timestamp()) + 60:
+            return {"published": False, "reason": "expired"}
+        params["expires_at"] = expires
+    stripe.PromotionCode.create(idempotency_key=f"promo:{coupon.id}", **params)
+    audit.record(
+        "coupon_published_to_stripe", actor_kind="system", subject_type="coupon",
+        subject_id=coupon.id, detail={"stripe_coupon": remote.id, "months": months},
+    )
+    return {"published": True, "reason": "created", "months": months}
+
+
+def unpublish_coupon(coupon) -> int:
+    """Stänger kupongens kampanjkoder i Stripe. Returnerar hur många."""
+    stripe = _client()
+    closed = 0
+    for row in _promotion_codes_for(stripe, coupon, active=True):
+        stripe.PromotionCode.modify(row["id"], active=False)
+        closed += 1
+    return closed
+
+
 def expire_checkout(order: Order) -> bool:
     """Stänger en öppen Checkout-session, så att den inte kan slutföras. Bästa möjliga."""
     if not order.stripe_checkout_session_id:

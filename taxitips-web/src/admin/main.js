@@ -887,7 +887,12 @@ el.view.addEventListener("submit", async (event) => {
         break;
       case "couponForm": {
         const result = await admin.createCoupon(sales.couponBody(form));
-        flash(`Kupongen ${result.coupon.code} är skapad.`);
+        const stripe = result.stripe ?? {};
+        flash(
+          stripe.synced && stripe.published !== false
+            ? `Kupongen ${result.coupon.code} är skapad och fungerar som kampanjkod i Stripe-kassan.`
+            : `Kupongen ${result.coupon.code} är skapad, men inte i Stripe-kassan: ${stripe.message || stripe.reason || "okänt fel"}. Säljaren kan fortfarande lösa in den.`,
+        );
         break;
       }
       case "discountForm": {
@@ -2250,7 +2255,7 @@ async function salesAction(action, ds) {
     }
 
     case "coupon-off": {
-      if (!confirm("Stänga av kupongen? Redan inlösta påverkas inte.")) return;
+      if (!confirm("Stänga av kupongen? Kampanjkoden i Stripe-kassan stängs också. Redan inlösta påverkas inte.")) return;
       await admin.deactivateCoupon(ds.coupon);
       return render();
     }
