@@ -7,14 +7,15 @@ saknar åtkomst: ett bolag som fortfarande har en period eller ett pågående pr
 ska avslutas först, annars försvinner en kund som kör ur listan.
 
 **Radera** tar bort bolaget och allt som hör till det: bilar, licenser,
-telefoner, förarpass, beställningar, supportchatten, notiser och kontakt-
-uppgifterna. Två saker finns kvar med avsikt:
+telefoner, förarpass, beställningar, supportchatten, notiser, kontakt-
+uppgifterna och **provhistoriken**. Ägarens beslut 2026-10-11: ett arkiverat
+bolag kan inte få ett nytt gratisprov (spärren i fleet/trials.py räknar på
+organisationsnumret), men ett permanent raderat bolag kan registrera sig och
+prova igen. Prov som hör till ett annat bolag som finns kvar med samma nummer
+(t.ex. ett arkiverat) står kvar -- det bolagets spärr gäller fortfarande.
 
-* **Provhistoriken** (`fleet_trial`, nycklad på land + organisationsnummer).
-  Utan den kunde samma bolag registrera sig igen dagen efter och få ett nytt
-  gratisprov (fleet/trials.py). Raden bär bara org-nyckeln och datum.
-* **Revisionsloggen** (`fleet_audit_event`), plus en rad om själva raderingen:
-  vem som raderade vad och när ska gå att svara på i efterhand.
+Kvar med avsikt: **revisionsloggen** (`fleet_audit_event`), plus en rad om
+själva raderingen: vem som raderade vad och när ska gå att svara på i efterhand.
 
 Radering kräver plattformsadministratör, ett arkiverat bolag och att bolaget
 **aldrig betalat**. Ett bolag som betalat har bokföringsunderlag
@@ -76,6 +77,7 @@ from fleet.models import (
     Subscription,
     SubscriptionStatus,
     SupportThread,
+    Trial,
     Vehicle,
     VehicleAssignment,
     VehicleSession,
@@ -377,6 +379,19 @@ def _delete_rows(company_id, *, confirm_name: str, now=None) -> tuple[dict, list
     owner_keys = [f"device:{d}" for d in device_ids] + [f"user:{u}" for u in member_ids]
     if owner_keys:
         gone("favoriter", OpportunityFavorite.objects.filter(owner_key__in=owner_keys))
+
+    # Provhistoriken: bolagets egna prov och organisationsnumrets prov från bolag
+    # som redan är borta. Ett annat bolag som finns kvar behåller sin spärr.
+    profile = CompanyProfile.objects.filter(company_id=company_id).first()
+    org_number = ((profile.org_number if profile else "") or company.org_number or "").strip()
+    trial_rows = Trial.objects.filter(company_id=company_id)
+    if org_number:
+        from fleet import orgnr
+
+        key = orgnr.org_key((profile.country if profile else "") or "SE", org_number)
+        living = Company.objects.exclude(id=company_id).values_list("id", flat=True)
+        trial_rows = trial_rows | Trial.objects.filter(org_key=key).exclude(company_id__in=living)
+    gone("provperioder", trial_rows)
 
     gone("företagsuppgifter", CompanyProfile.objects.filter(company_id=company_id))
     # Supabases tabeller: companies kaskaderar till devices och company_members

@@ -101,7 +101,7 @@ class ArchiveTests(FleetTestCase):
         self.assertEqual(response.json()["reason"], "confirm_name_mismatch")
         self.assertTrue(Company.objects.filter(id=self.company.id).exists())
 
-    def test_delete_removes_everything_but_the_trial_history(self):
+    def test_delete_removes_everything_and_the_company_may_try_again(self):
         self.terminate()
         archive.archive(self.company.id, actor_user_id=self.staff)
         response = self.post(f"/api/admin/companies/{self.company.id}/delete", {"confirmName": "Avslutad AB"})
@@ -115,9 +115,9 @@ class ArchiveTests(FleetTestCase):
         self.assertFalse(VehicleSession.objects.filter(company_id=cid).exists())
         self.assertFalse(Subscription.objects.filter(company_id=cid).exists())
         self.assertFalse(SalesFollowUp.objects.filter(company_id=cid).exists())
-        # Provhistoriken finns kvar: samma orgnr får inget nytt gratisprov.
-        self.assertTrue(Trial.objects.filter(company_id=cid).exists())
-        self.assertFalse(trials.eligibility(country="SE", org_number="5566778899").ok)
+        # Ägarens beslut 2026-10-11: permanent raderat = får prova igen.
+        self.assertFalse(Trial.objects.filter(company_id=cid).exists())
+        self.assertTrue(trials.eligibility(country="SE", org_number="5566778899").ok)
         deleted = AuditEvent.objects.get(action="company_deleted", company_id=cid)
         self.assertNotIn("Avslutad", json.dumps(deleted.detail))
 
@@ -141,6 +141,24 @@ class ArchiveTests(FleetTestCase):
             {str(self.owner.user_id), str(colleague.user_id)},
         )
         self.assertEqual(response.json()["deleted"]["inloggningar"], 2)
+
+    def test_an_archived_company_keeps_the_trial_block(self):
+        self.terminate()
+        archive.archive(self.company.id, actor_user_id=self.staff)
+        self.assertFalse(trials.eligibility(country="SE", org_number="5566778899").ok)
+
+    def test_delete_spares_the_trial_of_another_company_that_still_exists(self):
+        """Samma orgnr i ett annat bolag (t.ex. arkiverat): dess spärr står kvar."""
+        twin = self.make_company(name="Tvilling AB", org_number="5566778899")
+        twin_trial = Trial.objects.create(
+            company_id=twin.id, org_key="SE:5566778899", source=Trial.Source.SALES,
+            requires_payment_method=False, status=Trial.Status.ENDED,
+        )
+        self.terminate()
+        archive.archive(self.company.id, actor_user_id=self.staff)
+        self.post(f"/api/admin/companies/{self.company.id}/delete", {"confirmName": "Avslutad AB"})
+        self.assertTrue(Trial.objects.filter(id=twin_trial.id).exists())
+        self.assertFalse(Trial.objects.filter(company_id=self.company.id).exists())
 
     @override_settings(
         SUPABASE_SERVICE_ROLE_KEY="test-service-role", SUPABASE_URL="http://supabase.test",

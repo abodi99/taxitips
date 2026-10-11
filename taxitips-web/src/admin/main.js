@@ -2200,13 +2200,21 @@ async function salesAction(action, ds) {
 
     case "delete-company": {
       const name = prompt(
-        "RADERA PERMANENT: bolaget, bilarna, telefonerna, beställningarna och chatten tas bort " +
-          "och går inte att få tillbaka.\n\nSkriv bolagets namn exakt för att bekräfta:",
+        "RADERA PERMANENT: bolaget, bilarna, telefonerna, beställningarna, chatten, bolagets " +
+          "inloggningar och provhistoriken tas bort och går inte att få tillbaka.\n\n" +
+          "Skriv bolagets namn exakt för att bekräfta:",
       );
       if (!name) return;
       const result = await admin.deleteCompany(companyId, name);
-      const total = Object.values(result.deleted ?? {}).reduce((a, b) => a + b, 0);
-      flash(`Bolaget är raderat (${total} rader). Provhistoriken på organisationsnumret finns kvar.`);
+      const deleted = result.deleted ?? {};
+      const left = deleted["inloggningar kvar"] ?? 0;
+      const total = Object.entries(deleted)
+        .filter(([key]) => key !== "inloggningar kvar")
+        .reduce((sum, [, n]) => sum + n, 0);
+      flash(
+        `Bolaget är raderat (${total} rader, ${deleted.inloggningar ?? 0} inloggningar). ` +
+          (left ? `${left} inloggning(ar) kunde inte raderas -- se Konton.` : "Bolaget kan registrera sig och prova igen."),
+      );
       state.companyId = null;
       state.kundFilter = "alla";
       return render();

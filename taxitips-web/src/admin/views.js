@@ -1436,8 +1436,9 @@ function archiveCard(d, config) {
         ? '<button class="btn btn-danger" data-action="delete-company">Radera permanent</button>' : ""}
     </div>
     ${a.canDelete
-      ? `<p class="muted">Radera tar bort bilar, telefoner, beställningar, chatt och kontaktuppgifter.
-          Provhistoriken på organisationsnumret sparas, så att bolaget inte kan få ett nytt gratisprov.
+      ? `<p class="muted">Radera tar bort bilar, telefoner, beställningar, chatt, kontaktuppgifter,
+          bolagets inloggningar och provhistoriken. Bolaget kan sedan registrera sig och prova igen.
+          Så länge det bara är arkiverat får det inget nytt gratisprov, och kontona är pausade.
           ${config?.canManage ? "" : "Bara plattformsadministratören kan radera."}</p>`
       : `<p class="muted">${esc(a.deleteBlocker)}</p>`}`;
 }
