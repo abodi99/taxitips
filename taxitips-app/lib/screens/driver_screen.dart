@@ -138,7 +138,6 @@ class _DriverScreenState extends State<DriverScreen>
   /// Svaga tips (en enstaka inställd buss, nästa tåg om fem minuter) och
   /// "Övrigt" visas längre ner i listan, inte dolda: när de starka tipsen är
   /// få är de det som finns (ägarens beslut 2026-10-03). Föraren kan dölja dem.
-  bool _showWeak = true;
   int _hiddenWeak = 0;
 
   /// Event types the driver has explicitly switched off. Stored as an
@@ -306,9 +305,6 @@ class _DriverScreenState extends State<DriverScreen>
   static const _prefsScoreMinKey = 'tb_filter_score_min';
   static const _prefsScoreMaxKey = 'tb_filter_score_max';
   static const _prefsNearMeKey = 'tb_filter_near_me';
-  // v2: standarden blev "visa". Den gamla nyckeln bar många förares sparade
-  // "dölj" från när det var standard -- de hade aldrig sett ändringen.
-  static const _prefsShowWeakKey = 'tb_filter_show_weak_v2';
   static const _prefsSourceKey = 'tb_filter_source'; // legacy exclusive
   static const _prefsHiddenModesKey = 'tb_filter_hidden_modes';
   static const _prefsHiddenTiersKey = 'tb_filter_hidden_tiers';
@@ -329,7 +325,6 @@ class _DriverScreenState extends State<DriverScreen>
       final scoreMin = prefs.getDouble(_prefsScoreMinKey);
       final scoreMax = prefs.getDouble(_prefsScoreMaxKey);
       final nearMe = prefs.getBool(_prefsNearMeKey);
-      final showWeak = prefs.getBool(_prefsShowWeakKey);
       final hiddenModes = prefs.getStringList(_prefsHiddenModesKey);
       final legacySource = prefs.getString(_prefsSourceKey);
       final hiddenTiers = prefs.getStringList(_prefsHiddenTiersKey);
@@ -355,7 +350,6 @@ class _DriverScreenState extends State<DriverScreen>
         }
         if (eventDay != null) _eventDay = eventDay;
         _followedEvents = followedEvents;
-        if (showWeak != null) _showWeak = showWeak;
         if (scoreMin != null) _scoreMin = scoreMin.clamp(0, 100);
         if (scoreMax != null) _scoreMax = scoreMax.clamp(0, 100);
         if (_scoreMin > _scoreMax) {
@@ -434,7 +428,6 @@ class _DriverScreenState extends State<DriverScreen>
       await prefs.setDouble(_prefsScoreMaxKey, _scoreMax);
       await prefs.remove(_prefsHighOnlyKey);
       await prefs.setBool(_prefsNearMeKey, _nearMe);
-      await prefs.setBool(_prefsShowWeakKey, _showWeak);
       await prefs.setStringList(_prefsHiddenModesKey, _hiddenModes.toList());
       await prefs.remove(_prefsSourceKey);
       await prefs.setStringList(_prefsHiddenTiersKey, _hiddenTiers.toList());
@@ -1208,39 +1201,6 @@ class _DriverScreenState extends State<DriverScreen>
     );
   }
 
-  /// "3 svaga tips dolda · Visa" -- en rad, inte en knapp som tar plats.
-  Widget _weakToggleRow() {
-    final label = _showWeak
-        ? 'Dölj svaga tips'
-        : _hiddenWeak == 1
-        ? '1 svagt tips dolt · Visa'
-        : '$_hiddenWeak svaga tips dolda · Visa';
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(12, 0, 12, 4),
-      child: Align(
-        alignment: Alignment.centerLeft,
-        child: TextButton.icon(
-          style: TextButton.styleFrom(
-            foregroundColor: TbColors.skiffer,
-            minimumSize: const Size(0, 48),
-            textStyle: const TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          onPressed: () => _setShowWeak(!_showWeak),
-          icon: Icon(
-            _showWeak
-                ? Icons.visibility_off_outlined
-                : Icons.visibility_outlined,
-            size: 18,
-          ),
-          label: Text(label),
-        ),
-      ),
-    );
-  }
-
   void _focusOpportunity(Map<String, dynamic> o) {
     final lat = (o['lat'] as num?)?.toDouble();
     final lon = (o['lon'] as num?)?.toDouble();
@@ -1989,7 +1949,6 @@ class _DriverScreenState extends State<DriverScreen>
       _scoreMin,
       _scoreMax,
       _nearMe,
-      _showWeak,
       _sortMode,
       (_hiddenModes.toList()..sort()).join(','),
       (_hiddenTiers.toList()..sort()).join(','),
@@ -2011,9 +1970,10 @@ class _DriverScreenState extends State<DriverScreen>
           (a) => _inScoreRange(a) || categoryOfAlert(a) == SignalCategory.road,
         )
         .toList();
-    // Svaga döljs som standard. Räknas, så att listan kan säga hur många.
+    // Svaga tips visas alltid, utom när föraren filtrerar på starka (50+):
+    // då bort även ett svagt tips med hög poäng (t.ex. med ersättningstrafik).
     final before = list.length;
-    if (!_showWeak) list = list.where((a) => !_isHiddenWeak(a)).toList();
+    if (_scoreMin >= 50) list = list.where((a) => !_isHiddenWeak(a)).toList();
     _hiddenWeak = before - list.length;
     _sortByPriority(list);
     return list;
@@ -2024,14 +1984,6 @@ class _DriverScreenState extends State<DriverScreen>
       a['is_favorite'] != true &&
       categoryOfAlert(a) != SignalCategory.road &&
       likelihoodForAlert(a) == CustomerLikelihood.low;
-
-  void _setShowWeak(bool value) {
-    setState(() => _showWeak = value);
-    _saveFilters();
-    unawaited(
-      logAnalyticsEvent('filter_show_weak', params: {'on': value ? 1 : 0}),
-    );
-  }
 
   List<Map<String, dynamic>> get _trafficSignals => _listOpportunities;
 
@@ -2349,7 +2301,6 @@ class _DriverScreenState extends State<DriverScreen>
       _scoreMin = 0;
       _scoreMax = 100;
       _nearMe = false;
-      _showWeak = true;
       _hiddenModes = {};
       _hiddenTiers = {};
       _status = null;
@@ -2527,21 +2478,6 @@ class _DriverScreenState extends State<DriverScreen>
                               ),
                             ],
                           ],
-                        ),
-                        SwitchListTile(
-                          contentPadding: EdgeInsets.zero,
-                          title: const Text(
-                            'Visa svaga tips',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          subtitle: const Text(
-                            'T.ex. en inställd avgång när nästa går om några minuter.',
-                          ),
-                          value: _showWeak,
-                          onChanged: (v) {
-                            _setShowWeak(v);
-                            setModal(() {});
-                          },
                         ),
                         const SizedBox(height: 8),
                         const Text(
@@ -3774,9 +3710,6 @@ class _DriverScreenState extends State<DriverScreen>
         );
         out.addAll(today.map(eventCard));
       }
-    }
-    if (lens != SignalCategory.road && (_hiddenWeak > 0 || _showWeak)) {
-      out.add(_weakToggleRow());
     }
     if (ended.isNotEmpty) {
       out.add(
