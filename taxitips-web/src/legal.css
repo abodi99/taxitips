@@ -7,17 +7,17 @@
 }
 
 .legal h1 {
-  font-size: 1.8rem;
+  font-size: 2.1rem;
   margin-bottom: 0.25rem;
 }
 
 .legal h2 {
-  font-size: 1.25rem;
+  font-size: 1.45rem;
   margin: 2rem 0 0.5rem;
 }
 
 .legal h3 {
-  font-size: 1.05rem;
+  font-size: 1.15rem;
   margin: 1.25rem 0 0.25rem;
 }
 
@@ -63,7 +63,7 @@
   }
 
   .legal h1 {
-    font-size: 1.5rem;
+    font-size: 1.75rem;
   }
 
   .legal th,
