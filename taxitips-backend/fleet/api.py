@@ -1316,11 +1316,19 @@ def create_order(request):
     payment = str(body.get("payment") or commerce.PAYMENT_CARD)
     if payment not in (commerce.PAYMENT_CARD, commerce.PAYMENT_INVOICE):
         payment = commerce.PAYMENT_CARD
+    # Tillbaka till portalen efter Stripe-kassan (första abonnemanget med kort).
+    from django.conf import settings
+
+    portal = getattr(settings, "FLEET_PORTAL_URL", "https://taxitips.se/portal").rstrip("/")
+    # Byggs här, inte ur anropet: kassan ska aldrig skicka kunden någon annanstans.
+    success = f"{portal}?betalning=klar#medlemskap"
+    cancel = f"{portal}?betalning=avbruten#medlemskap"
 
     def place():
         return commerce.place_order(
             principal.company_id, plan, created_by=principal.user_id, actor_kind="customer",
             payment=payment, idempotency=body.get("idempotency_key"),
+            success_url=success, cancel_url=cancel,
         )
 
     if not plan.request["baseCountyChanges"]:
@@ -1371,11 +1379,12 @@ def create_order(request):
 @handle
 def trial_commit(request):
     """
-    POST /api/fleet/trial/commit -- bekräfta provbilar och spara kort.
+    POST /api/fleet/trial/commit -- fortsätt med provbilarna.
 
-    Under pågående Django-prov: skapar Stripe-abonnemang med trial_end =
-    provets slut. Kunden sparar kort via Checkout; debitering sker vid
-    provslut. Inget säljs i appen -- den här vägen är bara för portalen.
+    Kunden betalar första perioden direkt i Stripe Checkout (inget Stripe-prov,
+    fält för kampanjkod); provet övergår i medlemskapet när betalningen gått
+    igenom (commerce.commit_trial_continuation). Inget säljs i appen -- den
+    här vägen är bara för portalen.
     """
     from django.conf import settings
 

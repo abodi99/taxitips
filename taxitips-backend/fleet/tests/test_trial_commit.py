@@ -115,7 +115,8 @@ class TrialCommitTests(FleetTestCase):
         stripe.Subscription = SubscriptionAPI
         return stripe, sessions, creates
 
-    def test_commit_creates_checkout_with_trial_end_and_keeps_order_pending(self):
+    def test_commit_pays_now_in_checkout_without_a_stripe_trial(self):
+        """Ägarens beslut 2026-10-11: en betalning via Stripe är aldrig ett prov."""
         stripe, sessions, creates = self._fake_checkout()
         with mock.patch("fleet.stripe_sync._client", return_value=stripe):
             order, info = commerce.commit_trial_continuation(
@@ -124,16 +125,78 @@ class TrialCommitTests(FleetTestCase):
                 success_url="https://taxitips.se/portal?ok=1",
                 cancel_url="https://taxitips.se/portal?cancel=1",
             )
+        order.refresh_from_db()
         self.assertEqual(order.status, Order.Status.PENDING_PAYMENT)
-        self.assertTrue((order.request or {}).get("trial_commit"))
+        self.assertFalse((order.request or {}).get("trial_commit"))
         self.assertTrue(info["paymentUrl"].startswith("https://checkout.stripe.test/"))
+        self.assertIsNone(info["firstChargeAt"])
         session = list(sessions.values())[0]
-        self.assertEqual(session["metadata"]["kind"], "trial_commit")
+        self.assertEqual(session["metadata"]["kind"], "subscription")
         self.assertTrue(order.stripe_checkout_session_id)
         sub_data = creates[0].get("subscription_data") or {}
-        self.assertEqual(sub_data.get("trial_end"), int(self.trial.ends_at.timestamp()))
+        self.assertNotIn("trial_end", sub_data)
         # Kassan visar "Lägg till kampanjkod".
         self.assertIs(creates[0].get("allow_promotion_codes"), True)
+
+    def test_an_old_unpaid_card_saving_checkout_is_replaced(self):
+        stripe, sessions, creates = self._fake_checkout()
+        old = self._commit_order()
+        Order.objects.filter(id=old.id).update(
+            stripe_checkout_session_id="cs_old", stripe_payment_url="https://checkout.stripe.test/cs_old",
+        )
+        stripe.checkout.Session.expire = mock.Mock()
+        with mock.patch("fleet.stripe_sync._client", return_value=stripe):
+            order, info = commerce.commit_trial_continuation(
+                self.company.id, self._plan(), created_by=self.owner.user_id,
+                success_url="https://taxitips.se/portal?ok=1",
+                cancel_url="https://taxitips.se/portal?cancel=1",
+            )
+        old.refresh_from_db()
+        self.assertEqual(old.status, Order.Status.CANCELED)
+        stripe.checkout.Session.expire.assert_called_once_with("cs_old")
+        self.assertNotEqual(info["paymentUrl"], "https://checkout.stripe.test/cs_old")
+
+    def test_a_paid_checkout_applies_the_order_and_remembers_the_subscription(self):
+        order = orders.create_order(
+            self.company.id, self._plan(), created_by=self.owner.user_id, actor_kind="customer",
+        )
+        Order.objects.filter(id=order.id).update(stripe_checkout_session_id="cs_pay_1")
+        session = {
+            "object": "checkout.session", "id": "cs_pay_1", "payment_status": "paid",
+            "customer": "cus_pay", "subscription": "sub_pay_1",
+            "metadata": {"order_id": str(order.id), "company_id": str(self.company.id),
+                         "kind": "subscription"},
+        }
+        with mock.patch("fleet.webhook_events._resync_amount"):
+            result = webhook_events.handle("checkout.session.completed", session)
+        self.assertEqual(result["action"], "payment_succeeded")
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.APPLIED)
+        sub = Subscription.objects.get(company_id=self.company.id)
+        self.assertEqual((sub.stripe_subscription_id, sub.stripe_customer_id), ("sub_pay_1", "cus_pay"))
+        self.trial.refresh_from_db()
+        self.assertEqual(self.trial.status, Trial.Status.CONVERTED)
+
+    def test_the_subscriptions_invoice_finds_the_order_through_its_metadata(self):
+        order = orders.create_order(
+            self.company.id, self._plan(), created_by=self.owner.user_id, actor_kind="customer",
+        )
+        Subscription.objects.filter(company_id=self.company.id).update(
+            stripe_subscription_id="sub_meta", stripe_customer_id="cus_meta",
+        )
+        now = int(timezone.now().timestamp())
+        invoice = {
+            "object": "invoice", "id": "in_meta_1", "customer": "cus_meta", "subscription": "sub_meta",
+            "amount_paid": 10000, "status": "paid", "billing_reason": "subscription_create",
+            "metadata": {},
+            "parent": {"subscription_details": {"metadata": {"order_id": str(order.id)}}},
+            "lines": {"data": [{"type": "subscription", "subscription": "sub_meta",
+                                "period": {"start": now, "end": now + 30 * 86400}}]},
+        }
+        with mock.patch("fleet.webhook_events._resync_amount"):
+            webhook_events.handle("invoice.paid", invoice)
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.APPLIED)
 
     def _commit_order(self):
         order = orders.create_order(
@@ -156,73 +219,32 @@ class TrialCommitTests(FleetTestCase):
             **extra,
         }
 
-    def _stripe_with_discount(self, coupon, code="VAR20"):
-        modified = []
-        trial_end = int(self.trial.ends_at.timestamp())
-
-        class SubscriptionAPI:
-            @staticmethod
-            def retrieve(sub_id, expand=None):
-                return Obj(id=sub_id, trial_end=trial_end, discounts=[
-                    Obj(coupon=Obj(coupon), promotion_code=Obj(code=code)),
-                ])
-
-            @staticmethod
-            def modify(sub_id, **kw):
-                modified.append((sub_id, kw))
-                return Obj(id=sub_id)
-
-        stripe = mock.Mock()
-        stripe.Subscription = SubscriptionAPI
-        return stripe, modified
-
-    def test_a_promotion_code_becomes_the_company_discount_and_leaves_stripe(self):
-        """Annars drogs rabatten två gånger: i vår prismotor och i Stripe."""
+    def test_a_promotion_code_is_noted_and_stays_in_stripe(self):
+        """
+        Kupongen ligger kvar i Stripe, som sköter dess längd. I vår prismotor hade
+        en kod på "3 månader" blivit för alltid: där räknas beloppet i Stripe inte
+        om när en rabatt löper ut.
+        """
         from fleet import discounts
+        from fleet.models import AuditEvent
 
         order = self._commit_order()
-        stripe, modified = self._stripe_with_discount(
-            {"id": "co_1", "percent_off": 20.0, "duration": "repeating", "duration_in_months": 3},
+        webhook_events.handle(
+            "checkout.session.completed",
+            self._session(order, total_details={"amount_discount": 5000},
+                          discounts=[{"promotion_code": "promo_VAR20"}]),
         )
-        with mock.patch("fleet.stripe_sync._client", return_value=stripe), \
-                mock.patch("fleet.webhook_events._resync_amount") as resync:
-            result = webhook_events.handle(
-                "checkout.session.completed",
-                self._session(order, total_details={"amount_discount": 5000}),
-            )
-        self.assertEqual(result["action"], "trial_commit_card_saved")
-        self.assertEqual(modified, [("sub_disc_1", {"discounts": ""})])
-        row = discounts.active_discount(self.company.id)
-        self.assertEqual((row.kind, row.value), ("percent_bp", 2000))
-        self.assertIn("VAR20", row.description)
-        # Tre månader räknat från provets slut.
-        self.assertGreater(row.valid_until, self.trial.ends_at + timedelta(days=85))
-        resync.assert_called_once_with(self.company.id)
+        self.assertIsNone(discounts.active_discount(self.company.id))
+        event = AuditEvent.objects.get(action="promotion_code_used", company_id=self.company.id)
+        self.assertEqual(event.detail["discount_ore"], 5000)
+        self.assertEqual(event.detail["codes"], ["promo_VAR20"])
 
-    def test_a_checkout_without_a_code_touches_no_discount(self):
-        from fleet import discounts
+    def test_a_checkout_without_a_code_notes_nothing(self):
+        from fleet.models import AuditEvent
 
         order = self._commit_order()
-        with mock.patch("fleet.stripe_sync.take_over_checkout_discount") as take_over:
-            webhook_events.handle("checkout.session.completed", self._session(order))
-        take_over.assert_not_called()
-        self.assertIsNone(discounts.active_discount(self.company.id))
-
-    def test_a_foreign_currency_code_stays_in_stripe(self):
-        from fleet import discounts
-
-        order = self._commit_order()
-        stripe, modified = self._stripe_with_discount(
-            {"id": "co_eur", "amount_off": 1000, "currency": "eur", "duration": "forever"},
-        )
-        with mock.patch("fleet.stripe_sync._client", return_value=stripe), \
-                mock.patch("fleet.webhook_events._resync_amount"):
-            webhook_events.handle(
-                "checkout.session.completed",
-                self._session(order, total_details={"amount_discount": 1000}),
-            )
-        self.assertEqual(modified, [])
-        self.assertIsNone(discounts.active_discount(self.company.id))
+        webhook_events.handle("checkout.session.completed", self._session(order))
+        self.assertFalse(AuditEvent.objects.filter(action="promotion_code_used").exists())
 
     def _zero_invoice(self, order, billing_reason):
         Subscription.objects.filter(company_id=self.company.id).update(

@@ -121,7 +121,7 @@ function payStep({ payOk, hasMemberships, cs, trial }) {
   const pay = {
     id: "pay",
     title: "Fortsätt med medlemskap",
-    hint: "Kort sparas hos Stripe. Inget dras under ett pågående prov.",
+    hint: "Betala första månaden hos Stripe. Provet övergår då i medlemskapet.",
     done: payOk,
     goto: "abonnemang",
     cta: "Till abonnemang",
@@ -131,9 +131,9 @@ function payStep({ payOk, hasMemberships, cs, trial }) {
   };
   if (payOk || !hasMemberships) return pay;
   if (cs?.kind === "commit") {
-    pay.cta = "Bekräfta medlemskap och spara kort";
+    pay.cta = "Teckna medlemskap";
     pay.action = "continue-trial";
-    pay.hint = "Nästa steg: spara kortet. Första dragningen när provet tar slut.";
+    pay.hint = "Du betalar första månaden direkt. Provet övergår då i medlemskapet.";
   } else if (cs?.kind === "finish_card") {
     pay.cta = "Öppna betalsidan";
     pay.href = trial?.paymentUrl || null;
@@ -287,9 +287,9 @@ function continueCard(data) {
       <p>${items} ·
         provet slutar ${esc(date(trial.endsAt))}</p>
       ${price}
-      <p class="muted">Bekräfta medlemskapen och spara kortet hos Stripe. Inget dras
-        under provet — första dragningen sker när det tar slut, sedan varje månad.</p>
-      <div class="btn-row"><button class="btn btn-primary btn-lg" data-action="continue-trial">Bekräfta medlemskap och spara kort</button></div>
+      <p class="muted">Teckna medlemskapet när du vill. Du betalar första månaden direkt hos
+        Stripe, sedan en gång i månaden tills ni säger upp. Provet övergår då i medlemskapet.</p>
+      <div class="btn-row"><button class="btn btn-primary btn-lg" data-action="continue-trial">Teckna medlemskap</button></div>
     </div>`;
   }
 
@@ -844,21 +844,21 @@ function membershipAction(data, stage, plan) {
   const trial = data.trial;
   const unlocked = joinSv(plan.locked.map((k) => (CATEGORY_TEXT[k] ?? [k])[0].toLowerCase()));
   const unlockText = unlocked
-    ? ` ${unlocked.charAt(0).toUpperCase()}${unlocked.slice(1)} öppnas när kortet är sparat.`
+    ? ` ${unlocked.charAt(0).toUpperCase()}${unlocked.slice(1)} öppnas när betalningen har gått igenom.`
     : "";
 
   switch (cs?.kind) {
     case "commit":
       return `<div class="member-cta">
           <div class="member-cta-text">
-            <h3>Fortsätt efter provet</h3>
-            <p>Bekräfta ${theMemberships} (${plates}) och spara kortet hos Stripe. Inget
-              dras under provet. Första dragningen sker ${esc(date(trial?.endsAt))},
-              sedan en gång i månaden.${esc(unlockText)}</p>
+            <h3>Teckna medlemskap</h3>
+            <p>Fortsätt med ${theMemberships} (${plates}). Du betalar första månaden direkt
+              hos Stripe, sedan en gång i månaden tills ni säger upp. Provet övergår då i
+              medlemskapet.${esc(unlockText)}</p>
           </div>
           <div class="member-cta-act">
-            <button class="btn btn-primary btn-lg" data-action="continue-trial">Fortsätt efter provet</button>
-            <p class="member-fine">Du ser beloppet och godkänner det innan kortet sparas.</p>
+            <button class="btn btn-primary btn-lg" data-action="continue-trial">Teckna medlemskap</button>
+            <p class="member-fine">Du ser beloppet och godkänner det innan du betalar.</p>
           </div>
         </div>`;
     case "finish_card":
@@ -922,8 +922,8 @@ function membershipCard(data, pricing) {
     trial: [
       "Ni provar Taxi Tips — fortsätt med medlemskap",
       t?.endsAt
-        ? `Gratis till ${dateTime(t.endsAt)}. Spara kortet nu så tar medlemskapet vid automatiskt.`
-        : "Provet startar när den första telefonen ansluts. Därefter kan ni spara kortet här.",
+        ? `Gratis till ${dateTime(t.endsAt)}. Teckna medlemskapet när du vill: du betalar första månaden direkt.`
+        : "Provet startar när den första telefonen ansluts. Därefter kan ni teckna medlemskap här.",
       '<span class="pill pill-warn">Provperiod</span>',
     ],
     trial_committed: [

@@ -422,8 +422,6 @@ def collect_trial_commit(
         },
         # Kort obligatoriskt även under Stripe-provet -- annars ingen auto-förnyelse.
         payment_method_collection="always",
-        # "Lägg till kampanjkod" i kassan. Koderna skapas i Stripes dashboard;
-        # rabatten flyttas sedan till vår prismotor (take_over_checkout_discount).
         allow_promotion_codes=True,
         success_url=success_url,
         cancel_url=cancel_url,
@@ -539,7 +537,8 @@ def existing_subscription_is_open(subscription: Subscription) -> bool:
 
 
 def collect_order(
-    order: Order, *, collection_method: str = "charge_automatically", days_until_due: int = 14
+    order: Order, *, collection_method: str = "charge_automatically", days_until_due: int = 14,
+    success_url: str = "", cancel_url: str = "",
 ) -> str:
     """
     Tar betalt för en beställning som väntar på betalning. Returnerar länken
@@ -556,6 +555,11 @@ def collect_order(
     Rättigheterna ges fortfarande bara av webhooken eller avstämningen, när
     Stripe säger att fakturan är betald. Idempotent: en order som redan har en
     faktura får samma länk tillbaka.
+
+    **Första abonnemanget med kort och en sida att komma tillbaka till** går
+    via Stripe Checkout (`checkout_first_subscription`): betalning direkt,
+    inget Stripe-prov, och fältet "Lägg till kampanjkod". Stripes fakturasida
+    har inget sådant fält (ägarens beslut 2026-10-11).
     """
     stripe = _client()
     order.refresh_from_db()
@@ -563,6 +567,8 @@ def collect_order(
         raise ValueError(f"ordern väntar inte på betalning ({order.status})")
     if order.stripe_invoice_id:
         return order.stripe_payment_url or _invoice_url(order.stripe_invoice_id)
+    if order.stripe_checkout_session_id and order.stripe_payment_url:
+        return order.stripe_payment_url
 
     subscription = Subscription.objects.get(company_id=order.company_id)
     company = Company.objects.get(id=order.company_id)
@@ -570,6 +576,15 @@ def collect_order(
     collection = _collection(collection_method, days_until_due)
     has_open_subscription = existing_subscription_is_open(subscription)
     adding, add_counties = _pending_from_request(order.request)
+
+    if (
+        not has_open_subscription
+        and collection_method == "charge_automatically"
+        and success_url and cancel_url
+    ):
+        return checkout_first_subscription(
+            order, customer_id=customer_id, success_url=success_url, cancel_url=cancel_url,
+        )
 
     if not has_open_subscription:
         created = stripe.Subscription.create(
@@ -625,6 +640,73 @@ def collect_order(
                 "total_now_ore": order.total_now_ore},
     )
     return url
+
+
+def checkout_first_subscription(order: Order, *, customer_id: str, success_url: str,
+                                cancel_url: str) -> str:
+    """
+    Stripe Checkout för bolagets första abonnemang: kunden betalar första
+    perioden direkt. Inget `trial_end` -- provet ges av oss vid registreringen,
+    inte av Stripe, och en betalning är aldrig ett nytt prov. Kampanjkoder kan
+    anges i kassan; kupongen ligger kvar på abonnemanget och Stripe sköter dess
+    längd (en gång, månader, för alltid).
+
+    Rättigheterna ges av webhooken (`checkout.session.completed` med
+    `payment_status=paid`, och `invoice.paid`), som hittar ordern på metadata.
+    """
+    stripe = _client()
+    subscription = Subscription.objects.get(company_id=order.company_id)
+    amount_ore = int(order.amount_now_ore or order.next_period_amount_ore or 0)
+    if amount_ore <= 0:
+        raise ValueError("inget belopp att betala")
+    recurring_lines = [
+        line for line in (order.lines or [])
+        if not str(line.get("key") or "").startswith("prorated_")
+    ] or (order.lines or [])
+    adding, add_counties = _pending_from_request(order.request)
+    meta = {"company_id": str(order.company_id), "order_id": str(order.id)}
+    session = stripe.checkout.Session.create(
+        mode="subscription",
+        customer=customer_id,
+        line_items=_checkout_line_items(recurring_lines, currency=order.currency, amount_ore=amount_ore),
+        subscription_data={
+            "description": package_summary(order.company_id, adding=adding, add_counties=add_counties),
+            "metadata": {
+                **meta,
+                "licenses": str(order.quantity_after),
+                "extra_counties": str(_pending_extra_county_count(order.request)),
+                "price_version": subscription.price_version_id,
+            },
+        },
+        payment_method_collection="always",
+        allow_promotion_codes=True,
+        success_url=success_url,
+        cancel_url=cancel_url,
+        metadata={**meta, "kind": "subscription"},
+        idempotency_key=f"checkout:{order.id}",
+    )
+    url = getattr(session, "url", "") or ""
+    Order.objects.filter(id=order.id).update(
+        stripe_checkout_session_id=session.id, stripe_payment_url=url,
+    )
+    audit.record(
+        "order_checkout_created", company_id=order.company_id, actor_kind="system",
+        subject_type="order", subject_id=order.id,
+        detail={"session": session.id, "amount_ore": amount_ore},
+    )
+    return url
+
+
+def expire_checkout(order: Order) -> bool:
+    """Stänger en öppen Checkout-session, så att den inte kan slutföras. Bästa möjliga."""
+    if not order.stripe_checkout_session_id:
+        return False
+    try:
+        _client().checkout.Session.expire(order.stripe_checkout_session_id)
+        return True
+    except Exception as exc:  # noqa: BLE001 - redan stängd, utgången eller slutförd
+        log.warning("fleet.stripe: kunde inte stänga kassan %s: %s", order.stripe_checkout_session_id, exc)
+        return False
 
 
 def _invoice_url(invoice_id: str) -> str:
@@ -853,56 +935,6 @@ def cancel_stripe_subscription(subscription: Subscription, *, at_period_end: boo
         )
     else:
         stripe.Subscription.cancel(subscription.stripe_subscription_id)
-
-
-def take_over_checkout_discount(stripe_subscription_id: str) -> dict | None:
-    """
-    Kampanjkoden kunden angav i kassan, flyttad från Stripe till vår prismotor.
-
-    Vår prismotor räknar redan in bolagets rabatt i beloppet vi skickar till
-    Stripe (sync_company_amount). Låg kupongen kvar på abonnemanget hade den
-    dragits två gånger. Därför tas den bort här, och anroparen sparar den som
-    bolagets rabatt (fleet/discounts.py).
-
-    Returnerar {kind, value, months, code, coupon} -- `months` None = för alltid --
-    eller None när ingen rabatt finns eller den inte går att översätta (annan
-    valuta). Då lämnas den orörd i Stripe.
-    """
-    stripe = _client()
-    remote = stripe.Subscription.retrieve(
-        stripe_subscription_id, expand=["discounts", "discounts.promotion_code"],
-    )
-    found = [d for d in (remote.get("discounts") or []) if hasattr(d, "get")]
-    if not found and remote.get("discount"):
-        found = [remote["discount"]]
-    if not found:
-        return None
-    discount = found[0]
-    coupon = discount.get("coupon")
-    if isinstance(coupon, str):
-        coupon = stripe.Coupon.retrieve(coupon)
-    if not coupon:
-        return None
-    if coupon.get("percent_off"):
-        kind, value = "percent_bp", int(round(float(coupon["percent_off"]) * 100))
-    elif coupon.get("amount_off") and str(coupon.get("currency") or "").lower() == "sek":
-        kind, value = "fixed_ore", int(coupon["amount_off"])
-    else:
-        return None
-    duration = coupon.get("duration")
-    months = None
-    if duration == "once":
-        months = 1
-    elif duration == "repeating":
-        months = int(coupon.get("duration_in_months") or 1)
-    promo = discount.get("promotion_code")
-    code = promo.get("code") if hasattr(promo, "get") else ""
-    stripe.Subscription.modify(stripe_subscription_id, discounts="")
-    return {
-        "kind": kind, "value": value, "months": months,
-        "code": code or "", "coupon": coupon.get("id") or "",
-        "trial_end": remote.get("trial_end"),
-    }
 
 
 def cancel_now(subscription: Subscription) -> None:

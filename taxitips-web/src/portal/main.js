@@ -813,7 +813,9 @@ async function handle(action, ctx) {
 }
 
 /**
- * Under pågående prov: offert → commit (spara kort, debitering vid ends_at).
+ * Under pågående prov: offert → betalning direkt i Stripe-kassan. Provet
+ * övergår i medlemskapet när betalningen gått igenom (ingen Stripe-provperiod,
+ * ägarens beslut 2026-10-11).
  *
  * Ett enda godkännande räcker: beloppet, moms, totalsumma och datum visas i
  * bekräftelsen ovan (§6). Frågan "Öppna betalsidan nu?" togs bort -- den kom
@@ -826,13 +828,10 @@ async function commitTrial(change) {
   const quote = await api.quote(change);
   const summary = document.createElement("div");
   summary.innerHTML = quoteHtml(quote);
-  const ends = state.data?.trial?.endsAt
-    ? new Date(state.data.trial.endsAt).toLocaleDateString("sv-SE")
-    : "provets slut";
   const accepted = confirm(
     `${summary.textContent}\n\n` +
-      `Godkänner du? Kortet sparas nu. Första dragningen sker ${ends} — ` +
-      `inget debiteras under provet.`,
+      "Godkänner du? Du betalar första månaden nu hos Stripe, och provet " +
+      "övergår i medlemskapet.",
   );
   if (!accepted) return;
 

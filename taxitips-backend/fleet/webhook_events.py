@@ -65,7 +65,15 @@ def _subscription_for(obj: dict) -> Subscription | None:
 
 
 def _order_for(obj: dict) -> Order | None:
-    order_id = (obj.get("metadata") or {}).get("order_id")
+    # Fakturan som ett abonnemang skapar bär inte orderns id i egen metadata,
+    # men abonnemangets metadata följer med (subscription_details; i nyare
+    # API-versioner under parent).
+    details = (
+        obj.get("subscription_details")
+        or ((obj.get("parent") or {}).get("subscription_details"))
+        or {}
+    )
+    order_id = (obj.get("metadata") or {}).get("order_id") or (details.get("metadata") or {}).get("order_id")
     if order_id:
         return Order.objects.filter(id=order_id).first()
     invoice_id = obj.get("id") if obj.get("object") == "invoice" else obj.get("invoice")
@@ -168,6 +176,11 @@ def _payment_succeeded(event_type: str, obj: dict, *, event_at, now) -> dict:
     if subscription is None:
         return {"handled": False, "reason": "unknown_subscription"}
 
+    if obj.get("object") == "checkout.session":
+        # Första abonnemanget skapades i kassan (stripe_sync.checkout_first_subscription):
+        # hos oss finns ännu inget Stripe-id att förnya, säga upp eller synka mot.
+        _remember_checkout_subscription(subscription, obj)
+
     period_start, period_end = _paid_period(obj)
 
     # En äldre faktura får inte återöppna ett senare avslutat abonnemang.
@@ -240,8 +253,7 @@ def _trial_commit_checkout_completed(
     )
     if session.get("id") and not order.stripe_checkout_session_id:
         Order.objects.filter(id=order.id).update(stripe_checkout_session_id=session["id"])
-    if isinstance(sub_id, str) and sub_id and _session_has_discount(session):
-        _take_over_checkout_discount(company_id, sub_id)
+    _note_promotion_code(company_id, session)
     _touch(subscription, event_at)
     audit.record(
         "trial_commit_card_saved", company_id=company_id, actor_kind="system",
@@ -259,40 +271,40 @@ def _session_has_discount(session: dict) -> bool:
     return bool(session.get("discounts")) or int(totals.get("amount_discount") or 0) > 0
 
 
-def _take_over_checkout_discount(company_id, stripe_subscription_id: str) -> None:
+def _note_promotion_code(company_id, session: dict) -> None:
     """
-    Kampanjkoden från kassan blir bolagets rabatt hos oss, och tas bort i Stripe
-    (stripe_sync.take_over_checkout_discount). Ett fel får inte stoppa
-    kortsparandet: rabatten ligger då kvar i Stripe och syns i revisionen.
+    Kunden angav en kampanjkod i kassan. Kupongen ligger kvar på abonnemanget i
+    Stripe, som sköter hur länge den gäller; här blir den bara en rad i bolagets
+    historik. Den flyttas INTE till vår prismotor: där löper en rabatt ut utan
+    att beloppet i Stripe räknas om, så en kod på "3 månader" hade blivit för alltid.
     """
-    import datetime as dt
-
-    from fleet import discounts, stripe_sync
-
-    try:
-        taken = stripe_sync.take_over_checkout_discount(stripe_subscription_id)
-    except Exception as exc:  # noqa: BLE001 - Stripe kan svara på många sätt
-        log.warning("webhook: kampanjkoden kunde inte flyttas för %s: %s", company_id, exc)
-        audit.record(
-            "checkout_discount_not_taken_over", company_id=company_id, actor_kind="system",
-            subject_type="company", subject_id=company_id, detail={"error": str(exc)[:300]},
-        )
+    if not _session_has_discount(session):
         return
-    if not taken:
-        return
-    valid_until = None
-    if taken["months"]:
-        start = (
-            dt.datetime.fromtimestamp(int(taken["trial_end"]), tz=dt.timezone.utc)
-            if taken.get("trial_end") else timezone.now()
-        )
-        valid_until = start + dt.timedelta(days=31 * int(taken["months"]))
-    label = f"Kampanjkod {taken['code']}" if taken["code"] else f"Stripe-kupong {taken['coupon']}"
-    discounts.set_discount(
-        company_id, kind=taken["kind"], value=taken["value"], description=label,
-        valid_until=valid_until, actor_user_id=None, actor_kind="customer",
+    totals = session.get("total_details") or {}
+    codes = []
+    for row in session.get("discounts") or []:
+        if isinstance(row, dict):
+            codes.append(str(row.get("promotion_code") or row.get("coupon") or ""))
+    audit.record(
+        "promotion_code_used", company_id=company_id, actor_kind="customer",
+        subject_type="company", subject_id=company_id,
+        detail={"discount_ore": int(totals.get("amount_discount") or 0),
+                "codes": [c for c in codes if c], "session": session.get("id")},
     )
-    _resync_amount(company_id)
+
+
+def _remember_checkout_subscription(subscription, session: dict) -> None:
+    updates = {}
+    sub_id = session.get("subscription")
+    if isinstance(sub_id, str) and sub_id and subscription.stripe_subscription_id != sub_id:
+        updates["stripe_subscription_id"] = sub_id
+    customer = session.get("customer")
+    if isinstance(customer, str) and customer and subscription.stripe_customer_id != customer:
+        updates["stripe_customer_id"] = customer
+    if updates:
+        Subscription.objects.filter(id=subscription.id).update(**updates)
+        subscription.refresh_from_db()
+    _note_promotion_code(subscription.company_id, session)
 
 
 def _resync_amount(company_id) -> None:

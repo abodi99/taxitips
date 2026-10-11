@@ -183,7 +183,8 @@ class ChainBase(FleetTestCase):
         )
         return auth_admin.AuthLink(url=url, user_id=user_id, kind="invite")
 
-    def _fake_collect(self, order, *, collection_method="charge_automatically", days_until_due=14):
+    def _fake_collect(self, order, *, collection_method="charge_automatically", days_until_due=14,
+                      success_url="", cancel_url=""):
         """Det `stripe_sync.collect_order` skapar i Stripe: kund, abonnemang, faktura."""
         invoice = f"in_kedja_{uuid.uuid4().hex[:10]}"
         Subscription.objects.filter(company_id=order.company_id).update(
@@ -912,12 +913,19 @@ class TrialSeatContinuationTests(ChainBase):
         from fleet import orders
         from fleet.models import MembershipSession
 
-        def collect(order, *, trial_end, success_url, cancel_url):
+        seen = {}
+
+        def collect(order, *, collection_method="charge_automatically", days_until_due=14,
+                    success_url="", cancel_url=""):
+            # Betalning direkt i kassan, inget Stripe-prov (ägarens beslut 2026-10-11).
+            seen.update(collection_method=collection_method, success_url=success_url)
             url = f"https://checkout.stripe.com/c/{order.id}"
-            Order.objects.filter(id=order.id).update(stripe_payment_url=url)
+            Order.objects.filter(id=order.id).update(
+                stripe_payment_url=url, stripe_checkout_session_id=f"cs_{order.id.hex[:8]}",
+            )
             return url
 
-        self._patch("fleet.stripe_sync.collect_trial_commit", side_effect=collect)
+        self._patch("fleet.stripe_sync.collect_order", side_effect=collect)
         owner = str(uuid.uuid4())
         company_id, seat = self.start_app_trial(owner)
         change = {"addVehicles": [{
@@ -928,11 +936,14 @@ class TrialSeatContinuationTests(ChainBase):
             "post", "/api/fleet/trial/commit", {**change, "accepted": True}, user=owner, email=OWNER_EMAIL,
         ))
         self.assertTrue(committed["paymentUrl"].startswith("https://checkout.stripe.com/"))
+        self.assertEqual(seen["collection_method"], "charge_automatically")
+        self.assertTrue(seen["success_url"])
+        self.assertIsNone(committed["firstChargeAt"])
         order = Order.objects.get(id=committed["orderId"])
-        self.assertTrue(order.request["trial_commit"])
+        self.assertFalse((order.request or {}).get("trial_commit"))
         self.assertEqual(order.request["addVehicles"][0]["continueLicenseId"], seat["licenseId"])
 
-        # Stripe drar vid provslut: beställningen verkställs.
+        # Kunden betalar i kassan: beställningen verkställs och provet övergår.
         orders.mark_order_paid(order)
         license = License.objects.get(id=seat["licenseId"])
         self.assertEqual(license.status, License.Status.ACTIVE)

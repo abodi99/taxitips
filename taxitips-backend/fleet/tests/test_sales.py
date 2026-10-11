@@ -217,10 +217,24 @@ class FakeStripe:
                 fake.calls.append(("InvoiceItem.create", kw))
                 return Obj(id=next_id("ii"))
 
+        class Checkout:
+            class Session:
+                @staticmethod
+                def create(**kw):
+                    fake.calls.append(("checkout.Session.create", kw))
+                    sid = next_id("cs")
+                    return Obj(id=sid, url=f"https://checkout.stripe.test/{sid}")
+
+                @staticmethod
+                def expire(session_id):
+                    fake.calls.append(("checkout.Session.expire", session_id))
+                    return Obj(id=session_id, status="expired")
+
         self.Customer = Customer
         self.Subscription = Subscription
         self.Invoice = Invoice
         self.InvoiceItem = InvoiceItem
+        self.checkout = Checkout
 
     def names(self) -> list[str]:
         return [c[0] for c in self.calls]
@@ -882,7 +896,32 @@ class OrderTests(SalesTestCase):
             )
         body = response.json()
         self.assertEqual(body["status"], "pending_payment", body)
-        self.assertTrue(body["paymentUrl"].startswith("https://invoice.stripe.test/"))
+        # Första abonnemanget från portalen: Stripe-kassan, inte fakturasidan
+        # (ägarens beslut 2026-10-11): betalning direkt, inget Stripe-prov,
+        # fält för kampanjkod, och tillbaka till portalen.
+        self.assertTrue(body["paymentUrl"].startswith("https://checkout.stripe.test/"), body)
+        created = [c[1] for c in fake.calls if c[0] == "checkout.Session.create"][0]
+        self.assertEqual(created["mode"], "subscription")
+        self.assertIs(created["allow_promotion_codes"], True)
+        self.assertNotIn("trial_end", created["subscription_data"])
+        self.assertNotIn("trial_period_days", created["subscription_data"])
+        self.assertIn("/portal?betalning=klar", created["success_url"])
+        self.assertNotIn("Subscription.create", fake.names())
+
+    def test_canceling_an_unpaid_checkout_order_closes_the_checkout(self):
+        data = self.full_setup()
+        fake = FakeStripe()
+        with stripe_connected(fake):
+            response = self.client.post(
+                "/api/fleet/orders",
+                data=json.dumps({"addVehicles": self.vehicles("P2", county="12"), "accepted": True}),
+                content_type="application/json",
+                headers={"authorization": f"Bearer {jwt(str(data['owner'].user_id))}"},
+            )
+            order_id = response.json()["orderId"]
+            canceled = self.post(f"/api/admin/orders/{order_id}/cancel", {"reason": "Ångrade sig"})
+        self.assertEqual(canceled.json()["order"]["status"], "canceled", canceled.content)
+        self.assertIn("checkout.Session.expire", fake.names())
 
 
 # ---------------------------------------------------------------------------
