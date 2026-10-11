@@ -145,6 +145,72 @@ class ArchiveTests(FleetTestCase):
     @override_settings(
         SUPABASE_SERVICE_ROLE_KEY="test-service-role", SUPABASE_URL="http://supabase.test",
     )
+    def test_auth_is_asked_only_after_the_company_rows_are_gone(self):
+        """Inne i transaktionen väntade Auth på våra lås och svarade 504 (prod 2026-10-11)."""
+        self.terminate()
+        archive.archive(self.company.id, actor_user_id=self.staff)
+        seen = []
+
+        def delete_user(user_id):
+            seen.append(Company.objects.filter(id=self.company.id).exists())
+
+        with mock.patch("fleet.auth_admin.delete_user", side_effect=delete_user):
+            response = self.post(
+                f"/api/admin/companies/{self.company.id}/delete", {"confirmName": "Avslutad AB"}
+            )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(seen, [False])
+
+    @override_settings(
+        SUPABASE_SERVICE_ROLE_KEY="test-service-role", SUPABASE_URL="http://supabase.test",
+    )
+    def test_a_failed_auth_delete_is_counted_and_the_ids_are_kept(self):
+        from fleet import auth_admin
+
+        self.terminate()
+        archive.archive(self.company.id, actor_user_id=self.staff)
+        with mock.patch("fleet.auth_admin.delete_user", side_effect=auth_admin.AuthAdminError("504")):
+            response = self.post(
+                f"/api/admin/companies/{self.company.id}/delete", {"confirmName": "Avslutad AB"}
+            )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["deleted"]["inloggningar kvar"], 1)
+        event = AuditEvent.objects.filter(action="company_deleted").latest("created_at")
+        self.assertEqual(event.detail["account_ids"], [str(self.owner.user_id)])
+
+    def test_archiving_pauses_the_accounts_and_restoring_lifts_only_those(self):
+        from fleet import accounts, grants
+        from fleet.models import StaffRole
+
+        seat_user = uuid.uuid4()
+        other = self.make_company(name="Annat AB", org_number="5599001122")
+        shared = self.make_owner(self.company, role="fleet_admin")
+        self.make_owner(other).user_id  # en annan ägare i det andra bolaget
+        CompanyMember.objects.create(
+            id=uuid.uuid4(), company_id=other.id, user_id=shared.user_id, role="fleet_admin", status="active",
+        )
+        staff_member = self.make_owner(self.company, role="fleet_admin")
+        StaffRole.objects.create(user_id=staff_member.user_id, role="platform_admin", is_active=True)
+        grant = grants.grant_membership(company_id=self.company.id, user_id=seat_user, reason="test")
+        # Pausad av personalen av ett annat skäl -- ska stå kvar efter återställningen.
+        accounts.pause(scope="user", value=str(self.owner.user_id), reason="Obetalt",
+                       actor_user_id=self.staff, actor_kind="platform_admin")
+
+        self.terminate()
+        self.assertIsNotNone(type(grant).objects.get(id=grant.id).revoked_at)
+        archive.archive(self.company.id, actor_user_id=self.staff)
+        self.assertIsNotNone(accounts.account_pause(str(seat_user)))
+        self.assertIsNotNone(accounts.account_pause(str(self.owner.user_id)))
+        self.assertIsNone(accounts.account_pause(str(shared.user_id)), "hör också till ett annat bolag")
+        self.assertIsNone(accounts.account_pause(str(staff_member.user_id)), "personal pausas inte")
+
+        archive.unarchive(self.company.id, actor_user_id=self.staff)
+        self.assertIsNone(accounts.account_pause(str(seat_user)))
+        self.assertEqual(accounts.account_pause(str(self.owner.user_id)).reason, "Obetalt")
+
+    @override_settings(
+        SUPABASE_SERVICE_ROLE_KEY="test-service-role", SUPABASE_URL="http://supabase.test",
+    )
     def test_delete_removes_driver_auth_accounts_too(self):
         # Förarna som bjudits in med e-post är inte company_members, men deras
         # Auth-konton hör ändå till bolaget och ska bort med det.

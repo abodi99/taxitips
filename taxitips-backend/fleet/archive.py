@@ -21,12 +21,22 @@ Radering kräver plattformsadministratör, ett arkiverat bolag och att bolaget
 (beställningar, fakturareferenser) som ska sparas i sju år
 (bokföringslagen 7 kap. 2 §); det arkiveras i stället.
 
-**Medlemmarnas inloggningskonton i Supabase Auth raderas med bolaget.** Ett
-konto som lämnades kvar utan bolag kunde fortfarande logga in, och samma
-e-postadress gick inte att registrera på nytt ("adressen är redan
-registrerad") -- en ny kund med samma adress blev utelåst. Kontot hör till
-bolaget och ska bort med det (2026-10-07). Raderingen är bästa möjliga: en
-Auth-tjänst som ligger nere får inte stoppa själva bolagsraderingen.
+**Bolagets konton följer bolaget** (ägarens beslut 2026-10-07 och 2026-10-11):
+medlemmarna, förarna som bjudits in med e-post, kontona som fått en plats och
+kontona med ett beviljat medlemskap. Undantag: personalkonton, och konton som
+också hör till ett annat bolag -- de är inte bolagets att ta bort.
+
+* **Arkivera pausar kontona** (`accounts.pause`, skälet `ARCHIVE_PAUSE`): inga
+  tips i appen. "Återställ" häver exakt de pauserna, inga andra.
+* **Radera raderar kontona i Supabase Auth.** Ett konto som lämnades kvar utan
+  bolag kunde fortfarande logga in, och samma e-postadress gick inte att
+  registrera på nytt -- en ny kund med samma adress blev utelåst.
+
+Auth-raderingen görs EFTER att bolagsraderingen sparats. Inne i transaktionen
+höll den lås på `company_members` och `devices`, som Auth behöver för att ta
+bort kontot -- varje radering svarade 504 och inget konto försvann (prod
+2026-10-07 till 2026-10-11). Den är bästa möjliga: en Auth-tjänst som ligger
+nere får inte stoppa själva bolagsraderingen.
 """
 
 from __future__ import annotations
@@ -42,6 +52,8 @@ from fleet import audit, auth_admin
 from fleet.access import company_window
 from fleet.models import (
     AccountBlock,
+    MembershipGrant,
+    StaffRole,
     ChangeReview,
     CompanyProfile,
     CountyChange,
@@ -168,6 +180,38 @@ def archived_ids() -> set:
     )
 
 
+def ARCHIVE_PAUSE(company_id) -> str:
+    """Skälet på pauserna arkiveringen lägger. Återställningen häver bara dem."""
+    return f"Bolaget arkiverades ({company_id})"
+
+
+def company_account_ids(company_id) -> list[str]:
+    """
+    Kontona som hör till bolaget: medlemmar, förare inbjudna med e-post, konton
+    med en plats och konton med ett beviljande. Utan personal och utan konton
+    som också hör till ett annat bolag.
+    """
+    ids: set[str] = set()
+    ids.update(str(u) for u in CompanyMember.objects.filter(company_id=company_id)
+               .values_list("user_id", flat=True) if u)
+    for field in ("consumed_by_user", "auth_user_id"):
+        ids.update(str(u) for u in DriverInvite.objects.filter(company_id=company_id)
+                   .values_list(field, flat=True) if u)
+    ids.update(str(u) for u in License.objects.filter(company_id=company_id)
+               .values_list("assignee_user_id", flat=True) if u)
+    ids.update(str(u) for u in MembershipGrant.objects.filter(company_id=company_id)
+               .values_list("user_id", flat=True) if u)
+    if not ids:
+        return []
+    staff = {str(u) for u in StaffRole.objects.filter(user_id__in=ids, is_active=True)
+             .values_list("user_id", flat=True)}
+    elsewhere = {str(u) for u in CompanyMember.objects.filter(user_id__in=ids)
+                 .exclude(company_id=company_id).values_list("user_id", flat=True)}
+    elsewhere |= {str(u) for u in License.objects.filter(assignee_user_id__in=ids)
+                  .exclude(company_id=company_id).values_list("assignee_user_id", flat=True)}
+    return sorted(ids - staff - elsewhere)
+
+
 def archive(company_id, *, actor_user_id, force: bool = False, now=None) -> None:
     now = now or timezone.now()
     current = state(company_id, now)
@@ -179,17 +223,44 @@ def archive(company_id, *, actor_user_id, force: bool = False, now=None) -> None
     CompanyProfile.objects.filter(company_id=profile.company_id).update(
         archived_at=now, archived_by=actor_user_id,
     )
+    from fleet import accounts
+
+    paused = 0
+    for user_id in company_account_ids(company_id):
+        # Den som arkiverar pausar inte sig själv: ägaren som raderar sitt konto
+        # arkiverar bolaget på vägen (fleet/account_deletion.py).
+        if actor_user_id and user_id == str(actor_user_id):
+            continue
+        _row, created = accounts.pause(
+            scope="user", value=user_id, reason=ARCHIVE_PAUSE(company_id),
+            actor_user_id=actor_user_id, actor_kind="platform_admin", company_id=company_id,
+        )
+        paused += int(created)
     audit.record(
         "company_archived", company_id=company_id, actor_user_id=actor_user_id,
         actor_kind="platform_admin", subject_type="company", subject_id=company_id,
+        detail={"accounts_paused": paused},
     )
 
 
 def unarchive(company_id, *, actor_user_id) -> None:
     CompanyProfile.objects.filter(company_id=company_id).update(archived_at=None, archived_by=None)
+    from fleet import accounts
+
+    # Bara pauserna arkiveringen lade: en paus personalen lagt av ett annat skäl står kvar.
+    resumed = 0
+    rows = AccountBlock.objects.filter(
+        kind=AccountBlock.Kind.USER_PAUSE, reason=ARCHIVE_PAUSE(company_id), lifted_at__isnull=True,
+    ).values_list("value", flat=True)
+    for user_id in list(rows):
+        if accounts.resume(scope="user", value=user_id, actor_user_id=actor_user_id,
+                           actor_kind="platform_admin", note="Bolaget återställt",
+                           company_id=company_id) is not None:
+            resumed += 1
     audit.record(
         "company_unarchived", company_id=company_id, actor_user_id=actor_user_id,
         actor_kind="platform_admin", subject_type="company", subject_id=company_id,
+        detail={"accounts_resumed": resumed},
     )
 
 
@@ -224,9 +295,25 @@ def _delete_auth_accounts(user_ids) -> int:
     return deleted
 
 
-@transaction.atomic
 def delete(company_id, *, actor_user_id, confirm_name: str, now=None) -> dict:
     """Tar bort bolaget för gott. Se modulens docstring för vad som finns kvar."""
+    with transaction.atomic():
+        counts, account_ids = _delete_rows(company_id, confirm_name=confirm_name, now=now)
+    # Efter COMMIT: inne i transaktionen väntade Auth på våra lås och gav upp (504).
+    counts["inloggningar"] = _delete_auth_accounts(account_ids)
+    if len(account_ids) > counts["inloggningar"]:
+        counts["inloggningar kvar"] = len(account_ids) - counts["inloggningar"]
+    audit.record(
+        "company_deleted", company_id=company_id, actor_user_id=actor_user_id,
+        actor_kind="platform_admin", subject_type="company", subject_id=company_id,
+        # Inget namn och inget organisationsnummer: raden ska finnas kvar när
+        # uppgifterna inte längre får göra det. Konto-id:n för en ny körning.
+        detail={"counts": counts, "account_ids": account_ids},
+    )
+    return counts
+
+
+def _delete_rows(company_id, *, confirm_name: str, now=None) -> tuple[dict, list[str]]:
     now = now or timezone.now()
     company = Company.objects.select_for_update().filter(id=company_id).first()
     if company is None:
@@ -244,14 +331,8 @@ def delete(company_id, *, actor_user_id, confirm_name: str, now=None) -> dict:
     member_ids = list(
         CompanyMember.objects.filter(company_id=company_id).values_list("user_id", flat=True)
     )
-    # Förarna som bjudits in med e-post är inte medlemmar i bolaget, men deras
-    # Auth-konton hör ändå hit och ska bort med bolaget. consumed_by_user är
-    # kontot som löste in inbjudan, auth_user_id kontot som länken skapade.
-    driver_user_ids: set[str] = set()
-    for field in ("consumed_by_user", "auth_user_id"):
-        for uid in DriverInvite.objects.filter(company_id=company_id).values_list(field, flat=True):
-            if uid:
-                driver_user_ids.add(str(uid))
+    # Läses innan raderna som bär dem försvinner (medlemmar, inbjudningar, platser).
+    account_ids = company_account_ids(company_id)
     counts: dict[str, int] = {}
 
     def gone(label, queryset):
@@ -308,17 +389,4 @@ def delete(company_id, *, actor_user_id, confirm_name: str, now=None) -> dict:
         counts["telefoner"] = cur.rowcount
         cur.execute("delete from companies where id = %s", [str(company_id)])
 
-    # Kontona i Supabase Auth, sist i raden av raderingar: ett fel där rullar
-    # inte tillbaka bolagsraderingen -- se _delete_auth_accounts.
-    counts["inloggningar"] = _delete_auth_accounts(
-        sorted({str(u) for u in member_ids if u} | driver_user_ids)
-    )
-
-    audit.record(
-        "company_deleted", company_id=company_id, actor_user_id=actor_user_id,
-        actor_kind="platform_admin", subject_type="company", subject_id=company_id,
-        # Inget namn och inget organisationsnummer: raden ska finnas kvar när
-        # uppgifterna inte längre får göra det.
-        detail={"counts": counts},
-    )
-    return counts
+    return counts, account_ids
