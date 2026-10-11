@@ -184,11 +184,13 @@ def close_account(*, company_id, actor_user_id, now=None) -> dict:
     olika saker, och att blanda ihop dem är hur ett abonnemang fortsätter
     debitera ett företag som tror att det slutat.
     """
-    from fleet import orders
+    from fleet import commerce, orders
 
     now = now or timezone.now()
-    change = orders.cancel_subscription(
-        company_id, actor_user_id=actor_user_id, reason="account_closed", now=now
+    # Hos oss OCH i Stripe. Förut bara hos oss (orders.cancel_subscription): Stripe
+    # fortsatte förnya och debitera ett bolag som trodde att det slutat (2026-10-11).
+    change, stripe_result = commerce.cancel_subscription(
+        company_id, actor_user_id=actor_user_id, actor_kind="owner", reason="account_closed",
     )
     subscription = orders.get_or_create_subscription(company_id)
     Subscription.objects.filter(id=subscription.id).update(renewal_stopped_at=now)
@@ -197,7 +199,7 @@ def close_account(*, company_id, actor_user_id, now=None) -> dict:
     audit.record(
         "account_closed", company_id=company_id, actor_user_id=actor_user_id,
         actor_kind="owner", subject_type="company", subject_id=company_id,
-        detail={"access_until": change.effective_at.isoformat()},
+        detail={"access_until": change.effective_at.isoformat(), "stripe": stripe_result},
     )
     return {
         "accessUntil": change.effective_at.isoformat(),

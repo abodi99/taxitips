@@ -16,12 +16,20 @@ Två sorters bevis, samma som resten av fleet-API:t:
   ägarkontot -- då kopplas bara telefonen loss och appen säger hur ägaren
   raderar sitt konto (logga in och radera där).
 
-**Vägrar** när kontot är ENDA ägaren i ett företag vars medlemskap förnyas.
-Annars försvann den enda som kan säga upp abonnemanget medan det fortsatte
-debitera företaget -- samma skäl som `ownership.remove_member` vägrar. Svaret
-säger vad hen gör i stället: avsluta företagskontot först (då förnyas inget),
-eller låt en kollega ta över ägarrollen. Ett kortfritt prov stoppar inte
-raderingen: provet avslutas, det debiterar aldrig av sig självt.
+**Enda ägaren avslutar företaget** (ägarens beslut 2026-10-11). Utan ägare finns
+ingen som kan sköta medlemskapet, så företaget avslutas direkt
+(`commerce.terminate_now`: Stripe slutar debitera, prov, platser, förarpass och
+beviljanden avslutas, ingen automatisk återbetalning) och arkiveras
+(`archive.archive`: de andra kontona pausas). Gäller oavsett om företaget har ett
+betalt abonnemang, ett prov eller inget alls. Finns en annan ägare lämnar kontot
+bara företaget.
+
+**Ordningen.** Företagen avslutas först, var för sig. Sedan tas kontots rader bort
+i en transaktion. Sist, EFTER commit, raderas kontot i Supabase Auth: inne i
+transaktionen väntade Auth på våra lås på `company_members` och svarade 504 --
+allt rullades tillbaka medan Auth ändå raderade kontot när låsen släppte.
+Misslyckas Auth-steget nu får användaren försöka igen; det som redan gjorts
+görs inte om (kontot är inte längre ägare).
 
 Personalkonton (adminwebben) raderas inte härifrån: en plattformsadministratör
 som av misstag raderar sig själv i appen låser ute plattformen.
@@ -206,8 +214,9 @@ def _require_auth_admin() -> None:
 
 def _delete_auth_user(user_id) -> None:
     """
-    Kontot i Supabase Auth. Körs SIST i transaktionen: misslyckas det rullas
-    allt tillbaka och användaren kan försöka igen med samma inloggning.
+    Kontot i Supabase Auth. Körs EFTER transaktionen (Auth väntar annars på
+    våra lås och svarar 504). Misslyckas det finns inloggningen kvar och
+    användaren kan försöka igen; resten är redan gjort och görs inte om.
     """
     try:
         auth_admin.delete_user(str(user_id))
@@ -218,6 +227,29 @@ def _delete_auth_user(user_id) -> None:
             "Det gick inte att radera kontot just nu. Försök igen om en stund.",
             status=502,
         ) from exc
+
+
+def _close_sole_company(company_id, *, user_id, now) -> int:
+    """
+    Företaget vars enda ägare raderar sitt konto: avsluta direkt och arkivera.
+    Returnerar antalet prov som avslutades (0 eller 1).
+    """
+    from fleet import archive, commerce
+
+    from fleet import trials
+
+    trial = Trial.objects.filter(
+        company_id=company_id, status__in=[Trial.Status.PENDING, Trial.Status.ACTIVE],
+    ).first()
+    if trial is not None:
+        # Eget skäl i historiken: ägaren gick, plattformen avslutade inget.
+        trials.end_trial(trial, reason="owner_account_deleted", now=now)
+    commerce.terminate_now(
+        company_id, actor_user_id=user_id, actor_kind="owner",
+        reason="Enda ägaren raderade sitt konto i appen", now=now,
+    )
+    archive.archive(company_id=company_id, actor_user_id=user_id, force=True, now=now)
+    return int(trial is not None)
 
 
 def delete_signed_in_account(*, user_id, email: str = "", device: Device | None = None,
@@ -246,33 +278,13 @@ def delete_signed_in_account(*, user_id, email: str = "", device: Device | None 
     if device is not None:
         device_ids.add(str(device.id))
 
+    trials_ended = 0
+    companies_closed = []
+    for company in sole:
+        trials_ended += _close_sole_company(company["companyId"], user_id=user_id, now=now)
+        companies_closed.append(company["companyId"])
+
     with transaction.atomic():
-        trials_ended = 0
-        for company in sole:
-            # Ingen kvar som kan sköta provet: det avslutas, utan kostnad.
-            trial = Trial.objects.filter(
-                company_id=company["companyId"],
-                status__in=[Trial.Status.PENDING, Trial.Status.ACTIVE],
-            ).first()
-            if trial is not None:
-                from fleet import trials
-
-                trials.end_trial(trial, reason="owner_account_deleted", now=now)
-                trials_ended += 1
-            # Förnyas medlemskapet pausas det och företaget arkiveras, så att
-            # ägaren slipper "avsluta först" och företaget inte lämnas med ett
-            # debiterande abonnemang utan ägare (ägarens beslut 2026-10-07).
-            if company["renews"]:
-                from fleet import archive, ownership
-
-                ownership.close_account(
-                    company_id=company["companyId"], actor_user_id=user_id, now=now,
-                )
-                archive.archive(
-                    company_id=company["companyId"], actor_user_id=user_id,
-                    force=True, now=now,
-                )
-
         memberships = list(CompanyMember.objects.filter(user_id=user_id))
         companies = sorted({str(m.company_id) for m in memberships})
         CompanyMember.objects.filter(user_id=user_id).delete()
@@ -298,16 +310,22 @@ def delete_signed_in_account(*, user_id, email: str = "", device: Device | None 
                     "membershipsRemoved": len(memberships),
                     "phonesReleased": len(released),
                     "trialsEnded": trials_ended,
+                    "companiesClosed": companies_closed,
                 },
             )
-        _delete_auth_user(user_id)
+    # Efter COMMIT -- se modulens docstring.
+    _delete_auth_user(user_id)
 
+    message = "Ditt konto är raderat."
+    if companies_closed:
+        message = "Ditt konto är raderat och företaget är avslutat."
     return {
         "deleted": True,
         "accountsDeleted": 1,
         "phonesReleased": len(released),
         "trialsEnded": trials_ended,
-        "message": "Ditt konto är raderat.",
+        "companiesClosed": len(companies_closed),
+        "message": message,
     }
 
 
@@ -369,8 +387,9 @@ def delete_driver_by_device(*, device: Device, body: dict | None = None, now=Non
                     "phonesReleased": len(device_ids),
                 },
             )
-        for uid in to_delete:
-            _delete_auth_user(uid)
+    # Efter COMMIT -- se modulens docstring.
+    for uid in to_delete:
+        _delete_auth_user(uid)
 
     message = "Ditt förarkonto är raderat och telefonen är bortkopplad."
     if kept:

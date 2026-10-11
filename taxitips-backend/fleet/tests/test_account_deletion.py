@@ -31,6 +31,7 @@ from fleet.models import (
     License,
     StaffRole,
     Subscription,
+    SubscriptionStatus,
     Trial,
     VehicleSession,
 )
@@ -108,6 +109,52 @@ class AccountDeletionTests(FleetTestCase):
         self.assertIsNotNone(profile.archived_at)
         subscription = Subscription.objects.get(id=data["subscription"].id)
         self.assertIsNotNone(subscription.renewal_stopped_at)
+        # Ägarens beslut 2026-10-11: avslutat direkt, inte bara utan förnyelse.
+        self.assertEqual(subscription.status, SubscriptionStatus.CANCELED)
+        self.assertEqual(response.json()["companiesClosed"], 1)
+        self.assertFalse(License.objects.filter(
+            company_id=data["company"].id,
+            status__in=[License.Status.ACTIVE, License.Status.TRIAL, License.Status.PENDING_CANCEL],
+        ).exists())
+
+    def test_the_sole_owner_stops_stripe_now(self):
+        data = self.full_setup()
+        Subscription.objects.filter(id=data["subscription"].id).update(stripe_subscription_id="sub_live_1")
+        with patch("fleet.auth_admin.delete_user"), \
+                patch("fleet.stripe_sync.available", return_value=True), \
+                patch("fleet.stripe_sync.cancel_now") as cancel_now:
+            response = self.post(user_id=data["owner"].user_id)
+        self.assertEqual(response.status_code, 200, response.content)
+        cancel_now.assert_called_once()
+
+    def test_closing_the_company_account_stops_renewal_in_stripe_too(self):
+        """Förut stoppades förnyelsen bara hos oss, och Stripe fortsatte debitera (2026-10-11)."""
+        from fleet import ownership
+
+        data = self.full_setup()
+        Subscription.objects.filter(id=data["subscription"].id).update(stripe_subscription_id="sub_live_2")
+        with patch("fleet.stripe_sync.available", return_value=True), \
+                patch("fleet.stripe_sync.set_cancel_at_period_end") as set_cancel:
+            ownership.close_account(company_id=data["company"].id, actor_user_id=data["owner"].user_id)
+        set_cancel.assert_called_once()
+        self.assertTrue(set_cancel.call_args.args[1])
+        self.assertTrue(Subscription.objects.get(id=data["subscription"].id).cancel_at_period_end)
+
+    def test_a_sole_owner_without_any_membership_still_archives_the_company(self):
+        company = self.make_company(name="Tomt AB", org_number="5599112233")
+        owner = self.make_owner(company)
+        with patch("fleet.auth_admin.delete_user"):
+            response = self.post(user_id=owner.user_id)
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertIsNotNone(CompanyProfile.objects.get(company_id=company.id).archived_at)
+
+    def test_the_other_accounts_of_a_closed_company_are_paused(self):
+        data = self.full_setup()
+        colleague = self.make_owner(data["company"], role="fleet_admin")
+        with patch("fleet.auth_admin.delete_user"):
+            self.post(user_id=data["owner"].user_id)
+        self.assertIsNotNone(accounts.account_pause(str(colleague.user_id)))
+        self.assertIsNone(accounts.account_pause(str(data["owner"].user_id)))
 
     def test_after_closing_the_company_account_the_owner_can_delete(self):
         data = self.full_setup()
@@ -189,7 +236,12 @@ class AccountDeletionTests(FleetTestCase):
         self.assertEqual(response.json()["reason"], "auth_not_configured")
         self.assertTrue(CompanyMember.objects.filter(user_id=colleague.user_id).exists())
 
-    def test_when_auth_fails_everything_is_rolled_back(self):
+    def test_when_auth_fails_the_login_stays_and_a_retry_finishes(self):
+        """
+        Auth-raderingen görs efter commit: inne i transaktionen väntade Auth på
+        våra lås och svarade 504 (prod 2026-10-11). Misslyckas den finns
+        inloggningen kvar och ett nytt försök gör klart.
+        """
         data = self.full_setup()
         colleague = self.make_owner(data["company"], role="fleet_admin")
         with patch(
@@ -198,8 +250,11 @@ class AccountDeletionTests(FleetTestCase):
             response = self.post(user_id=colleague.user_id)
         self.assertEqual(response.status_code, 502, response.content)
         self.assertEqual(response.json()["reason"], "auth_delete_failed")
-        self.assertTrue(CompanyMember.objects.filter(user_id=colleague.user_id).exists())
-        self.assertFalse(AuditEvent.objects.filter(action="account_deleted_by_user").exists())
+        self.assertFalse(CompanyMember.objects.filter(user_id=colleague.user_id).exists())
+        with patch("fleet.auth_admin.delete_user") as delete_user:
+            again = self.post(user_id=colleague.user_id)
+        self.assertEqual(again.status_code, 200, again.content)
+        delete_user.assert_called_once_with(str(colleague.user_id))
 
     def test_an_owner_who_drives_also_releases_the_phone(self):
         data = self.full_setup()

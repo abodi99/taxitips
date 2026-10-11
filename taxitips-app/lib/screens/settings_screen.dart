@@ -556,9 +556,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   // --- Radera mitt konto (Apple 5.1.1(v)) ---------------------------------
   //
   // Ägare och förare raderar sitt eget konto här. "Avsluta företagskontot"
-  // ovan stoppar bara förnyelsen. Reglerna (enda ägaren med ett medlemskap som
-  // förnyas får ett nej med förklaring) bor på servern:
-  // taxitips-backend/fleet/account_deletion.py.
+  // ovan stoppar bara förnyelsen. Reglerna (enda ägaren avslutar och arkiverar
+  // företaget) bor på servern: taxitips-backend/fleet/account_deletion.py.
 
   Future<void> _deleteAccount() async {
     final ok = await showDialog<bool>(
@@ -568,8 +567,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
         content: Text(
           _isOffice
               ? 'Ditt konto och din inloggning tas bort för gott. Enheter du '
-                    'kört med kopplas från medlemskapet. Är du ensam ägare avslutas ett '
-                    'pågående prov. Det går inte att ångra.'
+                    'kört med kopplas från medlemskapet.\n\nÄr du ensam ägare avslutas '
+                    'företaget direkt: medlemskapet och ett pågående prov upphör, '
+                    'förarna slutar få tips och företaget arkiveras. Det går inte att ångra.'
               : 'Ditt förarkonto tas bort och enheten kopplas från din plats. '
                     'Din chef kan bjuda in dig igen. Det går inte att ångra.',
         ),

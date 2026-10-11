@@ -526,7 +526,8 @@ def undo_cancellation(company_id, *, actor_user_id, actor_kind: str) -> tuple:
     return subscription, stripe_result
 
 
-def terminate_now(company_id, *, actor_user_id, reason: str, now=None) -> dict:
+def terminate_now(company_id, *, actor_user_id, reason: str, actor_kind: str = "platform_admin",
+                  now=None) -> dict:
     """
     Avslutar abonnemanget DIREKT: åtkomsten upphör nu, licenserna avslutas,
     aktiva förarpass stängs och Stripe slutar debitera. Ingen återbetalning
@@ -570,7 +571,7 @@ def terminate_now(company_id, *, actor_user_id, reason: str, now=None) -> dict:
         ).update(status=Order.Status.CANCELED, failure_reason="terminated")
         audit.record(
             "subscription_terminated_now", company_id=company_id,
-            actor_user_id=actor_user_id, actor_kind="platform_admin",
+            actor_user_id=actor_user_id, actor_kind=actor_kind,
             subject_type="subscription", subject_id=subscription.id,
             detail={"reason": reason[:500]},
         )
