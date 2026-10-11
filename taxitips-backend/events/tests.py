@@ -745,7 +745,9 @@ class AppGateTests(TestCase):
                     source="predicthq", now=now, fetched_until=until)
         stevie = [e for e in _entitled_upcoming()["events"] if "Stevie" in e["name"]]
         self.assertEqual(len(stevie), 1)
-        self.assertEqual((stevie[0]["sources"], stevie[0]["attendance"]), (["predicthq", "ticketmaster"], 38706))
+        self.assertEqual(stevie[0]["attendance"], 38706)
+        # Appen får inte veta vilka källor som slogs ihop.
+        self.assertFalse(set(api.SOURCE_FIELDS) & set(stevie[0]))
 
 
 class AreaAndPreviewTests(TestCase):
@@ -882,12 +884,28 @@ class OwnerDecisionAppTests(TestCase):
     def test_predicthq_and_sports_are_in_the_app_and_ticketmaster_is_not(self):
         with override_settings(EVENT_SOURCES=PRODUCTION_LIKE):
             body = _entitled_upcoming(counties="01")
-        sources = {e["source"] for e in body["events"]}
-        self.assertNotIn("ticketmaster", sources)
-        self.assertIn("thesportsdb", sources)
-        hockey = next(e for e in body["events"] if e["source"] == "thesportsdb")
+        names = {e["name"] for e in body["events"]}
+        self.assertNotIn("Konsert på Avicii Arena", names)
+        hockey = next(e for e in body["events"] if "Djurgårdens IF – Frölunda HC" in e["name"])
         self.assertEqual((hockey["sport"], hockey["sportLabel"]), ("ishockey", "Ishockey"))
-        self.assertIn("TheSportsDB", body["attribution"])
+
+    def test_the_app_never_learns_where_an_event_comes_from(self):
+        """Ägarens beslut 2026-10-11: inga källnamn, länkar eller käll-id i appens svar."""
+        with override_settings(EVENT_SOURCES=PRODUCTION_LIKE):
+            body = _entitled_upcoming(counties="01")
+            again = _entitled_upcoming(counties="01")
+        self.assertTrue(body["events"])
+        self.assertEqual(body["attribution"], "")
+        # Namnen räknas inte: testraden "Gammal PredictHQ-rad" heter så.
+        text = json.dumps([{k: v for k, v in e.items() if k != "name"} for e in body["events"]]
+                          + [{k: v for k, v in body.items() if k != "events"}]).lower()
+        for name in ("thesportsdb", "predicthq", "ticketmaster"):
+            self.assertNotIn(name, text)
+        for event in body["events"]:
+            self.assertFalse(set(api.SOURCE_FIELDS) & set(event))
+            self.assertRegex(event["id"], r"^ev_[0-9a-f]{16}$")
+        self.assertEqual([e["id"] for e in again["events"]], [e["id"] for e in body["events"]],
+                         "följda evenemang sparas på id:t i telefonen")
 
 
 class PollIsolationTests(TestCase):

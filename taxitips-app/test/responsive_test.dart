@@ -78,8 +78,8 @@ void main() {
     'välkomst': () => WelcomeScreen(onLogin: () {}, onSignup: () {}),
     'inloggning': () => LoginScreen(
       api: plain(),
-      onOwner: () {},
-      onDriver: () {},
+      onOwner: () async {},
+      onDriver: () async {},
       onSignup: () {},
       onBack: () {},
     ),

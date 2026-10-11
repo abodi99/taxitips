@@ -410,7 +410,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
         code: issued['code']?.toString() ?? '',
         label: 'Min telefon',
       );
-      unawaited(registerForPush(widget.api));
+      registerForPushInBackground(widget.api);
       if (!mounted) return;
       await _reload();
       _snack(

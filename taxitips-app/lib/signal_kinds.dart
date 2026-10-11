@@ -42,7 +42,7 @@ extension SignalCategoryText on SignalCategory {
     SignalCategory.transit =>
       'Tåg, buss eller tunnelbana står still eller är sen. Folk behöver taxi.',
     SignalCategory.road =>
-      'Trafikolycka (Trafikverket). Räkna med kö, eller kör en annan väg.',
+      'Trafikolycka. Räkna med kö, eller kör en annan väg.',
     SignalCategory.flight =>
       'Många flyg landar, eller sista flyget. Folk behöver taxi från flygplatsen.',
     SignalCategory.ferry => 'Färja på väg in. Folk kliver av i hamnen.',

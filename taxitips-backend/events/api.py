@@ -21,6 +21,7 @@ from django.utils import timezone
 from django.views.decorators.http import require_GET
 
 import functools
+import hashlib
 
 from django.conf import settings
 
@@ -153,6 +154,22 @@ def event_row(event, now: dt.datetime, lat: float | None = None, lon: float | No
         "municipality": municipality_code,
         "distanceKm": distance,
     }
+
+
+# Fält som säger varifrån ett evenemang kommer. Appen får dem inte (ägarens
+# beslut 2026-10-11): källorna är en del av produkten, och ingen ska kunna läsa
+# ut dem ur appen eller ur dess trafik. Personalens vyer (events/explain.py,
+# events/live.py) använder event_row oförändrad.
+SOURCE_FIELDS = ("source", "sources", "sourceLabel", "sourceName", "url", "links")
+
+
+def app_row(row: dict) -> dict:
+    """event_row utan källfälten, med ett id som inte bär källans namn."""
+    out = {key: value for key, value in row.items() if key not in SOURCE_FIELDS}
+    # Stabilt mellan anrop (telefonen sparar följda evenemang på id:t), men
+    # "thesportsdb:123" blir ett neutralt "ev_…". Servern läser aldrig id:t tillbaka.
+    out["id"] = "ev_" + hashlib.sha256(str(row["id"]).encode()).hexdigest()[:16]
+    return out
 
 
 # Vilken källas rad som bär ett evenemang som finns i flera källor, i den ordningen. De andra
@@ -304,7 +321,7 @@ def upcoming(request):
                 continue
         day_counts[max(event.start_date, today).isoformat()] += 1
         if _in_period(event, first, last):
-            rows.append(event_row(event, now, lat, lon, also=also))
+            rows.append(app_row(event_row(event, now, lat, lon, also=also)))
     return _json(request, {
         "events": rows,
         "entitled": True,
@@ -319,5 +336,6 @@ def upcoming(request):
         "municipalities": municipalities,
         "preview": preview,
         "previewNote": PREVIEW_NOTE if preview else "",
-        "attribution": timing.attribution({s for r in rows for s in r["sources"]}),
+        # Kvar för äldre appar, som visar texten när den inte är tom.
+        "attribution": "",
     })

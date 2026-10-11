@@ -251,7 +251,6 @@ class _DriverScreenState extends State<DriverScreen>
   List<Map<String, dynamic>> _events = const [];
   bool _eventsPreview = false;
   String _eventsPreviewNote = '';
-  String _eventsAttribution = '';
   String? _eventsKey;
   // Evenemangskällan svarade (inte `no_licensed_sources`): då går sidan att öppna.
   bool _eventsSourceOk = false;
@@ -735,7 +734,7 @@ class _DriverScreenState extends State<DriverScreen>
       setState(() => _claiming = true);
       try {
         await widget.api.claimInvite(widget.inviteToken!);
-        unawaited(registerForPush(widget.api));
+        registerForPushInBackground(widget.api);
         setState(() => _status = 'Telefon kopplad');
       } catch (e) {
         setState(() => _error = _friendly(e));
@@ -745,7 +744,7 @@ class _DriverScreenState extends State<DriverScreen>
     } else if (widget.api.deviceToken != null) {
       // FCM-permission på webben kan hänga i en dialog som aldrig syns —
       // tipsflödet får inte vänta på den.
-      unawaited(registerForPush(widget.api));
+      registerForPushInBackground(widget.api);
     }
     // GPS får aldrig blockera första hämtningen: på webben kan
     // requestPermission hänga utan dialog, och då syns "Offline" forever
@@ -1125,7 +1124,6 @@ class _DriverScreenState extends State<DriverScreen>
         _events = _asMaps(body['events']);
         _eventsPreview = body['preview'] == true;
         _eventsPreviewNote = body['previewNote']?.toString() ?? '';
-        _eventsAttribution = body['attribution']?.toString() ?? '';
         _eventsKey = key;
         _eventsLoadedAt = DateTime.now();
         _eventsSourceOk =
@@ -1204,7 +1202,6 @@ class _DriverScreenState extends State<DriverScreen>
     showEventSheet(
       context,
       e,
-      attribution: _eventsAttribution,
       previewNote: _eventsPreview ? _eventsPreviewNote : '',
       followed: _isFollowedEvent(e),
       onToggleFollow: (v) => _toggleFollowEvent(e, v),
@@ -1243,14 +1240,6 @@ class _DriverScreenState extends State<DriverScreen>
       ),
     );
   }
-
-  Widget _sourceNote(String text) => Padding(
-    padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
-    child: Text(
-      text,
-      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-    ),
-  );
 
   void _focusOpportunity(Map<String, dynamic> o) {
     final lat = (o['lat'] as num?)?.toDouble();
@@ -3631,7 +3620,6 @@ class _DriverScreenState extends State<DriverScreen>
               label: const Text('Fler datum'),
             ),
           ),
-        if (_eventsAttribution.isNotEmpty) _sourceNote(_eventsAttribution),
       ];
     }
 

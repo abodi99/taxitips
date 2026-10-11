@@ -18,8 +18,8 @@ void main() {
       MaterialApp(
         home: LoginScreen(
           api: ApiClient(supabaseUrl: 'http://localhost', supabaseAnonKey: 'x'),
-          onOwner: () => taps.add('owner'),
-          onDriver: () => taps.add('driver'),
+          onOwner: () async => taps.add('owner'),
+          onDriver: () async => taps.add('driver'),
           onSignup: () => taps.add('signup'),
           onBack: () => taps.add('back'),
         ),

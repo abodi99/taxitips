@@ -28,10 +28,12 @@ class LoginScreen extends StatefulWidget {
   final ApiClient api;
 
   /// Kontot hör till ett företag (eller registrerar ett).
-  final VoidCallback onOwner;
+  // Väntas in: ett fel efter inloggningen (t.ex. telefonbytesgränsen) ska
+  // visas här, inte försvinna som en ohanterad krasch.
+  final Future<void> Function() onOwner;
 
   /// Telefonen är kopplad till förarens bil.
-  final VoidCallback onDriver;
+  final Future<void> Function() onDriver;
   final VoidCallback onSignup;
   final VoidCallback onBack;
 
@@ -96,7 +98,7 @@ class _LoginScreenState extends State<LoginScreen> {
       final role = await widget.api.signIn(email: email, password: password);
       TextInput.finishAutofillContext();
       if (!mounted) return;
-      role == 'owner' ? widget.onOwner() : widget.onDriver();
+      await (role == 'owner' ? widget.onOwner() : widget.onDriver());
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = _friendly(e));

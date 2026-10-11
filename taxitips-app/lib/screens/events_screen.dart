@@ -79,7 +79,6 @@ class _EventsScreenState extends State<EventsScreen> {
   String? _locked;
   bool _preview = false;
   String _previewNote = '';
-  String _attribution = '';
   int _maxDays = 120;
 
   DateTime get _today => _day(DateTime.now());
@@ -206,7 +205,6 @@ class _EventsScreenState extends State<EventsScreen> {
             : const {};
         _preview = body['preview'] == true;
         _previewNote = body['previewNote']?.toString() ?? '';
-        _attribution = body['attribution']?.toString() ?? '';
         _maxDays = (body['maxDays'] as num?)?.toInt() ?? _maxDays;
         // Appens egen text, inte serverns: texterna om medlemskap bor på ett
         // ställe (lib/membership_copy.dart).
@@ -412,7 +410,6 @@ class _EventsScreenState extends State<EventsScreen> {
   void _openSheet(Map<String, dynamic> e) => showEventSheet(
     context,
     e,
-    attribution: _attribution,
     previewNote: _preview ? _previewNote : '',
     followed: _isFollowed(e),
     onToggleFollow: (v) => _toggleFollow(e, v),
@@ -823,7 +820,7 @@ class _EventsScreenState extends State<EventsScreen> {
                     const SizedBox(height: 6),
                     Text(
                       _dayCounts.isEmpty
-                          ? 'Ticketmaster har tunt utbud utanför Stockholm. Prova ett annat län.'
+                          ? 'Utbudet är tunt utanför storstäderna. Prova ett annat län.'
                           : 'Dagarna ovan har evenemang — tryck på en av dem, eller välj en längre period.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
@@ -840,13 +837,6 @@ class _EventsScreenState extends State<EventsScreen> {
             else ...[
               const SizedBox(height: 10),
               ..._flatList(),
-            ],
-            if (_attribution.isNotEmpty) ...[
-              const SizedBox(height: 16),
-              Text(
-                _attribution,
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-              ),
             ],
           ],
         ),

@@ -348,7 +348,6 @@ final _screens = <_Screen>[
       (context) => showEventSheet(
         context,
         _eventRow(0),
-        attribution: 'Evenemangsdata: Ticketmaster',
         onToggleFollow: (_) {},
       ),
     ),
@@ -464,8 +463,8 @@ final _screens = <_Screen>[
     'inloggning',
     () => LoginScreen(
       api: _AuditApi(device: null),
-      onOwner: () {},
-      onDriver: () {},
+      onOwner: () async {},
+      onDriver: () async {},
       onSignup: () {},
       onBack: () {},
     ),
@@ -548,7 +547,7 @@ class _AuditApi extends FakeDriverApi {
     String? to,
   }) async => {
     'events': [for (var i = 0; i < 4; i++) _eventRow(i)],
-    'attribution': 'Evenemangsdata: Ticketmaster',
+    'attribution': '',
   };
 
   @override

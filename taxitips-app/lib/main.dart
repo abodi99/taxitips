@@ -89,7 +89,7 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
     _route = AppRoute.welcome;
     widget.api.listenForAuthSignIn(() {
       if (!mounted) return;
-      registerForPush(widget.api);
+      registerForPushInBackground(widget.api);
       if (_route == AppRoute.welcome ||
           _route == AppRoute.login ||
           _route == AppRoute.signup) {
@@ -120,7 +120,7 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
         await widget.api.me();
         _route = AppRoute.shell;
         // Befintlig session: koppla enhet + uppdatera last_seen / FCM.
-        unawaited(registerForPush(widget.api));
+        registerForPushInBackground(widget.api);
         if (uri.path.contains('driver')) {
           // Keep the driver view as the only main destination.
         }
@@ -131,7 +131,7 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
     } else if (widget.api.deviceToken != null) {
       _route = AppRoute.shell;
       // FCM-permission får inte blockera boot (hänger ofta på webben).
-      unawaited(registerForPush(widget.api));
+      registerForPushInBackground(widget.api);
     }
     // Första starten utan konto: introduktionen före välkomstskärmen, en
     // gång efter installationen. Startar appen i något annat läge (en

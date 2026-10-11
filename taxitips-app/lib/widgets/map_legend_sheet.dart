@@ -80,7 +80,7 @@ Future<void> showMapLegend(BuildContext context) {
                 },
               ),
             const SizedBox(height: 8),
-            const _Heading('Väg (Trafikverket)'),
+            const _Heading('Väg'),
             // Bara olyckor visas -- se thresholds.ROAD_SHOWN_CONDITIONS.
             const _Row(
               symbol: HazardSign(

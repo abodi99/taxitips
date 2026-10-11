@@ -1,7 +1,6 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../navigation.dart';
 import '../severity_labels.dart' show humanMinutes;
@@ -1076,15 +1075,12 @@ Future<void> showFerrySheet(
 Future<void> showEventSheet(
   BuildContext context,
   Map<String, dynamic> e, {
-  String attribution = '',
   String previewNote = '',
   bool followed = false,
   ValueChanged<bool>? onToggleFollow,
 }) {
   final lat = (e['lat'] as num?)?.toDouble();
   final lon = (e['lon'] as num?)?.toDouble();
-  final links = (e['links'] as List?)?.whereType<Map>().toList() ?? const [];
-  final url = e['url']?.toString() ?? '';
   final endBasis = e['endBasis']?.toString();
   final endNote = e['endNote']?.toString() ?? '';
   final end = e['endLocal']?.toString();
@@ -1179,37 +1175,6 @@ Future<void> showEventSheet(
           ),
         ),
       ],
-      const SizedBox(height: 14),
-      for (final link
-          in links.isNotEmpty
-              ? links
-              : [
-                  if (url.isNotEmpty) {'url': url, 'label': 'källan'},
-                ])
-        if ((link['url']?.toString() ?? '').isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(bottom: 8),
-            child: SizedBox(
-              width: double.infinity,
-              child: FilledButton.icon(
-                style: FilledButton.styleFrom(
-                  backgroundColor: TbColors.midnatt,
-                  foregroundColor: TbColors.vit,
-                ),
-                icon: const Icon(Icons.open_in_new, size: 18),
-                label: Text('Öppna hos ${link['label'] ?? 'källan'}'),
-                onPressed: () => launchUrl(
-                  Uri.parse(link['url'].toString()),
-                  mode: LaunchMode.externalApplication,
-                ),
-              ),
-            ),
-          ),
-      if (attribution.isNotEmpty)
-        Text(
-          attribution,
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-        ),
     ]),
   );
 }

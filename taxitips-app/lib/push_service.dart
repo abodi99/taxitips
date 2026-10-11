@@ -104,12 +104,21 @@ Future<String?> registerForPush(ApiClient api) {
   if (existing != null) return existing;
   final future = _registerForPushOnce(api);
   _registerInFlight = future;
+  // whenComplete ger en egen future med samma fel. Utan ignore() blev varje
+  // fel här (t.ex. device_swap_limit) en ohanterad "krasch" i rapporterna,
+  // fast inloggningen redan visade meddelandet.
   future.whenComplete(() {
     if (identical(_registerInFlight, future)) {
       _registerInFlight = null;
     }
-  });
+  }).ignore();
   return future;
+}
+
+/// [registerForPush] utan att vänta. Felen visas där användaren väntar på
+/// svaret (inloggningen); i bakgrunden får de inte bli en ohanterad krasch.
+void registerForPushInBackground(ApiClient api) {
+  registerForPush(api).ignore();
 }
 
 Future<String?> _registerForPushOnce(ApiClient api) async {
