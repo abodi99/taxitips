@@ -88,12 +88,17 @@ class State:
     archive_blocker: str
     can_delete: bool
     delete_blocker: str
+    # Vad som spärrar arkiveringen: "access" och "licenses" löses med
+    # "Avsluta direkt" (commerce.terminate_now), "pending_order" genom att
+    # avbryta beställningen. Adminwebben visar rätt knapp i stället för bara texten.
+    archive_blocked_by: str = ""
 
     def as_dict(self) -> dict:
         return {
             "archivedAt": self.archived_at.isoformat() if self.archived_at else None,
             "canArchive": self.can_archive,
             "archiveBlocker": self.archive_blocker,
+            "archiveBlockedBy": self.archive_blocked_by,
             "canDelete": self.can_delete,
             "deleteBlocker": self.delete_blocker,
         }
@@ -112,14 +117,25 @@ def state(company_id, now=None) -> State:
     archived_at = profile.archived_at if profile else None
 
     archive_blocker = ""
-    if company_window(company_id, now).ok:
-        archive_blocker = "Bolaget har fortfarande åtkomst. Avsluta abonnemanget eller provet först."
+    blocked_by = ""
+    window = company_window(company_id, now)
+    if window.ok:
+        blocked_by = "access"
+        archive_blocker = (
+            "Bolaget har ett beviljat medlemskap och har därför fortfarande åtkomst. "
+            "Avsluta direkt, så återkallas det."
+            if window.reason == "free_grant" else
+            "Bolaget har fortfarande åtkomst (abonnemang eller prov). Avsluta direkt först. "
+            "En avstängning räcker inte: den pausar bara åtkomsten."
+        )
     elif License.objects.filter(
         company_id=company_id,
         status__in=[License.Status.ACTIVE, License.Status.TRIAL, License.Status.PENDING_CANCEL],
     ).exists():
-        archive_blocker = "Bolaget har bilar som inte är avslutade."
+        blocked_by = "licenses"
+        archive_blocker = "Bolaget har platser som inte är avslutade. Avsluta direkt först."
     elif Order.objects.filter(company_id=company_id, status=Order.Status.PENDING_PAYMENT).exists():
+        blocked_by = "pending_order"
         archive_blocker = "En beställning väntar på betalning. Avbryt den först."
 
     delete_blocker = ""
@@ -142,6 +158,7 @@ def state(company_id, now=None) -> State:
         archive_blocker=archive_blocker,
         can_delete=not delete_blocker,
         delete_blocker=delete_blocker,
+        archive_blocked_by=blocked_by,
     )
 
 

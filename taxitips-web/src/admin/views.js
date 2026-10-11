@@ -1422,7 +1422,10 @@ function archiveCard(d, config) {
       återställa under Kunder → Arkiverade.</p>
     ${a.canArchive
       ? '<div class="btn-row"><button class="btn btn-quiet" data-action="archive">Arkivera bolaget</button></div>'
-      : `<p class="muted">${esc(a.archiveBlocker)}</p>`}`;
+      : `<p class="muted">${esc(a.archiveBlocker)}</p>
+        ${config?.canManage && ["access", "licenses"].includes(a.archiveBlockedBy)
+          ? '<div class="btn-row"><button class="btn btn-danger" data-action="terminate-now">Avsluta direkt och arkivera</button></div>'
+          : ""}`}`;
   }
   return `
     <h3>Arkiverat ${esc(date(a.archivedAt))}</h3>

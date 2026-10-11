@@ -556,6 +556,15 @@ def terminate_now(company_id, *, actor_user_id, reason: str, now=None) -> dict:
         ).first()
         if open_trial is not None:
             trials.end_trial(open_trial, reason="terminated_by_platform", converted=False, now=now)
+        # Ett beviljat medlemskap håller bolagets fönster öppet (access.company_window
+        # svarar free_grant). Utan det här fick bolaget ha kvar åtkomsten efter
+        # "Avsluta direkt", och arkiveringen spärrades med "har fortfarande åtkomst".
+        from fleet import grants
+        from fleet.models import MembershipGrant
+
+        for grant in MembershipGrant.objects.filter(company_id=company_id, revoked_at__isnull=True):
+            grants.revoke(grant, reason=f"Avslutat direkt: {reason}"[:500],
+                          actor_user_id=actor_user_id, now=now)
         Order.objects.filter(
             company_id=company_id, status=Order.Status.PENDING_PAYMENT, stripe_invoice_id=""
         ).update(status=Order.Status.CANCELED, failure_reason="terminated")

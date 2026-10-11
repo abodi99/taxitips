@@ -2169,8 +2169,8 @@ async function salesAction(action, ds) {
 
     case "terminate-now": {
       const reason = prompt(
-        "AVSLUTA DIREKT: åtkomsten upphör nu, alla licenser och förarpass avslutas och " +
-          "Stripe slutar debitera. Ingen återbetalning görs automatiskt.\n\nSkäl (obligatoriskt):",
+        "AVSLUTA DIREKT: åtkomsten upphör nu. Platser, förarpass, prov och beviljade medlemskap " +
+          "avslutas och Stripe slutar debitera. Ingen återbetalning görs automatiskt.\n\nSkäl (obligatoriskt):",
       );
       if (!reason) return;
       if (!confirm("Är du säker? Det går inte att ångra.")) return;

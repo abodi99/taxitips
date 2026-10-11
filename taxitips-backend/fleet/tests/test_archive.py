@@ -72,6 +72,26 @@ class ArchiveTests(FleetTestCase):
         self.post(f"/api/admin/companies/{self.company.id}/archive", {"archived": False})
         self.assertIn("Avslutad AB", self.list_names())
 
+    def test_the_blocker_says_what_to_do(self):
+        state = archive.state(self.company.id)
+        self.assertEqual(state.archive_blocked_by, "access")
+        self.assertIn("Avsluta direkt", state.archive_blocker)
+        self.assertEqual(state.as_dict()["archiveBlockedBy"], "access")
+
+    def test_terminate_now_revokes_a_granted_membership_so_the_company_can_be_archived(self):
+        """Förut höll ett beviljande fönstret öppet efter "Avsluta direkt" (2026-10-11)."""
+        from fleet import grants
+        from fleet.models import MembershipGrant
+
+        grant = grants.grant_membership(
+            company_id=self.company.id, email="forare@example.se", reason="goodwill",
+        )
+        self.terminate()
+        self.assertIsNotNone(MembershipGrant.objects.get(id=grant.id).revoked_at)
+        state = archive.state(self.company.id)
+        self.assertTrue(state.can_archive, state.archive_blocker)
+        self.assertEqual(self.post(f"/api/admin/companies/{self.company.id}/archive", {}).status_code, 200)
+
     def test_delete_needs_archive_and_the_exact_name(self):
         self.terminate()
         response = self.post(f"/api/admin/companies/{self.company.id}/delete", {"confirmName": "Avslutad AB"})
