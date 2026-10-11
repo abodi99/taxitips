@@ -35,6 +35,8 @@ export default defineConfig({
         forare: resolve(__dirname, "forare.html"),
         registrera: resolve(__dirname, "registrera.html"),
         demo: resolve(__dirname, "demo.html"),
+        privacy: resolve(__dirname, "privacy.html"),
+        raderaKonto: resolve(__dirname, "radera-konto.html"),
       },
     },
   },

@@ -1,0 +1,73 @@
+/* Integritetspolicy och radering av konto: lång text på ett kort. */
+
+.legal {
+  max-width: 760px;
+  margin: 2rem auto 3rem;
+  line-height: 1.65;
+}
+
+.legal h1 {
+  font-size: 1.8rem;
+  margin-bottom: 0.25rem;
+}
+
+.legal h2 {
+  font-size: 1.25rem;
+  margin: 2rem 0 0.5rem;
+}
+
+.legal h3 {
+  font-size: 1.05rem;
+  margin: 1.25rem 0 0.25rem;
+}
+
+.legal ul,
+.legal ol {
+  padding-left: 1.4rem;
+}
+
+.legal li + li {
+  margin-top: 0.35rem;
+}
+
+.legal li ul {
+  margin-top: 0.35rem;
+}
+
+.legal table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75rem 0;
+  font-size: 0.95rem;
+}
+
+.legal th,
+.legal td {
+  text-align: left;
+  vertical-align: top;
+  padding: 0.55rem 0.6rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.legal th {
+  font-weight: 600;
+}
+
+.legal a {
+  word-break: break-word;
+}
+
+@media (max-width: 560px) {
+  .legal {
+    margin: 1rem auto 2rem;
+  }
+
+  .legal h1 {
+    font-size: 1.5rem;
+  }
+
+  .legal th,
+  .legal td {
+    padding: 0.5rem 0.35rem;
+  }
+}

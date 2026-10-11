@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Integritetspolicy — Taxi Tips</title>
+  <meta name="description" content="Hur appen och webben Taxi Tips samlar in, använder och delar personuppgifter." />
+  <link rel="canonical" href="https://taxitips.se/privacy.html" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/brand.css" />
+  <link rel="stylesheet" href="/src/portal.css" />
+  <link rel="stylesheet" href="/src/legal.css" />
+</head>
+<body class="portal">
+  <header class="portal-nav">
+    <a class="brand-logo" href="/"><img src="/brand/logo-on-dark.svg" alt="Taxi Tips" height="26" /></a>
+  </header>
+
+  <!--
+    Integritetspolicyn som Google Play, App Store och appens Inställningar ->
+    Datapolicy länkar till. Håll den i takt med docs/release-checklist.md §5
+    (Data safety), ios/Runner/PrivacyInfo.xcprivacy och docs/loggning.md.
+  -->
+  <main class="portal-main">
+    <article class="card legal">
+      <h1>Integritetspolicy för Taxi Tips</h1>
+      <p class="muted">Gäller appen Taxi Tips (Android och iOS) och webben taxitips.se. Senast ändrad 11 oktober 2026.</p>
+
+      <p>Taxi Tips visar taxiförare var det kan finnas resenärer som behöver taxi, till exempel vid inställda tåg, landande flyg eller en konsert som slutar. Tjänsten säljs till taxibolag. Bolaget betalar medlemskapet på webben, och förarna använder appen utan att köpa något.</p>
+      <p>Här står vilka personuppgifter vi samlar in, varför, vem som får ta del av dem, hur länge vi sparar dem och hur du raderar dem.</p>
+
+      <h2 id="ansvarig">Vem ansvarar</h2>
+      <p>Personuppgiftsansvarig är <b>A2M Tech AB</b>, Malmö, som driver Taxi Tips. Kontakt: <a href="mailto:hej@taxitips.se">hej@taxitips.se</a>.</p>
+      <p>Om ditt konto kommer från en inbjudan från ett taxibolag är det bolagets administratör som bjuder in dig, kopplar dig till en bil och kan ta bort dig ur bolaget.</p>
+
+      <h2 id="uppgifter">Uppgifter vi samlar in</h2>
+
+      <h3>Konto</h3>
+      <ul>
+        <li><b>Namn, e-postadress och telefonnummer</b> när du skapar ett konto eller tar emot en inbjudan.</li>
+        <li><b>Lösenord</b>, som sparas bara som ett krypterat hashvärde. Vi kan inte läsa det.</li>
+        <li><b>Företagsuppgifter</b> när ett taxibolag registreras: bolagsnamn, organisationsnummer, adress och bilar. Organisationsnumret slås upp mot Bolagsverkets register.</li>
+        <li><b>Konto-id</b> och vilka bolag och bilar kontot hör till.</li>
+      </ul>
+
+      <h3>Telefonen</h3>
+      <ul>
+        <li><b>Installations-id och push-token</b>, så att telefonen kan kopplas till en bil och få notiser.</li>
+        <li><b>Appversion, telefonmodell och operativsystemets version</b>, så att supporten kan felsöka.</li>
+        <li><b>Nätadress, avkortad</b> till de första delarna, så att den inte pekar ut ett enskilt hushåll.</li>
+      </ul>
+
+      <h3>Plats</h3>
+      <ul>
+        <li>Appen frågar efter plats <b>bara medan appen används</b>. Den hämtar aldrig position i bakgrunden.</li>
+        <li>Positionen <b>avrundas till ungefär en kilometer</b> i telefonen innan den skickas. Den används för att visa avstånd till tipsen och <b>sparas inte</b>.</li>
+        <li>Slår du på <b>I tjänst</b> sparar servern vilken ruta på ungefär 5 km du befinner dig i, så att notiser gäller tips nära dig. Rutan skrivs över, sparas utan historik och slutar gälla 30 minuter efter senaste uppdateringen. Ingen annan, inte heller ditt taxibolag, kan se den.</li>
+        <li>Säger du nej till plats väljer du i stället ett län att köra i. Appen fungerar ändå.</li>
+      </ul>
+
+      <h3>Det du gör i appen</h3>
+      <ul>
+        <li><b>Inställningar för notiser</b>: kategorier, lägsta nivå, tysta timmar och körområde.</li>
+        <li><b>Sparade tips och feedback</b> på tips, till exempel "Fick körning" eller "Ingen kund". Feedbacken används för att göra tipsen bättre.</li>
+        <li><b>Supportchatten</b> och felrapporter du skriver själv.</li>
+      </ul>
+
+      <h3>Fel, krascher och användning</h3>
+      <ul>
+        <li><b>Felrapporter</b> till vår egen server när något går fel, till exempel en misslyckad inloggning. Innan felet sparas tas e-postadresser, telefonnummer, personnummer, koordinater, lösenord och nycklar bort ur texten.</li>
+        <li><b>Kraschrapporter och prestandamätningar</b> via Firebase Crashlytics och Firebase Performance. Rapporterna är inte kopplade till ditt namn eller din e-post.</li>
+        <li><b>Användningsstatistik</b> via Firebase Analytics, till exempel vilka skärmar som öppnas. Den används för att förstå hur appen används, inte för reklam.</li>
+      </ul>
+
+      <h3>Webben</h3>
+      <ul>
+        <li>På taxitips.se använder vi webbanalys som vi driver själva (Umami) och en chatt för kontakt. Kakor som inte behövs sätts bara om du godkänner dem. Du ändrar valet under <b>Cookies</b> längst ner på startsidan.</li>
+        <li>När ett bolag betalar sker betalningen hos Stripe. Vi får inte del av kortnumret.</li>
+      </ul>
+
+      <h3>Det vi inte samlar in</h3>
+      <p>Ingen reklam, inget reklam-id och ingen spårning mellan appar och webbplatser. Vi läser inte kontakter, bilder, filer eller mikrofon. Vi säljer inga uppgifter.</p>
+
+      <h2 id="varfor">Varför vi använder uppgifterna</h2>
+      <table>
+        <thead><tr><th>Ändamål</th><th>Rättslig grund</th></tr></thead>
+        <tbody>
+          <tr><td>Skapa och sköta kontot, koppla telefonen till en bil, visa tips, skicka notiser och svara i supporten</td><td>Avtal med dig eller med ditt taxibolag</td></tr>
+          <tr><td>Hitta och rätta fel, stoppa missbruk och hålla tjänsten säker</td><td>Berättigat intresse</td></tr>
+          <tr><td>Förstå hur appen används och förbättra tipsen</td><td>Berättigat intresse</td></tr>
+          <tr><td>Fakturor och bokföring för bolag som betalar</td><td>Rättslig förpliktelse</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="delning">Vem som får ta del av uppgifterna</h2>
+      <p>Vi säljer inte personuppgifter och delar dem inte för reklam. Uppgifterna hanteras av följande parter:</p>
+      <ul>
+        <li><b>Ditt taxibolag</b> ser namn och e-post för sina förare, och vilka telefoner som är kopplade till bolagets bilar. Bolaget ser inte din position, din feedback eller din supportchatt.</li>
+        <li><b>Våra egna medarbetare inom support</b> kan se konto, telefonernas appversion och felrapporter när de hjälper dig.</li>
+        <li><b>Personuppgiftsbiträden</b> som behandlar uppgifter för vår räkning och enligt avtal med oss:
+          <ul>
+            <li><b>Hostinger</b>: servrarna där databasen, inloggningen och tjänsten körs, i Tyskland (EU).</li>
+            <li><b>Google Firebase</b>: notiser (Cloud Messaging), kraschrapporter (Crashlytics), prestanda (Performance), användningsstatistik (Analytics) och fjärrinställningar (Remote Config).</li>
+            <li><b>Google Maps</b>: kartan i appen. Google tar emot telefonens nätadress och vilket kartområde som visas.</li>
+            <li><b>Stripe</b>: betalning och fakturor för taxibolag. Gäller inte förare.</li>
+          </ul>
+        </li>
+        <li><b>Myndigheter</b> när lagen kräver det.</li>
+      </ul>
+      <p>Google kan behandla uppgifter utanför EU, bland annat i USA. Överföringen sker enligt EU:s ramverk för dataskydd mellan EU och USA (Data Privacy Framework) eller EU-kommissionens standardavtalsklausuler.</p>
+
+      <h2 id="lagring">Hur länge vi sparar uppgifterna</h2>
+      <table>
+        <thead><tr><th>Uppgift</th><th>Sparas</th></tr></thead>
+        <tbody>
+          <tr><td>Konto, inställningar och sparade tips</td><td>Tills du raderar kontot</td></tr>
+          <tr><td>Rutan för I tjänst</td><td>30 minuter efter senaste uppdateringen</td></tr>
+          <tr><td>Position för avstånd till tips</td><td>Sparas inte</td></tr>
+          <tr><td>Felrapporter på vår server</td><td>30 dagar</td></tr>
+          <tr><td>Telefonens appversion och senaste aktivitet</td><td>180 dagar efter att telefonen senast använts</td></tr>
+          <tr><td>Kraschrapporter i Crashlytics</td><td>90 dagar</td></tr>
+          <tr><td>Användningsstatistik i Analytics</td><td>Högst 14 månader</td></tr>
+          <tr><td>Fakturor och bokföringsunderlag</td><td>7 år, enligt bokföringslagen</td></tr>
+        </tbody>
+      </table>
+
+      <h2 id="radera">Radera kontot</h2>
+      <p>Du raderar kontot i appen under <b>Inställningar → Radera mitt konto</b>. Du kan också begära radering via e-post. Hur det går till och vad som tas bort står på <a href="/radera-konto">taxitips.se/radera-konto</a>.</p>
+
+      <h2 id="rattigheter">Dina rättigheter</h2>
+      <p>Enligt dataskyddsförordningen (GDPR) har du rätt att</p>
+      <ul>
+        <li>få veta vilka uppgifter vi har om dig och få en kopia,</li>
+        <li>få felaktiga uppgifter rättade,</li>
+        <li>få uppgifterna raderade,</li>
+        <li>begränsa eller invända mot behandling som bygger på berättigat intresse,</li>
+        <li>få ut uppgifter du själv lämnat i ett maskinläsbart format.</li>
+      </ul>
+      <p>Skriv till <a href="mailto:hej@taxitips.se">hej@taxitips.se</a>. Vi svarar inom en månad. Är du inte nöjd kan du klaga hos Integritetsskyddsmyndigheten (<a href="https://www.imy.se" rel="noopener">imy.se</a>).</p>
+
+      <h2 id="barn">Barn</h2>
+      <p>Taxi Tips är ett arbetsverktyg för taxiförare och riktar sig inte till personer under 18 år.</p>
+
+      <h2 id="andringar">Ändringar</h2>
+      <p>Om vi ändrar policyn uppdaterar vi datumet överst. Väsentliga ändringar meddelar vi i appen eller via e-post.</p>
+    </article>
+  </main>
+</body>
+</html>

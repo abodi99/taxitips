@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Radera konto — Taxi Tips</title>
+  <meta name="description" content="Så raderar du ditt konto i Taxi Tips och vad som tas bort." />
+  <link rel="canonical" href="https://taxitips.se/radera-konto" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/brand.css" />
+  <link rel="stylesheet" href="/src/portal.css" />
+  <link rel="stylesheet" href="/src/legal.css" />
+</head>
+<body class="portal">
+  <header class="portal-nav">
+    <a class="brand-logo" href="/"><img src="/brand/logo-on-dark.svg" alt="Taxi Tips" height="26" /></a>
+  </header>
+
+  <!--
+    Google Play kräver en webbadress där man kan begära radering av kontot
+    utan att ha appen. Vad som tas bort och vad som finns kvar ska stämma med
+    taxitips-backend/fleet/account_deletion.py.
+  -->
+  <main class="portal-main">
+    <article class="card legal">
+      <h1>Radera ditt konto i Taxi Tips</h1>
+      <p class="muted">Gäller appen Taxi Tips från A2M Tech AB, för förare, ägare och kontor.</p>
+
+      <h2 id="i-appen">I appen</h2>
+      <ol>
+        <li>Öppna appen <b>Taxi Tips</b>.</li>
+        <li>Gå till <b>Inställningar</b> och skrolla längst ner.</li>
+        <li>Tryck <b>Radera mitt konto</b> och bekräfta.</li>
+      </ol>
+      <p>Kontot raderas direkt.</p>
+      <p>Är du <b>enda ägaren</b> av ett bolag med ett medlemskap som förnyas? Tryck först <b>Avsluta företagskontot</b> längst ner i Inställningar, eller låt en kollega ta över ägarrollen. Annars skulle ingen kunna säga upp medlemskapet. Ett gratis prov hindrar inte raderingen.</p>
+
+      <h2 id="via-e-post">Utan appen</h2>
+      <p>Skicka ett mejl till <a href="mailto:hej@taxitips.se?subject=Radera%20mitt%20konto">hej@taxitips.se</a> med ämnet <b>Radera mitt konto</b>. Skicka det från e-postadressen du loggar in med, så att vi vet att kontot är ditt. Vi raderar kontot inom 30 dagar och svarar när det är gjort.</p>
+
+      <h2 id="tas-bort">Det här tas bort</h2>
+      <ul>
+        <li>Inloggningen: namn, e-post, telefonnummer och lösenord</li>
+        <li>Medlemskapet i bolaget och kopplingen till bilen</li>
+        <li>Telefonens koppling, push-token, notisinställningar och sparade tips</li>
+        <li>Rutan för I tjänst</li>
+      </ul>
+
+      <h2 id="finns-kvar">Det här finns kvar</h2>
+      <ul>
+        <li><b>Fakturor och bokföringsunderlag</b> för bolag som betalat sparas i 7 år, enligt bokföringslagen.</li>
+        <li><b>Händelseloggen</b>, som visar vem som gjort ändringar i ett bolag, finns kvar för säkerhetens skull.</li>
+        <li><b>Supportärenden</b> finns kvar så att vi kan svara på frågor om dem i efterhand.</li>
+        <li><b>Feedback på tips</b> finns kvar, men knuten till telefonens installations-id och inte till dig.</li>
+        <li><b>Bolagets egna uppgifter</b> om bilar och inbjudningar finns kvar tills bolaget tar bort dem.</li>
+        <li><b>Felrapporter</b> raderas efter 30 dagar och <b>kraschrapporter</b> efter 90 dagar.</li>
+      </ul>
+      <p>Mer om hur vi hanterar personuppgifter står i <a href="/privacy.html">integritetspolicyn</a>.</p>
+    </article>
+  </main>
+</body>
+</html>
