@@ -422,6 +422,9 @@ def collect_trial_commit(
         },
         # Kort obligatoriskt även under Stripe-provet -- annars ingen auto-förnyelse.
         payment_method_collection="always",
+        # "Lägg till kampanjkod" i kassan. Koderna skapas i Stripes dashboard;
+        # rabatten flyttas sedan till vår prismotor (take_over_checkout_discount).
+        allow_promotion_codes=True,
         success_url=success_url,
         cancel_url=cancel_url,
         metadata={
@@ -850,6 +853,56 @@ def cancel_stripe_subscription(subscription: Subscription, *, at_period_end: boo
         )
     else:
         stripe.Subscription.cancel(subscription.stripe_subscription_id)
+
+
+def take_over_checkout_discount(stripe_subscription_id: str) -> dict | None:
+    """
+    Kampanjkoden kunden angav i kassan, flyttad från Stripe till vår prismotor.
+
+    Vår prismotor räknar redan in bolagets rabatt i beloppet vi skickar till
+    Stripe (sync_company_amount). Låg kupongen kvar på abonnemanget hade den
+    dragits två gånger. Därför tas den bort här, och anroparen sparar den som
+    bolagets rabatt (fleet/discounts.py).
+
+    Returnerar {kind, value, months, code, coupon} -- `months` None = för alltid --
+    eller None när ingen rabatt finns eller den inte går att översätta (annan
+    valuta). Då lämnas den orörd i Stripe.
+    """
+    stripe = _client()
+    remote = stripe.Subscription.retrieve(
+        stripe_subscription_id, expand=["discounts", "discounts.promotion_code"],
+    )
+    found = [d for d in (remote.get("discounts") or []) if hasattr(d, "get")]
+    if not found and remote.get("discount"):
+        found = [remote["discount"]]
+    if not found:
+        return None
+    discount = found[0]
+    coupon = discount.get("coupon")
+    if isinstance(coupon, str):
+        coupon = stripe.Coupon.retrieve(coupon)
+    if not coupon:
+        return None
+    if coupon.get("percent_off"):
+        kind, value = "percent_bp", int(round(float(coupon["percent_off"]) * 100))
+    elif coupon.get("amount_off") and str(coupon.get("currency") or "").lower() == "sek":
+        kind, value = "fixed_ore", int(coupon["amount_off"])
+    else:
+        return None
+    duration = coupon.get("duration")
+    months = None
+    if duration == "once":
+        months = 1
+    elif duration == "repeating":
+        months = int(coupon.get("duration_in_months") or 1)
+    promo = discount.get("promotion_code")
+    code = promo.get("code") if hasattr(promo, "get") else ""
+    stripe.Subscription.modify(stripe_subscription_id, discounts="")
+    return {
+        "kind": kind, "value": value, "months": months,
+        "code": code or "", "coupon": coupon.get("id") or "",
+        "trial_end": remote.get("trial_end"),
+    }
 
 
 def cancel_now(subscription: Subscription) -> None:

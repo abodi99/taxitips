@@ -132,6 +132,128 @@ class TrialCommitTests(FleetTestCase):
         self.assertTrue(order.stripe_checkout_session_id)
         sub_data = creates[0].get("subscription_data") or {}
         self.assertEqual(sub_data.get("trial_end"), int(self.trial.ends_at.timestamp()))
+        # Kassan visar "Lägg till kampanjkod".
+        self.assertIs(creates[0].get("allow_promotion_codes"), True)
+
+    def _commit_order(self):
+        order = orders.create_order(
+            self.company.id, self._plan(), created_by=self.owner.user_id, actor_kind="customer",
+        )
+        Order.objects.filter(id=order.id).update(
+            request={**(order.request or {}), "trial_commit": True},
+            status=Order.Status.PENDING_PAYMENT,
+        )
+        order.refresh_from_db()
+        return order
+
+    def _session(self, order, **extra):
+        return {
+            "object": "checkout.session", "id": "cs_disc_1",
+            "payment_status": "no_payment_required", "customer": "cus_commit",
+            "subscription": "sub_disc_1",
+            "metadata": {"order_id": str(order.id), "company_id": str(self.company.id),
+                         "kind": "trial_commit"},
+            **extra,
+        }
+
+    def _stripe_with_discount(self, coupon, code="VAR20"):
+        modified = []
+        trial_end = int(self.trial.ends_at.timestamp())
+
+        class SubscriptionAPI:
+            @staticmethod
+            def retrieve(sub_id, expand=None):
+                return Obj(id=sub_id, trial_end=trial_end, discounts=[
+                    Obj(coupon=Obj(coupon), promotion_code=Obj(code=code)),
+                ])
+
+            @staticmethod
+            def modify(sub_id, **kw):
+                modified.append((sub_id, kw))
+                return Obj(id=sub_id)
+
+        stripe = mock.Mock()
+        stripe.Subscription = SubscriptionAPI
+        return stripe, modified
+
+    def test_a_promotion_code_becomes_the_company_discount_and_leaves_stripe(self):
+        """Annars drogs rabatten två gånger: i vår prismotor och i Stripe."""
+        from fleet import discounts
+
+        order = self._commit_order()
+        stripe, modified = self._stripe_with_discount(
+            {"id": "co_1", "percent_off": 20.0, "duration": "repeating", "duration_in_months": 3},
+        )
+        with mock.patch("fleet.stripe_sync._client", return_value=stripe), \
+                mock.patch("fleet.webhook_events._resync_amount") as resync:
+            result = webhook_events.handle(
+                "checkout.session.completed",
+                self._session(order, total_details={"amount_discount": 5000}),
+            )
+        self.assertEqual(result["action"], "trial_commit_card_saved")
+        self.assertEqual(modified, [("sub_disc_1", {"discounts": ""})])
+        row = discounts.active_discount(self.company.id)
+        self.assertEqual((row.kind, row.value), ("percent_bp", 2000))
+        self.assertIn("VAR20", row.description)
+        # Tre månader räknat från provets slut.
+        self.assertGreater(row.valid_until, self.trial.ends_at + timedelta(days=85))
+        resync.assert_called_once_with(self.company.id)
+
+    def test_a_checkout_without_a_code_touches_no_discount(self):
+        from fleet import discounts
+
+        order = self._commit_order()
+        with mock.patch("fleet.stripe_sync.take_over_checkout_discount") as take_over:
+            webhook_events.handle("checkout.session.completed", self._session(order))
+        take_over.assert_not_called()
+        self.assertIsNone(discounts.active_discount(self.company.id))
+
+    def test_a_foreign_currency_code_stays_in_stripe(self):
+        from fleet import discounts
+
+        order = self._commit_order()
+        stripe, modified = self._stripe_with_discount(
+            {"id": "co_eur", "amount_off": 1000, "currency": "eur", "duration": "forever"},
+        )
+        with mock.patch("fleet.stripe_sync._client", return_value=stripe), \
+                mock.patch("fleet.webhook_events._resync_amount"):
+            webhook_events.handle(
+                "checkout.session.completed",
+                self._session(order, total_details={"amount_discount": 1000}),
+            )
+        self.assertEqual(modified, [])
+        self.assertIsNone(discounts.active_discount(self.company.id))
+
+    def _zero_invoice(self, order, billing_reason):
+        Subscription.objects.filter(company_id=self.company.id).update(
+            stripe_subscription_id="sub_x", status=SubscriptionStatus.TRIALING,
+            stripe_customer_id="cus_x",
+        )
+        now = int(timezone.now().timestamp())
+        return {
+            "object": "invoice", "id": f"in_zero_{billing_reason}", "customer": "cus_x",
+            "subscription": "sub_x", "amount_paid": 0, "status": "paid",
+            "billing_reason": billing_reason,
+            "metadata": {"order_id": str(order.id), "company_id": str(self.company.id)},
+            "lines": {"data": [{"type": "subscription", "subscription": "sub_x",
+                                "period": {"start": now, "end": now + 30 * 86400}}]},
+        }
+
+    def test_the_trials_own_zero_invoice_activates_nothing(self):
+        order = self._commit_order()
+        result = webhook_events.handle("invoice.paid", self._zero_invoice(order, "subscription_create"))
+        self.assertEqual(result["action"], "trial_commit_zero_invoice")
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PENDING_PAYMENT)
+
+    def test_a_zero_invoice_after_the_trial_is_a_paid_period(self):
+        """En kampanjkod på 100 %: fakturan efter provet är 0 kr men en riktig period."""
+        order = self._commit_order()
+        with mock.patch("fleet.webhook_events._resync_amount"):
+            result = webhook_events.handle("invoice.paid", self._zero_invoice(order, "subscription_cycle"))
+        self.assertEqual(result["action"], "payment_succeeded")
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.APPLIED)
 
     def test_checkout_completed_saves_card_without_applying_order(self):
         order = orders.create_order(

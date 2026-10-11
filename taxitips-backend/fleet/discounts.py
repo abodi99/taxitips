@@ -76,6 +76,7 @@ def set_discount(
     description: str = "",
     valid_until=None,
     actor_user_id,
+    actor_kind: str = "platform_admin",
 ) -> CompanyDiscount:
     _validate(kind, int(value))
     CompanyDiscount.objects.filter(company_id=company_id, is_active=True).update(
@@ -93,7 +94,7 @@ def set_discount(
         "company_discount_set",
         company_id=company_id,
         actor_user_id=actor_user_id,
-        actor_kind="platform_admin",
+        actor_kind=actor_kind,
         subject_type="company_discount",
         subject_id=row.id,
         detail={"kind": kind, "value": int(value), "validUntil": valid_until.isoformat() if valid_until else None},

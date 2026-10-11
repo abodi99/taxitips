@@ -156,7 +156,13 @@ def _payment_succeeded(event_type: str, obj: dict, *, event_at, now) -> dict:
             return _trial_commit_checkout_completed(
                 obj, subscription=subscription, order=order, event_at=event_at, now=now,
             )
-        if obj.get("object") == "invoice" and int(obj.get("amount_paid") or 0) <= 0:
+        # Provets egen startfaktura (0 kr) aktiverar inget. En faktura på 0 kr
+        # EFTER provet (en kampanjkod på 100 %) är däremot en betald period.
+        if (
+            obj.get("object") == "invoice"
+            and int(obj.get("amount_paid") or 0) <= 0
+            and obj.get("billing_reason") in (None, "", "subscription_create")
+        ):
             return {"handled": True, "action": "trial_commit_zero_invoice"}
 
     if subscription is None:
@@ -234,6 +240,8 @@ def _trial_commit_checkout_completed(
     )
     if session.get("id") and not order.stripe_checkout_session_id:
         Order.objects.filter(id=order.id).update(stripe_checkout_session_id=session["id"])
+    if isinstance(sub_id, str) and sub_id and _session_has_discount(session):
+        _take_over_checkout_discount(company_id, sub_id)
     _touch(subscription, event_at)
     audit.record(
         "trial_commit_card_saved", company_id=company_id, actor_kind="system",
@@ -244,6 +252,47 @@ def _trial_commit_checkout_completed(
         "handled": True, "action": "trial_commit_card_saved",
         "order_id": str(order.id),
     }
+
+
+def _session_has_discount(session: dict) -> bool:
+    totals = session.get("total_details") or {}
+    return bool(session.get("discounts")) or int(totals.get("amount_discount") or 0) > 0
+
+
+def _take_over_checkout_discount(company_id, stripe_subscription_id: str) -> None:
+    """
+    Kampanjkoden från kassan blir bolagets rabatt hos oss, och tas bort i Stripe
+    (stripe_sync.take_over_checkout_discount). Ett fel får inte stoppa
+    kortsparandet: rabatten ligger då kvar i Stripe och syns i revisionen.
+    """
+    import datetime as dt
+
+    from fleet import discounts, stripe_sync
+
+    try:
+        taken = stripe_sync.take_over_checkout_discount(stripe_subscription_id)
+    except Exception as exc:  # noqa: BLE001 - Stripe kan svara på många sätt
+        log.warning("webhook: kampanjkoden kunde inte flyttas för %s: %s", company_id, exc)
+        audit.record(
+            "checkout_discount_not_taken_over", company_id=company_id, actor_kind="system",
+            subject_type="company", subject_id=company_id, detail={"error": str(exc)[:300]},
+        )
+        return
+    if not taken:
+        return
+    valid_until = None
+    if taken["months"]:
+        start = (
+            dt.datetime.fromtimestamp(int(taken["trial_end"]), tz=dt.timezone.utc)
+            if taken.get("trial_end") else timezone.now()
+        )
+        valid_until = start + dt.timedelta(days=31 * int(taken["months"]))
+    label = f"Kampanjkod {taken['code']}" if taken["code"] else f"Stripe-kupong {taken['coupon']}"
+    discounts.set_discount(
+        company_id, kind=taken["kind"], value=taken["value"], description=label,
+        valid_until=valid_until, actor_user_id=None, actor_kind="customer",
+    )
+    _resync_amount(company_id)
 
 
 def _resync_amount(company_id) -> None:
