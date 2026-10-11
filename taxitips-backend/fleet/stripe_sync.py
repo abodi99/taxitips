@@ -838,6 +838,13 @@ def _items_from_lines(lines: list[dict], *, currency: str, amount_ore: int) -> l
     )]
 
 
+def fetch_checkout_session(session_id: str) -> dict:
+    """Kassan som Stripe ser den just nu -- för avstämning av en order från kassan."""
+    stripe = _client()
+    session = stripe.checkout.Session.retrieve(session_id)
+    return session.to_dict() if hasattr(session, "to_dict") else dict(session)
+
+
 def fetch_invoice(invoice_id: str) -> dict:
     """Fakturan som Stripe ser den just nu -- för avstämning av en enskild order."""
     stripe = _client()

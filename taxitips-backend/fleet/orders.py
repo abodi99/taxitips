@@ -648,10 +648,17 @@ def _continue_trial_seat(order: Order, spec: dict, now) -> License | None:
     return license
 
 
+@transaction.atomic
 def apply_order(order: Order, *, now=None) -> Order:
     """
     Verkställer en BETALD beställning: skapar bilar och licenser, aktiverar
     extra län, schemalägger det som ska gälla senare.
+
+    Egen transaktion: raden låses (select_for_update), och webhooken körs i
+    Celery utan omgivande transaktion. Utan den kraschade en betald kassa med
+    "select_for_update cannot be used outside of a transaction" -- ordern blev
+    `paid` men aldrig `applied` (prod 2026-10-11). Testerna såg det aldrig,
+    eftersom varje TestCase redan ligger i en transaktion.
 
     Idempotent: en dubblerad webhook, ett återförsök och en manuell
     avstämning ska kunna anropa den här utan att skapa en andra licens.

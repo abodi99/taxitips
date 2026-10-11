@@ -53,6 +53,7 @@ def _order_row(order: Order) -> dict:
         "effectiveAt": _iso(order.effective_at), "createdAt": _iso(order.created_at),
         "paidAt": _iso(order.paid_at), "failureReason": order.failure_reason,
         "stripeInvoiceId": order.stripe_invoice_id,
+        "stripeCheckoutSessionId": order.stripe_checkout_session_id,
         "paymentUrl": order.stripe_payment_url or None,
     }
 

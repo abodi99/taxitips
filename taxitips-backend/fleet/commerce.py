@@ -212,6 +212,12 @@ def refresh_payment(order: Order) -> dict:
     """
     from fleet import webhook_events
 
+    if order.status == Order.Status.PAID:
+        # Betald men aldrig verkställd (t.ex. en webhook som kraschade): gör klart.
+        orders.apply_order(order)
+        order.refresh_from_db()
+    if not order.stripe_invoice_id and order.stripe_checkout_session_id:
+        return _refresh_checkout(order)
     if not order.stripe_invoice_id:
         raise orders.OrderError("no_invoice", "Ordern har ingen faktura i Stripe.")
     try:
@@ -231,6 +237,33 @@ def refresh_payment(order: Order) -> dict:
         "amountDueOre": invoice.get("amount_due"),
         "amountPaidOre": invoice.get("amount_paid"),
         "paymentUrl": invoice.get("hosted_invoice_url") or order.stripe_payment_url or None,
+    }
+
+
+def _refresh_checkout(order: Order) -> dict:
+    """
+    Avstämning av en order från kassan: läser kassan i Stripe och kör samma väg
+    som webhooken `checkout.session.completed`. Idempotent.
+    """
+    from fleet import webhook_events
+
+    try:
+        session = stripe_sync.fetch_checkout_session(order.stripe_checkout_session_id)
+    except Exception as exc:
+        raise _stripe_failure(exc) from exc
+    status = str(session.get("status") or "")
+    paid = session.get("payment_status") in ("paid", "no_payment_required")
+    if status == "complete" and paid:
+        webhook_events.handle("checkout.session.completed", session)
+    elif status == "expired" and order.status == Order.Status.PENDING_PAYMENT:
+        orders.mark_order_canceled(order, reason="kassan gick ut", actor_kind="system")
+    order.refresh_from_db()
+    return {
+        "invoiceStatus": f"checkout_{status}" if status else "",
+        "orderStatus": order.status,
+        "amountDueOre": (session.get("amount_total")),
+        "amountPaidOre": session.get("amount_total") if paid else 0,
+        "paymentUrl": order.stripe_payment_url or None,
     }
 
 

@@ -431,9 +431,12 @@ export function ordersCard(orders, config) {
                 <a class="btn btn-quiet" href="${esc(o.paymentUrl)}" target="_blank" rel="noopener">Betalsida</a>
                 <button class="btn btn-quiet" data-action="copy-link" data-url="${esc(o.paymentUrl)}">Kopiera länk</button></div>` : ""}
             ${canSell && o.status === "pending_payment" ? `<div class="btn-row">
-              ${o.stripeInvoiceId ? `<button class="btn btn-quiet" data-action="order-refresh" data-order="${esc(o.id)}">Kontrollera betalning</button>` : ""}
-              ${!o.stripeInvoiceId && stripeOk ? `<button class="btn btn-quiet" data-action="order-link" data-order="${esc(o.id)}">Skapa betallänk</button>` : ""}
+              ${o.stripeInvoiceId || o.stripeCheckoutSessionId ? `<button class="btn btn-quiet" data-action="order-refresh" data-order="${esc(o.id)}">Kontrollera betalning</button>` : ""}
+              ${!o.stripeInvoiceId && !o.stripeCheckoutSessionId && stripeOk ? `<button class="btn btn-quiet" data-action="order-link" data-order="${esc(o.id)}">Skapa betallänk</button>` : ""}
               <button class="btn btn-danger" data-action="order-cancel" data-order="${esc(o.id)}">Avbryt</button>
+            </div>` : ""}
+            ${canSell && o.status === "paid" ? `<div class="btn-row">
+              <button class="btn btn-primary" data-action="order-refresh" data-order="${esc(o.id)}">Verkställ betald order</button>
             </div>` : ""}
           </td>
         </tr>`).join("")}</tbody></table>

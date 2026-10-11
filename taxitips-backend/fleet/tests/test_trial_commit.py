@@ -177,6 +177,43 @@ class TrialCommitTests(FleetTestCase):
         self.trial.refresh_from_db()
         self.assertEqual(self.trial.status, Trial.Status.CONVERTED)
 
+    def test_reconciling_a_paid_checkout_applies_the_order(self):
+        """Webhooken kraschade i prod 2026-10-11: avstämningen ska kunna göra klart."""
+        order = orders.create_order(
+            self.company.id, self._plan(), created_by=self.owner.user_id, actor_kind="customer",
+        )
+        Order.objects.filter(id=order.id).update(stripe_checkout_session_id="cs_rec_1")
+        order.refresh_from_db()
+        session = {
+            "object": "checkout.session", "id": "cs_rec_1", "status": "complete",
+            "payment_status": "paid", "amount_total": 99875,
+            "customer": "cus_rec", "subscription": "sub_rec_1",
+            "metadata": {"order_id": str(order.id), "company_id": str(self.company.id)},
+        }
+        with mock.patch("fleet.stripe_sync.fetch_checkout_session", return_value=session), \
+                mock.patch("fleet.webhook_events._resync_amount"):
+            result = commerce.refresh_payment(order)
+        self.assertEqual(result["orderStatus"], Order.Status.APPLIED)
+        self.assertEqual(Subscription.objects.get(company_id=self.company.id).stripe_subscription_id, "sub_rec_1")
+        self.trial.refresh_from_db()
+        self.assertEqual(self.trial.status, Trial.Status.CONVERTED)
+
+    def test_reconciling_a_paid_but_unapplied_order_finishes_it(self):
+        order = orders.create_order(
+            self.company.id, self._plan(), created_by=self.owner.user_id, actor_kind="customer",
+        )
+        Order.objects.filter(id=order.id).update(
+            status=Order.Status.PAID, paid_at=timezone.now(), stripe_checkout_session_id="cs_rec_2",
+        )
+        order.refresh_from_db()
+        session = {"object": "checkout.session", "id": "cs_rec_2", "status": "complete",
+                   "payment_status": "paid", "metadata": {"order_id": str(order.id),
+                                                           "company_id": str(self.company.id)}}
+        with mock.patch("fleet.stripe_sync.fetch_checkout_session", return_value=session), \
+                mock.patch("fleet.webhook_events._resync_amount"):
+            result = commerce.refresh_payment(order)
+        self.assertEqual(result["orderStatus"], Order.Status.APPLIED)
+
     def test_the_subscriptions_invoice_finds_the_order_through_its_metadata(self):
         order = orders.create_order(
             self.company.id, self._plan(), created_by=self.owner.user_id, actor_kind="customer",
