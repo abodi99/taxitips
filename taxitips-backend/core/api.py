@@ -1718,7 +1718,7 @@ def device_session(request):
         # godkänd telefon i en aktiv bil fick aldrig en enda notis.
         # Hittat på en riktig telefon 2026-09-21.
         from fleet.access import device_for_token
-        from fleet.device_swaps import DeviceSwapError, link_account_device
+        from fleet.device_swaps import DeviceSwapError, link_account_device, sign_out_previous_phone
 
         device, credential, _how = device_for_token(device_header)
         if device is None:
@@ -1738,9 +1738,10 @@ def device_session(request):
         device.refresh_from_db()
         if user_id:
             try:
-                link_account_device(
+                swap = link_account_device(
                     user_id=user_id, device=device, via="device_session", now=now,
                 )
+                sign_out_previous_phone(swap, request)
                 device.refresh_from_db()
             except DeviceSwapError as exc:
                 return _json(
@@ -1793,7 +1794,7 @@ def device_session(request):
     ent = entitlement_for_request(request)
     display_label = f"{label} ({platform})" if platform else label
 
-    from fleet.device_swaps import DeviceSwapError, link_account_device
+    from fleet.device_swaps import DeviceSwapError, link_account_device, sign_out_previous_phone
 
     device = Device.objects.filter(token=installation_id).first()
     if device is None:
@@ -1832,9 +1833,10 @@ def device_session(request):
         linked = "updated"
 
     try:
-        link_account_device(
+        swap = link_account_device(
             user_id=user_id, device=device, via="owner_app", now=now,
         )
+        sign_out_previous_phone(swap, request)
         device.refresh_from_db()
     except DeviceSwapError as exc:
         return _json(

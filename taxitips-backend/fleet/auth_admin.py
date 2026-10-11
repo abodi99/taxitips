@@ -128,6 +128,33 @@ def invite_link(email: str, redirect_to: str) -> AuthLink:
         raise AuthAdminError(f"generate_link: {exc.__class__.__name__}") from exc
 
 
+def sign_out_other_logins(access_token: str) -> bool:
+    """
+    Kontots ÖVRIGA inloggningar slutar gälla (`/auth/v1/logout?scope=others`).
+
+    Anropas med den nya telefonens egen token, så den inloggningen behålls.
+    Den gamla telefonen kan inte förnya sin token och är utloggad när den
+    gamla går ut (jwt_expiry). Fram till dess stoppar `fleet/access.py`
+    (`account_moved`) den. Falskt = misslyckades; spärren gäller ändå.
+    """
+    token = (access_token or "").strip()
+    if not token or not configured():
+        return False
+    try:
+        res = requests.post(
+            f"{settings.SUPABASE_URL.rstrip('/')}/auth/v1/logout?scope=others",
+            headers={"apikey": settings.SUPABASE_SERVICE_ROLE_KEY.strip(), "Authorization": f"Bearer {token}"},
+            timeout=HTTP_TIMEOUT,
+        )
+    except requests.RequestException as exc:
+        log.warning("sign_out_other_logins: %s", exc.__class__.__name__)
+        return False
+    if res.status_code in (200, 204):
+        return True
+    log.warning("sign_out_other_logins: %s %s", res.status_code, res.text[:200])
+    return False
+
+
 def delete_user(user_id: str) -> None:
     """
     Tar bort kontot i Supabase Auth. 404 räknas som OK (redan borta).

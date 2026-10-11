@@ -4,15 +4,19 @@ Telefonbyte: högst ett per kalendermånad, admin kan ge extra.
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime
+from unittest import mock
 from zoneinfo import ZoneInfo
 
+from django.test import Client, RequestFactory, override_settings
 from django.utils import timezone
 
 from billing.models import Device
-from fleet import device_swaps
+from fleet import access, device_swaps
 from fleet.tests.base import FleetTestCase
+from fleet.tests.test_support import SECRET, jwt
 
 STOCKHOLM = ZoneInfo("Europe/Stockholm")
 
@@ -156,3 +160,84 @@ class DeviceSwapTests(FleetTestCase):
         self.assertEqual(len(summary["history"]), 2)
         self.assertTrue(summary["history"][0]["isSwap"])
         self.assertFalse(summary["history"][1]["isSwap"])
+
+
+@override_settings(SUPABASE_JWT_SECRET=SECRET, SUPABASE_URL="http://auth.test", SUPABASE_SERVICE_ROLE_KEY="svc")
+class OneAccountOnePhoneTests(FleetTestCase):
+    """
+    Ägarens beslut 2026-10-11: ett konto, en telefon. Byter kontot telefon
+    tappar den gamla inloggningen -- direkt i åtkomstkontrollen, och i
+    Supabase Auth så att den inte kan förnya sin token.
+    """
+
+    def setUp(self):
+        super().setUp()
+        self.data = self.full_setup()
+        self.user_id = str(self.data["owner"].user_id)
+        self.token = jwt(self.user_id)
+
+    def register(self, installation_id):
+        with mock.patch("fleet.auth_admin.requests.post") as post:
+            post.return_value.status_code = 204
+            response = Client().post(
+                "/api/device/session",
+                data=json.dumps({"installation_id": installation_id, "platform": "android"}),
+                content_type="application/json",
+                headers={"authorization": f"Bearer {self.token}"},
+            )
+        return response, post
+
+    def resolve(self, installation_id):
+        request = RequestFactory().get(
+            "/api/alerts",
+            headers={"x-device-token": installation_id, "authorization": f"Bearer {self.token}"},
+        )
+        return access.resolve(request)
+
+    def test_the_first_phone_does_not_sign_anyone_out(self):
+        response, post = self.register("iphone-install-0001")
+        self.assertEqual(response.status_code, 200, response.content)
+        post.assert_not_called()
+        self.assertNotEqual(self.resolve("iphone-install-0001").reason, "account_moved")
+
+    def test_a_swap_signs_out_the_old_phone(self):
+        self.register("iphone-install-0001")
+        response, post = self.register("samsung-install-0001")
+        self.assertEqual(response.status_code, 200, response.content)
+        post.assert_called_once()
+        url = post.call_args.args[0]
+        self.assertEqual(url, "http://auth.test/auth/v1/logout?scope=others")
+        # Den NYA telefonens token: den inloggningen ska behållas.
+        self.assertEqual(post.call_args.kwargs["headers"]["Authorization"], f"Bearer {self.token}")
+
+        old = self.resolve("iphone-install-0001")
+        self.assertEqual((old.ok, old.reason), (False, "account_moved"))
+        self.assertIn("annan telefon", old.message)
+        self.assertNotEqual(self.resolve("samsung-install-0001").reason, "account_moved")
+
+    def test_a_phone_mid_login_is_not_stopped(self):
+        """En ny telefon som ännu inte kopplats har aldrig haft kontot."""
+        self.register("iphone-install-0001")
+        Device.objects.create(
+            id=uuid.uuid4(), company_id=self.data["company"].id, token="samsung-install-0001",
+            label="Ny", kind="owner_app", notify_prefs={}, created_at=timezone.now(),
+            last_seen_at=timezone.now(),
+        )
+        self.assertNotEqual(self.resolve("samsung-install-0001").reason, "account_moved")
+
+    def test_the_limit_still_holds_and_the_old_phone_keeps_out(self):
+        self.register("iphone-install-0001")
+        self.register("samsung-install-0001")
+        response, post = self.register("iphone-install-0001")
+        self.assertEqual((response.status_code, response.json()["reason"]), (403, "device_swap_limit"))
+        post.assert_not_called()
+        self.assertEqual(self.resolve("iphone-install-0001").reason, "account_moved")
+
+    def test_moving_back_with_an_extra_swap_flips_it(self):
+        self.register("iphone-install-0001")
+        self.register("samsung-install-0001")
+        device_swaps.grant_extra_swap(user_id=self.user_id, actor_user_id=None, note="test")
+        response, _post = self.register("iphone-install-0001")
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertNotEqual(self.resolve("iphone-install-0001").reason, "account_moved")
+        self.assertEqual(self.resolve("samsung-install-0001").reason, "account_moved")

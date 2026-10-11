@@ -179,6 +179,44 @@ def link_account_device(
     }
 
 
+def moved_away(user_id, device_id) -> bool:
+    """
+    Kontot har flyttat FRÅN den här telefonen till en annan.
+
+    Sant bara när kontot har varit kopplat hit och den senaste kopplingen gäller
+    en annan telefon. En ny telefon som ännu inte kopplats räknas inte -- den är
+    mitt i inloggningen och får inte stoppas innan bytet ens prövats.
+    """
+    from fleet.models import DeviceLinkEvent
+
+    if not user_id or not device_id:
+        return False
+    latest = (
+        DeviceLinkEvent.objects.filter(user_id=user_id)
+        .order_by("-created_at").values_list("device_id", flat=True).first()
+    )
+    if latest is None or str(latest) == str(device_id):
+        return False
+    return DeviceLinkEvent.objects.filter(user_id=user_id, device_id=device_id).exists()
+
+
+def sign_out_previous_phone(result: dict, request) -> bool:
+    """
+    Efter ett byte: den gamla telefonen tappar inloggningen.
+
+    Ett konto, en telefon -- annars hade bytesgränsen inte betytt något, eftersom
+    tipsen följer kontots inloggning och inte telefonen.
+    """
+    if not (result or {}).get("is_swap"):
+        return False
+    auth = request.headers.get("Authorization", "")
+    if not auth.lower().startswith("bearer "):
+        return False
+    from fleet import auth_admin
+
+    return auth_admin.sign_out_other_logins(auth[7:].strip())
+
+
 @transaction.atomic
 def grant_extra_swap(*, user_id, actor_user_id, note: str = "", now=None) -> dict:
     """Personal ger ett extra bytestillfälle den här kalendermånaden."""

@@ -494,6 +494,11 @@ def resolve(request, now=None) -> Access:
     # öppen session faller det vidare till medlemsvägen/tokenvägen som förut, så
     # portalen och ägarappen är oförändrade.
     if payload:
+        # Kontot har bytt till en annan telefon: inloggningen här gäller inte
+        # längre, inte ens medan dess token ännu inte gått ut.
+        moved = _moved_away_access(payload, token)
+        if moved is not None:
+            return moved
         _maybe_claim_memberships(payload, now)
         membership_result = _membership_access(payload, now)
         if membership_result is not None:
@@ -578,6 +583,29 @@ def _maybe_claim_memberships(payload: dict, now) -> list:
     from fleet import membership
 
     return membership.claim_for_email(email=email, user_id=user_id, now=now)
+
+
+def _moved_away_access(payload: dict, token: str | None) -> Access | None:
+    """
+    Ett konto, en telefon. När kontot bytt telefon (fleet/device_swaps.py)
+    loggas den gamla ut i Supabase Auth, men dess token gäller tills den går
+    ut. Här stoppas den direkt: annars fick samma konto tips på två telefoner
+    och bytesgränsen hade inte betytt något. Loggar man in här igen flyttar
+    kontot tillbaka -- det är ett nytt byte och räknas mot gränsen.
+    """
+    if not token or not payload.get("sub"):
+        return None
+    device, _credential, _how = device_for_token(token)
+    if device is None:
+        return None
+    from fleet import device_swaps
+
+    if not device_swaps.moved_away(payload["sub"], device.id):
+        return None
+    return Access(
+        False, "account_moved", kind="member", device_id=str(device.id),
+        message=_window_message("account_moved"),
+    )
 
 
 def _membership_access(payload: dict, now) -> Access | None:
@@ -938,6 +966,10 @@ def _window_message(reason: str) -> str:
         "company_paused": "Medlemskapet är pausat. Ditt företags administratör hanterar medlemskapet på webben.",
         "account_paused": "Ditt medlemskap är pausat. Ditt företags administratör hanterar medlemskapet på webben.",
         "account_blocked": "Kontot är spärrat. Kontakta TaxiTips support.",
+        "account_moved": (
+            "Ditt konto används nu på en annan telefon. Logga in här igen om du vill "
+            "flytta tillbaka. Telefonen går att byta en gång i månaden."
+        ),
     }.get(reason, "Åtkomsten är inte aktiv.")
 
 

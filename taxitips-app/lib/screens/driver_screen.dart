@@ -4014,6 +4014,15 @@ class _EntitlementBanner extends StatelessWidget {
       Icons.flag_outlined,
       TbColors.live,
     ),
+    // Kontot bytte telefon (fleet/access.py): ett konto, en telefon.
+    'account_moved' => (
+      'Inloggad på en annan telefon',
+      message ??
+          'Ditt konto används nu på en annan telefon. Logga in här igen om '
+              'du vill flytta tillbaka. Telefonen går att byta en gång i månaden.',
+      Icons.phonelink_erase_rounded,
+      TbColors.taxiDeep,
+    ),
     'company_suspended' || 'account_blocked' => (
       'Kontot är avstängt',
       message ?? 'Kontakta TaxiTips support.',
