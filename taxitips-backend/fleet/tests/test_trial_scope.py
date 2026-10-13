@@ -127,6 +127,22 @@ class RegistrationRulesTests(FleetTestCase):
             self.register(org_number=SOLE_TRADER, company_name="Annas Taxi", contact_phone="0708123491")
         self.assertEqual(caught.exception.reason, "phone_in_use")
 
+    def test_a_used_phone_is_refused_before_the_account_is_created(self):
+        # Appen anropar /register/check före Supabase-kontot. Kom spärren först
+        # i register() satt kunden med ett bekräftat konto utan företag.
+        with registry(VOLVO):
+            self.register()
+        with registry(NOT_FOUND):
+            response = Client().post(
+                "/api/fleet/register/check",
+                data=json.dumps({"orgNumber": SOLE_TRADER, "contactPhone": "0708123491",
+                                 "email": "ny@taxi.test"}),
+                content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 409)
+        body = response.json()
+        self.assertEqual((body["reason"], body["field"]), ("phone_in_use", "phone"))
+
     def test_a_self_registered_trial_has_one_car_and_one_county(self):
         with registry(VOLVO):
             result = self.register(vehicles=[{"plate": "ABC123", "baseCounty": "12"}])

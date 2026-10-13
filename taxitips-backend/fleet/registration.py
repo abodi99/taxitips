@@ -201,7 +201,8 @@ def precheck(
 ) -> Checked:
     """
     Allt som går att pröva INNAN kontot skapas: numrets form, om bolaget
-    redan har ett konto, registret, telefonen och e-postdomänen. Appen anropar
+    redan har ett konto, registret, telefonen (formen och om den redan använts
+    för ett prov) och e-postdomänen. Appen anropar
     samma prövning via /api/fleet/register/check innan Supabase-kontot skapas,
     så att ett felskrivet nummer -- eller ett bolag som redan är kund -- inte
     upptäcks först efter att e-posten bekräftats.
@@ -222,6 +223,17 @@ def precheck(
         if check_existing and sales.existing_company_for(normalized, country) is not None:
             raise sales.SalesError("company_exists", COMPANY_EXISTS_MESSAGE, status=409)
         phone = signup_checks.check_phone(contact_phone)
+        if signup_checks.phone_used_by_other_trial(phone, now=now):
+            # Samma skäl som provspärren på organisationsnumret. Inget om vilket
+            # bolag: bara att numret redan använts. Prövas här och inte först i
+            # register(): där har e-posten redan bekräftats, och kunden satt
+            # kvar med ett konto utan företag som bara kunde loggas ut.
+            raise sales.SalesError(
+                "phone_in_use",
+                "Mobilnumret har redan använts för en provperiod i ett annat företag. "
+                "Kontakta TaxiTips så hjälper vi dig.",
+                status=409,
+            )
         kind = "organisation"
         registry = None
         if country == "SE":
