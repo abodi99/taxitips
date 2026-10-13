@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -262,5 +264,25 @@ void main() {
     expect(tester.takeException(), isNull);
     expect(find.text('Första'), findsOneWidget);
     await close(tester, tour);
+  });
+  // Testerna körs i debug, där `debugNeedsLayout` och liknande fungerar. I
+  // release kastar de, och genomgången startade aldrig på telefonerna.
+  test('genomgången använder inga debug-API:er', () {
+    for (final path in [
+      'lib/widgets/guided_tour.dart',
+      'lib/widgets/driver_tour.dart',
+    ]) {
+      final code = File(path)
+          .readAsLinesSync()
+          .where((line) => !line.trimLeft().startsWith('//'))
+          .join('\n');
+      expect(
+        RegExp(
+          r'\.debug(NeedsLayout|NeedsPaint|Disposed|Size)\b',
+        ).hasMatch(code),
+        isFalse,
+        reason: path,
+      );
+    }
   });
 }

@@ -138,8 +138,10 @@ Rect? tourRectOfKey(GlobalKey key) {
   final context = key.currentContext;
   if (context == null || !context.mounted) return null;
   final box = context.findRenderObject();
+  // Inget `debugNeedsLayout` här: det finns bara i debug. I release kastade
+  // det LateInitializationError, och genomgången startade aldrig (fleet_client_error
+  // 2026-10-11--13, iOS och Android) -- testerna körs i debug och märkte inget.
   if (box is! RenderBox || !box.attached || !box.hasSize) return null;
-  if (box.debugNeedsLayout) return null;
   if (box.size.isEmpty) return null;
   return tourVisibleRect(box.localToGlobal(Offset.zero) & box.size);
 }
