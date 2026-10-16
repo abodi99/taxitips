@@ -64,6 +64,44 @@ class DeviceSwapTests(FleetTestCase):
         self.assertEqual(ctx.exception.reason, "device_swap_limit")
         self.assertIn("en gång", ctx.exception.message)
 
+    def test_review_account_has_no_limit_and_keeps_every_phone(self):
+        from fleet.models import KnownAccount
+
+        KnownAccount.objects.create(
+            user_id=self.user_id, email="apple@taxitips.se", last_seen_at=self.now,
+        )
+        phones = [self._phone(f"P{i}") for i in range(5)]
+        for phone in phones:
+            r = device_swaps.link_account_device(
+                user_id=self.user_id, device=phone, via="owner_app", now=self.now,
+            )
+            self.assertFalse(r["is_swap"])
+            device_swaps.assert_can_swap(self.user_id, now=self.now)
+        # Alla telefoner är kvar inloggade -- ingen har "flyttat bort".
+        for phone in phones:
+            phone.refresh_from_db()
+            self.assertEqual(str(phone.user_id), str(self.user_id))
+            self.assertFalse(device_swaps.moved_away(self.user_id, phone.id))
+        self.assertEqual(device_swaps.swaps_used(self.user_id, now=self.now), 0)
+
+    @override_settings(DEVICE_UNLIMITED_EMAILS=[])
+    def test_review_exemption_is_only_the_configured_addresses(self):
+        from fleet.models import KnownAccount
+
+        KnownAccount.objects.create(
+            user_id=self.user_id, email="apple@taxitips.se", last_seen_at=self.now,
+        )
+        device_swaps.link_account_device(
+            user_id=self.user_id, device=self._phone("A"), via="owner_app", now=self.now,
+        )
+        device_swaps.link_account_device(
+            user_id=self.user_id, device=self._phone("B"), via="owner_app", now=self.now,
+        )
+        with self.assertRaises(device_swaps.DeviceSwapError):
+            device_swaps.link_account_device(
+                user_id=self.user_id, device=self._phone("C"), via="owner_app", now=self.now,
+            )
+
     def test_same_phone_again_is_not_a_swap(self):
         phone = self._phone()
         device_swaps.link_account_device(

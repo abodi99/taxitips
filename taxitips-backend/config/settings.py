@@ -564,3 +564,17 @@ if os.environ.get("CACHE_REDIS_URL"):
     }
 else:
     CACHES = {"default": {"BACKEND": "django.core.cache.backends.locmem.LocMemCache", "LOCATION": "taxitips"}}
+
+# --- Granskningskonton (App Store / Google Play) ------------------------
+# Konton som Apple och Google loggar in med för att granska appen. De får
+# logga in på hur många telefoner som helst: ingen bytesgräns, ingen
+# utloggning av förra telefonen, ingen "kontot har flyttat"-spärr
+# (fleet/device_swaps.py). Adressen jämförs mot KnownAccount, som skrivs ur
+# den verifierade token -- aldrig ur något klienten påstår.
+DEVICE_UNLIMITED_EMAILS = [
+    e.strip().lower()
+    for e in os.environ.get(
+        "TAXITIPS_DEVICE_UNLIMITED_EMAILS", "apple@taxitips.se,android@taxitips.se"
+    ).split(",")
+    if e.strip()
+]

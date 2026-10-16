@@ -17,6 +17,9 @@ telefon" styrs fortfarande av `fleet_vehicle_session`.
 
 Gräns: ett byte per kalendermånad (Europe/Stockholm). Därefter `device_swap_limit`
 tills personal med ADMIN_MANAGE ger ett extra tillfälle (`grant_extra_swap`).
+
+Undantag: granskningskontona i `settings.DEVICE_UNLIMITED_EMAILS` (Apple och
+Google) har ingen gräns och får vara inloggade på flera telefoner samtidigt.
 """
 
 from __future__ import annotations
@@ -25,6 +28,7 @@ import uuid
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
 
@@ -94,8 +98,18 @@ def remaining_swaps(user_id, *, now=None) -> int:
     return max(0, MONTHLY_LIMIT + grants_this_month(user_id, now=now) - swaps_used(user_id, now=now))
 
 
+def is_unlimited(user_id) -> bool:
+    """Granskningskonto: ingen bytesgräns och flera telefoner samtidigt."""
+    allowed = getattr(settings, "DEVICE_UNLIMITED_EMAILS", None) or []
+    if not user_id or not allowed:
+        return False
+    from fleet import accounts
+
+    return (accounts.email_for(user_id) or "").strip().lower() in allowed
+
+
 def assert_can_swap(user_id, *, admin_override: bool = False, now=None) -> None:
-    if admin_override:
+    if admin_override or is_unlimited(user_id):
         return
     if remaining_swaps(user_id, now=now) <= 0:
         raise DeviceSwapError("device_swap_limit", LIMIT_MESSAGE, status=403)
@@ -132,6 +146,15 @@ def link_account_device(
     user_id = str(user_id)
     if not user_id:
         raise DeviceSwapError("login_required", "Logga in för att fortsätta.", status=401)
+
+    if is_unlimited(user_id):
+        # Granskningskonto: koppla den här telefonen utan att släppa de andra
+        # och utan att räkna något byte. Ingen DeviceLinkEvent heller, annars
+        # hade `moved_away` stängt ute de tidigare telefonerna.
+        if not (device.user_id and str(device.user_id) == user_id):
+            Device.objects.filter(id=device.id).update(user_id=user_id)
+            device.user_id = uuid.UUID(user_id)
+        return {"is_swap": False, "previous_device_id": None, "remaining": MONTHLY_LIMIT}
 
     already = bool(device.user_id) and str(device.user_id) == user_id
     if already:
@@ -190,6 +213,8 @@ def moved_away(user_id, device_id) -> bool:
     from fleet.models import DeviceLinkEvent
 
     if not user_id or not device_id:
+        return False
+    if is_unlimited(user_id):
         return False
     latest = (
         DeviceLinkEvent.objects.filter(user_id=user_id)
