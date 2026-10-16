@@ -75,7 +75,9 @@ class PushBannerData {
       kind: data['kind']?.toString() ?? '',
       severityTier: data['severity_tier']?.toString() ?? '',
       level: data['level']?.toString() ?? '',
-      demandScore: (data['demand_score'] as num?) ?? 0,
+      // FCM-data är alltid strängar; `as num?` kastade TypeError på varje
+      // notis i förgrunden.
+      demandScore: num.tryParse(data['demand_score']?.toString() ?? '') ?? 0,
       isSupportReply: type == 'support_reply',
     );
   }

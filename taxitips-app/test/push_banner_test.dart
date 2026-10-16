@@ -97,6 +97,13 @@ void main() {
       expect(data.isTip, isTrue);
       expect(data.eyebrow, 'Medel · Flyg');
     });
+
+    test('FCM skickar talen som strängar', () {
+      final message = RemoteMessage.fromMap({
+        'data': {'kind': 'flight', 'level': 'high', 'demand_score': '62'},
+      });
+      expect(PushBannerData.fromMessage(message).demandScore, 62);
+    });
   });
 
   group('kortet', () {
