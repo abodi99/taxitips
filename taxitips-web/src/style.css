@@ -278,6 +278,19 @@ p { margin: 0; text-wrap: pretty; }
 
 .nav-links a { font-size: 1.05rem; min-height: 48px; }
 
+/* Sociala ikoner längst ned i mobilmenyn */
+.nav-links-social {
+  margin-top: 0.5rem;
+  padding: 0.85rem 0.85rem 0.25rem;
+  border-top: 1px solid var(--line-dark);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.85rem;
+  color: rgba(245, 247, 250, 0.55);
+}
+
 @keyframes menu-in {
   from { opacity: 0; transform: translateY(-6px); }
   to { opacity: 1; transform: none; }
@@ -298,6 +311,7 @@ p { margin: 0; text-wrap: pretty; }
   }
   .nav-links a { font-size: 0.95rem; min-height: 44px; }
   .nav-links .nav-links-login { display: none; }
+  .nav-links-social { display: none; }
   .nav-signin { display: inline-flex; }
   .nav-toggle { display: none; }
 }
@@ -491,6 +505,62 @@ p { margin: 0; text-wrap: pretty; }
 /* Mobil: knapparna fyller bredden så de är lätta att träffa med tummen */
 @media (max-width: 520px) {
   .hero-actions .btn { flex: 1 1 100%; }
+}
+
+/* Butikslänkar och sociala ikoner under knapparna */
+.hero-meta {
+  margin-top: 1.5rem;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem 1.25rem;
+}
+
+.hero-stores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.hero-store {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 44px;
+  padding: 0 1rem;
+  border: 1px solid rgba(245, 247, 250, 0.22);
+  border-radius: var(--radius-pill);
+  color: var(--on-dark);
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+  white-space: nowrap;
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.hero-store img { width: 16px; height: 16px; filter: invert(1); }
+
+.hero-store:hover {
+  color: #fff;
+  border-color: rgba(245, 247, 250, 0.6);
+  background-color: rgba(245, 247, 250, 0.06);
+}
+
+.hero-store:focus-visible { outline: 2px solid var(--guld); outline-offset: 3px; }
+
+/* Mobil: butikerna delar bredden, ikonerna på egen rad under */
+@media (max-width: 520px) {
+  .hero-stores { flex: 1 1 100%; }
+  .hero-store { flex: 1 1 auto; }
+}
+
+/* Bredare: en tunn linje skiljer butikerna från ikonerna */
+@media (min-width: 521px) {
+  .hero-meta .social-icons {
+    padding-left: 1.25rem;
+    border-left: 1px solid rgba(245, 247, 250, 0.18);
+  }
 }
 
 .hero-points {
@@ -1356,7 +1426,16 @@ p { margin: 0; text-wrap: pretty; }
   border-radius: 12px;
   background: var(--midnatt);
   min-height: 52px;
+  text-decoration: none;
+  transition: transform 0.2s var(--ease-out), box-shadow 0.2s var(--ease-out);
 }
+
+a.store-badge:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 22px rgba(0, 0, 0, 0.18);
+}
+
+a.store-badge:focus-visible { outline: 2px solid var(--guld); outline-offset: 3px; }
 
 .store-badge img {
   width: auto;
@@ -1577,6 +1656,43 @@ p { margin: 0; text-wrap: pretty; }
 }
 
 .footer-tagline { max-width: 24rem; }
+
+.social-icons {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.social-icons a {
+  display: inline-grid;
+  padding: 0;
+  min-height: 0;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--line-dark);
+  border-radius: 50%;
+  color: var(--on-dark);
+  transition: color 0.15s ease, border-color 0.15s ease, background-color 0.15s ease, transform 0.2s var(--ease-out);
+}
+
+.social-icons svg { width: 18px; height: 18px; display: block; fill: currentColor; }
+
+.social-icons a:hover {
+  color: var(--midnatt);
+  background-color: var(--guld);
+  border-color: var(--guld);
+  transform: translateY(-2px);
+}
+
+.social-icons a:focus-visible { outline: 2px solid var(--guld); outline-offset: 3px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .social-icons a:hover { transform: none; }
+}
 
 .footer-col h3 {
   margin: 0 0 0.9rem;
