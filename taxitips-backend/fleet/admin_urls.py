@@ -8,7 +8,7 @@ from django.urls import path
 
 from fleet import (
     admin_accounts, admin_activity, admin_api, admin_app_version, admin_crm, admin_followup, admin_sales,
-    admin_status, admin_support, admin_tip_reports, admin_vehicles,
+    admin_status, admin_support, admin_tip_reports, admin_vehicles, admin_web_analytics,
 )
 from fleet import admin_dashboard, admin_notify
 
@@ -20,6 +20,8 @@ urlpatterns = [
     path("status", admin_status.status),
     # Minsta och rekommenderade appversion per plattform -- se core/app_version.py.
     path("app-version", admin_app_version.app_version_view),
+    # Besök på taxitips.se ur GA4 och Umami -- se core/web_analytics.py.
+    path("web-analytics", admin_web_analytics.web_analytics_view),
     path("companies", admin_api.companies),
     # Säljarens uppföljning av prov (vem ska ringas, vad sa de).
     path("followups", admin_followup.followups),

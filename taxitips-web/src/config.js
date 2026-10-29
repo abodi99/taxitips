@@ -17,12 +17,6 @@ export const firebase = {
   appId: "1:1015418824161:web:a8462870b4b2801e859ea0",
 };
 
-/** Umami (A2M Central) — https://umami.a2m-tech.com */
-export const umami = {
-  src: "https://umami.a2m-tech.com/script.js",
-  websiteId: "8287627e-d38d-45c4-87e5-5589e944cebd",
-};
-
 /**
  * GlitchTip (Sentry-compatible) — https://gt.a2m-tech.com
  * Prefer Coolify runtime env GLITCHTIP_DSN (served via /api/config).
@@ -39,7 +33,7 @@ export const glitchtip = {
  */
 export const chatwoot = {
   baseUrl: "https://chat.a2m-tech.com",
-  // Website token is public by design (same as Umami websiteId).
+  // Website token is public by design.
   websiteToken:
     import.meta.env.VITE_CHATWOOT_WEBSITE_TOKEN || "LhpeRrGyqTJahHVfgmn4ErnF",
 };

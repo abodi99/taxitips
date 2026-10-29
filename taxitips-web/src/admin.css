@@ -3404,3 +3404,105 @@ button.dash-stat:hover {
     text-align: left;
   }
 }
+
+/* --- Webbstatistik (src/admin/web_analytics.js) ------------------------------
+   Samma diagramfärger som dashboarden. Heatmapen är en sekventiell ramp i
+   --dv-1 mot vit yta; talet finns alltid i verktygstipset och aria-label. */
+
+.wa-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1.25rem;
+  margin-bottom: 1rem;
+}
+.wa-controls .chips {
+  margin: 0;
+}
+.wa-insights {
+  margin: 0 0 1.25rem;
+  padding: 0.75rem 1rem 0.75rem 2rem;
+  background: var(--ljusgra);
+  border-radius: 8px;
+  font-size: 0.95rem;
+}
+.wa-insights li + li {
+  margin-top: 0.25rem;
+}
+.wa-heat-wrap {
+  overflow-x: auto;
+  margin-bottom: 1.25rem;
+}
+.wa-heat {
+  border-collapse: separate;
+  border-spacing: 2px;
+  width: 100%;
+  min-width: 560px;
+  font-size: 0.75rem;
+}
+.wa-heat th {
+  font-weight: 500;
+  color: var(--ink-soft);
+  text-align: left;
+  padding: 0 0.3rem 0 0;
+  font-variant-numeric: tabular-nums;
+}
+.wa-cell {
+  height: 22px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--dv-1) var(--a), #eef1f6);
+  cursor: default;
+}
+.wa-cell:focus-visible {
+  outline: 2px solid var(--guld);
+}
+.wa-heat-key {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.8rem;
+  margin: 0.4rem 0 0;
+}
+.wa-heat-key i {
+  width: 120px;
+  height: 10px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, #eef1f6, var(--dv-1));
+}
+.wa-top {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wa-top li {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.15rem 0.75rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid var(--line);
+  font-size: 0.9rem;
+}
+.wa-top-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wa-top-bar {
+  grid-column: 1 / -1;
+  height: 4px;
+  background: var(--ljusgra);
+  border-radius: 2px;
+}
+.wa-top-bar i {
+  display: block;
+  height: 100%;
+  background: var(--dv-1);
+  border-radius: 2px;
+}
+.wa-setup code {
+  font-size: 0.85em;
+  word-break: break-all;
+}
+.wa-steps li + li {
+  margin-top: 0.4rem;
+}

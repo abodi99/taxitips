@@ -17,6 +17,12 @@ export const admin = {
   status: (fresh = false) => request(`/api/admin/status${fresh ? "?fresh=1" : ""}`),
   // Minsta och rekommenderade appversion (core/app_version.py). Ändra kräver ADMIN_MANAGE.
   appVersion: () => request("/api/admin/app-version"),
+  // Besök på taxitips.se och i appen ur GA4 (core/web_analytics.py). `fresh` hoppar över serverns cache.
+  webAnalytics: ({ days = 30, scope = "web", fresh = false } = {}) => {
+    const params = new URLSearchParams({ days: String(days), scope });
+    if (fresh) params.set("fresh", "1");
+    return request(`/api/admin/web-analytics?${params}`);
+  },
   setAppVersion: (body) => request("/api/admin/app-version", { method: "POST", body }),
   companies: (q = "", archived = false) => {
     const params = new URLSearchParams();

@@ -24,7 +24,7 @@ function showBanner() {
   banner.setAttribute("role", "dialog");
   banner.setAttribute("aria-label", "Cookies");
   banner.innerHTML = `
-    <p>Vi använder nödvändiga cookies för att sidan ska fungera. Med ditt godkännande mäter vi besök via Umami och Google Analytics (Firebase), och fångar tekniska fel via GlitchTip.</p>
+    <p>Vi använder nödvändiga cookies för att sidan ska fungera. Med ditt godkännande mäter vi besök via Google Analytics (Firebase), och fångar tekniska fel via GlitchTip.</p>
     <div class="consent-actions">
       <button type="button" class="btn-ghost-sm" data-consent="necessary">Endast nödvändiga</button>
       <button type="button" class="btn btn-primary btn-sm" data-consent="accepted">Acceptera analys</button>

@@ -5,6 +5,7 @@ import { ApiError, supabase } from "../portal/api.js";
 import * as acc from "./accounts.js";
 import * as activity from "./activity.js";
 import { bindTooltips, dashboard } from "./dashboard.js";
+import { downloadCsv, webAnalytics } from "./web_analytics.js";
 import { callsCell, followUpBody, nextCell, uppfoljning } from "./followup.js";
 import { admin } from "./api.js";
 import { notifyBody } from "../notify_editor.js";
@@ -73,13 +74,15 @@ const el = {
 
 /** Vyer som ligger under Mer — sidomenyn öppnas så aktiv flik syns. */
 const MORE_VIEWS = new Set([
-  "dashboard", "tipprapporter", "granskning", "evenemang",
+  "dashboard", "webbstatistik", "tipprapporter", "granskning", "evenemang",
   "kuponger", "notiser", "konton", "aktivitet", "personal",
 ]);
 
 const state = {
   // Hem först: det som kräver åtgärd, inte dashboardens siffror.
   view: "oversikt",
+  // Webbstatistiken: period och om appen räknas med.
+  web: { days: 30, source: "", scope: "web", fresh: false },
   companyId: null,
   query: "",
   pushStatus: "",
@@ -206,6 +209,12 @@ async function renderView(seq) {
       case "dashboard":
         paint(dashboard(await admin.dashboard()));
         break;
+      case "webbstatistik": {
+        const { days, scope, fresh } = state.web;
+        state.web.fresh = false;
+        paint(webAnalytics(await admin.webAnalytics({ days, scope, fresh }), state.web));
+        break;
+      }
       case "oversikt": {
         const [overview, list, sup, tipRep, crmTasks] = await Promise.all([
           admin.overview(), admin.companies(),
@@ -1360,6 +1369,18 @@ async function act(action, ds) {
     case "status-refresh":
       state.statusFresh = true;
       return render();
+
+    case "wa-days":
+      state.web.days = Number(ds.value);
+      return render();
+    case "wa-scope":
+      state.web.scope = ds.value;
+      return render();
+    case "wa-refresh":
+      state.web.fresh = true;
+      return render();
+    case "wa-csv":
+      return downloadCsv(state.web.source);
 
     case "goto":
       state.view = ds.view;

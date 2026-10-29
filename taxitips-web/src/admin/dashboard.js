@@ -668,3 +668,6 @@ export function bindTooltips(root) {
   root.addEventListener("focusout", hide);
   window.addEventListener("scroll", hide, { passive: true });
 }
+
+// Byggklossarna delas med webbstatistiken (web_analytics.js) -- samma diagram och färger.
+export { esc, num, pct, stat, section, table, columns, line, figure, legend, dayLabel, C1, C2 };
