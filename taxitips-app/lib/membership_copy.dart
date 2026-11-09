@@ -44,7 +44,8 @@ String notIncludedFor(Object? plan) =>
     plan == 'grant' ? kNotInMembership : kNotInTrial;
 
 /// Hela låstexten efter serverns plan: raden plus vem som sköter medlemskapet.
-String lockedNoteFor(Object? plan) => '${notIncludedFor(plan)} $kMembershipOnWeb';
+String lockedNoteFor(Object? plan) =>
+    '${notIncludedFor(plan)} $kMembershipOnWeb';
 
 /// Inställningarnas hänvisning för fakturor och medlemskap (förare / footer).
 /// Ingen länk, inget pris, ingen knapp -- bara var det sköts.
@@ -105,3 +106,14 @@ String membershipNotice(
 /// Servern kallar evenemangen `events`; kartan och kategoriraden `event`.
 SignalCategory? signalCategoryFromFeatureKey(Object? key) =>
     signalCategoryFromKey(key == 'events' ? 'event' : key?.toString());
+
+/// BankID vid registreringen. Ska säga rakt ut att legitimeringen inte är ett
+/// avtal: ingen bindning, ingen kostnad, provet slutar av sig självt.
+const kBankIdNoCommitment =
+    'BankID visar bara att det är du. Du binder dig inte till något och '
+    'inget kostar pengar. Provet slutar av sig självt efter 7 dagar.';
+
+/// Vad som händer senare, utan pris eller köpväg.
+const kBankIdLaterDetails =
+    'Organisationsnummer och fakturauppgifter behövs först om ni vill '
+    'fortsätta efter provet.';

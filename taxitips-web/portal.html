@@ -168,6 +168,43 @@
     </form>
   </dialog>
 
+  <!-- Konton som registrerats med BankID har inget organisationsnummer.
+       Det anges här, en gång, innan första beställningen
+       (POST /api/fleet/company/org-number). -->
+  <dialog id="companyDetailsDialog" class="code-dialog add-membership-dialog"
+    aria-labelledby="companyDetailsTitle">
+    <h2 id="companyDetailsTitle">Företagets uppgifter</h2>
+    <p class="muted">Innan du beställer behöver vi organisationsnumret och vart
+      fakturan ska. Inget kostar förrän du godkänner beställningen.</p>
+
+    <form id="companyDetailsForm" novalidate>
+      <div class="add-field">
+        <label for="companyOrgNumber">Organisationsnummer</label>
+        <input id="companyOrgNumber" name="orgNumber" inputmode="numeric"
+          autocomplete="off" placeholder="556677-8899" required />
+        <p class="muted">Enskild firma: ditt personnummer. Namn och adress hämtas från Bolagsverket.</p>
+      </div>
+      <div class="add-field company-legal-field" hidden>
+        <label for="companyLegalName">Företagets juridiska namn</label>
+        <input id="companyLegalName" name="legalName" autocomplete="organization" />
+      </div>
+      <div class="add-field">
+        <label for="companyBillingEmail">E-post för fakturor</label>
+        <input id="companyBillingEmail" name="billingEmail" type="email" inputmode="email"
+          autocomplete="email" autocapitalize="off" spellcheck="false" />
+      </div>
+
+      <p id="companyDetailsError" class="auth-alert" role="alert" hidden></p>
+
+      <div class="btn-row">
+        <button class="btn btn-primary btn-block" type="submit" id="companyDetailsSave">
+          <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Spara och fortsätt</span>
+        </button>
+        <button class="btn btn-quiet btn-block" type="button" data-close-details>Avbryt</button>
+      </div>
+    </form>
+  </dialog>
+
   <script type="module" src="/src/portal/main.js"></script>
 </body>
 </html>

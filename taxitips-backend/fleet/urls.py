@@ -50,6 +50,12 @@ urlpatterns = [
     path("signup", api.signup),
     path("register", api.register),
     path("register/check", api.register_check),
+    # BankID: registrering utan organisationsnummer och återställning.
+    path("bankid/start", api.bankid_start),
+    path("bankid/collect", api.bankid_collect),
+    path("bankid/cancel", api.bankid_cancel),
+    path("bankid/register", api.bankid_register),
+    path("bankid/recover", api.bankid_recover),
     path("trial/vehicles", api.trial_vehicles),
     path("trial/vehicles/<uuid:license_id>/county", api.trial_vehicle_county),
     path("trial/vehicles/<uuid:license_id>/remove", api.trial_vehicle_remove),
@@ -67,6 +73,7 @@ urlpatterns = [
     # Radera mitt konto (Apple 5.1.1(v)): inloggat konto ELLER förarens telefon.
     path("account/delete", api.delete_own_account),
     path("company/details", api.update_company_details),
+    path("company/org-number", api.set_company_org_number),
     path("company/contracting-party", api.change_contracting_party),
     # Plattformens granskning
     path("reviews/<uuid:review_id>/resolve", api.resolve_review),

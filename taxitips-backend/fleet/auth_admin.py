@@ -69,6 +69,15 @@ def _post(path: str, payload: dict) -> requests.Response:
     )
 
 
+def _put(path: str, payload: dict) -> requests.Response:
+    return requests.put(
+        f"{settings.SUPABASE_URL.rstrip('/')}{path}",
+        json=payload,
+        headers=_headers(),
+        timeout=HTTP_TIMEOUT,
+    )
+
+
 def _delete(path: str) -> requests.Response:
     return requests.delete(
         f"{settings.SUPABASE_URL.rstrip('/')}{path}",
@@ -168,3 +177,56 @@ def delete_user(user_id: str) -> None:
     if res.status_code in (200, 204, 404):
         return
     raise AuthAdminError(f"delete_user: {res.status_code} {res.text[:200]}")
+
+
+class EmailTaken(AuthAdminError):
+    """Adressen har redan ett konto i Supabase Auth."""
+
+
+def create_user(email: str, password: str, *, app_metadata: dict | None = None) -> str:
+    """
+    Skapar ett bekräftat konto (BankID-registreringen, fleet/registration.py).
+    Ingen bekräftelselänk: personen är legitimerad med BankID, och e-posten är
+    bara inloggningsnamnet. Returnerar användarens id.
+    """
+    if not configured():
+        raise AuthAdminError("SUPABASE_SERVICE_ROLE_KEY saknas")
+    try:
+        res = _post("/auth/v1/admin/users", {
+            "email": email, "password": password, "email_confirm": True,
+            "app_metadata": app_metadata or {},
+        })
+    except requests.RequestException as exc:
+        raise AuthAdminError(f"create_user: {exc.__class__.__name__}") from exc
+    if _already_registered(res):
+        raise EmailTaken("create_user: email_exists")
+    if res.status_code >= 300:
+        raise AuthAdminError(f"create_user: {res.status_code} {res.text[:200]}")
+    body = res.json() if res.content else {}
+    user = body.get("user") if isinstance(body.get("user"), dict) else body
+    user_id = user.get("id") if isinstance(user, dict) else None
+    if not user_id:
+        raise AuthAdminError("create_user: inget id i svaret")
+    return str(user_id)
+
+
+def update_user(user_id: str, *, password: str = "", email: str = "") -> None:
+    """Nytt lösenord och/eller ny e-post, bekräftad direkt (återställning med BankID)."""
+    if not configured():
+        raise AuthAdminError("SUPABASE_SERVICE_ROLE_KEY saknas")
+    payload: dict = {}
+    if password:
+        payload["password"] = password
+    if email:
+        payload["email"] = email
+        payload["email_confirm"] = True
+    if not payload:
+        return
+    try:
+        res = _put(f"/auth/v1/admin/users/{user_id}", payload)
+    except requests.RequestException as exc:
+        raise AuthAdminError(f"update_user: {exc.__class__.__name__}") from exc
+    if _already_registered(res):
+        raise EmailTaken("update_user: email_exists")
+    if res.status_code >= 300:
+        raise AuthAdminError(f"update_user: {res.status_code} {res.text[:200]}")

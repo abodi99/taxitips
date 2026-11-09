@@ -5,6 +5,7 @@ import 'package:taxitips_app/screens/driver_screen.dart';
 import 'package:taxitips_app/screens/login_screen.dart';
 import 'package:taxitips_app/screens/onboarding_screen.dart';
 import 'package:taxitips_app/screens/settings_screen.dart';
+import 'package:taxitips_app/bankid_flow.dart';
 import 'package:taxitips_app/screens/signup_screen.dart';
 import 'package:taxitips_app/screens/trial_welcome_screen.dart';
 import 'package:taxitips_app/screens/welcome_screen.dart';
@@ -50,26 +51,15 @@ void main() {
 
   FakeDriverApi plain() => FakeDriverApi(device: null);
 
-  // Bekräftelsekortet ("Bekräfta din e-post") visas bara efter att formuläret
-  // skickats, så `registrering` ovan når det aldrig. Här pumpas det i samma ram
-  // skärmen ger det: SingleChildScrollView + ConstrainedBox(maxWidth: 480).
-  Widget confirmCard() => Scaffold(
-    backgroundColor: TbColors.navy,
-    body: SafeArea(
-      child: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: SignupConfirmCard(
-              email: 'agare@bolag.se',
-              onResend: () async {},
-              onChangeEmail: () {},
-              onLogin: () {},
-            ),
-          ),
-        ),
-      ),
+  // Andra steget visas först efter BankID, så `registrering` når det aldrig.
+  Widget signupDetails() => SignupScreen(
+    api: plain(),
+    onDone: () {},
+    onLogin: () {},
+    initialIdentity: const BankIdResult(
+      ticket: 't',
+      name: 'Anna Andersson',
+      givenName: 'Anna',
     ),
   );
 
@@ -89,7 +79,7 @@ void main() {
       onLogin: () {},
       onBack: () {},
     ),
-    'registrering, bekräftelsekortet': confirmCard,
+    'registrering efter BankID': signupDetails,
     'välkomst till provet': () =>
         TrialWelcomeScreen(api: plain(), onDone: () {}),
     'inställningar, förare': () =>

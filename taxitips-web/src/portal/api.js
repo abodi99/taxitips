@@ -82,6 +82,11 @@ export const api = {
   updateDetails: (details) =>
     request("/api/fleet/company/details", { method: "POST", body: details }),
   register: (company) => request("/api/fleet/register", { method: "POST", body: company }),
+  setOrgNumber: (orgNumber, legalName) =>
+    request("/api/fleet/company/org-number", {
+      method: "POST",
+      body: { orgNumber, ...(legalName ? { legalName } : {}) },
+    }),
   claimInvite: () => request("/api/fleet/claim-invite", { method: "POST", body: {} }),
   orders: () => request("/api/fleet/orders/list"),
   createVehicle: (plate, label) =>

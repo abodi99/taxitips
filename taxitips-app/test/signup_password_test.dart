@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:taxitips_app/api_client.dart';
+import 'package:taxitips_app/bankid_flow.dart';
 import 'package:taxitips_app/screens/signup_screen.dart';
 
 /// Registreringen har ett lösenordsfält, och det har ett öga: samma knapp och
@@ -19,6 +20,11 @@ void main() {
           api: ApiClient(supabaseUrl: 'http://localhost', supabaseAnonKey: 'x'),
           onDone: () {},
           onLogin: () {},
+          initialIdentity: const BankIdResult(
+            ticket: 't',
+            name: 'Anna Andersson',
+            givenName: 'Anna',
+          ),
         ),
       ),
     );
@@ -61,7 +67,8 @@ void main() {
 
   testWidgets('stegen säger inget om en kod att läsa upp', (tester) async {
     await pump(tester);
-    expect(find.textContaining('Bjud in förarna'), findsOneWidget);
+    // Ingen kod i mejlet längre heller: BankID ersatte bekräftelsen.
+    expect(find.textContaining('kod'), findsNothing);
     expect(find.textContaining('Ge förarna en kod'), findsNothing);
   });
 }

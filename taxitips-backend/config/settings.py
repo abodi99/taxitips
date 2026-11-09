@@ -449,6 +449,17 @@ BOLAGSVERKET_API_URL = os.environ.get(
     "BOLAGSVERKET_API_URL", "https://gw.api.bolagsverket.se/vardefulla-datamangder/v1"
 )
 
+# --- BankID (fleet/bankid.py) --------------------------------------------
+# Samma proxy och certifikat som Volontera. Utan URL är BankID-registreringen
+# avstängd och appen visar den gamla vägen. PEPPER gör personnummernyckeln
+# (fleet_bankid_identity.pnr_key) oläslig; byt den aldrig när det finns konton,
+# då hittas de inte längre.
+BANKID_PROXY_URL = os.environ.get("BANKID_PROXY_URL", "")
+BANKID_PROXY_SECRET = os.environ.get("BANKID_PROXY_SECRET", "")
+BANKID_PROXY_SECRET_PREVIOUS = os.environ.get("BANKID_PROXY_SECRET_PREVIOUS", "")
+BANKID_USE_PRODUCTION = os.environ.get("BANKID_USE_PRODUCTION", "") == "1"
+BANKID_PNR_PEPPER = os.environ.get("BANKID_PNR_PEPPER", "")
+
 # Spärr mot att den här koden rör riktiga abonnemang. Måste sättas till "1"
 # uttryckligen innan en livenyckel används -- se fleet/stripe_sync.py.
 STRIPE_ALLOW_LIVE = os.environ.get("STRIPE_ALLOW_LIVE", "")

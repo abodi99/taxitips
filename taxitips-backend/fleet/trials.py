@@ -84,11 +84,18 @@ class Eligibility:
 
 def eligibility(*, country: str, org_number: str, now=None) -> Eligibility:
     """Får det här organisationsnumret ett gratisprov just nu?"""
-    now = now or timezone.now()
-    key = orgnr.org_key(country, org_number)
     if not orgnr.normalize(org_number, country):
         return Eligibility(False, "invalid_org_number", "Organisationsnumret går inte att tolka.")
+    return eligibility_for_key(orgnr.org_key(country, org_number), now=now)
 
+
+def eligibility_for_key(key: str, *, now=None) -> Eligibility:
+    """
+    Samma spärr för en färdig nyckel: `orgnr.org_key` eller, för en
+    BankID-registrering utan organisationsnummer, `bankid.trial_key` -- en
+    person, ett prov.
+    """
+    now = now or timezone.now()
     cutoff = now - timedelta(days=TRIAL_COOLDOWN_MONTHS * 30)
     previous = (
         Trial.objects.filter(org_key=key)
@@ -142,21 +149,27 @@ def create_trial(
     requires_payment_method: bool = True,
     planned_days: int | None = None,
     actor_user_id=None,
+    trial_key: str = "",
     now=None,
 ) -> Trial:
     """
-    Skapar provet i läget `pending`. Klockan startar inte här -- den startar
+    Skapar provet i läget `pending`. `trial_key` ersätter organisationsnumret
+    som spärrens nyckel (BankID-registrering, se `eligibility_for_key`). Klockan startar inte här -- den startar
     vid första telefonaktiveringen, se `start_trial`.
     """
     now = now or timezone.now()
-    check = eligibility(country=country, org_number=org_number, now=now)
+    key = trial_key or orgnr.org_key(country, org_number)
+    check = (
+        eligibility_for_key(key, now=now) if trial_key
+        else eligibility(country=country, org_number=org_number, now=now)
+    )
     if not check.ok:
         raise TrialError(check.reason, check.message)
     _validate_planned_days(planned_days)
 
     trial = Trial.objects.create(
         company_id=company_id,
-        org_key=orgnr.org_key(country, org_number),
+        org_key=key,
         source=source,
         invite=invite,
         requires_payment_method=requires_payment_method,

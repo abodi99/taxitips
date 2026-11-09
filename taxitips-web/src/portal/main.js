@@ -46,6 +46,15 @@ const el = {
   addQuote: document.getElementById("addMembershipQuote"),
   addError: document.getElementById("addMembershipError"),
   addBuy: document.getElementById("addMembershipBuy"),
+  // Organisationsnummer före första beställningen (BankID-registrerade konton).
+  detailsDialog: document.getElementById("companyDetailsDialog"),
+  detailsForm: document.getElementById("companyDetailsForm"),
+  detailsOrg: document.getElementById("companyOrgNumber"),
+  detailsLegal: document.getElementById("companyLegalName"),
+  detailsLegalField: document.querySelector(".company-legal-field"),
+  detailsBilling: document.getElementById("companyBillingEmail"),
+  detailsError: document.getElementById("companyDetailsError"),
+  detailsSave: document.getElementById("companyDetailsSave"),
 };
 
 /** Primärvyer i flikraden. Äldre fliknamn (bilar, lan) mappas till medlemskap. */
@@ -825,6 +834,7 @@ async function handle(action, ctx) {
  * vyn efter omritningen (views.js, "Öppna betalsidan").
  */
 async function commitTrial(change) {
+  if (!(await ensureCompanyDetails())) return;
   const quote = await api.quote(change);
   const summary = document.createElement("div");
   summary.innerHTML = quoteHtml(quote);
@@ -893,8 +903,72 @@ function setAddBusy(busy) {
   el.addBuy.setAttribute("aria-busy", busy ? "true" : "false");
 }
 
+/**
+ * Ett konto som registrerats med BankID har inget organisationsnummer. Innan
+ * första beställningen frågar vi efter det (och fakturamejlen) i en ruta.
+ * Servern spärrar beställningen ändå (`company_details_required`); det här är
+ * bara så att kunden får frågan i stället för ett fel. Löser med true när
+ * uppgifterna finns, false om kunden avbröt.
+ */
+function ensureCompanyDetails() {
+  const details = state.data?.company?.details ?? {};
+  if (!details.needsOrgNumber || !el.detailsDialog) return Promise.resolve(true);
+  el.detailsForm.reset();
+  if (el.detailsLegalField) el.detailsLegalField.hidden = true;
+  el.detailsError.hidden = true;
+  el.detailsBilling.value = details.billingEmail || details.contactEmail || "";
+  return new Promise((resolve) => {
+    let saved = false;
+    const onSubmit = async (event) => {
+      event.preventDefault();
+      const orgNumber = el.detailsOrg.value.trim();
+      if (orgNumber.replace(/\D/g, "").length < 10) {
+        el.detailsError.textContent = "Skriv organisationsnumret (10 siffror).";
+        el.detailsError.hidden = false;
+        return;
+      }
+      el.detailsSave.disabled = true;
+      el.detailsError.hidden = true;
+      try {
+        await api.setOrgNumber(orgNumber, el.detailsLegal.value.trim());
+        const billingEmail = el.detailsBilling.value.trim();
+        if (billingEmail && billingEmail !== details.billingEmail) {
+          await api.updateDetails({ billingEmail });
+        }
+        saved = true;
+        el.detailsDialog.close();
+      } catch (error) {
+        const field = error instanceof ApiError ? error.detail?.field : null;
+        if (field === "legalName" && el.detailsLegalField) el.detailsLegalField.hidden = false;
+        el.detailsError.textContent =
+          error instanceof ApiError ? error.message : "Det gick inte att spara. Försök igen.";
+        el.detailsError.hidden = false;
+      } finally {
+        el.detailsSave.disabled = false;
+      }
+    };
+    const onCancel = (event) => {
+      if (event.target.closest("[data-close-details]")) el.detailsDialog.close();
+    };
+    el.detailsForm.addEventListener("submit", onSubmit);
+    el.detailsDialog.addEventListener("click", onCancel);
+    el.detailsDialog.addEventListener(
+      "close",
+      async () => {
+        el.detailsForm.removeEventListener("submit", onSubmit);
+        el.detailsDialog.removeEventListener("click", onCancel);
+        if (saved) await refresh();
+        resolve(saved);
+      },
+      { once: true },
+    );
+    el.detailsDialog.showModal();
+  });
+}
+
 /** Rutan för "Lägg till medlemskap": ett län och vem som håller platsen. */
-function openAddMembership() {
+async function openAddMembership() {
+  if (!(await ensureCompanyDetails())) return;
   if (el.addCounty && !el.addCounty.options.length) {
     el.addCounty.innerHTML = COUNTY_OPTIONS.map(
       (c) => `<option value="${escAttr(c.code)}">${escAttr(c.name)}</option>`,
@@ -1014,6 +1088,7 @@ document.addEventListener("click", (event) => {
 });
 
 async function buy(change) {
+  if (!(await ensureCompanyDetails())) return;
   const quote = await api.quote(change);
   const summary = document.createElement("div");
   summary.innerHTML = quoteHtml(quote);
