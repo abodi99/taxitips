@@ -1437,7 +1437,8 @@ function archiveCard(d, config) {
     </div>
     ${a.canDelete
       ? `<p class="muted">Radera tar bort bilar, telefoner, beställningar, chatt, kontaktuppgifter,
-          bolagets inloggningar och provhistoriken. Bolaget kan sedan registrera sig och prova igen.
+          bolagets inloggningar och provhistoriken. Betalda belopp och fakturareferenser sparas
+          för bokföringen. Bolaget kan sedan registrera sig och prova igen.
           Så länge det bara är arkiverat får det inget nytt gratisprov, och kontona är pausade.
           ${config?.canManage ? "" : "Bara plattformsadministratören kan radera."}</p>`
       : `<p class="muted">${esc(a.deleteBlocker)}</p>`}`;

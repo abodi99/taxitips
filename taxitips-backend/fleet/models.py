@@ -1199,6 +1199,44 @@ class Order(models.Model):
         indexes = [models.Index(fields=["company_id", "-created_at"])]
 
 
+class BookkeepingRecord(models.Model):
+    """
+    Bokföringsunderlag som blir kvar när ett bolag raderas.
+
+    Beställningen själv tas bort med bolaget. Den här raden har ingen
+    främmande nyckel dit, så belopp, avtalspart och Stripe-referenser finns
+    kvar i sju år (bokföringslagen 7 kap. 2 §). Inga kontaktuppgifter.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    retained_at = models.DateTimeField()
+    retained_by = models.UUIDField(null=True, blank=True)
+    former_company_id = models.UUIDField()
+    country = models.CharField(max_length=2, default="SE")
+    org_number = models.CharField(max_length=32, blank=True, default="")
+    legal_name = models.TextField(blank=True, default="")
+    order_id = models.UUIDField(null=True, blank=True)
+    kind = models.CharField(max_length=24, blank=True, default="")
+    status = models.CharField(max_length=20, blank=True, default="")
+    amount_ore = models.IntegerField(default=0)
+    vat_ore = models.IntegerField(default=0)
+    total_ore = models.IntegerField(default=0)
+    currency = models.CharField(max_length=3, default="SEK")
+    paid_at = models.DateTimeField(null=True, blank=True)
+    stripe_invoice_id = models.TextField(blank=True, default="")
+    stripe_payment_intent_id = models.TextField(blank=True, default="")
+    stripe_checkout_session_id = models.TextField(blank=True, default="")
+    stripe_customer_id = models.TextField(blank=True, default="")
+    stripe_subscription_id = models.TextField(blank=True, default="")
+
+    class Meta:
+        db_table = "fleet_bookkeeping_record"
+        indexes = [
+            models.Index(fields=["former_company_id", "-retained_at"]),
+            models.Index(fields=["org_number"]),
+        ]
+
+
 class PendingChange(models.Model):
     """
     En ändring som träder i kraft vid nästa förnyelse.

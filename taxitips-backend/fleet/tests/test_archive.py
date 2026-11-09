@@ -257,16 +257,33 @@ class ArchiveTests(FleetTestCase):
         )
         self.assertEqual(response.json()["deleted"]["inloggningar"], 2)
 
-    def test_a_company_that_paid_is_only_archived(self):
+    def test_a_company_that_paid_can_be_deleted_and_the_invoice_is_kept(self):
+        from fleet.models import BookkeepingRecord
+
         self.terminate()
-        Subscription.objects.filter(company_id=self.company.id).update(had_successful_payment=True)
+        subscription = Subscription.objects.get(company_id=self.company.id)
+        Subscription.objects.filter(id=subscription.id).update(
+            had_successful_payment=True, stripe_customer_id="cus_test", stripe_subscription_id="sub_test",
+        )
+        Order.objects.create(
+            company_id=self.company.id, kind=Order.Kind.INITIAL, status=Order.Status.APPLIED,
+            price_version=subscription.price_version, amount_now_ore=79900, vat_now_ore=19975,
+            total_now_ore=99875, stripe_invoice_id="in_test_1", paid_at=timezone.now(),
+        )
         archive.archive(self.company.id, actor_user_id=self.staff)
         state = archive.state(self.company.id)
-        self.assertFalse(state.can_delete)
-        self.assertIn("sju år", state.delete_blocker)
+        self.assertTrue(state.can_delete, state.delete_blocker)
         response = self.post(f"/api/admin/companies/{self.company.id}/delete", {"confirmName": "Avslutad AB"})
-        self.assertEqual(response.status_code, 409)
-        self.assertTrue(Company.objects.filter(id=self.company.id).exists())
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertFalse(Company.objects.filter(id=self.company.id).exists())
+        self.assertFalse(Order.objects.filter(company_id=self.company.id).exists())
+        row = BookkeepingRecord.objects.get(former_company_id=self.company.id)
+        self.assertEqual(row.total_ore, 99875)
+        self.assertEqual(row.stripe_invoice_id, "in_test_1")
+        self.assertEqual(row.org_number, "5566778899")
+        self.assertEqual(row.legal_name, "Avslutad AB")
+        self.assertEqual(row.stripe_subscription_id, "sub_test")
+        self.assertEqual(response.json()["deleted"]["bokföring"], 1)
 
     def test_a_pending_order_blocks_archiving(self):
         self.terminate()

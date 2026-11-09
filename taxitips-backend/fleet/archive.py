@@ -17,10 +17,12 @@ prova igen. Prov som hör till ett annat bolag som finns kvar med samma nummer
 Kvar med avsikt: **revisionsloggen** (`fleet_audit_event`), plus en rad om
 själva raderingen: vem som raderade vad och när ska gå att svara på i efterhand.
 
-Radering kräver plattformsadministratör, ett arkiverat bolag och att bolaget
-**aldrig betalat**. Ett bolag som betalat har bokföringsunderlag
-(beställningar, fakturareferenser) som ska sparas i sju år
-(bokföringslagen 7 kap. 2 §); det arkiveras i stället.
+Radering kräver plattformsadministratör och ett arkiverat bolag utan
+åtkomst. Har bolaget betalat kopieras belopp, avtalspart och
+Stripe-referenser till `fleet_bookkeeping_record` innan beställningarna
+tas bort. Den raden har ingen koppling till bolaget och är underlaget som
+ska sparas i sju år (bokföringslagen 7 kap. 2 §). Att bolaget betalat är
+inte längre ett skäl att vägra radering.
 
 **Bolagets konton följer bolaget** (ägarens beslut 2026-10-07 och 2026-10-11):
 medlemmarna, förarna som bjudits in med e-post, kontona som fått en plats och
@@ -59,6 +61,7 @@ from fleet.models import (
     CompanyProfile,
     CountyChange,
     CountyChangeGrant,
+    BookkeepingRecord,
     CouponRedemption,
     DeviceApproval,
     DeviceCredential,
@@ -75,7 +78,6 @@ from fleet.models import (
     RiskSignal,
     SalesFollowUp,
     Subscription,
-    SubscriptionStatus,
     SupportThread,
     Trial,
     Vehicle,
@@ -118,13 +120,6 @@ class State:
         }
 
 
-def has_paid(company_id) -> bool:
-    """Har bolaget någonsin betalat? Då finns bokföringsunderlag."""
-    if Subscription.objects.filter(company_id=company_id, had_successful_payment=True).exists():
-        return True
-    return Order.objects.filter(company_id=company_id, status=Order.Status.PAID).exists()
-
-
 def state(company_id, now=None) -> State:
     now = now or timezone.now()
     profile = CompanyProfile.objects.filter(company_id=company_id).first()
@@ -155,16 +150,14 @@ def state(company_id, now=None) -> State:
     delete_blocker = ""
     if not archived_at:
         delete_blocker = "Arkivera bolaget först."
-    elif has_paid(company_id):
+    elif window.ok:
+        # Arkivering kräver att åtkomsten redan är slut. Ett beviljande som
+        # lagts efteråt, eller en period som öppnats igen, får inte raderas
+        # medan bolaget fortfarande kör.
         delete_blocker = (
-            "Bolaget har betalat. Bokföringsunderlag sparas i sju år, så bolaget "
-            "kan bara arkiveras."
+            "Bolaget har fortfarande åtkomst. Avsluta direkt först, så att "
+            "medlemskapet stängs och Stripe slutar debitera."
         )
-    elif Subscription.objects.filter(
-        company_id=company_id,
-        status__in=[SubscriptionStatus.ACTIVE, SubscriptionStatus.PAST_DUE],
-    ).exists():
-        delete_blocker = "Abonnemanget är inte avslutat."
 
     return State(
         archived_at=archived_at,
@@ -300,7 +293,9 @@ def _delete_auth_accounts(user_ids) -> int:
 def delete(company_id, *, actor_user_id, confirm_name: str, now=None) -> dict:
     """Tar bort bolaget för gott. Se modulens docstring för vad som finns kvar."""
     with transaction.atomic():
-        counts, account_ids = _delete_rows(company_id, confirm_name=confirm_name, now=now)
+        counts, account_ids = _delete_rows(
+            company_id, confirm_name=confirm_name, actor_user_id=actor_user_id, now=now,
+        )
     # Efter COMMIT: inne i transaktionen väntade Auth på våra lås och gav upp (504).
     counts["inloggningar"] = _delete_auth_accounts(account_ids)
     if len(account_ids) > counts["inloggningar"]:
@@ -315,7 +310,76 @@ def delete(company_id, *, actor_user_id, confirm_name: str, now=None) -> dict:
     return counts
 
 
-def _delete_rows(company_id, *, confirm_name: str, now=None) -> tuple[dict, list[str]]:
+def _money_orders(company_id):
+    """Beställningar som är bokföringsunderlag, inte bara ett utkast."""
+    return [
+        order for order in Order.objects.filter(
+            company_id=company_id,
+            status__in=[Order.Status.PAID, Order.Status.APPLIED],
+        )
+        if (order.total_now_ore or 0) > 0 or order.stripe_invoice_id or order.stripe_payment_intent_id
+    ]
+
+
+def _retain_bookkeeping(company, *, actor_user_id, now) -> int:
+    """
+    Kopierar betalningarna innan beställningarna tas bort. Utan det här
+    försvann fakturaunderlaget med bolaget, och radering var därför spärrad
+    med "bolaget har betalat" även när abonnemanget sedan länge var avslutat.
+    """
+    profile = CompanyProfile.objects.filter(company_id=company.id).first()
+    subscription = Subscription.objects.filter(company_id=company.id).first()
+    orders = _money_orders(company.id)
+    stripe_customer = (
+        (subscription.stripe_customer_id if subscription else "") or company.stripe_customer_id or ""
+    )
+    stripe_subscription = (
+        (subscription.stripe_subscription_id if subscription else "")
+        or company.stripe_subscription_id or ""
+    )
+    paid_flag = bool(subscription and subscription.had_successful_payment)
+    if not orders and not paid_flag and not stripe_customer and not stripe_subscription:
+        return 0
+    common = dict(
+        retained_at=now,
+        retained_by=actor_user_id or None,
+        former_company_id=company.id,
+        country=((profile.country if profile else "") or "SE")[:2],
+        org_number=((profile.org_number if profile else "") or company.org_number or "")[:32],
+        legal_name=(profile.legal_name if profile and profile.legal_name else "") or company.name or "",
+        stripe_customer_id=stripe_customer,
+        stripe_subscription_id=stripe_subscription,
+    )
+    if orders:
+        rows = [
+            BookkeepingRecord(
+                order_id=order.id,
+                kind=order.kind,
+                status=order.status,
+                amount_ore=order.amount_now_ore or 0,
+                vat_ore=order.vat_now_ore or 0,
+                total_ore=order.total_now_ore or 0,
+                currency=order.currency or "SEK",
+                paid_at=order.paid_at,
+                stripe_invoice_id=order.stripe_invoice_id or "",
+                stripe_payment_intent_id=order.stripe_payment_intent_id or "",
+                stripe_checkout_session_id=order.stripe_checkout_session_id or "",
+                **common,
+            )
+            for order in orders
+        ]
+    else:
+        rows = [BookkeepingRecord(
+            kind="subscription",
+            status=subscription.status if subscription else "",
+            currency="SEK",
+            **common,
+        )]
+    BookkeepingRecord.objects.bulk_create(rows)
+    return len(rows)
+
+
+def _delete_rows(company_id, *, confirm_name: str, actor_user_id=None, now=None) -> tuple[dict, list[str]]:
     now = now or timezone.now()
     company = Company.objects.select_for_update().filter(id=company_id).first()
     if company is None:
@@ -336,6 +400,9 @@ def _delete_rows(company_id, *, confirm_name: str, now=None) -> tuple[dict, list
     # Läses innan raderna som bär dem försvinner (medlemmar, inbjudningar, platser).
     account_ids = company_account_ids(company_id)
     counts: dict[str, int] = {}
+    retained = _retain_bookkeeping(company, actor_user_id=actor_user_id, now=now)
+    if retained:
+        counts["bokföring"] = retained
 
     def gone(label, queryset):
         deleted, _ = queryset.delete()
