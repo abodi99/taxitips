@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../api_client.dart';
+import '../bankid_flow.dart';
 import '../net_status.dart';
 import '../theme.dart';
 
@@ -135,6 +136,23 @@ class _LoginScreenState extends State<LoginScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  /// Ägare som registrerat sig med BankID: nytt lösenord och/eller ny e-post
+  /// utan mejl. Förare har kvar länken i mejlet ([_forgot]).
+  Future<void> _forgotWithBankId() async {
+    setState(() {
+      _error = null;
+      _notice = null;
+    });
+    final email = await recoverWithBankId(context, widget.api);
+    if (!mounted || email == null) return;
+    setState(() {
+      _email.text = email;
+      _password.clear();
+      _notice = 'Klart. Logga in med $email och ditt nya lösenord.';
+    });
+    _passwordFocus.requestFocus();
   }
 
   /// Supabase Auths engelska fel och serverns skäl, i enkel svenska.
@@ -322,6 +340,20 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: const Text(
                       'Glömt lösenord?',
                       style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                  ),
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: _busy ? null : _forgotWithBankId,
+                    style: TextButton.styleFrom(
+                      foregroundColor: TbColors.navy,
+                      minimumSize: const Size(48, 44),
+                    ),
+                    child: const Text(
+                      'Glömt lösenord eller bytt e-post? Använd BankID',
+                      textAlign: TextAlign.right,
                     ),
                   ),
                 ),

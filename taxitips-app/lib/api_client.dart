@@ -587,6 +587,83 @@ class ApiClient {
     }
   }
 
+  // -------------------------------------------------------------------------
+  // BankID (2026-11): registrering och återställning
+  // -------------------------------------------------------------------------
+
+  BackendApi get _bankidBackend {
+    final backend = _backend;
+    if (backend == null) {
+      throw ApiException(503, 'BankID är inte tillgängligt just nu.');
+    }
+    return backend;
+  }
+
+  /// Startar en legitimering. `purpose` är `register` eller `recover`.
+  Future<Map<String, dynamic>> bankIdStart(String purpose) async {
+    try {
+      return await _bankidBackend.bankid('start', {'purpose': purpose});
+    } catch (e) {
+      throw asApiIfNetwork(e);
+    }
+  }
+
+  Future<Map<String, dynamic>> bankIdCollect(String orderRef) =>
+      _bankidBackend.bankid('collect', {'orderRef': orderRef});
+
+  Future<void> bankIdCancel(String orderRef) async {
+    try {
+      await _bankidBackend.bankid('cancel', {'orderRef': orderRef});
+    } catch (_) {
+      // En order som inte avbryts går ut av sig själv.
+    }
+  }
+
+  /// Kontot, företaget och provet skapas på servern (bekräftat, ingen länk i
+  /// mejlet), och appen loggar sedan in som vanligt med e-post och lösenord.
+  Future<void> bankIdRegister({
+    required String ticket,
+    required String email,
+    required String password,
+    required String phone,
+    required String companyName,
+  }) => _reported('bankid_register', () async {
+    await ensureInitialized();
+    try {
+      await _bankidBackend.bankid('register', {
+        'ticket': ticket,
+        'email': email.trim(),
+        'password': password,
+        'contactPhone': phone.trim(),
+        'companyName': companyName.trim(),
+      });
+    } catch (e) {
+      throw asApiIfNetwork(e);
+    }
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_pendingRegistrationKey);
+    await signIn(email: email, password: password);
+  });
+
+  /// Glömt lösenord eller bytt e-post: BankID räcker. Returnerar adressen att
+  /// logga in med.
+  Future<String> bankIdRecover({
+    required String ticket,
+    String newPassword = '',
+    String newEmail = '',
+  }) async {
+    try {
+      final data = await _bankidBackend.bankid('recover', {
+        'ticket': ticket,
+        if (newPassword.isNotEmpty) 'newPassword': newPassword,
+        if (newEmail.trim().isNotEmpty) 'newEmail': newEmail.trim(),
+      });
+      return data['email']?.toString() ?? newEmail.trim();
+    } catch (e) {
+      throw asApiIfNetwork(e);
+    }
+  }
+
   /// Nytt bekräftelsemejl när det första inte kom fram (skräppost, fel adress).
   /// Registreringen bekräftas med länken i mejlet ({{ .ConfirmationURL }}, som
   /// går till _confirmedPage). Sidan skickar sessionen tillbaka till appen via

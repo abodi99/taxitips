@@ -2106,3 +2106,43 @@ class CompanyNotifyDefault(models.Model):
 
     class Meta:
         db_table = "fleet_company_notify_default"
+
+
+class BankIdIdentity(models.Model):
+    """
+    Kontot som legitimerat sig med BankID vid registreringen (fleet/bankid.py).
+
+    `pnr_key` är en HMAC av personnumret, inte personnumret: den räcker för
+    "en person, ett konto" och för att hitta kontot när ägaren glömt lösenordet
+    eller bytt e-post, men går inte att läsa tillbaka. Namnet är det BankID
+    gav, inte det kunden skrev.
+    """
+
+    user_id = models.UUIDField(primary_key=True)
+    pnr_key = models.CharField(max_length=32, unique=True)
+    full_name = models.TextField()
+    verified_at = models.DateTimeField()
+    last_used_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "fleet_bankid_identity"
+
+
+class BankIdOrder(models.Model):
+    """
+    En BankID-order som startades här. Proxyn delas med Volontera; bara en
+    order som finns här ger en biljett, och bara en gång (`collected_at`).
+    `consumed_at` sätts när biljetten använts för en återställning. Rader äldre
+    än ett dygn behövs inte och kan rensas.
+    """
+
+    order_ref = models.CharField(max_length=64, primary_key=True)
+    purpose = models.CharField(max_length=16)
+    created_at = models.DateTimeField(auto_now_add=True)
+    collected_at = models.DateTimeField(null=True, blank=True)
+    consumed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "fleet_bankid_order"
+        indexes = [models.Index(fields=["created_at"])]

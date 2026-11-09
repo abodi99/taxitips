@@ -386,6 +386,18 @@ svenskt mobilnummer, ett prov per nummer, riktigt personnummer, bolag som
 Bolagsverket känner till) och flaggar resten för säljaren under **Uppföljning**
 i adminwebben (`fleet/admin_followup.py`). Detaljer: `docs/fleet-abonnemang.md` §7, §9c.
 
+**Registrering med BankID** (2026-11): appen börjar med BankID (samma proxy
+och certifikat som Volontera, anropad från Django: `fleet/bankid.py`), sedan
+e-post, lösenord, mobil och företagsnamn. Servern skapar ett bekräftat
+Supabase-konto (`auth_admin.create_user`), företaget och provet direkt -- ingen
+mejllänk, inget org.nr. En person = ett konto och ett prov (`pnr_key`, HMAC av
+personnumret; klartext sparas aldrig). Org.nr fylls i i portalen före första
+köpet (`company_details.set_org_number`, spärren `require_company_details`).
+"Glömt lösenord eller bytt e-post? Använd BankID" finns i inloggningen för de
+kontona. Env: `BANKID_PROXY_URL`, `BANKID_PROXY_SECRET`(+`_PREVIOUS`),
+`BANKID_USE_PRODUCTION`, `BANKID_PNR_PEPPER`. Den gamla vägen
+(`/api/fleet/register` + mejllänk) finns kvar för äldre appversioner.
+
 **Automatisk onboarding och mejl** (2026-09-27): registrering i appen (org.nr ->
 Bolagsverket) -> kortfritt prov -> mejl tre dagar före och sista dygnet med pris
 och länken `taxitips.se/portal#fortsatt` -> kortet "Fortsätt med provbilarna" i

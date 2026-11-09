@@ -391,6 +391,22 @@ def cancellation_confirmed(company_id, effective_at) -> OutboxMessage | None:
     )
 
 
+def login_email_changed(company_id, old_address: str, new_address: str) -> OutboxMessage | None:
+    """Till den GAMLA adressen: någon bytte inloggningen med BankID (fleet/registration.py)."""
+    return queue(
+        category="login_email_changed", company_id=company_id, to_address=old_address,
+        subject="Din inloggning till TaxiTips har ändrats",
+        body=(
+            "Hej!\n\n"
+            f"Inloggningen till ditt TaxiTips-konto är nu {new_address}. Ändringen "
+            "gjordes efter legitimering med ditt BankID.\n\n"
+            "Var det inte du? Svara på det här mejlet eller skriv till oss i appens chatt.\n"
+            + _SIGNATURE
+        ),
+        key_parts=(company_id, old_address, new_address),
+    )
+
+
 def device_blocked(company_id, approval) -> OutboxMessage | None:
     return queue(
         category="device_blocked", company_id=company_id,

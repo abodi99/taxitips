@@ -243,6 +243,16 @@ order utan villkorsversion går inte att knyta till ett avtal i efterhand.
 * Spärren räknar på `land + normaliserat organisationsnummer`, inte på
   company_id, e-post, telefon, Stripe-kund eller administratör — alla fem går
   att byta på en eftermiddag.
+* **Registrering med BankID (2026-11):** appen registrerar med BankID +
+  e-post, lösenord, mobil och företagsnamn -- inget organisationsnummer och
+  ingen bekräftelselänk (`fleet/registration.register_with_bankid`). Spärren
+  räknar då på personen: `Trial.org_key = "PNR:" + HMAC(personnummer)`
+  (`bankid.trial_key`), ett konto och ett prov per person, plus mobilnummer-
+  spärren. Personnumret sparas aldrig i klartext (`fleet_bankid_identity`).
+  Organisationsnumret anges i portalen före första beställningen
+  (`POST /api/fleet/company/org-number`); `orders` och `trial/commit` nekar
+  med `company_details_required` tills dess. BankID används också för att
+  byta lösenord/e-post (`/api/fleet/bankid/recover`) för de kontona.
 * Klockan startar vid **första telefonaktiveringen**, inte vid registreringen.
   Start och slut skrivs atomiskt en gång; alla provbilar delar slutdatum.
 * Provbilar är inte beställda licenser. Tre provbilar blir aldrig tre

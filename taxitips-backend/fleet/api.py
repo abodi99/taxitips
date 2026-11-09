@@ -36,6 +36,7 @@ from fleet import (
     account_deletion,
     accounts,
     access,
+    bankid,
     archive,
     audit,
     commerce,
@@ -111,6 +112,7 @@ _DOMAIN_ERRORS = (
     discounts.DiscountError,
     TipReportError,
     PermissionDenied,
+    bankid.BankIdError,
 )
 
 
@@ -1304,6 +1306,7 @@ def create_order(request):
     ändrats än.
     """
     principal = _principal(request, Perm.PURCHASE)
+    company_details.require_company_details(principal.company_id)
     body = _body(request)
     plan = _plan_from_body(principal.company_id, body)
 
@@ -1389,6 +1392,7 @@ def trial_commit(request):
     from django.conf import settings
 
     principal = _principal(request, Perm.PURCHASE)
+    company_details.require_company_details(principal.company_id)
     body = _body(request)
     plan = _plan_from_body(principal.company_id, body)
     if not body.get("accepted"):
@@ -1681,6 +1685,116 @@ def _register(registration, payload, body, org_number, country):
         contact_phone=str(body.get("contactPhone") or ""),
         vehicles=body.get("vehicles") or [], country=country, token_payload=payload,
     )
+
+
+# ---------------------------------------------------------------------------
+# BankID: registrering och återställning (fleet/bankid.py)
+# ---------------------------------------------------------------------------
+
+
+def _bankid_ip(request) -> str:
+    from fleet import bolagsverket
+
+    return bolagsverket.client_ip(request) or "unknown"
+
+
+@csrf_exempt
+@require_POST
+@handle
+def bankid_start(request):
+    """
+    POST /api/fleet/bankid/start {"purpose": "register" | "recover"}
+    -> {"orderRef", "autoStartToken", "qrStartToken", "qrStartSecret"}
+
+    Utan inloggning. Bromsas per IP, som registeruppslaget.
+    """
+    ip = _bankid_ip(request)
+    ratelimit.enforce(ratelimit.BANKID_START, ip)
+    body = _body(request)
+    return _json(request, {"ok": True, **bankid.start(purpose=str(body.get("purpose") or ""), end_user_ip=ip)})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def bankid_collect(request):
+    """
+    POST /api/fleet/bankid/collect {"orderRef"}
+    -> {"status": "pending", "message", "qrData"} | {"status": "failed", "message"}
+     | {"status": "complete", "name", "givenName", "ticket"}
+
+    Personnumret lämnar aldrig servern; biljetten bär bara dess nyckel.
+    """
+    ratelimit.enforce(ratelimit.BANKID_COLLECT, _bankid_ip(request))
+    body = _body(request)
+    return _json(request, {"ok": True, **bankid.collect(str(body.get("orderRef") or ""))})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def bankid_cancel(request):
+    """POST /api/fleet/bankid/cancel {"orderRef"}. Tyst om ordern inte finns."""
+    body = _body(request)
+    bankid.cancel(str(body.get("orderRef") or ""))
+    return _json(request, {"ok": True})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def bankid_register(request):
+    """
+    POST /api/fleet/bankid/register
+        {"ticket", "email", "password", "contactPhone", "companyName"}
+
+    Skapar kontot (bekräftat, ingen länk i mejlet), företaget och provet.
+    Appen loggar sedan in med e-post och lösenord som vanligt.
+    """
+    from fleet import registration
+
+    ratelimit.enforce(ratelimit.BANKID_REGISTER, _bankid_ip(request))
+    body = _body(request)
+    result = registration.register_with_bankid(
+        ticket=str(body.get("ticket") or ""),
+        email=str(body.get("email") or ""),
+        password=str(body.get("password") or ""),
+        contact_phone=str(body.get("contactPhone") or ""),
+        company_name=str(body.get("companyName") or ""),
+    )
+    trial = result.trial
+    return _json(request, {
+        "ok": True,
+        "created": True,
+        "companyId": str(result.company.id),
+        "companyName": result.company.name,
+        "trial": (
+            {"status": trial.status, "vehicleLimit": trial.vehicle_limit,
+             "endsAt": trial.ends_at.isoformat() if trial.ends_at else None}
+            if trial else None
+        ),
+        "message": result.trial_message,
+    }, status=201)
+
+
+@csrf_exempt
+@require_POST
+@handle
+def bankid_recover(request):
+    """
+    POST /api/fleet/bankid/recover {"ticket", "newPassword"?, "newEmail"?}
+    -> {"email"}: adressen att logga in med.
+    """
+    from fleet import registration
+
+    ratelimit.enforce(ratelimit.BANKID_RECOVER, _bankid_ip(request))
+    body = _body(request)
+    result = registration.recover_with_bankid(
+        ticket=str(body.get("ticket") or ""),
+        new_password=str(body.get("newPassword") or ""),
+        new_email=str(body.get("newEmail") or ""),
+    )
+    return _json(request, {"ok": True, **result})
 
 
 @csrf_exempt
@@ -1979,6 +2093,22 @@ def accept_ownership(request, transfer_id):
         raise ownership.OwnershipError("unknown_transfer", "Överföringen finns inte.", 404)
     ownership.accept_transfer(transfer=transfer, by_user_id=principal.user_id)
     return _json(request, {"ok": True, "role": "company_owner"})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def set_company_org_number(request):
+    """
+    POST /api/fleet/company/org-number {"orgNumber", "legalName"?}
+
+    Första gången, för ett konto som registrerats med BankID. Namnet hämtas
+    från Bolagsverket; `legalName` behövs bara när registret inte har bolaget.
+    """
+    principal = _principal(request, Perm.PURCHASE)
+    ratelimit.enforce(ratelimit.REGISTRY_LOOKUP, str(principal.user_id))
+    result = company_details.set_org_number(principal, _body(request))
+    return _json(request, {"ok": True, **result})
 
 
 @csrf_exempt

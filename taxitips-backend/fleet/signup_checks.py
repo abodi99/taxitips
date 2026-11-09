@@ -277,7 +277,15 @@ def flags(profile) -> list[dict]:
         return out
     registry = profile.registry or {}
     kind = org_kind(profile.org_number) if profile.country == "SE" else "organisation"
-    if kind == "person":
+    if not profile.org_number:
+        # BankID-registreringen (fleet/registration.register_with_bankid):
+        # personen är legitimerad, bolaget anges först vid beställningen.
+        out.append({
+            "code": "org_number_later",
+            "level": "info",
+            "text": "Legitimerad med BankID. Organisationsnummer anges när kunden beställer.",
+        })
+    elif kind == "person":
         out.append({
             "code": "sole_trader",
             "level": "warn",

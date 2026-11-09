@@ -32,6 +32,12 @@ class Limit:
 PAIRING_REDEEM = Limit("pairing_redeem", limit=10, window_seconds=300)
 PAIRING_ISSUE = Limit("pairing_issue", limit=20, window_seconds=3600)
 SIGNUP = Limit("signup", limit=5, window_seconds=3600)
+# BankID: en legitimering tar några polls i sekunden under en halv minut.
+BANKID_START = Limit("bankid_start", limit=60, window_seconds=3600)
+BANKID_COLLECT = Limit("bankid_collect", limit=2000, window_seconds=3600)
+BANKID_RECOVER = Limit("bankid_recover", limit=10, window_seconds=3600)
+# Per IP, inte per bolag: flera förare bakom samma mobiloperatörs-NAT.
+BANKID_REGISTER = Limit("bankid_register", limit=30, window_seconds=3600)
 JOIN_LOOKUP = Limit("join_lookup", limit=10, window_seconds=3600)
 INVITE_REDEEM = Limit("invite_redeem", limit=10, window_seconds=3600)
 # Förarinbjudan med e-post: varje utskick är ett riktigt mejl till en

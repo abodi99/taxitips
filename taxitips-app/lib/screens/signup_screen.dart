@@ -1,13 +1,18 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
 import '../api_client.dart';
+import '../bankid_flow.dart';
+import '../membership_copy.dart';
 import '../net_status.dart';
 import '../theme.dart';
 import '../widgets/password_visibility.dart';
 
+/// Registreringen (2026-11): BankID först, sedan e-post, lösenord, mobil och
+/// företagets namn. Kontot och provet skapas direkt på servern
+/// (fleet/registration.py:register_with_bankid) -- ingen länk i mejlet och
+/// inget organisationsnummer. Det anges i kundportalen om kunden vill
+/// fortsätta efter provet.
 class SignupScreen extends StatefulWidget {
   const SignupScreen({
     super.key,
@@ -15,6 +20,7 @@ class SignupScreen extends StatefulWidget {
     required this.onDone,
     required this.onLogin,
     this.onBack,
+    this.initialIdentity,
   });
 
   final ApiClient api;
@@ -22,45 +28,42 @@ class SignupScreen extends StatefulWidget {
   final VoidCallback onLogin;
   final VoidCallback? onBack;
 
+  /// Bara för tester och förhandsvisning: hoppa över BankID-steget.
+  final BankIdResult? initialIdentity;
+
   @override
   State<SignupScreen> createState() => SignupScreenState();
 }
 
 class SignupScreenState extends State<SignupScreen> {
-  final _name = TextEditingController();
+  final _company = TextEditingController();
   final _email = TextEditingController();
   final _password = TextEditingController();
-  final _org = TextEditingController();
-  final _contact = TextEditingController();
   final _phone = TextEditingController();
+  BankIdResult? _identity;
   String? _error;
-  String? _lookupHint;
-  // Bolagsverkets svar för numret i fältet. Null = inte hämtat, eller gick
-  // inte att hämta; då skriver användaren företagsnamnet själv.
-  Map<String, dynamic>? _registry;
-  bool _registryChecked = false;
-  bool _lookingUp = false;
-  int _lookupSeq = 0;
-  // Satt när Supabase kräver att e-posten bekräftas innan kontot kan logga in.
-  String? _confirmEmail;
   bool _busy = false;
-  // Lösenordet är dolt tills ögat trycks (samma som i inloggningen).
   bool _hidePassword = true;
-  Timer? _lookupTimer;
 
   @override
   void initState() {
     super.initState();
-    // Ingen förifyllning: en ny registrering börjar med tomma fält. E-posten
-    // som sparades vid en tidigare inloggning hör till inloggningen, inte hit,
-    // och lösenordet sparas aldrig (api_client.saveCredentials).
-    _org.addListener(_onOrgChanged);
+    // Ingen förifyllning: en ny registrering börjar med tomma fält.
+    _identity = widget.initialIdentity;
   }
 
-  void _onOrgChanged() {
-    _lookupTimer?.cancel();
-    _lookupTimer = Timer(const Duration(milliseconds: 450), _checkOrg);
+  @override
+  void dispose() {
+    _company.dispose();
+    _email.dispose();
+    _password.dispose();
+    _phone.dispose();
+    super.dispose();
   }
+
+  // Formkontrollerna nedan används inte längre i registreringen (BankID ersatte
+  // organisationsnumret) men är samma regler som servern och prövas i
+  // test/signup_org_test.dart. Mobilnumret prövas fortfarande här.
 
   /// Kontrollsiffran i ett svenskt organisations- eller personnummer (Luhn på
   /// de tio sista siffrorna), samma regel som servern (fleet/orgnr.py). Ett
@@ -149,81 +152,16 @@ class SignupScreenState extends State<SignupScreen> {
     return month >= 1 && month <= 12;
   }
 
-  Future<void> _checkOrg() async {
-    final digits = _org.text.replaceAll(RegExp(r'\D'), '');
-    if (!mounted) return;
-    final seq = ++_lookupSeq;
-    final luhn = digits.length >= 10 && orgNumberLooksValid(_org.text);
-    final personal = luhn ? personalNumberProblem(_org.text) : null;
-    final valid = luhn && personal == null;
-    setState(() {
-      _registry = null;
-      _registryChecked = false;
-      _lookingUp = valid;
-      _lookupHint = digits.length < 10 || valid
-          ? null
-          : (personal ?? 'Numret stämmer inte. Kontrollera siffrorna.');
-    });
-    if (!valid) return;
-    // Namn, adress och status hämtas från Bolagsverket; användaren behöver
-    // inte skriva av dem (fleet/bolagsverket.py).
-    final registry = await widget.api.registryLookup(_org.text.trim());
-    // Ett äldre svar får inte skriva över ett nyare: användaren kan ha
-    // fortsatt skriva medan uppslaget pågick.
-    if (!mounted || seq != _lookupSeq) return;
-    setState(() {
-      _registry = registry;
-      _registryChecked = true;
-      _lookingUp = false;
-    });
+  Future<void> _bankId() async {
+    setState(() => _error = null);
+    final result = await runBankId(context, widget.api, purpose: 'register');
+    if (!mounted || result == null) return;
+    setState(() => _identity = result);
   }
 
-  bool get _registryFound => _registry?['found'] == true;
-  bool get _registryBlocks => _registry?['blocksSignup'] == true;
-
-  /// Uppslaget gick inte att göra (nätet, backenden eller Bolagsverket). Inte
-  /// samma sak som "finns inte" -- då ska användaren kunna försöka igen, inte
-  /// få höra att bolaget saknas (2026-09-30: backenden låg nere och appen sa
-  /// "Vi hittade inte bolaget" om ett aktivt aktiebolag).
-  bool get _registryUnavailable => _registryChecked && _registry == null;
-
-  /// Aktiebolag, ekonomisk förening och handelsbolag (5/7/9) finns alltid hos
-  /// Bolagsverket. Saknas de där är numret fel, och servern nekar
-  /// (fleet/signup_checks.py:check_registry).
-  bool get _registryRejects =>
-      _registryChecked &&
-      _registry != null &&
-      !_registryFound &&
-      !_soleTrader &&
-      RegExp(r'^[579]').hasMatch(
-        _org.text
-            .replaceAll(RegExp(r'\D'), '')
-            .replaceFirst(RegExp(r'^16'), ''),
-      );
-
-  /// Företagsnamnet behöver bara skrivas när registret inte har bolaget
-  /// (t.ex. en enskild firma) eller inte gick att nå.
-  bool get _needsCompanyName =>
-      _registryChecked && !_registryFound && !_registryRejects;
-
-  bool get _soleTrader => looksLikeSoleTrader(_org.text);
-
-  @override
-  void dispose() {
-    _lookupTimer?.cancel();
-    _org.removeListener(_onOrgChanged);
-    _name.dispose();
-    _email.dispose();
-    _password.dispose();
-    _org.dispose();
-    _contact.dispose();
-    _phone.dispose();
-    super.dispose();
-  }
-
-  /// Konto och företag i ett steg. Ingen betalning: provet är kortfritt och
-  /// startar när den första telefonen kopplas (fleet/registration.py).
   Future<void> _submit() async {
+    final identity = _identity;
+    if (identity == null) return;
     final problem = _validate();
     if (problem != null) {
       setState(() => _error = problem);
@@ -234,49 +172,39 @@ class SignupScreenState extends State<SignupScreen> {
       _error = null;
     });
     try {
-      final data = await widget.api.signup(
-        name: _contact.text.trim(),
-        email: _email.text.trim(),
+      await widget.api.bankIdRegister(
+        ticket: identity.ticket,
+        email: _email.text,
         password: _password.text,
-        orgNumber: _org.text.trim(),
-        // Tomt när Bolagsverket har bolaget: servern tar namnet därifrån.
-        companyName: _needsCompanyName ? _name.text.trim() : '',
-        phone: _phone.text.trim(),
+        phone: _phone.text,
+        companyName: _company.text,
       );
-      if (data['needsConfirmation'] == true) {
-        if (mounted) setState(() => _confirmEmail = _email.text.trim());
-        return;
-      }
       widget.onDone();
     } on ApiException catch (e) {
-      setState(() => _error = e.message);
+      setState(() {
+        _error = e.message;
+        // Biljetten gäller i 15 minuter. Har den gått ut börjar man om med
+        // BankID; det som skrivits finns kvar.
+        if (e.reason == 'ticket_expired' || e.reason == 'invalid_ticket') {
+          _identity = null;
+        }
+      });
     } catch (e) {
-      setState(() => _error = _friendly(e));
+      final net = netFailureOf(e);
+      setState(
+        () => _error = net != null
+            ? netMessage(net)
+            : 'Något gick fel. Försök igen.',
+      );
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
   String? _validate() {
-    if (!orgNumberLooksValid(_org.text)) {
-      return 'Kontrollera organisationsnumret (10 siffror).';
+    if (_company.text.trim().isEmpty) {
+      return 'Skriv namnet på företaget du kör för.';
     }
-    final personal = personalNumberProblem(_org.text);
-    if (personal != null) return personal;
-    if (_lookingUp) return 'Vänta, vi hämtar bolaget från Bolagsverket.';
-    if (_registryBlocks) {
-      return 'Bolaget är avregistrerat hos Bolagsverket och kan inte skapa ett konto.';
-    }
-    if (!_registryChecked) return 'Vänta, vi kontrollerar organisationsnumret.';
-    if (_registryRejects) {
-      return 'Bolagsverket hittar inte organisationsnumret. Kontrollera siffrorna.';
-    }
-    if (_needsCompanyName && _name.text.trim().isEmpty) {
-      return _soleTrader
-          ? 'Skriv firmanamnet (enskild firma finns inte hos Bolagsverket).'
-          : 'Skriv företagets namn.';
-    }
-    if (_contact.text.trim().isEmpty) return 'Skriv ditt namn.';
     if (!phoneLooksValid(_phone.text)) {
       return 'Skriv ett svenskt mobilnummer, till exempel 070-123 45 67.';
     }
@@ -285,31 +213,211 @@ class SignupScreenState extends State<SignupScreen> {
     return null;
   }
 
-  /// Supabase Auths engelska fel, i klartext.
-  String _friendly(Object e) {
-    final net = netFailureOf(e);
-    if (net != null) return netMessage(net);
-    final text = e.toString();
-    if (text.contains('already registered') ||
-        text.contains('already been registered')) {
-      return 'Det finns redan ett konto med den e-postadressen. Logga in i stället.';
-    }
-    if (text.contains('Password should be')) return 'Lösenordet är för svagt.';
-    return text.replaceFirst(RegExp(r'^\w*Exception:\s*'), '');
+  InputDecoration _field(String label, IconData icon, {String? helper}) =>
+      InputDecoration(
+        labelText: label,
+        helperText: helper,
+        helperMaxLines: 2,
+        prefixIcon: Icon(icon),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+      );
+
+  Widget _title(String text) => Text(
+    text,
+    textAlign: TextAlign.center,
+    style: const TextStyle(
+      fontFamily: kDisplayFont,
+      color: TbColors.ink,
+      fontSize: 28,
+      fontWeight: FontWeight.w800,
+    ),
+  );
+
+  Widget _note(String text, {IconData icon = Icons.verified_user_outlined}) =>
+      Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: TbColors.foam,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: TbColors.line),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: TbColors.ink, size: 20),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                text,
+                style: const TextStyle(
+                  color: TbColors.ink,
+                  fontSize: 14,
+                  height: 1.4,
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+
+  ButtonStyle get _primary => FilledButton.styleFrom(
+    backgroundColor: TbColors.ink,
+    foregroundColor: TbColors.foam,
+    minimumSize: const Size.fromHeight(56),
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+  );
+
+  List<Widget> _bankIdStep() => [
+    _title('Starta en veckas gratis prov'),
+    const SizedBox(height: 8),
+    Text(
+      'En bil i ett län i 7 dagar. Inget kort behövs. Under provet visas tåg och buss.',
+      textAlign: TextAlign.center,
+      style: TextStyle(color: Colors.grey.shade600, fontSize: 14, height: 1.4),
+    ),
+    const SizedBox(height: 24),
+    FilledButton.icon(
+      onPressed: _bankId,
+      style: _primary,
+      icon: const Icon(Icons.fingerprint),
+      label: const Text(
+        'Fortsätt med BankID',
+        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+      ),
+    ),
+    const SizedBox(height: 16),
+    _note(kBankIdNoCommitment),
+    const SizedBox(height: 16),
+    const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _Step(n: 1, text: 'Legitimera dig med BankID'),
+        _Step(n: 2, text: 'Skriv e-post, lösenord, mobil och företag'),
+        _Step(n: 3, text: 'Välj län – provet startar direkt'),
+      ],
+    ),
+  ];
+
+  List<Widget> _detailsStep(BankIdResult identity) {
+    final hello = identity.givenName.isNotEmpty
+        ? identity.givenName
+        : identity.name;
+    return [
+      _title(hello.isEmpty ? 'Nästan klart' : 'Hej $hello!'),
+      const SizedBox(height: 8),
+      Text(
+        'Du är legitimerad. Nu behöver vi bara det här för att skapa kontot.',
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: Colors.grey.shade600,
+          fontSize: 14,
+          height: 1.4,
+        ),
+      ),
+      const SizedBox(height: 24),
+      TextField(
+        controller: _company,
+        textCapitalization: TextCapitalization.words,
+        decoration: _field(
+          'Företaget du kör för',
+          Icons.business_outlined,
+          helper: 'Namnet räcker. Organisationsnummer behövs inte nu.',
+        ),
+      ),
+      const SizedBox(height: 16),
+      TextField(
+        controller: _phone,
+        keyboardType: TextInputType.phone,
+        decoration: _field(
+          'Mobilnummer',
+          Icons.phone_outlined,
+          helper: 'Vi ringer och hjälper dig i gång under provet.',
+        ),
+      ),
+      const SizedBox(height: 16),
+      TextField(
+        controller: _email,
+        keyboardType: TextInputType.emailAddress,
+        autocorrect: false,
+        decoration: _field('E-postadress', Icons.email_outlined),
+      ),
+      const SizedBox(height: 16),
+      TextField(
+        controller: _password,
+        obscureText: _hidePassword,
+        decoration: _field('Lösenord (minst 8 tecken)', Icons.lock_outline)
+            .copyWith(
+              suffixIcon: PasswordVisibilityButton(
+                hidden: _hidePassword,
+                onToggle: () => setState(() => _hidePassword = !_hidePassword),
+              ),
+            ),
+      ),
+      const SizedBox(height: 16),
+      _note(kBankIdLaterDetails, icon: Icons.info_outline),
+      if (_error != null) ...[const SizedBox(height: 16), _errorBox(_error!)],
+      const SizedBox(height: 24),
+      FilledButton(
+        onPressed: _busy ? null : _submit,
+        style: _primary,
+        child: _busy
+            ? const SizedBox(
+                width: 24,
+                height: 24,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: TbColors.foam,
+                ),
+              )
+            : const Text(
+                'Skapa konto och starta provet',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+              ),
+      ),
+    ];
   }
+
+  Widget _errorBox(String text) => Container(
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: TbColors.danger.withValues(alpha: 0.1),
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Row(
+      children: [
+        const Icon(Icons.error_outline, color: TbColors.danger, size: 20),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              color: TbColors.danger,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
+    final identity = _identity;
     return Scaffold(
       backgroundColor: TbColors.navy,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: widget.onBack == null
+        leading: widget.onBack == null && identity == null
             ? null
             : IconButton(
                 tooltip: 'Tillbaka',
-                onPressed: widget.onBack,
+                onPressed: identity != null
+                    ? () => setState(() {
+                        _identity = null;
+                        _error = null;
+                      })
+                    : widget.onBack,
                 icon: const Icon(Icons.arrow_back, color: TbColors.foam),
               ),
       ),
@@ -321,7 +429,6 @@ class SignupScreenState extends State<SignupScreen> {
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 480),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
                   SvgPicture.asset(
                     'assets/brand/logo-on-dark.svg',
@@ -330,322 +437,45 @@ class SignupScreenState extends State<SignupScreen> {
                     fit: BoxFit.contain,
                   ),
                   const SizedBox(height: 32),
-                  if (_confirmEmail != null)
-                    SignupConfirmCard(
-                      email: _confirmEmail!,
-                      onResend: () =>
-                          widget.api.resendConfirmation(_confirmEmail!),
-                      onChangeEmail: () => setState(() => _confirmEmail = null),
-                      onLogin: widget.onLogin,
-                    )
-                  else
-                    Container(
-                      padding: const EdgeInsets.all(32),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: const [
-                          BoxShadow(
-                            color: Colors.black12,
-                            blurRadius: 20,
-                            offset: Offset(0, 8),
-                          ),
-                        ],
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          const Text(
-                            'Skapa företagskonto',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontFamily: kDisplayFont,
-                              color: TbColors.ink,
-                              fontSize: 28,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Prova gratis i 7 dagar med en bil i ett län. '
-                            'Inget kort behövs. Under provet visas tåg och buss.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              color: Colors.grey.shade600,
-                              fontSize: 14,
-                              height: 1.4,
-                            ),
-                          ),
-                          const SizedBox(height: 24),
-                          TextField(
-                            controller: _org,
-                            keyboardType: TextInputType.number,
-                            decoration: InputDecoration(
-                              labelText: 'Organisationsnummer',
-                              helperText: 'Enskild firma: ditt personnummer',
-                              prefixIcon: const Icon(
-                                Icons.business_center_outlined,
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                          if (_lookupHint != null) ...[
-                            const SizedBox(height: 8),
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: TbColors.taxi.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.info_outline,
-                                    color: TbColors.ink,
-                                    size: 20,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      _lookupHint!,
-                                      style: const TextStyle(
-                                        color: TbColors.ink,
-                                        fontSize: 13,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                          if (_lookingUp) ...[
-                            const SizedBox(height: 10),
-                            const Row(
-                              children: [
-                                SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                  ),
-                                ),
-                                SizedBox(width: 10),
-                                Text(
-                                  'Hämtar bolaget från Bolagsverket …',
-                                  style: TextStyle(
-                                    color: TbColors.muted,
-                                    fontSize: 13,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                          if (_registryFound) ...[
-                            const SizedBox(height: 10),
-                            _RegistryCard(registry: _registry!),
-                          ],
-                          if (_registryRejects) ...[
-                            const SizedBox(height: 8),
-                            const Text(
-                              'Bolagsverket hittar inte organisationsnumret. Kontrollera siffrorna.',
-                              style: TextStyle(
-                                color: TbColors.danger,
-                                fontSize: 13,
-                              ),
-                            ),
-                          ],
-                          if (_registryUnavailable) ...[
-                            const SizedBox(height: 8),
-                            Row(
-                              children: [
-                                const Expanded(
-                                  child: Text(
-                                    'Kunde inte nå Bolagsverket just nu.',
-                                    style: TextStyle(fontSize: 13),
-                                  ),
-                                ),
-                                TextButton(
-                                  onPressed: _checkOrg,
-                                  child: const Text('Försök igen'),
-                                ),
-                              ],
-                            ),
-                          ],
-                          if (_needsCompanyName) ...[
-                            const SizedBox(height: 16),
-                            TextField(
-                              controller: _name,
-                              textCapitalization: TextCapitalization.words,
-                              decoration: InputDecoration(
-                                labelText: _soleTrader
-                                    ? 'Firmanamn'
-                                    : 'Företagsnamn',
-                                helperText: _soleTrader
-                                    ? 'Enskild firma hämtas inte från Bolagsverket — skriv namnet ni använder.'
-                                    : _registryUnavailable
-                                    ? 'Eller skriv företagets namn, så kontrollerar vi det senare.'
-                                    : 'Vi hittade inte bolaget hos Bolagsverket. Skriv namnet så ni syns rätt.',
-                                prefixIcon: const Icon(Icons.business_outlined),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: _contact,
-                            textCapitalization: TextCapitalization.words,
-                            decoration: InputDecoration(
-                              labelText: 'Ditt namn',
-                              prefixIcon: const Icon(Icons.person_outline),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: _phone,
-                            keyboardType: TextInputType.phone,
-                            decoration: InputDecoration(
-                              labelText: 'Mobilnummer',
-                              helperText:
-                                  'Vi ringer och hjälper dig i gång under provet.',
-                              prefixIcon: const Icon(Icons.phone_outlined),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: _email,
-                            keyboardType: TextInputType.emailAddress,
-                            decoration: InputDecoration(
-                              labelText: 'E-postadress',
-                              prefixIcon: const Icon(Icons.email_outlined),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          TextField(
-                            controller: _password,
-                            obscureText: _hidePassword,
-                            decoration: InputDecoration(
-                              labelText: 'Lösenord (minst 8 tecken)',
-                              prefixIcon: const Icon(Icons.lock_outline),
-                              suffixIcon: PasswordVisibilityButton(
-                                hidden: _hidePassword,
-                                onToggle: () => setState(
-                                  () => _hidePassword = !_hidePassword,
-                                ),
-                              ),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 16),
-                          Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: TbColors.foam,
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(color: TbColors.line),
-                            ),
-                            child: const Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                _Step(n: 1, text: 'Skapa kontot'),
-                                _Step(n: 2, text: 'Välj län för din plats'),
-                                _Step(
-                                  n: 3,
-                                  text:
-                                      'Bjud in förarna på webben — provet startar när första föraren loggar in',
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (_error != null) ...[
-                            const SizedBox(height: 16),
-                            Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: TbColors.danger.withValues(alpha: 0.1),
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(
-                                    Icons.error_outline,
-                                    color: TbColors.danger,
-                                    size: 20,
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      _error!,
-                                      style: const TextStyle(
-                                        color: TbColors.danger,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                          const SizedBox(height: 24),
-                          FilledButton(
-                            onPressed: _busy || _registryBlocks
-                                ? null
-                                : _submit,
-                            style: FilledButton.styleFrom(
-                              backgroundColor: TbColors.ink,
-                              foregroundColor: TbColors.foam,
-                              minimumSize: const Size.fromHeight(56),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: _busy
-                                ? const SizedBox(
-                                    width: 24,
-                                    height: 24,
-                                    child: CircularProgressIndicator(
-                                      strokeWidth: 2,
-                                      color: TbColors.foam,
-                                    ),
-                                  )
-                                : const Text(
-                                    'Skapa konto och prova gratis',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                          ),
-                          const SizedBox(height: 16),
-                          OutlinedButton(
-                            onPressed: widget.onLogin,
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: TbColors.ink,
-                              minimumSize: const Size.fromHeight(56),
-                              side: const BorderSide(color: Colors.black12),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                            ),
-                            child: const Text('Jag har redan ett konto'),
-                          ),
-                        ],
-                      ),
+                  Container(
+                    padding: const EdgeInsets.all(28),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: const [
+                        BoxShadow(
+                          color: Colors.black12,
+                          blurRadius: 20,
+                          offset: Offset(0, 8),
+                        ),
+                      ],
                     ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        ...(identity == null
+                            ? _bankIdStep()
+                            : _detailsStep(identity)),
+                        if (identity == null && _error != null) ...[
+                          const SizedBox(height: 16),
+                          _errorBox(_error!),
+                        ],
+                        const SizedBox(height: 16),
+                        OutlinedButton(
+                          onPressed: widget.onLogin,
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: TbColors.ink,
+                            minimumSize: const Size.fromHeight(56),
+                            side: const BorderSide(color: Colors.black12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: const Text('Jag har redan ett konto'),
+                        ),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -688,309 +518,6 @@ class _Step extends StatelessWidget {
                 fontWeight: FontWeight.w600,
                 color: TbColors.ink,
               ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Kontot är skapat; e-posten bekräftas med länken i mejlet.
-///
-/// Ingen kod: registreringen bekräftas genom att kunden trycker på "Bekräfta
-/// e-post" i mejlet och sedan loggar in här -- först då registreras företaget
-/// (`completePendingRegistration` i main.dart). Regenereringskoden togs bort
-/// 2026-10-07 (docs/epost-otp.md).
-///
-/// Publik för att `test/responsive_test.dart` ska kunna pumpa den på en smal
-/// telefon: den visas bara efter att formuläret skickats, så den vanliga
-/// skärmpumpen når den aldrig (samma skäl som `SignupScreenState` är publik).
-class SignupConfirmCard extends StatefulWidget {
-  const SignupConfirmCard({
-    super.key,
-    required this.email,
-    required this.onResend,
-    required this.onChangeEmail,
-    required this.onLogin,
-  });
-
-  final String email;
-  final Future<void> Function() onResend;
-  final VoidCallback onChangeEmail;
-  final VoidCallback onLogin;
-
-  @override
-  State<SignupConfirmCard> createState() => SignupConfirmCardState();
-}
-
-class SignupConfirmCardState extends State<SignupConfirmCard> {
-  static const _cooldown = 60;
-
-  String? _error;
-  String? _note;
-  bool _busy = false;
-  int _wait = _cooldown;
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _startCooldown();
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  /// Utan setState: anropas också från initState. Anroparna ritar om själva.
-  void _startCooldown() {
-    _timer?.cancel();
-    _wait = _cooldown;
-    _timer = Timer.periodic(const Duration(seconds: 1), (t) {
-      if (!mounted) return t.cancel();
-      setState(() => _wait--);
-      if (_wait <= 0) t.cancel();
-    });
-  }
-
-  Future<void> _resend() async {
-    setState(() {
-      _busy = true;
-      _error = null;
-      _note = null;
-    });
-    try {
-      await widget.onResend();
-      _note = 'Nytt mejl skickat till ${widget.email}.';
-      _startCooldown();
-    } catch (e) {
-      // Supabase begränsar hur ofta samma adress får ett nytt mejl.
-      _error = e.toString().contains('seconds')
-          ? 'Vänta en minut och försök igen.'
-          : 'Det gick inte att skicka. Försök igen om en stund.';
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(28),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          const Icon(
-            Icons.mark_email_read_outlined,
-            size: 52,
-            color: TbColors.taxiDeep,
-          ),
-          const SizedBox(height: 14),
-          const Text(
-            'Bekräfta din e-post',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontFamily: kDisplayFont,
-              fontSize: 24,
-              fontWeight: FontWeight.w800,
-              color: TbColors.ink,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text.rich(
-            TextSpan(
-              style: const TextStyle(color: TbColors.muted, height: 1.4),
-              children: [
-                const TextSpan(text: 'Vi skickade ett mejl till\n'),
-                TextSpan(
-                  text: widget.email,
-                  style: const TextStyle(
-                    color: TbColors.ink,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 20),
-          const Text(
-            'Öppna mejlet och tryck på "Bekräfta e-post". '
-            'Kom sedan tillbaka hit och logga in.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: TbColors.muted, height: 1.5),
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 10),
-            Text(
-              _error!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: TbColors.danger,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-          if (_note != null) ...[
-            const SizedBox(height: 10),
-            Text(
-              _note!,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: TbColors.live,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ],
-          const SizedBox(height: 18),
-          FilledButton(
-            onPressed: _busy || _wait > 0 ? null : _resend,
-            style: FilledButton.styleFrom(
-              backgroundColor: TbColors.taxi,
-              foregroundColor: TbColors.ink,
-              minimumSize: const Size.fromHeight(54),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(14),
-              ),
-            ),
-            child: _busy
-                ? const SizedBox(
-                    height: 22,
-                    width: 22,
-                    child: CircularProgressIndicator(
-                      color: TbColors.ink,
-                      strokeWidth: 2.5,
-                    ),
-                  )
-                : Text(
-                    _wait > 0
-                        ? 'Skicka nytt mejl om $_wait s'
-                        : 'Skicka nytt mejl',
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-          ),
-          Text(
-            'Syns inget? Titta i skräpposten.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 13),
-          ),
-          const SizedBox(height: 4),
-          // Wrap i stället för Row: de två länkarna ("Ändra e-post" och
-          // "Tryckte på länken? Logga in") är tillsammans bredare än kortet på en
-          // smal telefon och spiller annars över kanten. Nu bryts de till två
-          // rader i stället.
-          Wrap(
-            alignment: WrapAlignment.center,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              TextButton(
-                onPressed: _busy ? null : widget.onChangeEmail,
-                child: const Text('Ändra e-post'),
-              ),
-              const Text('·', style: TextStyle(color: TbColors.muted)),
-              TextButton(
-                onPressed: _busy ? null : widget.onLogin,
-                child: const Text('Tryckte på länken? Logga in'),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// Bolaget som Bolagsverket har det: namn, adress och form. Rött när det är
-/// avregistrerat, gult när en konkurs eller likvidation pågår.
-class _RegistryCard extends StatelessWidget {
-  const _RegistryCard({required this.registry});
-
-  final Map<String, dynamic> registry;
-
-  @override
-  Widget build(BuildContext context) {
-    final blocks = registry['blocksSignup'] == true;
-    final status = registry['status']?.toString() ?? '';
-    final warn = status == 'winding_up' || status == 'inactive';
-    final color = blocks
-        ? TbColors.danger
-        : (warn ? TbColors.taxiDeep : TbColors.live);
-    final line1 = registry['line1']?.toString() ?? '';
-    final line2 = registry['line2']?.toString() ?? '';
-    final postal = [
-      registry['postalCode']?.toString() ?? '',
-      registry['city']?.toString() ?? '',
-    ].where((s) => s.isNotEmpty).join(' ');
-    final form = registry['legalForm']?.toString() ?? '';
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: color.withValues(alpha: 0.4)),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(
-            blocks
-                ? Icons.block
-                : (warn ? Icons.warning_amber : Icons.verified),
-            color: color,
-            size: 22,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  registry['name']?.toString() ?? '',
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w800,
-                    color: TbColors.ink,
-                  ),
-                ),
-                if (form.isNotEmpty)
-                  Text(form, style: const TextStyle(color: TbColors.muted)),
-                if (line1.isNotEmpty) ...[
-                  const SizedBox(height: 4),
-                  Text(line1, style: const TextStyle(color: TbColors.ink)),
-                ],
-                if (line2.isNotEmpty)
-                  Text(line2, style: const TextStyle(color: TbColors.ink)),
-                if (postal.isNotEmpty)
-                  Text(postal, style: const TextStyle(color: TbColors.ink)),
-                if (blocks || warn)
-                  Padding(
-                    padding: const EdgeInsets.only(top: 4),
-                    child: Text(
-                      registry['statusText']?.toString() ?? '',
-                      style: TextStyle(
-                        color: color,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                if (!blocks && !warn)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 4),
-                    child: Text(
-                      'Hämtat från Bolagsverket — du behöver inte skriva om det.',
-                      style: TextStyle(color: TbColors.muted, fontSize: 12),
-                    ),
-                  ),
-              ],
             ),
           ),
         ],

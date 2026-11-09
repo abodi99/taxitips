@@ -1,5 +1,9 @@
 # E-postbekräftelse vid registrering
 
+> **2026-11:** appen registrerar nu med BankID och behöver ingen
+> bekräftelselänk (se AGENTS.md, "Registrering med BankID"). Det här gäller
+> den äldre vägen, som finns kvar för äldre appversioner och webben.
+
 Den som registrerar ett företag bekräftar sin e-post genom att **trycka på
 länken i mejlet** – samma väg som "Glömt lösenord". Tidigare skrevs en
 6-siffrig engångskod in i appen; det steget togs bort 2026-10-10 eftersom länken

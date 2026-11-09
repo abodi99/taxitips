@@ -673,6 +673,24 @@ class BackendApi {
     return _decode(res, 'registerCheck');
   }
 
+  // BankID (fleet/bankid.py): registrering utan organisationsnummer och
+  // återställning av lösenord/e-post. Utan inloggning; biljetten från collect
+  // är beviset, aldrig ett personnummer från appen.
+
+  Future<Map<String, dynamic>> bankid(
+    String step,
+    Map<String, dynamic> body,
+  ) async {
+    final res = await _client
+        .post(
+          Uri.parse('$baseUrl/api/fleet/bankid/$step'),
+          headers: _headers(),
+          body: jsonEncode(body),
+        )
+        .timeout(_timeout);
+    return _decode(res, 'bankid_$step');
+  }
+
   // Supportchatten (/api/support). Båda bevisen följer med: servern väljer
   // kontot om appen är inloggad, annars telefonen (fleet/support.py).
 

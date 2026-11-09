@@ -293,3 +293,228 @@ def report_duplicate_attempt(org_number: str, *, email: str, user_id, country: s
         ),
         key_parts=(company.id, email),
     )
+
+
+# ---------------------------------------------------------------------------
+# Registrering med BankID (2026-11)
+# ---------------------------------------------------------------------------
+#
+# Så enkelt som möjligt att börja ett prov: BankID, sedan e-post, lösenord,
+# mobil och företagets namn. Inget organisationsnummer och ingen
+# bekräftelselänk -- personen är legitimerad, och e-posten är bara
+# inloggningsnamnet. Organisationsnumret och fakturauppgifterna fylls i när
+# kunden beställer (portalen, `orders.require_company_details`).
+#
+# Spärren flyttar från bolaget till personen: ett konto och ett prov per
+# personnummer (`bankid.trial_key`), plus samma mobilnummerspärr som förut.
+
+MIN_PASSWORD_LENGTH = 8
+
+PERSON_HAS_ACCOUNT_MESSAGE = (
+    "Du har redan ett konto hos TaxiTips. Logga in, eller välj "
+    "\"Glömt lösenord\" och legitimera dig med BankID för att komma in igen."
+)
+EMAIL_TAKEN_MESSAGE = (
+    "E-postadressen har redan ett konto. Logga in, eller använd en annan adress."
+)
+
+
+def _check_password(password: str) -> None:
+    if len(password or "") < MIN_PASSWORD_LENGTH:
+        raise sales.SalesError(
+            "weak_password", f"Lösenordet behöver minst {MIN_PASSWORD_LENGTH} tecken.",
+        )
+
+
+def register_with_bankid(
+    *,
+    ticket: str,
+    email: str,
+    password: str,
+    contact_phone: str,
+    company_name: str,
+    now=None,
+) -> Registration:
+    from fleet import auth_admin, bankid, notifications
+    from fleet.models import BankIdIdentity
+
+    now = now or timezone.now()
+    identity = bankid.read_ticket(ticket, purpose="register")
+    email = accounts.normalize_email(email)
+    if not email or "@" not in email:
+        raise sales.SalesError("invalid_email", "Skriv en e-postadress.")
+    accounts.assert_email_allowed(email)
+    try:
+        signup_checks.check_email(email)
+    except signup_checks.CheckError as exc:
+        raise sales.SalesError(exc.reason, exc.message) from exc
+    _check_password(password)
+    name = sales._clean(company_name, 200)
+    if not name:
+        raise sales.SalesError("name_required", "Skriv namnet på företaget du kör för.")
+    try:
+        phone = signup_checks.check_phone(contact_phone)
+    except signup_checks.CheckError as exc:
+        raise sales.SalesError(exc.reason, exc.message) from exc
+
+    if BankIdIdentity.objects.filter(pnr_key=identity.pnr_key).exists():
+        raise sales.SalesError("person_has_account", PERSON_HAS_ACCOUNT_MESSAGE, status=409)
+    if signup_checks.phone_used_by_other_trial(phone, now=now):
+        raise sales.SalesError(
+            "phone_in_use",
+            "Mobilnumret har redan använts för en provperiod i ett annat företag. "
+            "Kontakta TaxiTips så hjälper vi dig.",
+            status=409,
+        )
+    key = bankid.trial_key(identity.pnr_key)
+    check = trials.eligibility_for_key(key, now=now)
+
+    # Kontot skapas först, utanför transaktionen: Supabase Auth är en annan
+    # databas. Går något i vår del fel tas kontot bort igen.
+    try:
+        user_id = auth_admin.create_user(email, password, app_metadata={"bankid": True})
+    except auth_admin.EmailTaken as exc:
+        raise sales.SalesError("email_taken", EMAIL_TAKEN_MESSAGE, status=409) from exc
+    except auth_admin.AuthAdminError as exc:
+        raise sales.SalesError(
+            "signup_unavailable", "Det gick inte att skapa kontot just nu. Försök igen om en stund.",
+            status=503,
+        ) from exc
+
+    try:
+        with transaction.atomic():
+            company, trial = _create_bankid_company(
+                user_id=user_id, email=email, name=name, phone=phone,
+                identity=identity, key=key, eligible=check.ok, now=now,
+            )
+    except Exception:
+        try:
+            auth_admin.delete_user(user_id)
+        except auth_admin.AuthAdminError:
+            # Ett konto utan företag kan inte göra något; det syns i loggen.
+            pass
+        raise
+
+    if trial is not None:
+        notifications.trial_started(company.id, email, trial)
+        message = f"Provperioden på {trials.TRIAL_DAYS} dagar har startat."
+    else:
+        message = f"{check.message} Kontakta TaxiTips för att komma igång."
+    return Registration(company, trial, message, created=True)
+
+
+def _create_bankid_company(*, user_id, email, name, phone, identity, key, eligible, now):
+    from fleet.models import BankIdIdentity, KnownAccount
+
+    # Kontot har ingen token hos oss än; adminwebben och återställningen
+    # behöver adressen innan första inloggningen (accounts.seen skriver sedan över).
+    KnownAccount.objects.update_or_create(user_id=user_id, defaults={"email": email, "last_seen_at": now})
+    # Unik nyckel: två samtidiga registreringar av samma person ger ett konto.
+    BankIdIdentity.objects.create(
+        user_id=user_id, pnr_key=identity.pnr_key, full_name=identity.full_name[:200],
+        verified_at=now,
+    )
+    company = Company.objects.create(
+        id=uuid.uuid4(), name=name, email=email, org_number=None,
+        join_code=sales._new_join_code(), seats=1,
+        status="inactive", subscription_status="inactive", created_at=now,
+    )
+    CompanyProfile.objects.create(
+        company_id=company.id, country="SE", org_number="", legal_name="",
+        contact_name=identity.full_name[:200], contact_email=email,
+        contact_phone=phone, billing_email=email,
+        verification_note=(
+            "Självregistrering i appen med BankID. Personen är legitimerad; "
+            "företaget och behörigheten är inte kontrollerade. Organisationsnummer "
+            "anges vid beställning."
+        ),
+    )
+    CompanyMember.objects.create(
+        id=uuid.uuid4(), company_id=company.id, user_id=user_id,
+        role="company_owner", status="active", created_at=now,
+    )
+    orders.get_or_create_subscription(company.id)
+
+    trial = None
+    if eligible:
+        trial = trials.create_trial(
+            company_id=company.id, country="SE", org_number="", trial_key=key,
+            source=Trial.Source.SELF_SIGNUP, requires_payment_method=False,
+            actor_user_id=user_id, now=now,
+        )
+        # Som i register(): klockan startar direkt, kunden ska inte vänta.
+        trial = trials.start_trial(trial, now=now)
+    audit.record(
+        "self_registered", company_id=company.id, actor_user_id=user_id,
+        actor_kind="customer", subject_type="company", subject_id=company.id,
+        detail={"name": name, "trial": bool(trial), "kind": "bankid"},
+    )
+    return company, trial
+
+
+def recover_with_bankid(*, ticket: str, new_password: str = "", new_email: str = "", now=None) -> dict:
+    """
+    Glömt lösenord eller bytt e-post: legitimering med BankID räcker. Gäller
+    bara konton som skapades med BankID; förarna har kvar länken i mejlet.
+    """
+    from fleet import auth_admin, bankid, notifications
+    from fleet.models import BankIdIdentity
+
+    now = now or timezone.now()
+    if not new_password and not new_email:
+        raise sales.SalesError("nothing_to_change", "Skriv ett nytt lösenord eller en ny e-postadress.")
+    if new_password:
+        _check_password(new_password)
+    if new_email:
+        new_email = accounts.normalize_email(new_email)
+        if "@" not in new_email:
+            raise sales.SalesError("invalid_email", "Skriv en e-postadress.")
+        accounts.assert_email_allowed(new_email)
+        try:
+            signup_checks.check_email(new_email)
+        except signup_checks.CheckError as exc:
+            raise sales.SalesError(exc.reason, exc.message) from exc
+
+    with transaction.atomic():
+        identity = bankid.read_ticket(ticket, purpose="recover", consume=True)
+        row = BankIdIdentity.objects.select_for_update().filter(pnr_key=identity.pnr_key).first()
+        if row is None:
+            raise sales.SalesError(
+                "no_bankid_account",
+                "Vi hittar inget konto som skapats med ditt BankID. Har du fått en inbjudan "
+                "med e-post? Välj då \"Glömt lösenord\" med e-post i stället.",
+                status=404,
+            )
+        user_id = str(row.user_id)
+        member = CompanyMember.objects.filter(user_id=user_id, status="active").first()
+        company_id = member.company_id if member else None
+        old_email = accounts.email_for(user_id) or (
+            Company.objects.filter(id=company_id).values_list("email", flat=True).first() if company_id else ""
+        ) or ""
+        try:
+            auth_admin.update_user(user_id, password=new_password, email=new_email)
+        except auth_admin.EmailTaken as exc:
+            raise sales.SalesError("email_taken", EMAIL_TAKEN_MESSAGE, status=409) from exc
+        except auth_admin.AuthAdminError as exc:
+            raise sales.SalesError(
+                "recover_unavailable", "Det gick inte att ändra kontot just nu. Försök igen om en stund.",
+                status=503,
+            ) from exc
+        row.last_used_at = now
+        row.save(update_fields=["last_used_at"])
+        if new_email:
+            from fleet.models import KnownAccount
+
+            KnownAccount.objects.update_or_create(user_id=user_id, defaults={"email": new_email})
+            if company_id and old_email:
+                CompanyProfile.objects.filter(company_id=company_id, contact_email=old_email).update(
+                    contact_email=new_email
+                )
+        audit.record(
+            "bankid_recovered", company_id=company_id, actor_user_id=user_id,
+            actor_kind="customer", subject_type="account", subject_id=user_id,
+            detail={"password": bool(new_password), "email": bool(new_email)},
+        )
+    if new_email and old_email and old_email != new_email:
+        notifications.login_email_changed(company_id, old_email, new_email)
+    return {"email": new_email or old_email}
