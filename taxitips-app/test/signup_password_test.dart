@@ -31,9 +31,8 @@ void main() {
     await tester.pump();
   }
 
-  TextField passwordField(WidgetTester tester) => tester.widget<TextField>(
-    find.widgetWithText(TextField, 'Lösenord (minst 8 tecken)'),
-  );
+  TextField passwordField(WidgetTester tester) =>
+      tester.widget<TextField>(find.widgetWithText(TextField, 'Lösenord'));
 
   testWidgets('lösenordet kan visas och döljas med ögat', (tester) async {
     await pump(tester);
@@ -56,7 +55,7 @@ void main() {
   testWidgets('det som skrivs finns kvar när lösenordet visas', (tester) async {
     await pump(tester);
     await tester.enterText(
-      find.widgetWithText(TextField, 'Lösenord (minst 8 tecken)'),
+      find.widgetWithText(TextField, 'Lösenord'),
       'hemligt-123',
     );
     await tester.ensureVisible(find.byTooltip('Visa lösenord'));

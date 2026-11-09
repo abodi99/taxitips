@@ -13,11 +13,16 @@ class BankIdResult {
     required this.ticket,
     required this.name,
     required this.givenName,
+    this.accountEmail,
   });
 
   final String ticket;
   final String name;
   final String givenName;
+
+  /// Bara vid återställning: kontots e-post, eller null om personen inte har
+  /// något BankID-konto.
+  final String? accountEmail;
 }
 
 /// Legitimering med BankID på samma telefon, i ett ark. Samma flöde som
@@ -110,10 +115,7 @@ class _BankIdSheetState extends State<_BankIdSheet> {
       mode: LaunchMode.externalApplication,
     );
     if (!opened && mounted) {
-      setState(
-        () => _message =
-            'Vi kunde inte öppna BankID-appen. Kontrollera att den är installerad.',
-      );
+      setState(() => _message = 'Hittar inte BankID-appen.');
     }
   }
 
@@ -145,6 +147,7 @@ class _BankIdSheetState extends State<_BankIdSheet> {
             ticket: data['ticket'].toString(),
             name: data['name']?.toString() ?? '',
             givenName: data['givenName']?.toString() ?? '',
+            accountEmail: data['accountEmail']?.toString(),
           ),
         );
         return;
@@ -185,7 +188,7 @@ class _BankIdSheetState extends State<_BankIdSheet> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             const Text(
-              'Legitimera dig med BankID',
+              'BankID',
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontFamily: kDisplayFont,
@@ -231,7 +234,7 @@ class _BankIdSheetState extends State<_BankIdSheet> {
                   foregroundColor: TbColors.ink,
                   minimumSize: const Size.fromHeight(52),
                 ),
-                child: const Text('Öppna BankID igen'),
+                child: const Text('Öppna BankID'),
               ),
             const SizedBox(height: 8),
             TextButton(onPressed: _cancel, child: const Text('Avbryt')),
@@ -248,6 +251,22 @@ class _BankIdSheetState extends State<_BankIdSheet> {
 Future<String?> recoverWithBankId(BuildContext context, ApiClient api) async {
   final identity = await runBankId(context, api, purpose: 'recover');
   if (identity == null || !context.mounted) return null;
+  if (identity.accountEmail == null) {
+    await showDialog<void>(
+      context: context,
+      builder: (dialog) => AlertDialog(
+        title: const Text('Inget konto'),
+        content: const Text('Ditt BankID har inget konto här.'),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.of(dialog).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+    return null;
+  }
   return showDialog<String>(
     context: context,
     barrierDismissible: false,
@@ -282,11 +301,11 @@ class _RecoverDialogState extends State<_RecoverDialog> {
 
   Future<void> _save() async {
     if (_password.text.length < 8) {
-      setState(() => _error = 'Lösenordet behöver minst 8 tecken.');
+      setState(() => _error = 'Lösenordet: minst 8 tecken.');
       return;
     }
     if (_changeEmail && !_email.text.contains('@')) {
-      setState(() => _error = 'Skriv en giltig e-postadress.');
+      setState(() => _error = 'Fel e-post.');
       return;
     }
     setState(() {
@@ -319,13 +338,35 @@ class _RecoverDialogState extends State<_RecoverDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('Välj ett nytt lösenord för ditt konto.'),
+            const Text('Ditt konto:'),
+            const SizedBox(height: 4),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              decoration: BoxDecoration(
+                color: TbColors.foam,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: TbColors.line),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.email_outlined, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      widget.identity.accountEmail ?? '',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                  ),
+                ],
+              ),
+            ),
             const SizedBox(height: 16),
             TextField(
               controller: _password,
               obscureText: _hide,
               decoration: InputDecoration(
-                labelText: 'Nytt lösenord (minst 8 tecken)',
+                labelText: 'Nytt lösenord',
+                helperText: 'Minst 8 tecken',
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
                   tooltip: _hide ? 'Visa lösenord' : 'Dölj lösenord',
@@ -342,7 +383,7 @@ class _RecoverDialogState extends State<_RecoverDialog> {
               contentPadding: EdgeInsets.zero,
               value: _changeEmail,
               onChanged: (v) => setState(() => _changeEmail = v ?? false),
-              title: const Text('Byt också e-postadress'),
+              title: const Text('Byt e-post också'),
             ),
             if (_changeEmail)
               TextField(
@@ -350,7 +391,7 @@ class _RecoverDialogState extends State<_RecoverDialog> {
                 keyboardType: TextInputType.emailAddress,
                 autocorrect: false,
                 decoration: const InputDecoration(
-                  labelText: 'Ny e-postadress',
+                  labelText: 'Ny e-post',
                   border: OutlineInputBorder(),
                 ),
               ),

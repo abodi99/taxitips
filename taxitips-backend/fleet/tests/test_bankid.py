@@ -266,6 +266,27 @@ class BankIdTests(FleetTestCase):
 
     # -- Återställning -----------------------------------------------------
 
+    def collect_recover(self, **kwargs):
+        fake, _ = proxy(**kwargs)
+        with mock.patch("fleet.bankid.requests.post", side_effect=fake):
+            ref = self.post("/api/fleet/bankid/start", {"purpose": "recover"}).json()["orderRef"]
+            return self.post("/api/fleet/bankid/collect", {"orderRef": ref}).json()
+
+    def test_recover_collect_shows_the_account_email(self):
+        self.register()
+        data = self.collect_recover()
+        self.assertEqual(data["accountEmail"], "anna@exempeltaxi.se")
+        # Någon annans BankID ser inte kontot.
+        self.assertIsNone(self.collect_recover(pnr="199002023456")["accountEmail"])
+
+    def test_register_collect_does_not_reveal_emails(self):
+        self.register()
+        fake, _ = proxy()
+        with mock.patch("fleet.bankid.requests.post", side_effect=fake):
+            ref = self.post("/api/fleet/bankid/start", {"purpose": "register"}).json()["orderRef"]
+            data = self.post("/api/fleet/bankid/collect", {"orderRef": ref}).json()
+        self.assertNotIn("accountEmail", data)
+
     def test_recover_sets_password_and_email_and_tells_old_address(self):
         self.register()
         user_id = self.created_users[0][0]

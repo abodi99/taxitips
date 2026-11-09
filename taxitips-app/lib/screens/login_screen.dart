@@ -108,38 +108,9 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _forgot() async {
-    final email = _email.text.trim();
-    if (email.isEmpty || !email.contains('@')) {
-      setState(() {
-        _notice = null;
-        _error = 'Skriv din e-post först. Tryck sedan på Glömt lösenord.';
-      });
-      return;
-    }
-    setState(() {
-      _busy = true;
-      _error = null;
-      _notice = null;
-    });
-    try {
-      await widget.api.sendPasswordReset(email);
-      if (!mounted) return;
-      setState(
-        () => _notice =
-            'Vi har mejlat en länk till $email. Välj ett nytt lösenord och '
-            'logga in här igen.',
-      );
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _error = _friendly(e));
-    } finally {
-      if (mounted) setState(() => _busy = false);
-    }
-  }
-
-  /// Ägare som registrerat sig med BankID: nytt lösenord och/eller ny e-post
-  /// utan mejl. Förare har kvar länken i mejlet ([_forgot]).
+  /// Glömt lösenord: BankID, sedan nytt lösenord (och ny e-post om man vill).
+  /// Den enda vägen sedan 2026-11; återställning via mejl finns inte längre.
+  /// En förare utan BankID-konto ber företaget skicka inbjudan igen.
   Future<void> _forgotWithBankId() async {
     setState(() {
       _error = null;
@@ -150,7 +121,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _email.text = email;
       _password.clear();
-      _notice = 'Klart. Logga in med $email och ditt nya lösenord.';
+      _notice = 'Klart! Logga in med $email.';
     });
     _passwordFocus.requestFocus();
   }
@@ -159,8 +130,7 @@ class _LoginScreenState extends State<LoginScreen> {
   String _friendly(Object e) {
     final text = e.toString();
     if (text.contains('Invalid login credentials')) {
-      return 'Fel e-post eller lösenord. Ny förare? Välj först ett lösenord '
-          'med länken i inbjudan, eller tryck Glömt lösenord.';
+      return 'Fel e-post eller lösenord.';
     }
     if (text.contains('Email not confirmed')) {
       return 'Bekräfta din e-post först. Tryck på länken i mejlet.';
@@ -332,7 +302,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 Align(
                   alignment: Alignment.centerRight,
                   child: TextButton(
-                    onPressed: _busy ? null : _forgot,
+                    onPressed: _busy ? null : _forgotWithBankId,
                     style: TextButton.styleFrom(
                       foregroundColor: TbColors.navy,
                       minimumSize: const Size(48, 44),
@@ -340,20 +310,6 @@ class _LoginScreenState extends State<LoginScreen> {
                     child: const Text(
                       'Glömt lösenord?',
                       style: TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: TextButton(
-                    onPressed: _busy ? null : _forgotWithBankId,
-                    style: TextButton.styleFrom(
-                      foregroundColor: TbColors.navy,
-                      minimumSize: const Size(48, 44),
-                    ),
-                    child: const Text(
-                      'Glömt lösenord eller bytt e-post? Använd BankID',
-                      textAlign: TextAlign.right,
                     ),
                   ),
                 ),

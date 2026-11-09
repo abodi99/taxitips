@@ -31,7 +31,9 @@ void main() {
   testWidgets('första steget: BankID och att det inte binder', (tester) async {
     await pump(tester);
     expect(find.text('Fortsätt med BankID'), findsOneWidget);
-    expect(find.text(kBankIdNoCommitment), findsOneWidget);
+    for (final line in kBankIdPromises) {
+      expect(find.text(line), findsOneWidget);
+    }
     expect(find.byType(TextField), findsNothing);
     expect(find.textContaining('Organisationsnummer'), findsNothing);
   });
@@ -49,12 +51,8 @@ void main() {
     );
     expect(find.text('Hej Anna!'), findsOneWidget);
     expect(find.byType(TextField), findsNWidgets(4));
-    expect(
-      find.widgetWithText(TextField, 'Företaget du kör för'),
-      findsOneWidget,
-    );
+    expect(find.widgetWithText(TextField, 'Företag'), findsOneWidget);
     expect(find.widgetWithText(TextField, 'Organisationsnummer'), findsNothing);
-    expect(find.text(kBankIdLaterDetails), findsOneWidget);
   });
 
   testWidgets('fel i formuläret visas utan att något skickas', (tester) async {
@@ -66,20 +64,21 @@ void main() {
         givenName: 'Anna',
       ),
     );
-    final submit = find.text('Skapa konto och starta provet');
+    final submit = find.text('Starta provet');
     await tester.ensureVisible(submit);
     await tester.tap(submit);
     await tester.pump();
-    expect(find.text('Skriv namnet på företaget du kör för.'), findsOneWidget);
+    expect(find.text('Skriv företagets namn.'), findsOneWidget);
   });
 
   test('BankID-texterna säljer ingenting', () {
-    for (final text in [kBankIdNoCommitment, kBankIdLaterDetails]) {
+    for (final text in kBankIdPromises) {
       expect(text, isNot(contains('kr')));
       expect(text.toLowerCase(), isNot(contains('köp')));
       expect(text.toLowerCase(), isNot(contains('prenumer')));
       expect(text, isNot(contains('http')));
     }
-    expect(kBankIdNoCommitment, contains('binder dig inte'));
+    // BankID är inget avtal: det ska synas direkt.
+    expect(kBankIdPromises, contains('Ingen bindning'));
   });
 }

@@ -348,10 +348,6 @@ class ApiClient {
 
   bool _signInInProgress = false;
 
-  /// Sidan där man väljer lösenord: länken i förarinbjudan och "Glömt
-  /// lösenord?" leder dit. Samma värd som Supabases SITE_URL.
-  static const _passwordPage = 'https://taxitips.se/forare';
-
   /// En inloggning för alla: e-post och lösenord, och servern avgör rollen.
   ///
   /// * Medlem i ett företag (ägare, kontor) eller en registrering som väntar
@@ -432,30 +428,6 @@ class ApiClient {
         await saveSession(null);
       }
       _signInInProgress = false;
-    }
-  }
-
-  /// "Glömt lösenord?": Supabase mejlar en länk till sidan där man väljer
-  /// ett nytt lösenord. Samma sida för förare och ägare som inbjudans länk.
-  ///
-  /// Implicit flöde, inte appens PKCE: länken öppnas i en webbläsare
-  /// (taxitips.se/forare) som saknar telefonens code_verifier. Med PKCE kom
-  /// föraren alltid till "länken fungerar inte längre" (2026-10-11).
-  Future<void> sendPasswordReset(String email) async {
-    final auth = GoTrueClient(
-      url: '$supabaseUrl/auth/v1',
-      headers: {'apikey': supabaseAnonKey},
-      flowType: AuthFlowType.implicit,
-    );
-    try {
-      await auth.resetPasswordForEmail(
-        email.trim().toLowerCase(),
-        redirectTo: _passwordPage,
-      );
-    } catch (e) {
-      throw asApiIfNetwork(e);
-    } finally {
-      auth.dispose();
     }
   }
 

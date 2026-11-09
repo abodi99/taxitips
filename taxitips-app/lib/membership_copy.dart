@@ -107,13 +107,7 @@ String membershipNotice(
 SignalCategory? signalCategoryFromFeatureKey(Object? key) =>
     signalCategoryFromKey(key == 'events' ? 'event' : key?.toString());
 
-/// BankID vid registreringen. Ska säga rakt ut att legitimeringen inte är ett
-/// avtal: ingen bindning, ingen kostnad, provet slutar av sig självt.
-const kBankIdNoCommitment =
-    'BankID visar bara att det är du. Du binder dig inte till något och '
-    'inget kostar pengar. Provet slutar av sig självt efter 7 dagar.';
-
-/// Vad som händer senare, utan pris eller köpväg.
-const kBankIdLaterDetails =
-    'Organisationsnummer och fakturauppgifter behövs först om ni vill '
-    'fortsätta efter provet.';
+/// BankID vid registreringen: tre korta löften, inga långa meningar. Många
+/// förare läser inte mycket svenska. "Ingen bindning" måste stå kvar: BankID
+/// är inget avtal, och det ska synas direkt.
+const kBankIdPromises = ['Gratis', 'Inget kort', 'Ingen bindning'];

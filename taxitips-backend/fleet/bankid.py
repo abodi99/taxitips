@@ -227,7 +227,14 @@ def collect(order_ref: str) -> dict:
         pnr_key=pnr_key(personal_number), full_name=full_name, given_name=given_name,
         order_ref=order.order_ref, purpose=order.purpose,
     )
-    return {"status": "complete", "name": full_name, "givenName": given_name, "ticket": ticket}
+    result = {"status": "complete", "name": full_name, "givenName": given_name, "ticket": ticket}
+    if order.purpose == "recover":
+        # Den legitimerade personen får se sin egen inloggning, så att hen vet
+        # vilken adress lösenordet gäller. None = inget BankID-konto.
+        from fleet import registration
+
+        result["accountEmail"] = registration.bankid_account_email(pnr_key(personal_number))
+    return result
 
 
 def cancel(order_ref: str) -> None:
