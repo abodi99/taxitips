@@ -57,9 +57,16 @@ class SignalCard extends StatelessWidget {
     final color = strengthColor(strength, category: category);
     final active = alert['is_active'] != false;
     final followed = alert['is_favorite'] == true;
+    final minor = alert['minor'] == true;
+    // Rad 1 är VAR. Saknas station tar vi länet ("Skåne") när servern har en
+    // rubrik för rad 2 -- annars stod samma sak två gånger ("Buss: Försening"
+    // över "Buss sen"). "Övrigt" har ingen rubrik: där är källans titel allt.
+    final county = countyShort(alert['countyName']?.toString() ?? '');
     final place = tipStation(alert).isNotEmpty
         ? tipStation(alert)
-        : alertPlaceTitle(alert);
+        : (!minor && serverHeadline(alert).isNotEmpty && county.isNotEmpty
+              ? county
+              : alertPlaceTitle(alert));
     final distance = alert['distance_km'] as num?;
     final headline = serverHeadline(alert).isNotEmpty
         ? serverHeadline(alert)
@@ -186,11 +193,14 @@ class SignalCard extends StatelessWidget {
                                     ),
                                   ),
                                   const SizedBox(width: 6),
-                                  StrengthPill(
-                                    strength: strength,
-                                    category: category,
-                                    muted: !active,
-                                  ),
+                                  // "Övrigt" är trafikbolagets meddelande,
+                                  // inte en bedömning: ingen styrka att visa.
+                                  if (!minor)
+                                    StrengthPill(
+                                      strength: strength,
+                                      category: category,
+                                      muted: !active,
+                                    ),
                                 ],
                               ),
                               if (row3 != null || pays) ...[

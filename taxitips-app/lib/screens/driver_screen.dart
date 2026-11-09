@@ -3597,10 +3597,12 @@ class _DriverScreenState extends State<DriverScreen>
       for (final a in tips)
         if (!savedIds.contains(a['id']?.toString())) a,
     ];
-    // Bara Stark + Medel i listan; svaga och "Övrigt" fälls ihop längst ner.
-    // Vägar visas som förut. Kartan påverkas inte (den läser _mapItems).
-    final split = splitTipsForList(allFeed);
-    final feedTips = split.visible;
+    // Alla tips i EN lista, starkast först (ägarbeslut 2026-11-10). En kväll
+    // utan starka tips var listan tom fast det fanns svaga och "Övrigt" --
+    // föraren ska se allt och själv filtrera. Styrkan står på varje kort
+    // (färgad kant + ordet), så inget behöver gömmas för att det ska synas
+    // vad som är värt mest.
+    final feedTips = allFeed;
     final out = <Widget>[];
     if (saved.isNotEmpty) {
       out.add(
@@ -3676,24 +3678,6 @@ class _DriverScreenState extends State<DriverScreen>
         );
         out.addAll(today.map(eventCard));
       }
-    }
-    // Hopfällda grupper i samma stil som "Nyss slut": tryck för att visa.
-    Widget folded(String title, List<Map<String, dynamic>> items) => Theme(
-      data: ThemeData(dividerColor: Colors.transparent),
-      child: ExpansionTile(
-        tilePadding: const EdgeInsets.symmetric(horizontal: 16),
-        title: Text(
-          title,
-          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-        ),
-        children: [for (final a in items) tipCard(a)],
-      ),
-    );
-    if (split.weak.isNotEmpty) {
-      out.add(folded('Svaga (${split.weak.length})', split.weak));
-    }
-    if (split.minor.isNotEmpty) {
-      out.add(folded('Övrigt (${split.minor.length})', split.minor));
     }
     if (ended.isNotEmpty) {
       out.add(
@@ -4164,33 +4148,4 @@ class _Notice extends StatelessWidget {
       ),
     );
   }
-}
-
-/// Listans uppdelning: det som alltid visas, svaga tips och "Övrigt".
-class TipListSplit {
-  const TipListSplit(this.visible, this.weak, this.minor);
-  final List<Map<String, dynamic>> visible;
-  final List<Map<String, dynamic>> weak;
-  final List<Map<String, dynamic>> minor;
-}
-
-/// Delar aktiva tips i Stark/Medel (visas), Svag (fälls ihop) och "Övrigt"
-/// (fälls ihop). Sparade tips och väghinder visas alltid. Ordningen
-/// (prioritetssorteringen) behålls inom varje grupp.
-TipListSplit splitTipsForList(List<Map<String, dynamic>> tips) {
-  final visible = <Map<String, dynamic>>[];
-  final weak = <Map<String, dynamic>>[];
-  final minor = <Map<String, dynamic>>[];
-  for (final a in tips) {
-    if (a['is_favorite'] == true || categoryOfAlert(a) == SignalCategory.road) {
-      visible.add(a);
-    } else if (a['minor'] == true) {
-      minor.add(a);
-    } else if (likelihoodForAlert(a) == CustomerLikelihood.low) {
-      weak.add(a);
-    } else {
-      visible.add(a);
-    }
-  }
-  return TipListSplit(visible, weak, minor);
 }

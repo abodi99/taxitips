@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:taxitips_app/screens/driver_screen.dart';
 import 'package:taxitips_app/theme.dart';
 import 'package:taxitips_app/widgets/signal_card.dart';
 
@@ -113,43 +112,5 @@ void main() {
   testWidgets('kortet är lågt: tre rader får plats i ca 90 px', (tester) async {
     await pump(tester, tip(pays: true));
     expect(tester.getSize(find.byType(SignalCard)).height, lessThan(100));
-  });
-
-  group('listans uppdelning', () {
-    Map<String, dynamic> t(String id, String level, {bool minor = false}) => {
-      'id': id,
-      'kind': 'transit',
-      'mode': 'train',
-      'level': level,
-      'minor': minor,
-      'severity_tier': minor ? 'ignore' : 'vehicle_cancelled',
-    };
-
-    test('Stark och Medel visas, Svag och Övrigt fälls ihop', () {
-      final split = splitTipsForList([
-        t('a', 'high'),
-        t('b', 'medium'),
-        t('c', 'low'),
-        t('d', 'low', minor: true),
-      ]);
-      expect([for (final x in split.visible) x['id']], ['a', 'b']);
-      expect([for (final x in split.weak) x['id']], ['c']);
-      expect([for (final x in split.minor) x['id']], ['d']);
-    });
-
-    test('sparade och väghinder visas alltid', () {
-      final saved = t('s', 'low')..['is_favorite'] = true;
-      final road = {
-        'id': 'r',
-        'kind': 'road',
-        'mode': 'road',
-        'level': 'low',
-        'severity_tier': 'road_accident_or_closure',
-      };
-      final split = splitTipsForList([saved, road]);
-      expect(split.visible, hasLength(2));
-      expect(split.weak, isEmpty);
-      expect(split.minor, isEmpty);
-    });
   });
 }

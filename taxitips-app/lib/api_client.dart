@@ -2059,6 +2059,10 @@ class ApiClient {
   /// redan gjord, se core/thresholds.py) och ersättningsfälten, som RPC:n
   /// aldrig exponerade. Saknas `level` räknar severity_labels.dart ut det
   /// lokalt, så Supabase-vägen ser likadan ut som förut.
+  @visibleForTesting
+  Map<String, dynamic> alertFromRowForTest(Map<String, dynamic> m) =>
+      _alertFromRow(m);
+
   Map<String, dynamic> _alertFromRow(Map<String, dynamic> m) {
     final alert = <String, dynamic>{
       'id': m['id'],
@@ -2109,6 +2113,13 @@ class ApiClient {
       // (core/alternatives.py) så att kort, detaljvy och push säger samma
       // sak. Saknas den (Supabase-vägen) visas ingen rad alls.
       'travel_options': m['travel_options'],
+      // Kortets två rader, skrivna av servern (core/tip_lines.py): vad som
+      // hänt och det som avgör, plus tonen som styr färgen. Tomma på äldre
+      // svar -- då visar kortet det gamla. Glömdes de här blir det nya kortet
+      // tyst det gamla (2026-11-10: fälten kom från servern men kopierades inte).
+      'headline': m['headline']?.toString() ?? '',
+      'decision': m['decision']?.toString() ?? '',
+      'decision_tone': m['decision_tone']?.toString() ?? '',
       // Varför, i förarens ord: läget och omständigheterna som räknades
       // (core/taxi_context.py). Saknas på äldre svar -- då visas inget.
       'factors': m['factors'] ?? const [],
