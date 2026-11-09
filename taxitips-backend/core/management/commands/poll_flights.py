@@ -26,7 +26,7 @@ from django.utils import timezone
 
 from core import flight_scoring, thresholds
 from core.health import polling
-from core.models import SourceStatus
+from core.models import Opportunity, SourceStatus
 from core.repository import upsert_opportunities, upsert_source_events
 from core.sources.swedavia import NON_ARRIVING_STATUSES, fetch_arrivals
 from core.time_limits import reraise_time_limit
@@ -204,7 +204,11 @@ class Command(BaseCommand):
             self._report(assessed, state, per_airport_note, wrote=False)
             return
 
-        status.written = self._write(assessed)
+        # Bara flygplatser vars dagens svar hämtades den här cykeln: en
+        # flygplats som kadensen hoppade över saknar flyg i `assessed`, och
+        # tystnad betyder då inte att tipsen är föråldrade.
+        fresh = {iata for iata, _date, slot in planned if slot == "today" and iata in flights_by_airport}
+        status.written = self._write(assessed, fresh_airports=fresh)
         # Sparas så att en kadensöverhoppad cykel kan bära fram dem i stället
         # för att nollställa vyn.
         state["last_events"] = status.events
@@ -214,7 +218,45 @@ class Command(BaseCommand):
 
     # -- skrivning ------------------------------------------------------------
 
-    def _write(self, assessed) -> int:
+    def _end_stale_last_arrivals(self, assessed, fresh_airports, now) -> int:
+        """
+        Högst ett "sista plan"-tips per flygplats och kväll.
+
+        Fönstrets id följer starttiden. Flyttas planet över en halvtimmesgräns
+        (estimat 23:00 -> 23:30) skapas ett nytt tips medan det gamla ligger
+        kvar aktivt -- Kiruna visade "23:00" och "23:30" samtidigt. Ett
+        sista-plan-tips som inte längre är kvällens sista avslutas därför nu
+        (end_time, inte radering: spåret ska finnas kvar). Kommer planet
+        tillbaka till fönstret skriver upsert tillbaka end_time.
+        """
+        keep = {w.external_id for w, a in assessed if a.rule_id == flight_scoring.RULE_ID_LAST}
+        # Bara fönster som börjar i dag (lokal tid): det är dagens svar som är
+        # färskt. Fönster efter midnatt kommer ur morgondagens svar, som hämtas
+        # glesare -- utan gränsen hade nattens sista plan avslutats varje gång
+        # bara dagens datum hämtades, och kommit tillbaka först timmar senare.
+        local_now = timezone.localtime(now)
+        day_start = local_now.replace(hour=0, minute=0, second=0, microsecond=0)
+        day_end = day_start + dt.timedelta(days=1)
+        ended = 0
+        for iata in fresh_airports:
+            ended += (
+                Opportunity.objects.filter(
+                    rule_id=flight_scoring.RULE_ID_LAST,
+                    external_id__startswith=f"swedavia:{iata}:",
+                    start_time__gte=day_start,
+                    start_time__lt=day_end,
+                    end_time__gt=now,
+                    suppressed_at__isnull=True,
+                )
+                .exclude(external_id__in=keep)
+                .update(end_time=now)
+            )
+        return ended
+
+    def _write(self, assessed, *, now=None, fresh_airports=()) -> int:
+        now = now or timezone.now()
+        if fresh_airports:
+            self._end_stale_last_arrivals(assessed, fresh_airports, now)
         if not assessed:
             return 0
 
@@ -271,6 +313,7 @@ class Command(BaseCommand):
                 # ser är INTE den här utan thresholds.customer_likelihood(),
                 # som core/api.py räknar fram vid varje svar.
                 "level": thresholds.stored_level(assessment.tier, assessment.score),
+                "factors": flight_scoring.factors(window),
                 "title": flight_scoring.title(window),
                 "summary": flight_scoring.summary(window),
                 "lat": window.config["lat"],

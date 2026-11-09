@@ -33,7 +33,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.gzip import gzip_page
 from django.views.decorators.http import require_GET, require_POST
 
-from core import areas, briefs, notify, thresholds
+from core import areas, briefs, notify, thresholds, tip_lines
 # Alias: `notify_prefs` är vyn nedan.
 from core import notify_prefs as notify_prefs_rules
 from core.alternatives import travel_options
@@ -335,6 +335,7 @@ def _serialize(o: Opportunity, distance_km: float | None, now) -> dict:
     from core.compensation import source_for
 
     compensation_url, compensation_source = source_for(o, _rules_for(now))
+    lines = tip_lines.lines_for(o, now)
     return {
         "id": str(o.id),
         "title": o.title,
@@ -342,6 +343,11 @@ def _serialize(o: Opportunity, distance_km: float | None, now) -> dict:
         # En rad i förarens ord (core/briefs.py), bara när den skrevs från
         # tipset som det ser ut nu. Saknas den visar appen det den alltid visat.
         "brief": briefs.current_brief(o),
+        # Två korta rader skrivna av servern (core/tip_lines.py) -- samma som
+        # notisen. Tomma = visa källans rubrik. Gamla fält ligger kvar för äldre appar.
+        "headline": lines["headline"],
+        "decision": lines["decision"],
+        "decision_tone": lines["decision_tone"],
         "kind": o.kind,
         "mode": o.mode,
         "severity_tier": o.severity_tier,
@@ -594,6 +600,8 @@ def feed_for(
             "counties": [],
             "municipalities": [],
             "needsArea": True,
+            "weakCount": 0,
+            "minorCount": 0,
             "generatedAt": _iso(now),
         }
 
@@ -688,6 +696,13 @@ def feed_for(
         "counties": list(area.counties),
         "municipalities": list(area.municipalities),
         "needsArea": False,
+        # Hur många som inte ritas som standard: aktiva svaga tips (utan väg och
+        # utan "Övrigt") och "Övrigt". Appen visar "12 svaga" utan att hämta
+        # korten att räkna.
+        "weakCount": sum(
+            1 for a in alerts if a["is_active"] and not a["minor"] and a["level"] == "low"
+        ),
+        "minorCount": sum(1 for a in alerts if a["minor"]),
         "generatedAt": _iso(now),
     }
 

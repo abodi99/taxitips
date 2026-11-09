@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:taxitips_app/screens/driver_screen.dart';
 import 'package:taxitips_app/theme.dart';
+import 'package:taxitips_app/widgets/category_bar.dart';
 import 'package:taxitips_app/widgets/ferry_event_widgets.dart';
 import 'package:taxitips_app/widgets/guided_tour.dart';
 
@@ -484,8 +485,23 @@ void main() {
       );
       await settleDriverScreen(tester);
 
-      // Färje-läget: kartans pilar och listans kort är samma sex färjor.
-      await tester.tap(find.text('6 färjor'));
+      // Färje-läget (kategoriraden): kartans pilar och listans kort är samma
+      // sex färjor.
+      final ferryChip = find.descendant(
+        of: find.byType(CategoryBar),
+        matching: find.textContaining('Färja'),
+      );
+      await tester.scrollUntilVisible(
+        ferryChip,
+        200,
+        scrollable: find
+            .descendant(
+              of: find.byType(CategoryBar),
+              matching: find.byType(Scrollable),
+            )
+            .first,
+      );
+      await tester.tap(ferryChip.first);
       await settleDriverScreen(tester);
       await tester.drag(
         find.textContaining('Färjor ·'),

@@ -135,11 +135,6 @@ class _DriverScreenState extends State<DriverScreen>
   bool _nearMe = false;
   String _sortMode = 'score'; // 'score', 'distance', 'newest'
 
-  /// Svaga tips (en enstaka inställd buss, nästa tåg om fem minuter) och
-  /// "Övrigt" visas längre ner i listan, inte dolda: när de starka tipsen är
-  /// få är de det som finns (ägarens beslut 2026-10-03). Föraren kan dölja dem.
-  int _hiddenWeak = 0;
-
   /// Event types the driver has explicitly switched off. Stored as an
   /// opt-OUT set rather than an opt-in list so a new severity_tier added
   /// server-side shows up by default instead of being silently invisible
@@ -1972,9 +1967,7 @@ class _DriverScreenState extends State<DriverScreen>
         .toList();
     // Svaga tips visas alltid, utom när föraren filtrerar på starka (50+):
     // då bort även ett svagt tips med hög poäng (t.ex. med ersättningstrafik).
-    final before = list.length;
     if (_scoreMin >= 50) list = list.where((a) => !_isHiddenWeak(a)).toList();
-    _hiddenWeak = before - list.length;
     _sortByPriority(list);
     return list;
   }
@@ -3600,40 +3593,15 @@ class _DriverScreenState extends State<DriverScreen>
     ];
     final savedIds = {for (final a in saved) a['id']?.toString()}
       ..removeWhere((id) => id == null || id.isEmpty);
-    final feedTips = [
+    final allFeed = [
       for (final a in tips)
         if (!savedIds.contains(a['id']?.toString())) a,
     ];
+    // Bara Stark + Medel i listan; svaga och "Övrigt" fälls ihop längst ner.
+    // Vägar visas som förut. Kartan påverkas inte (den läser _mapItems).
+    final split = splitTipsForList(allFeed);
+    final feedTips = split.visible;
     final out = <Widget>[];
-    if (lens == null) {
-      final today = _eventsToday.length;
-      final ferries = _ferriesVisible.length;
-      if (today > 0 || ferries > 0) {
-        out.add(
-          SizedBox(
-            height: 48,
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-              children: [
-                if (today > 0)
-                  _ShortcutChip(
-                    icon: Icons.stadium_rounded,
-                    label: '$today event i dag',
-                    onTap: () => _selectCategory(SignalCategory.event.key),
-                  ),
-                if (ferries > 0)
-                  _ShortcutChip(
-                    icon: Icons.directions_boat_rounded,
-                    label: '$ferries färjor',
-                    onTap: () => _selectCategory(SignalCategory.ferry.key),
-                  ),
-              ],
-            ),
-          ),
-        );
-      }
-    }
     if (saved.isNotEmpty) {
       out.add(
         const Padding(
@@ -3668,9 +3636,7 @@ class _DriverScreenState extends State<DriverScreen>
             : empty(
                 lens == SignalCategory.road
                     ? 'Inga trafikolyckor i ditt område just nu.'
-                    : _hiddenWeak > 0
-                    ? 'Inga starka tips i ditt område just nu.'
-                    : 'Inga störningar i ditt område just nu.',
+                    : 'Lugnt just nu',
                 icon: Icons.check_circle_outline_rounded,
               ),
       );
@@ -3710,6 +3676,24 @@ class _DriverScreenState extends State<DriverScreen>
         );
         out.addAll(today.map(eventCard));
       }
+    }
+    // Hopfällda grupper i samma stil som "Nyss slut": tryck för att visa.
+    Widget folded(String title, List<Map<String, dynamic>> items) => Theme(
+      data: ThemeData(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16),
+        title: Text(
+          title,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        ),
+        children: [for (final a in items) tipCard(a)],
+      ),
+    );
+    if (split.weak.isNotEmpty) {
+      out.add(folded('Svaga (${split.weak.length})', split.weak));
+    }
+    if (split.minor.isNotEmpty) {
+      out.add(folded('Övrigt (${split.minor.length})', split.minor));
     }
     if (ended.isNotEmpty) {
       out.add(
@@ -4124,48 +4108,6 @@ class _ZoomButtons extends StatelessWidget {
   }
 }
 
-class _ShortcutChip extends StatelessWidget {
-  const _ShortcutChip({
-    required this.icon,
-    required this.label,
-    required this.onTap,
-  });
-
-  final IconData icon;
-  final String label;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: ActionChip(
-        avatar: Icon(icon, size: 18, color: TbColors.midnatt),
-        label: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: const TextStyle(
-                fontWeight: FontWeight.w700,
-                color: TbColors.midnatt,
-              ),
-            ),
-            const Icon(
-              Icons.chevron_right_rounded,
-              size: 18,
-              color: TbColors.midnatt,
-            ),
-          ],
-        ),
-        backgroundColor: TbColors.ljusgra,
-        side: const BorderSide(color: TbColors.line),
-        onPressed: onTap,
-      ),
-    );
-  }
-}
-
 /// En kort rad överst på kartan när något behöver göras eller inte fungerar.
 class _Notice extends StatelessWidget {
   const _Notice({
@@ -4222,4 +4164,33 @@ class _Notice extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Listans uppdelning: det som alltid visas, svaga tips och "Övrigt".
+class TipListSplit {
+  const TipListSplit(this.visible, this.weak, this.minor);
+  final List<Map<String, dynamic>> visible;
+  final List<Map<String, dynamic>> weak;
+  final List<Map<String, dynamic>> minor;
+}
+
+/// Delar aktiva tips i Stark/Medel (visas), Svag (fälls ihop) och "Övrigt"
+/// (fälls ihop). Sparade tips och väghinder visas alltid. Ordningen
+/// (prioritetssorteringen) behålls inom varje grupp.
+TipListSplit splitTipsForList(List<Map<String, dynamic>> tips) {
+  final visible = <Map<String, dynamic>>[];
+  final weak = <Map<String, dynamic>>[];
+  final minor = <Map<String, dynamic>>[];
+  for (final a in tips) {
+    if (a['is_favorite'] == true || categoryOfAlert(a) == SignalCategory.road) {
+      visible.add(a);
+    } else if (a['minor'] == true) {
+      minor.add(a);
+    } else if (likelihoodForAlert(a) == CustomerLikelihood.low) {
+      weak.add(a);
+    } else {
+      visible.add(a);
+    }
+  }
+  return TipListSplit(visible, weak, minor);
 }

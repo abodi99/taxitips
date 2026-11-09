@@ -509,3 +509,89 @@ class CadenceTests(TestCase):
         """Där signalen finns ska pengarna läggas: 326 flyg mot Kirunas tre."""
         by_airport = {i: thresholds.flight_calls_per_day(i) for i in thresholds.AIRPORTS}
         self.assertEqual(max(by_airport, key=by_airport.get), "ARN")
+
+
+class StaleLastArrivalTests(TestCase):
+    """
+    Produktion 2026-11-09: "Sista ankomsten Kiruna 23:00" och "...23:30" låg
+    aktiva samtidigt. Fönstrets id följer starttiden, så när ett plan flyttas
+    över en halvtimmesgräns får det nya fönstret ett eget tips medan det gamla
+    ligger kvar tills det löper ut.
+    """
+
+    NOW = dt.datetime(2026, 9, 12, 20, 0, tzinfo=UTC)
+
+    def _poll(self, offsets):
+        found = windows_for(evening(offsets), "KRN", self.NOW)
+        assessed = [(w, flight_scoring.classify(w, self.NOW)) for w in found]
+        return Command()._write(assessed, now=self.NOW, fresh_airports={"KRN"})
+
+    def _active(self):
+        return Opportunity.objects.filter(
+            rule_id=flight_scoring.RULE_ID_LAST, end_time__gt=self.NOW
+        )
+
+    def test_a_moved_plane_leaves_one_active_last_arrival(self):
+        self._poll([-30])  # planet landar 23:00
+        self.assertEqual(self._active().count(), 1)
+        self._poll([0])    # estimatet flyttar det till 23:30
+        active = list(self._active())
+        self.assertEqual(len(active), 1)
+        self.assertIn("23:30", active[0].title)
+
+    def test_the_stale_tip_is_ended_not_deleted(self):
+        self._poll([-30])
+        self._poll([0])
+        old = Opportunity.objects.get(title__contains="23:00")
+        self.assertLessEqual(old.end_time, self.NOW)
+
+    def test_a_plane_that_moves_back_revives_its_tip(self):
+        self._poll([-30])
+        self._poll([0])
+        self._poll([-30])
+        active = list(self._active())
+        self.assertEqual([o.title.endswith("23:00") for o in active], [True])
+
+    def test_other_airports_are_left_alone(self):
+        self._poll([-30])
+        found = windows_for(evening([0]), "LLA", self.NOW)
+        Command()._write(
+            [(w, flight_scoring.classify(w, self.NOW)) for w in found],
+            now=self.NOW, fresh_airports={"LLA"},
+        )
+        self.assertEqual(self._active().count(), 2)
+
+
+class FactorTests(TestCase):
+    NOW = dt.datetime(2026, 9, 12, 20, 0, tzinfo=UTC)
+
+    def _factors(self, raws, airport):
+        window = windows_for(raws, airport, self.NOW)[0]
+        return flight_scoring.factors(window)
+
+    def test_wave_says_how_many_planes_and_that_it_is_night(self):
+        got = self._factors(evening([0, 5, 10, 15, 20, 25, 2, 7]), "ARN")
+        self.assertEqual(got[0], {"text": "8 plan samtidigt", "sign": "+"})
+        self.assertEqual(got[1]["text"], "Natt – få bussar")
+
+    def test_delayed_planes_are_named_when_it_is_not_night(self):
+        window = windows_for(evening([0, 5, 10, 15, 20, 25, 2, 7]), "ARN", self.NOW)[0]
+        for f in window.flights[:2]:
+            f["delay_minutes"] = 45
+        window.start = window.start.replace(hour=22)
+        got = flight_scoring.factors(window)
+        self.assertEqual(got[1]["text"], "2 plan är sena")
+
+    def test_last_arrival_factor(self):
+        got = self._factors(evening([0]), "LLA")
+        self.assertEqual(got[0]["text"], "Sista planet på 2 tim")
+
+    def test_at_most_two_short_factors_are_written(self):
+        Command()._write(
+            [(w, flight_scoring.classify(w, self.NOW)) for w in windows_for(evening([0]), "LLA", self.NOW)],
+            now=self.NOW,
+        )
+        tip = Opportunity.objects.get(kind="flight")
+        self.assertTrue(1 <= len(tip.factors) <= 2)
+        for factor in tip.factors:
+            self.assertLessEqual(len(factor["text"].split()), 5)

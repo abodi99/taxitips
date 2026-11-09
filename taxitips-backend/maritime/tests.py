@@ -319,6 +319,15 @@ class WriteTipTests(TestCase):
         self.assertEqual(event.raw["mmsi"], ferry.mmsi)
         self.assertEqual(event.raw["trigger"], ais.REASON_SLOWING)
 
+    def test_tip_carries_short_factors(self):
+        _ferry, ext = self.write()
+        tip = Opportunity.objects.get(external_id=ext)
+        self.assertTrue(1 <= len(tip.factors) <= 2)
+        for factor in tip.factors:
+            self.assertLessEqual(len(factor["text"].split()), 5)
+            self.assertEqual(factor["sign"], "+")
+        self.assertIn("färja", tip.factors[0]["text"].lower())
+
     def test_same_arrival_written_twice_is_one_tip(self):
         ferry, ext = self.write()
         assessment = tips.assess(ferry, NYNASHAMN, ais.REASON_SLOWING, NOW)

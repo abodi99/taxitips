@@ -184,8 +184,22 @@ class DelayTests(TestCase):
     def test_delay_is_line_delayed_not_line_paused(self):
         result = classify(alert(cancelled=False, delay_minutes=65))
         self.assertEqual(result.tier, "line_delayed")
-        self.assertTrue(result.stranded, "en timme sent är som en inställd avgång")
+        # Tåget kommer, så ingen står strandsatt: högst Medel, aldrig Stark.
+        self.assertFalse(result.stranded)
         self.assertEqual(classify(alert(cancelled=False, delay_minutes=35)).stranded, False)
+
+    def test_a_delayed_train_is_never_strong_however_late(self):
+        for minutes in (35, 65, 180, 600):
+            with self.subTest(minutes=minutes):
+                a = alert(cancelled=False, delay_minutes=minutes)
+                result = classify(a)
+                outcome = taxi_context.assess(
+                    result.situation(), busy_station=is_busy_station(a),
+                )
+                self.assertNotEqual(outcome.level, "high")
+                self.assertFalse(result.stranded)
+        # Poängen är orörd: bara strandsättningen utgår.
+        self.assertEqual(classify(alert(cancelled=False, delay_minutes=65)).score, 55)
 
 
 class ParsingTests(TestCase):

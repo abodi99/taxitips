@@ -181,6 +181,13 @@ void main() {
 
   double top(WidgetTester tester, Finder f) => tester.getTopLeft(f).dy;
 
+  /// Allt utom beslutet ligger hopfällt under "Mer".
+  Future<void> openMore(WidgetTester tester) async {
+    await tester.ensureVisible(find.text('Mer'));
+    await tester.tap(find.text('Mer'));
+    await tester.pumpAndSettle();
+  }
+
   setUp(() {
     SharedPreferences.setMockInitialValues({});
     AlertFeedbackBar.debugAlwaysShow = true;
@@ -188,53 +195,42 @@ void main() {
   tearDown(() => AlertFeedbackBar.debugAlwaysShow = false);
 
   group('ordningen: snabbknappar överst, huvudkortet följer', () {
-    testWidgets('snabbknappar och huvudkortets delar i läsordning', (
+    testWidgets('beslutet överst, resten under Mer i läsordning', (
       tester,
     ) async {
       await pumpSheet(tester, strongTip(), distanceKm: 3.2);
 
-      final drive = find.widgetWithText(FilledButton, 'Kör dit · 3,2 km');
-      final save = find.widgetWithText(OutlinedButton, 'Spara');
+      final drive = find.widgetWithText(FilledButton, 'Kör dit');
+      final fare = find.text('Fick körning');
+      final more = find.text('Mer');
+      expect(drive, findsOneWidget);
+      expect(fare, findsOneWidget);
+      expect(find.byTooltip('Spara tipset'), findsOneWidget);
+      // Hopfällt: huvudkortets delar syns inte förrän "Mer" öppnats.
+      expect(find.text('INSTÄLLD'), findsNothing);
+      expect(find.text('Händelse & beskrivning'), findsNothing);
+      expect(top(tester, drive), lessThan(top(tester, fare)));
+      expect(top(tester, fare), lessThan(top(tester, more)));
+
+      await openMore(tester);
       final category = find.text('Tåg & buss');
-      final placeA = find.text('Göteborg C');
       final placeB = find.text('Alingsås');
       final status = find.text('INSTÄLLD');
       final train = find.text('Tåg 123');
       final section = find.text('Händelse & beskrivning');
-      final factors = find.text('Särskilda omständigheter');
-
-      for (final f in [
-        drive,
-        save,
-        category,
-        placeA,
-        placeB,
-        status,
-        train,
-        section,
-        factors,
-      ]) {
+      for (final f in [category, placeB, status, train, section]) {
         expect(f, findsOneWidget);
       }
-
-      // Snabbknapparna ligger överst, sedan huvudkortet, sedan beslutsunderlaget.
-      expect(top(tester, drive), lessThan(top(tester, category)));
+      expect(top(tester, more), lessThan(top(tester, category)));
       expect(top(tester, category), lessThan(top(tester, status)));
       expect(top(tester, status), lessThan(top(tester, section)));
-      expect(top(tester, section), lessThan(top(tester, factors)));
-
-      // Station A → Station B på samma rad, B till höger.
-      expect(top(tester, placeA), top(tester, placeB));
-      expect(
-        tester.getTopLeft(placeB).dx,
-        greaterThan(tester.getTopLeft(placeA).dx),
-      );
     });
 
     testWidgets('ersättningen får en egen ruta och står inte två gånger', (
       tester,
     ) async {
       await pumpSheet(tester, strongTip());
+      await openMore(tester);
       final sentence = find.textContaining('Resenären kan få taxin betald');
       expect(sentence, findsOneWidget);
       final text = (tester.widget(sentence) as Text).data!;
@@ -258,6 +254,7 @@ void main() {
           ..['line'] = 'Buss 725'
           ..['station'] = 'Tumba station',
       );
+      await openMore(tester);
       final header = find.byKey(const ValueKey('tip-line-station'));
       expect(header, findsOneWidget);
       expect((tester.widget(header) as Text).data, 'Buss 725 · Tumba station');
@@ -270,6 +267,8 @@ void main() {
       // Linjen från backend ersätter numret ur texten i tågbrickan.
       expect(find.text('Buss 725'), findsOneWidget);
       expect(find.text('Tåg 123'), findsNothing);
+      // Beslutsraden högst upp visar bara platsen.
+      expect(find.text('Tumba station'), findsWidgets);
     });
 
     testWidgets('utan station: första platsen', (tester) async {
@@ -279,6 +278,7 @@ void main() {
           ..['line'] = 'Pågatåg 1612'
           ..['station'] = '',
       );
+      await openMore(tester);
       expect(
         (tester.widget(find.byKey(const ValueKey('tip-line-station'))) as Text)
             .data,
@@ -291,7 +291,7 @@ void main() {
     ) async {
       await pumpSheet(tester, strongTip());
       expect(find.byKey(const ValueKey('tip-line-station')), findsNothing);
-      expect(find.text('Göteborg C'), findsOneWidget);
+      expect(find.text('Göteborg C'), findsWidgets);
     });
 
     test('tolkas försiktigt: saknade fält är tomma', () {
@@ -340,6 +340,7 @@ void main() {
         withRules(),
         onOpenUrl: (url) async => opened.add(url),
       );
+      await openMore(tester);
       final link = find.byKey(const ValueKey('compensation-rules-link'));
       await tester.scrollUntilVisible(
         link,
@@ -365,6 +366,7 @@ void main() {
         withRules()..['compensation_url'] = '',
         onOpenUrl: (url) async {},
       );
+      await openMore(tester);
       expect(find.textContaining('Läs reglerna'), findsNothing);
       expect(find.textContaining('taxin betald'), findsOneWidget);
     });
@@ -413,6 +415,9 @@ void main() {
       tester,
     ) async {
       await pumpSheet(tester, endedTip());
+      // Rad 3 i huvudvyn: bara "Slut". Detaljerna ligger under Mer.
+      expect(find.text('Slut'), findsOneWidget);
+      await openMore(tester);
 
       expect(find.text('Slut. Tipset gäller inte längre.'), findsOneWidget);
       expect(find.textContaining('Tog slut för 8 min sedan'), findsOneWidget);
@@ -421,7 +426,7 @@ void main() {
         find.widgetWithText(OutlinedButton, 'Öppna navigering'),
         findsOneWidget,
       );
-      expect(find.widgetWithText(OutlinedButton, 'Spara'), findsOneWidget);
+      expect(find.byTooltip('Spara tipset'), findsOneWidget);
       expect(find.text('Särskilda omständigheter'), findsNothing);
     });
 
@@ -430,8 +435,8 @@ void main() {
     ) async {
       await pumpSheet(tester, roadTip());
 
-      expect(find.text('Olycka'), findsOneWidget);
-      expect(find.text('E6 Kungsbacka mot Göteborg'), findsOneWidget);
+      expect(find.text('Olycka'), findsWidgets);
+      expect(find.text('E6 Kungsbacka mot Göteborg'), findsWidgets);
       expect(find.text('Vägen dit'), findsOneWidget);
       expect(
         find.text('Räkna med kö, eller välj en annan väg.'),
@@ -440,13 +445,16 @@ void main() {
       expect(find.textContaining('Kör dit'), findsNothing);
       expect(find.text('Fick körning'), findsNothing);
       expect(find.text('Ingen kund'), findsNothing);
+      // Väghändelser har "Mer" öppet från start.
       expect(find.text('Rapportera felaktigt tips'), findsOneWidget);
-      expect(find.widgetWithText(OutlinedButton, 'Spara'), findsOneWidget);
+      expect(find.byTooltip('Spara tipset'), findsOneWidget);
     });
   });
 
   group('knapparna', () {
-    testWidgets('Spara skickar valet och visar Sparat', (tester) async {
+    testWidgets('Stjärnan skickar valet och visar att tipset är sparat', (
+      tester,
+    ) async {
       final tip = strongTip();
       final calls = <bool>[];
       await pumpSheet(
@@ -457,27 +465,27 @@ void main() {
           tip['is_favorite'] = v;
         },
       );
-      await tester.tap(find.text('Spara'));
+      await tester.tap(find.byTooltip('Spara tipset'));
       await tester.pump();
       await tester.pump();
       expect(calls, [true]);
-      expect(find.text('Sparat'), findsOneWidget);
+      expect(find.byTooltip('Ta bort sparat'), findsOneWidget);
 
-      await tester.tap(find.text('Sparat'));
+      await tester.tap(find.byTooltip('Ta bort sparat'));
       await tester.pump();
       await tester.pump();
       expect(calls, [true, false]);
-      expect(find.text('Spara'), findsOneWidget);
+      expect(find.byTooltip('Spara tipset'), findsOneWidget);
     });
 
     testWidgets('misslyckas sparandet backar knappen', (tester) async {
       final tip = strongTip();
       await pumpSheet(tester, tip, onToggleFavorite: (v) async {});
-      await tester.tap(find.text('Spara'));
+      await tester.tap(find.byTooltip('Spara tipset'));
       await tester.pump();
       await tester.pump();
-      expect(find.text('Spara'), findsOneWidget);
-      expect(find.text('Sparat'), findsNothing);
+      expect(find.byTooltip('Spara tipset'), findsOneWidget);
+      expect(find.byTooltip('Ta bort sparat'), findsNothing);
     });
 
     testWidgets('utan stöd för favoriter finns ingen Spara-knapp', (
@@ -500,8 +508,8 @@ void main() {
           ),
         ),
       );
-      expect(find.text('Spara'), findsNothing);
-      expect(find.textContaining('Kör dit'), findsOneWidget);
+      expect(find.byTooltip('Spara tipset'), findsNothing);
+      expect(find.text('Kör dit'), findsOneWidget);
     });
 
     testWidgets('Fick körning och Ingen kund ligger bland snabbknapparna', (
@@ -515,12 +523,14 @@ void main() {
     testWidgets('trafikbolagets sida öppnas från snabbknappen', (tester) async {
       var opened = 0;
       await pumpSheet(tester, strongTip(), onOpenSourcePage: () => opened++);
+      await openMore(tester);
       await tester.tap(find.text('Trafikbolagets sida'));
       expect(opened, 1);
     });
 
     testWidgets('utan egen sida finns ingen länk', (tester) async {
       await pumpSheet(tester, strongTip());
+      await openMore(tester);
       expect(find.text('Trafikbolagets sida'), findsNothing);
     });
 
@@ -529,6 +539,7 @@ void main() {
     ) async {
       final api = _FakeApi();
       await pumpSheet(tester, strongTip(), api: api);
+      await openMore(tester);
 
       await tester.tap(find.text('Rapportera felaktigt tips'));
       await tester.pumpAndSettle();
@@ -569,6 +580,7 @@ void main() {
       tester,
     ) async {
       await pumpSheet(tester, manyFactorsTip());
+      // Huvudvyn visar tre skäl som rader; det fjärde ligger under Mer.
       expect(
         find.text('Natt – nästan inga andra sätt att ta sig hem'),
         findsOneWidget,
@@ -577,6 +589,7 @@ void main() {
       expect(find.text('Sent på kvällen – färre alternativ'), findsOneWidget);
       expect(find.text('Halka på vägarna'), findsNothing);
 
+      await openMore(tester);
       final all = find.text('Visa alla skäl');
       await tester.ensureVisible(all);
       await tester.tap(all);
@@ -650,11 +663,8 @@ void main() {
     ) async {
       await openSheet(tester, strongTip());
       expect(tester.takeException(), isNull);
-      expect(find.text('INSTÄLLD'), findsOneWidget);
-      expect(
-        find.widgetWithText(FilledButton, 'Kör dit · 3,2 km'),
-        findsOneWidget,
-      );
+      expect(find.widgetWithText(FilledButton, 'Kör dit'), findsOneWidget);
+      expect(find.text('Fick körning'), findsOneWidget);
     });
 
     testWidgets('att dra ner i innehållet stänger bladet', (tester) async {
@@ -669,6 +679,92 @@ void main() {
       await tester.tap(find.byTooltip('Stäng'));
       await tester.pumpAndSettle();
       expect(find.byType(TipSheetBody), findsNothing);
+    });
+  });
+
+  group('beslutet utan scroll på 360×640', () {
+    Future<void> pumpSmall(
+      WidgetTester tester,
+      Map<String, dynamic> tip,
+    ) async {
+      await tester.binding.setSurfaceSize(const Size(360, 640));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: buildTaxiTheme(),
+          home: Scaffold(
+            body: TipSheetBody(
+              alert: tip,
+              api: ApiClient(
+                supabaseUrl: 'http://localhost',
+                supabaseAnonKey: 'x',
+              ),
+              now: now,
+              distanceKm: 12,
+              onToggleFavorite: (v) async {},
+            ),
+          ),
+        ),
+      );
+      await tester.pump();
+    }
+
+    Map<String, dynamic> withLines() => strongTip()
+      ..['station'] = 'Ronneby'
+      ..['headline'] = 'Tåg 22:48 inställt'
+      ..['decision'] = 'Nästa tåg 23:48'
+      ..['decision_tone'] = 'go';
+
+    testWidgets('beslut, Kör dit och båda svarsknapparna syns direkt', (
+      tester,
+    ) async {
+      await pumpSmall(tester, withLines());
+      expect(tester.takeException(), isNull);
+      for (final f in [
+        find.text('Ronneby'),
+        find.text('Tåg 22:48 inställt'),
+        find.text('Nästa tåg 23:48'),
+        find.widgetWithText(FilledButton, 'Kör dit'),
+        find.text('Fick körning'),
+        find.text('Ingen kund'),
+        find.text('Taxi betalas'),
+        find.text('Mer'),
+      ]) {
+        expect(f, findsOneWidget);
+        expect(tester.getBottomLeft(f).dy, lessThan(640), reason: '$f');
+      }
+      expect(
+        tester.getSize(find.widgetWithText(FilledButton, 'Kör dit')).height,
+        greaterThanOrEqualTo(56),
+      );
+      expect(
+        tester.widget<Text>(find.text('Nästa tåg 23:48')).style!.color,
+        TbColors.live,
+      );
+    });
+
+    testWidgets('Mer är hopfällt och döljer källans text', (tester) async {
+      await pumpSmall(tester, withLines());
+      expect(find.textContaining('fordonsfel'), findsNothing);
+      expect(find.text('Händelse & beskrivning'), findsNothing);
+      await tester.tap(find.text('Mer'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('fordonsfel'), findsOneWidget);
+    });
+
+    testWidgets('Övrigt: titeln som förut och Mer öppet', (tester) async {
+      await pumpSmall(tester, minorTip());
+      expect(find.text('Spårvagn 7 har ändrad körväg'), findsWidgets);
+      expect(find.text('Trafikbolagets meddelande'), findsOneWidget);
+    });
+
+    testWidgets('utan nya fält: dagens rubrik och avgångsraden', (
+      tester,
+    ) async {
+      await pumpSmall(tester, strongTip());
+      expect(tester.takeException(), isNull);
+      expect(find.text('En avgång inställd'), findsOneWidget);
+      expect(find.widgetWithText(FilledButton, 'Kör dit'), findsOneWidget);
     });
   });
 
