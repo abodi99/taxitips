@@ -6,12 +6,34 @@ import '../severity_labels.dart';
 import '../signal_kinds.dart';
 import '../theme.dart';
 
-/// Ett tips i listan, byggt för en blick från förarplatsen.
+/// Serverns rad 2: vad som hänt, högst fyra ord ("Tåg 22:48 inställt").
+/// Tom för äldre servrar och för "Övrigt" -- då faller vyerna tillbaka på
+/// dagens rubrik.
+String serverHeadline(Map alert) => _field(alert['headline']);
+
+/// Serverns rad 3: det som avgör ("Nästa tåg 23:48"). Tom om den saknas.
+String serverDecision(Map alert) => _field(alert['decision']);
+
+/// Färgen på beslutsraden. go = ingen annan väg, värt att köra (grönt); no =
+/// resenärerna klarar sig (grått); wait/okänt = osäkert (mörkt). Texten bär
+/// alltid orden, färgen är bara förstärkning.
+Color decisionColor(Map alert) {
+  switch (_field(alert['decision_tone'])) {
+    case 'go':
+      return TbColors.live;
+    case 'no':
+      return TbColors.skiffer;
+    default:
+      return TbColors.midnatt;
+  }
+}
+
+/// Ett tips i listan, byggt för en blick från förarplatsen: tre rader.
 ///
-/// Uppifrån och ner: VAD (ikonrutan och platsen), HUR VIKTIGT (färg + ett
-/// ord), NÄR och HUR LÅNGT (siffror med ikon), och sist varför resenären kan
-/// behöva taxi (nästa avgång). Den fria texten från källan visas i detaljvyn,
-/// inte här -- den är lång, på myndighetssvenska och sällan det som avgör.
+/// 1. VAR (plats, avstånd till höger). 2. VAD (kort rubrik + styrkeordet).
+/// 3. BESLUTET (det som avgör, i färg efter tonen; 💰 när taxi betalas).
+/// Färgad vänsterkant och ikonruta bär styrkan, men ordet står kvar så att
+/// färg aldrig är ensam bärare. Källans fria text hör hemma i detaljvyn.
 class SignalCard extends StatelessWidget {
   const SignalCard({
     super.key,
@@ -24,7 +46,8 @@ class SignalCard extends StatelessWidget {
   final VoidCallback? onTap;
 
   /// `null` = ingen stjärna alls (backend kan inte spara), aldrig en knapp som
-  /// tyst inte gör något.
+  /// tyst inte gör något. Stjärnan visas bara på redan sparade tips; att spara
+  /// görs i detaljvyn.
   final ValueChanged<bool>? onToggleFollow;
 
   @override
@@ -34,13 +57,56 @@ class SignalCard extends StatelessWidget {
     final color = strengthColor(strength, category: category);
     final active = alert['is_active'] != false;
     final followed = alert['is_favorite'] == true;
-    // Linje och station först ("Buss 725 · Tumba station"), annars platsen.
-    final title = tipLineStation(alert) ?? alertPlaceTitle(alert);
-    final start = DateTime.tryParse(
-      alert['start_time']?.toString() ?? '',
-    )?.toLocal();
+    final place = tipStation(alert).isNotEmpty
+        ? tipStation(alert)
+        : alertPlaceTitle(alert);
     final distance = alert['distance_km'] as num?;
+    final headline = serverHeadline(alert).isNotEmpty
+        ? serverHeadline(alert)
+        : shortWhat(alert);
+    final decision = serverDecision(alert);
     final travel = TravelOptions.of(alert);
+    final edge = active ? color : TbColors.skiffer;
+
+    // Rad 3: slut > serverns beslut > dagens avgångsrad > ingenting.
+    Widget? row3;
+    if (!active) {
+      row3 = const Text(
+        'Slut',
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+          color: TbColors.skiffer,
+        ),
+      );
+    } else if (decision.isNotEmpty) {
+      row3 = Text(
+        decision,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 16,
+          fontWeight: FontWeight.w800,
+          color: decisionColor(alert),
+        ),
+      );
+    } else if (travel != null) {
+      row3 = LiveTravelText(
+        travel,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w700,
+          color: travel.isStrong
+              ? TbColors.live
+              : (travel.isWeak ? TbColors.skiffer : TbColors.midnatt),
+        ),
+      );
+    }
+    final pays = active && alert['compensation_eligible'] == true;
 
     return Material(
       color: active ? TbColors.vit : TbColors.ljusgra,
@@ -53,136 +119,111 @@ class SignalCard extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: TbColors.line),
           ),
-          padding: const EdgeInsets.fromLTRB(12, 12, 4, 12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _IconTile(
-                icon: iconForAlert(alert),
-                color: active ? color : TbColors.skiffer,
-                hazard: category == SignalCategory.road,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontFamily: kDisplayFont,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w700,
-                        height: 1.2,
-                        color: TbColors.midnatt,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 4,
-                      crossAxisAlignment: WrapCrossAlignment.center,
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(width: 4, color: edge),
+                Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(10, 10, 4, 10),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        StrengthPill(
-                          strength: strength,
-                          category: category,
-                          muted: !active,
+                        _IconTile(
+                          icon: iconForAlert(alert),
+                          color: edge,
+                          hazard: category == SignalCategory.road,
                         ),
-                        if (followed)
-                          const Text(
-                            'Sparat',
-                            style: TextStyle(
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                              color: TbColors.guldDjup,
-                            ),
-                          ),
-                        Text(
-                          shortWhat(alert),
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w600,
-                            color: TbColors.skiffer,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      place,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontFamily: kDisplayFont,
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.w700,
+                                        height: 1.2,
+                                        color: TbColors.midnatt,
+                                      ),
+                                    ),
+                                  ),
+                                  if (distance != null) ...[
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      distanceText(distance),
+                                      maxLines: 1,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w700,
+                                        color: TbColors.skiffer,
+                                      ),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      headline,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w600,
+                                        color: TbColors.midnatt,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  StrengthPill(
+                                    strength: strength,
+                                    category: category,
+                                    muted: !active,
+                                  ),
+                                ],
+                              ),
+                              if (row3 != null || pays) ...[
+                                const SizedBox(height: 2),
+                                Row(
+                                  children: [
+                                    Expanded(child: row3 ?? const SizedBox()),
+                                    if (pays)
+                                      const Icon(
+                                        Icons.payments_rounded,
+                                        size: 20,
+                                        color: TbColors.live,
+                                        semanticLabel: 'Taxi betalas',
+                                      ),
+                                  ],
+                                ),
+                              ],
+                            ],
                           ),
                         ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 14,
-                      runSpacing: 6,
-                      children: [
-                        if (!active)
-                          const MetaItem(
-                            icon: Icons.history_rounded,
-                            text: 'Slut',
+                        if (followed && onToggleFollow != null)
+                          FollowButton(
+                            followed: followed,
+                            onChanged: onToggleFollow!,
                           )
-                        else if (start != null)
-                          MetaItem(
-                            icon: Icons.schedule_rounded,
-                            text: dateText(start),
-                          ),
-                        if (distance != null)
-                          MetaItem(
-                            icon: Icons.near_me_rounded,
-                            text: distanceText(distance),
-                          ),
-                        if (alert['compensation_eligible'] == true)
-                          const MetaItem(
-                            icon: Icons.payments_rounded,
-                            text: 'Taxi betalas',
-                            color: TbColors.live,
-                          ),
-                        if ((alert['countyName']?.toString() ?? '').isNotEmpty)
-                          MetaItem(
-                            icon: Icons.place_rounded,
-                            text: countyShort(alert['countyName'].toString()),
-                          ),
+                        else
+                          const SizedBox(width: 8),
                       ],
                     ),
-                    if (travel == null &&
-                        active &&
-                        tipBrief(alert) != null) ...[
-                      // Utan avgångsuppgift är beskedet det som säger mest.
-                      const SizedBox(height: 8),
-                      Text(
-                        tipBrief(alert)!,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          height: 1.3,
-                          fontWeight: FontWeight.w600,
-                          color: TbColors.midnatt,
-                        ),
-                      ),
-                    ],
-                    if (travel != null) ...[
-                      const SizedBox(height: 8),
-                      LiveTravelText(
-                        travel,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 14,
-                          height: 1.3,
-                          fontWeight: FontWeight.w600,
-                          color: travel.isStrong
-                              ? TbColors.live
-                              : (travel.isWeak
-                                    ? TbColors.skiffer
-                                    : TbColors.midnatt),
-                        ),
-                      ),
-                    ],
-                  ],
+                  ),
                 ),
-              ),
-              if (onToggleFollow != null)
-                FollowButton(followed: followed, onChanged: onToggleFollow!),
-            ],
+              ],
+            ),
           ),
         ),
       ),

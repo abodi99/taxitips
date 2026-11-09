@@ -106,7 +106,7 @@ def classify(alert: RailAlert) -> Assessment:
       3. Sista avgången                     -> 80, strandsatt
       4. Inställt, nästa resa om 31+ min    -> 50-68, strandsatt
       5. Inställt, okänt när nästa går      -> 50, strandsatt men osäkert
-      6. Försenat                           -> 40, eller 55 och strandsatt från 60 min
+      6. Försenat                           -> 40, eller 55 från 60 min; aldrig strandsatt (högst Medel)
     """
     reasons: list[str] = []
 
@@ -116,7 +116,11 @@ def classify(alert: RailAlert) -> Assessment:
         return _finish(
             SeverityTier.LINE_DELAYED, SERIOUS_DELAY_SCORE if serious else DELAY_SCORE,
             Confidence.HIGH, reasons, alert, "train.line_delayed",
-            stranded=serious, wait=alert.delay_minutes,
+            # Ett försenat tåg kommer: ingen står strandsatt. Stark ska betyda
+            # "inget alternativ" och vara notisvärd -- 405 Starka förseningar
+            # i veckan (snitt 62 p) lovade på kortet mer än notisen höll.
+            # Poängen är orörd; bara strandsättningen (som lyfter nivån) utgår.
+            stranded=False, wait=alert.delay_minutes,
             factors=[tc.delay_factor(alert.delay_minutes)],
         )
 

@@ -41,6 +41,43 @@ class ValidTests(TestCase):
         # 13:45 står ingenstans: hellre inget besked än en påhittad avgång.
         self.assertIsNone(briefs.valid("Inställt 11:33, nästa 13:45", source))
 
+    def test_sista_needs_the_source_to_say_last_departure(self):
+        """Prod 2026-11-09: "sista avgången" skrevs fast nästa tåg gick 05:05."""
+        o = herrljunga(title="Norrtåg 03:05 Luleå–Haparanda är inställt",
+                       departure_at=datetime(2026, 10, 4, 2, 5, tzinfo=dt_tz.utc),
+                       next_departure_at=datetime(2026, 10, 4, 4, 5, tzinfo=dt_tz.utc))
+        source = briefs.source_text(o)
+        self.assertIsNone(briefs.valid("Norrtåg 03:05 Luleå-Haparanda inställt, sista avgången.", source))
+        self.assertIsNone(briefs.valid("Sista tåget 03:05 inställt", source))
+        last = herrljunga(is_last_departure=True, next_departure_at=None)
+        self.assertIn("Sista avgången", briefs.source_text(last))
+        self.assertEqual(
+            briefs.valid("Sista tåget 11:33 inställt", briefs.source_text(last)),
+            "Sista tåget 11:33 inställt",
+        )
+
+    def test_a_line_that_stops_mid_sentence_is_dropped(self):
+        source = briefs.source_text(herrljunga()) + "\nSista avgången för dagen\nSimrishamn 06:07"
+        self.assertIsNone(briefs.valid("Sista tåget 06:07 från Simrishamn inställt, ger resenärer.", source))
+        for dangling in ("Tåget 06:07 är inställt,", "Tåget 06:07 är inställt och", "Inställt 06:07 från", "Inställt 06:07 –"):
+            with self.subTest(dangling):
+                self.assertIsNone(briefs.valid(dangling, source))
+        self.assertEqual(briefs.valid("Inställt 06:07 från Simrishamn.", source), "Inställt 06:07 från Simrishamn.")
+
+    def test_structured_tips_get_no_ai_line(self):
+        rail = herrljunga(rule_id="train.line_paused.long_gap")
+        self.assertFalse(briefs.wants_brief(rail))
+        self.assertFalse(briefs.wants_brief(herrljunga(kind="flight", external_id="test:f")))
+        self.assertFalse(briefs.wants_brief(herrljunga(kind="ferry", external_id="test:b")))
+        # Fritext (ingen järnvägsregel) får fortfarande en rad.
+        self.assertTrue(briefs.wants_brief(herrljunga(rule_id="train.line_paused.ambiguous", external_id="test:t")))
+        self.assertTrue(briefs.wants_brief(herrljunga(external_id="test:u")))
+
+    def test_old_stored_briefs_stop_showing_on_structured_tips(self):
+        o = herrljunga(rule_id="train.line_paused.long_gap")
+        o.brief, o.brief_key = "Gammal rad", briefs.key_for(o)
+        self.assertIsNone(briefs.current_brief(o))
+
     def test_too_long_or_empty_is_dropped(self):
         source = briefs.source_text(herrljunga())
         self.assertIsNone(briefs.valid("x" * (briefs.BRIEF_MAX_CHARS + 1), source))

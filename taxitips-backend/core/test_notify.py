@@ -389,32 +389,83 @@ class PushCycleTests(SupabaseCompanyMixin, TestCase):
         self.assertEqual(len(self.sent), 1)
 
     def test_push_title_leads_with_where_and_what(self):
-        o = opportunity(places=["Malmö C"], severity_tier=SeverityTier.LINE_PAUSED)
-        self.assertEqual(notify.push_title(o), "Malmö C: Hela linjen stoppad")
+        o = opportunity(
+            places=["Ronneby"], severity_tier=SeverityTier.LINE_PAUSED,
+            rule_id="train.line_paused.long_gap",
+        )
+        self.assertEqual(notify.push_title(o), "Ronneby: Tåg inställt")
         # Utan plats får färdsättet bära raden -- råtiteln är ofta ett naket
         # "Inställd" utan sammanhang.
         o.places = []
-        self.assertEqual(notify.push_title(o), "Tåg: Hela linjen stoppad")
+        self.assertEqual(notify.push_title(o), "Tåg: Tåg inställt")
 
-    def test_push_body_does_not_repeat_the_next_departure(self):
-        """Järnvägens summary skriver redan ut nästa avgång i sin egen text."""
+    def test_push_title_never_says_whole_line_for_a_single_train(self):
+        o = opportunity(places=["Malmö C"], severity_tier=SeverityTier.LINE_PAUSED)
+        self.assertNotIn("Hela linjen", notify.push_title(o))
+
+    def test_push_title_falls_back_to_the_source_title_without_a_headline(self):
         o = opportunity(
-            summary="Avgången 08:00 är inställd. Nästa avgång går om 20 min.",
-            next_departure_minutes=20,
+            places=["Lund C"], severity_tier=SeverityTier.IGNORE, title="Hållplats flyttad",
+            rule_id="bus.ignore.facility", mode="bus",
         )
-        self.assertEqual(notify.push_body(o).count("Nästa avgång"), 1)
+        self.assertEqual(notify.push_title(o), "Lund C: Hållplats flyttad")
 
-    def test_push_body_uses_clock_time_not_a_relative_duration(self):
+    def test_push_body_long_gap_train_with_compensation(self):
         from datetime import datetime, timezone as dt_tz
 
         o = opportunity(
-            summary="Avgången 08:00 är inställd.",
-            next_departure_minutes=110,
-            next_departure_at=datetime(2026, 9, 30, 11, 50, tzinfo=dt_tz.utc),  # 13:50 svensk sommartid
+            places=["Ronneby"], rule_id="train.line_paused.long_gap",
+            summary="Avgången 22:15 är inställd. Nästa avgång går 23:48.",
+            next_departure_minutes=93,
+            next_departure_at=datetime(2026, 11, 9, 22, 48, tzinfo=dt_tz.utc),  # 23:48 svensk vintertid
+            compensation_eligible=True,
         )
+        self.assertEqual(notify.push_title(o), "Ronneby: Tåg inställt")
+        self.assertEqual(notify.push_body(o), "Nästa tåg 23:48. Taxi betalas.")
+
+    def test_push_body_without_compensation_has_no_taxi_sentence(self):
+        o = opportunity(rule_id="train.line_paused.whole_line_stop", compensation_eligible=False)
+        self.assertEqual(notify.push_body(o), "Ingen trafik.")
+
+    def test_push_body_for_last_departure_says_it_once(self):
+        o = opportunity(
+            rule_id="train.line_paused.last_departure", is_last_departure=True,
+            summary="Sista avgången är inställd. Sista avgången härifrån.",
+            compensation_eligible=True,
+        )
+        self.assertEqual(notify.push_title(o), "Lund C: Sista tåget inställt")
         body = notify.push_body(o)
-        self.assertIn("Nästa avgång 13:50.", body)
-        self.assertNotIn(" om ", body)
+        self.assertEqual(body, "Inget mer i kväll. Taxi betalas.")
+        self.assertNotIn("Sista avgången", body)
+
+    def test_push_texts_never_repeat_a_phrase(self):
+        for rule_id, extra in (
+            ("train.line_paused.long_gap", {}),
+            ("train.line_paused.last_departure", {"is_last_departure": True}),
+            ("train.vehicle_cancelled.alternative_soon", {"next_departure_minutes": 12}),
+            ("train.line_paused.whole_line_stop", {}),
+        ):
+            with self.subTest(rule_id):
+                o = opportunity(rule_id=rule_id, compensation_eligible=True, **extra)
+                text = f"{notify.push_title(o)} {notify.push_body(o)}".lower()
+                for phrase in ("sista avgången", "taxi betalas", "nästa avgång"):
+                    self.assertLessEqual(text.count(phrase), 1, phrase)
+
+    def test_push_body_falls_back_to_the_summary_without_a_decision(self):
+        o = opportunity(
+            severity_tier=SeverityTier.IGNORE, mode="bus", rule_id="bus.ignore.facility",
+            summary="Hållplatsen har flyttats.",
+        )
+        self.assertEqual(notify.push_body(o), "Hållplatsen har flyttats.")
+
+    def test_push_body_for_a_flight_wave(self):
+        o = opportunity(
+            kind="flight", mode="flight", rule_id="flight.arrival_wave",
+            severity_tier=SeverityTier.ARRIVAL_WAVE, places=["Stockholm Arlanda"],
+            summary="8 plan landar mellan 23:30 och 00:00.",
+        )
+        self.assertEqual(notify.push_title(o), "Stockholm Arlanda: 8 plan landar")
+        self.assertEqual(notify.push_body(o), "Kl 23:30–00:00.")
 
 
 def train_stop(station: str, train: str = "13311", day: str = "2026-10-04", clock: str = "08:20") -> Opportunity:

@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 
 from django.utils import timezone
 
-from core import thresholds
+from core import taxi_context, thresholds
 from core.models import Confidence, SeverityTier, TransportMode
 from core.rules import rule_for
 from core.sources.swedavia import NON_ARRIVING_STATUSES
@@ -280,3 +280,24 @@ def flight_external_id(flight: dict) -> str:
     scheduled = flight.get("scheduled") or flight.get("effective")
     stamp = scheduled.astimezone(dt.timezone.utc).strftime("%Y-%m-%dT%H:%MZ")
     return f"swedavia:{flight['airport']}:{flight['flight_id']}:{stamp}"
+
+
+def factors(window: FlightWindow) -> list[dict]:
+    """
+    Skälen på kortet: högst två korta rader, samma form som tågens factors.
+
+    Bara det tidtabellen och estimaten faktiskt säger -- "få bussar" är
+    nattpåslagets egen motivering (se modulens docstring), aldrig ett
+    påstående om att något slutat gå. Antal plan, aldrig antal resenärer.
+    """
+    if window.config["rule"] == thresholds.RULE_WAVE:
+        main = taxi_context.Factor(f"{window.arrivals} plan samtidigt", "+")
+    else:
+        main = taxi_context.Factor(f"Sista planet på {thresholds.FLIGHT_ISOLATION_HOURS} tim", "+")
+    out = [main]
+    if thresholds.is_flight_night_hour(window.local_start.hour):
+        out.append(taxi_context.Factor("Natt – få bussar", "+"))
+    elif window.delayed:
+        n = len(window.delayed)
+        out.append(taxi_context.Factor("1 plan är sent" if n == 1 else f"{n} plan är sena", "+"))
+    return [f.as_dict() for f in out]

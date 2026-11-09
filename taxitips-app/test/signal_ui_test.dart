@@ -249,7 +249,7 @@ void main() {
     );
 
     testWidgets(
-      'kortet visar plats, styrkeord och en stjärna som går att trycka på',
+      'kortet visar plats, styrkeord och en stjärna på sparade tips',
       (tester) async {
         bool? followed;
         await tester.pumpWidget(
@@ -262,6 +262,7 @@ void main() {
                 'level': 'high',
                 'severity_tier': 'line_paused',
                 'distance_km': 3.2,
+                'is_favorite': true,
               },
               onToggleFollow: (v) => followed = v,
             ),
@@ -270,12 +271,13 @@ void main() {
         expect(find.text('Göteborg C'), findsOneWidget);
         expect(find.text('Stark'), findsOneWidget);
         expect(find.text('3,2 km'), findsOneWidget);
-        await tester.tap(find.byTooltip('Spara tipset'));
-        expect(followed, isTrue);
+        // Stjärnan visas bara på sparade tips; spara görs i detaljvyn.
+        await tester.tap(find.byTooltip('Ta bort sparat'));
+        expect(followed, isFalse);
       },
     );
 
-    testWidgets('kortet visar linje och station när backend skickar dem', (
+    testWidgets('kortet visar stationen när backend skickar den', (
       tester,
     ) async {
       await tester.pumpWidget(
@@ -295,7 +297,8 @@ void main() {
           ),
         ),
       );
-      expect(find.text('Buss 725 · Tumba station'), findsOneWidget);
+      // Kortet visar platsen; linjen hör till detaljvyn.
+      expect(find.text('Tumba station'), findsOneWidget);
     });
 
     testWidgets('kortet utan linje och station: platsen som förut', (

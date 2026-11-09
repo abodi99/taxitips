@@ -41,14 +41,14 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('kortet visar beskedet när avgångsuppgift saknas', (
+  testWidgets('kortet har ingen brödtext: beskedet hör till detaljvyn', (
     tester,
   ) async {
     await pump(
       tester,
       SignalCard(alert: tip(brief: 'Buss inställd vid Slussen – fordonsfel')),
     );
-    expect(find.text('Buss inställd vid Slussen – fordonsfel'), findsOneWidget);
+    expect(find.text('Buss inställd vid Slussen – fordonsfel'), findsNothing);
   });
 
   testWidgets('utan besked ser kortet ut som förut', (tester) async {
@@ -74,6 +74,9 @@ void main() {
           ),
         ),
       );
+      // Beskedet ligger under "Mer".
+      await tester.tap(find.text('Mer'));
+      await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('tip-brief')), findsOneWidget);
 
       await pump(

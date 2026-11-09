@@ -627,6 +627,35 @@ class AreaFeedTests(ApiTestCase):
         self.assertTrue(body["needsArea"])
         self.assertEqual(body["alerts"], [])
 
+    def test_tips_carry_the_two_short_lines(self):
+        opportunity(rule_id="train.line_paused.whole_line_stop")
+        body = self.alerts_without_position(counties="12")
+        tip = body["alerts"][0]
+        self.assertEqual(
+            (tip["headline"], tip["decision"], tip["decision_tone"]),
+            ("Linjen står still", "Ingen trafik", "go"),
+        )
+        self.assertIn("title", tip)  # gamla fält ligger kvar för äldre appar
+
+    def test_needs_area_response_counts_nothing(self):
+        opportunity()
+        body = self.alerts_without_position()
+        self.assertEqual((body["weakCount"], body["minorCount"]), (0, 0))
+
+    def test_weak_and_minor_tips_are_counted_but_road_and_strong_are_not(self):
+        opportunity(title="Stark")  # line_paused/85 = high
+        opportunity(title="Svag 1", severity_tier=SeverityTier.VEHICLE_CANCELLED, demand_score=10, level="low")
+        opportunity(title="Svag 2", severity_tier=SeverityTier.VEHICLE_CANCELLED, demand_score=12, level="low")
+        opportunity(title="Slut", severity_tier=SeverityTier.VEHICLE_CANCELLED, demand_score=12, level="low",
+                    end_time=timezone.now() - timedelta(minutes=5))
+        opportunity(title="Vägen", kind="road", mode="road", severity_tier=SeverityTier.ROAD_WORK,
+                    demand_score=5, level="low", rule_id="road.road_work.minor")
+        opportunity(title="Övrigt", severity_tier=SeverityTier.IGNORE, demand_score=0, level="low",
+                    rule_id="bus.ignore.facility")
+        body = self.alerts_without_position(counties="12")
+        self.assertEqual(body["weakCount"], 2)
+        self.assertEqual(body["minorCount"], 1)
+
     def test_chosen_counties_decide_without_position(self):
         opportunity(title="Skånetips")
         opportunity(title="Stockholmstips", lat=59.3293, lon=18.0686, region="sl")

@@ -16,7 +16,7 @@ import json
 from dataclasses import dataclass
 from zoneinfo import ZoneInfo
 
-from core import thresholds
+from core import taxi_context, thresholds
 from core.models import Confidence, SeverityTier
 from core.repository import upsert_opportunities, upsert_source_events
 from maritime import ais
@@ -108,6 +108,19 @@ def assess(vessel, port: Port, reason: str, now: dt.datetime) -> Assessment | No
     )
 
 
+def factors(assessment: Assessment) -> list[dict]:
+    """
+    Skälen på kortet, högst två och högst fem ord var. Storleken som ord
+    (aldrig passagerare, se modulens docstring) och kvällsläget när det gav
+    påslag -- taxi_context.time_factor är för långt för en rad på kortet.
+    """
+    out = [taxi_context.Factor(assessment.band.capitalize(), "+")]
+    local = assessment.start.astimezone(STOCKHOLM)
+    if local.hour >= LATE_FROM_HOUR or local.hour < LATE_UNTIL_HOUR:
+        out.append(taxi_context.Factor("Sent på kvällen", "+"))
+    return [f.as_dict() for f in out]
+
+
 def external_id(vessel, port: Port) -> str:
     """Ett id per anlöp: samma fartyg i samma hamn senare samma dag är en ny ankomst."""
     stamp = (vessel.triggered_at or vessel.timestamp).astimezone(dt.timezone.utc)
@@ -163,6 +176,7 @@ def write_tip(vessel, port: Port, assessment: Assessment, reason: str) -> str:
         "mode": "boat",
         "severity_tier": assessment.tier,
         "level": thresholds.stored_level(assessment.tier, assessment.score),
+        "factors": factors(assessment),
         "title": f"{title_name} {verb} i {port.name}",
         # Storleken i ord, inte längden: föraren behöver "stor färja", inte metertal
         # (ägarkrav 2026-10-09). Längden finns kvar i skälen och i källhändelsen.

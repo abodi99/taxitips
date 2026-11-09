@@ -201,7 +201,9 @@ class _TipSheetBodyState extends State<TipSheetBody> {
                       ),
                     ),
                   ),
-                  // 1. Kompakta åtgärdsknappar längst upp (tar minimalt med plats)
+                  // Beslutet först, utan scroll: plats, vad, vad som avgör, en stor
+                  // knapp, högst tre skäl och svarsknapparna. Allt annat ligger
+                  // hopfällt under "Mer".
                   _TopActionBar(
                     alert: a,
                     api: widget.api,
@@ -216,42 +218,40 @@ class _TipSheetBodyState extends State<TipSheetBody> {
                     onDriving: ended || !hasId || !TaxiTipsConfig.usesDjangoApi
                         ? null
                         : () => _drivingTo(a),
-                  ),
-                  const SizedBox(height: 10),
-
-                  // 2. Samlat huvudkort:
-                  //    Station A → Station B
-                  //    --- Sektionsbrytare 1 ---
-                  //    Inställd/Status + Sträckad tid + Nästa avgång + Tågnamn/Nummer/Operatör
-                  //    --- Sektionsbrytare 2 ---
-                  //    Händelse & Beskrivning
-                  _UnifiedOverviewAndEventCard(
-                    alert: a,
                     travel: travel,
-                    distanceKm: widget.distanceKm,
-                    start: start,
-                    end: end,
-                    now: now,
-                    ended: ended,
-                    minor: minor,
-                    road: road,
+                    // "Övrigt" och väghinder saknar rubrik/beslut: de visar
+                    // titeln som förut och har "Mer" öppet från start.
+                    moreOpen: minor || road,
+                    more: [
+                      // Samlat huvudkort:
+                      //    Station A → Station B, status, nästa avgång,
+                      //    tågnummer/operatör och källans text.
+                      _UnifiedOverviewAndEventCard(
+                        alert: a,
+                        travel: travel,
+                        distanceKm: widget.distanceKm,
+                        start: start,
+                        end: end,
+                        now: now,
+                        ended: ended,
+                        minor: minor,
+                        road: road,
+                      ),
+                      // Ersättningsregler (och skäl utöver de tre i huvudvyn).
+                      if ((showWorthIt && tipFactors(a).length > 3) ||
+                          a['compensation_eligible'] == true) ...[
+                        const SizedBox(height: 12),
+                        _WorthItAndCompensationCard(
+                          alert: a,
+                          travel: travel,
+                          showWorthIt: showWorthIt && tipFactors(a).length > 3,
+                          onOpenUrl: widget.onOpenUrl,
+                        ),
+                      ],
+                      const SizedBox(height: 10),
+                      const TipsNotPromisesNote(),
+                    ],
                   ),
-
-                  // 3. Särskilda omständigheter (natt, väder, stor station) & Riktlinjer vid försening
-                  //    Visas BARA om det finns unik info som inte redan nämnts längre upp.
-                  if ((showWorthIt && tipFactors(a).isNotEmpty) ||
-                      a['compensation_eligible'] == true) ...[
-                    const SizedBox(height: 12),
-                    _WorthItAndCompensationCard(
-                      alert: a,
-                      travel: travel,
-                      showWorthIt: showWorthIt,
-                      onOpenUrl: widget.onOpenUrl,
-                    ),
-                  ],
-
-                  const SizedBox(height: 10),
-                  const TipsNotPromisesNote(),
                 ],
               ),
             ),
@@ -545,9 +545,18 @@ class _TopActionBar extends StatefulWidget {
     required this.distanceKm,
     required this.onToggleFavorite,
     required this.onClose,
+    required this.travel,
+    required this.more,
+    required this.moreOpen,
     this.onDriving,
     this.onOpenSourcePage,
   });
+
+  final TravelOptions? travel;
+
+  /// Det som ligger hopfällt under "Mer".
+  final List<Widget> more;
+  final bool moreOpen;
 
   final Map<String, dynamic> alert;
   final ApiClient api;
@@ -669,238 +678,113 @@ class _TopActionBarState extends State<_TopActionBar> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    final canFollow = widget.onToggleFavorite != null;
-    final distance = widget.distanceKm == null
-        ? ''
-        : ' · ${distanceText(widget.distanceKm)}';
-    final isFare = _feedbackChoice == 'fare';
-    final isEmpty = _feedbackChoice == 'empty';
+  /// Stor knapp med ikon och ett ord. Minst 56 hög: träffbar med en tumme.
+  Widget _bigFeedback({
+    required IconData icon,
+    required String label,
+    required bool selected,
+    required Color color,
+    required VoidCallback? onPressed,
+  }) {
+    return Expanded(
+      child: TextButton.icon(
+        style: TextButton.styleFrom(
+          foregroundColor: selected ? TbColors.vit : color,
+          backgroundColor: selected ? color : TbColors.vit,
+          side: BorderSide(color: selected ? color : TbColors.line),
+          minimumSize: const Size(0, 56),
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
+        icon: Icon(icon, size: 24),
+        // Ingen egen Flexible: TextButton.icon lägger redan en runt etiketten.
+        label: Text(
+          label,
+          maxLines: 2,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800),
+        ),
+        onPressed: onPressed,
+      ),
+    );
+  }
 
+  /// Knappar som inte hör till beslutet: rapportera och trafikbolagets sida.
+  /// De ligger under "Mer".
+  Widget _extraActions() {
     final compactShape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(9),
     );
-
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    ButtonStyle style() => TextButton.styleFrom(
+      foregroundColor: TbColors.skiffer,
+      backgroundColor: TbColors.vit,
+      side: const BorderSide(color: TbColors.line),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      minimumSize: const Size(0, 36),
+      tapTargetSize: MaterialTapTargetSize.padded,
+      shape: compactShape,
+    );
+    return Wrap(
+      spacing: 6,
       children: [
-        Expanded(
-          // Knapparna ritas 36 höga men tar emot tryck på 48 (padded), så
-          // raderna står 12 isär utan extra radavstånd.
-          child: Wrap(
-            spacing: 6,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              // Kör dit / Öppna navigering
-              if (widget.canDrive)
-                widget.ended
-                    ? OutlinedButton.icon(
-                        style: OutlinedButton.styleFrom(
-                          foregroundColor: TbColors.midnatt,
-                          backgroundColor: TbColors.vit,
-                          side: const BorderSide(color: TbColors.line),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 11,
-                            vertical: 7,
-                          ),
-                          minimumSize: const Size(0, 36),
-                          tapTargetSize: MaterialTapTargetSize.padded,
-                          shape: compactShape,
-                        ),
-                        icon: const Icon(Icons.navigation_outlined, size: 16),
-                        label: const Text(
-                          'Öppna navigering',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        onPressed: _drive,
-                      )
-                    : FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          foregroundColor: TbColors.midnatt,
-                          backgroundColor: TbColors.taxi,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 7,
-                          ),
-                          minimumSize: const Size(0, 36),
-                          tapTargetSize: MaterialTapTargetSize.padded,
-                          shape: compactShape,
-                        ),
-                        icon: const Icon(Icons.navigation_rounded, size: 16),
-                        label: Text(
-                          'Kör dit$distance',
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        onPressed: _drive,
-                      ),
-
-              // Spara / Sparat
-              if (canFollow)
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: _followed
-                        ? TbColors.guldDjup
-                        : TbColors.midnatt,
-                    backgroundColor: _followed
-                        ? TbColors.guld.withValues(alpha: 0.18)
-                        : TbColors.vit,
-                    side: BorderSide(
-                      color: _followed ? TbColors.guldDjup : TbColors.line,
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 7,
-                    ),
-                    minimumSize: const Size(0, 36),
-                    tapTargetSize: MaterialTapTargetSize.padded,
-                    shape: compactShape,
-                  ),
-                  icon: Icon(
-                    _followed ? Icons.star_rounded : Icons.star_outline_rounded,
-                    size: 16,
-                    color: _followed ? TbColors.guldDjup : TbColors.midnatt,
-                  ),
-                  label: Text(
-                    _followed ? 'Sparat' : 'Spara',
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  onPressed: _toggleFollow,
-                ),
-
-              // Fick körning & Ingen kund
-              if (_showFeedback) ...[
-                TextButton.icon(
-                  style: TextButton.styleFrom(
-                    foregroundColor: isFare ? TbColors.vit : TbColors.midnatt,
-                    backgroundColor: isFare ? TbColors.live : TbColors.vit,
-                    side: BorderSide(
-                      color: isFare ? TbColors.live : TbColors.line,
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 7,
-                    ),
-                    minimumSize: const Size(0, 36),
-                    tapTargetSize: MaterialTapTargetSize.padded,
-                    shape: compactShape,
-                  ),
-                  icon: Icon(
-                    isFare
-                        ? Icons.thumb_up_alt_rounded
-                        : Icons.thumb_up_alt_outlined,
-                    size: 15,
-                  ),
-                  label: const Text(
-                    'Fick körning',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  onPressed: _busyFeedback ? null : () => _pickFeedback('fare'),
-                ),
-                TextButton.icon(
-                  style: TextButton.styleFrom(
-                    foregroundColor: isEmpty ? TbColors.vit : TbColors.skiffer,
-                    backgroundColor: isEmpty ? TbColors.skiffer : TbColors.vit,
-                    side: BorderSide(
-                      color: isEmpty ? TbColors.skiffer : TbColors.line,
-                    ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 7,
-                    ),
-                    minimumSize: const Size(0, 36),
-                    tapTargetSize: MaterialTapTargetSize.padded,
-                    shape: compactShape,
-                  ),
-                  icon: Icon(
-                    isEmpty
-                        ? Icons.thumb_down_alt_rounded
-                        : Icons.thumb_down_alt_outlined,
-                    size: 15,
-                  ),
-                  label: const Text(
-                    'Ingen kund',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  onPressed: _busyFeedback
-                      ? null
-                      : () => _pickFeedback('empty'),
-                ),
-              ],
-
-              // Rapportera felaktigt tips
-              if (widget.hasId)
-                TextButton.icon(
-                  style: TextButton.styleFrom(
-                    foregroundColor: TbColors.skiffer,
-                    backgroundColor: TbColors.vit,
-                    side: const BorderSide(color: TbColors.line),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 7,
-                    ),
-                    minimumSize: const Size(0, 36),
-                    tapTargetSize: MaterialTapTargetSize.padded,
-                    shape: compactShape,
-                  ),
-                  icon: Icon(
-                    _reported ? Icons.check_rounded : Icons.flag_outlined,
-                    size: 15,
-                  ),
-                  label: Text(
-                    _reported ? 'Rapporterat' : 'Rapportera felaktigt tips',
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  onPressed: _reported ? null : _openReportDialog,
-                ),
-
-              // Trafikbolagets sida
-              if (widget.onOpenSourcePage != null)
-                TextButton.icon(
-                  style: TextButton.styleFrom(
-                    foregroundColor: TbColors.skiffer,
-                    backgroundColor: TbColors.vit,
-                    side: const BorderSide(color: TbColors.line),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 7,
-                    ),
-                    minimumSize: const Size(0, 36),
-                    tapTargetSize: MaterialTapTargetSize.padded,
-                    shape: compactShape,
-                  ),
-                  icon: const Icon(Icons.open_in_new, size: 15),
-                  label: const Text(
-                    'Trafikbolagets sida',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  onPressed: widget.onOpenSourcePage,
-                ),
-            ],
+        if (widget.hasId)
+          TextButton.icon(
+            style: style(),
+            icon: Icon(
+              _reported ? Icons.check_rounded : Icons.flag_outlined,
+              size: 15,
+            ),
+            label: Text(
+              _reported ? 'Rapporterat' : 'Rapportera felaktigt tips',
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            onPressed: _reported ? null : _openReportDialog,
           ),
-        ),
-        const SizedBox(width: 4),
+        if (widget.onOpenSourcePage != null)
+          TextButton.icon(
+            style: style(),
+            icon: const Icon(Icons.open_in_new, size: 15),
+            label: const Text(
+              'Trafikbolagets sida',
+              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+            ),
+            onPressed: widget.onOpenSourcePage,
+          ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final a = widget.alert;
+    final canFollow = widget.onToggleFavorite != null;
+    final isFare = _feedbackChoice == 'fare';
+    final isEmpty = _feedbackChoice == 'empty';
+    final minor = isMinorTip(a);
+    final factors = (!widget.ended && !minor && !widget.road)
+        ? tipFactors(a).take(3).toList()
+        : const <TipFactor>[];
+    final pays = a['compensation_eligible'] == true && !widget.ended;
+
+    final trailing = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (canFollow)
+          IconButton(
+            onPressed: _toggleFollow,
+            iconSize: 26,
+            constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
+            tooltip: _followed ? 'Ta bort sparat' : 'Spara tipset',
+            icon: Icon(
+              _followed ? Icons.star_rounded : Icons.star_outline_rounded,
+              color: _followed ? TbColors.guldDjup : TbColors.skiffer,
+            ),
+          ),
         IconButton(
           onPressed: widget.onClose,
           iconSize: 24,
@@ -909,6 +793,303 @@ class _TopActionBarState extends State<_TopActionBar> {
           icon: const Icon(Icons.close_rounded, color: TbColors.skiffer),
         ),
       ],
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _DecisionHeader(
+          alert: a,
+          travel: widget.travel,
+          distanceKm: widget.distanceKm,
+          trailing: trailing,
+        ),
+        if (widget.canDrive) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: widget.ended
+                ? OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: TbColors.midnatt,
+                      backgroundColor: TbColors.vit,
+                      side: const BorderSide(color: TbColors.line),
+                      minimumSize: const Size.fromHeight(56),
+                    ),
+                    icon: const Icon(Icons.navigation_outlined, size: 24),
+                    label: const Text(
+                      'Öppna navigering',
+                      style: TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    onPressed: _drive,
+                  )
+                : FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      foregroundColor: TbColors.midnatt,
+                      backgroundColor: TbColors.taxi,
+                      minimumSize: const Size.fromHeight(56),
+                    ),
+                    icon: const Icon(Icons.navigation_rounded, size: 26),
+                    label: const Text(
+                      'Kör dit',
+                      style: TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    onPressed: _drive,
+                  ),
+          ),
+        ],
+        if (factors.isNotEmpty || pays) ...[
+          const SizedBox(height: 10),
+          for (final f in factors)
+            _ReasonRow(
+              icon: f.supports
+                  ? Icons.add_circle_outline_rounded
+                  : Icons.remove_circle_outline_rounded,
+              color: f.supports ? TbColors.live : TbColors.skiffer,
+              text: f.text,
+            ),
+          if (pays)
+            const _ReasonRow(
+              icon: Icons.payments_rounded,
+              color: TbColors.live,
+              text: 'Taxi betalas',
+              semanticLabel: 'Taxi betalas',
+            ),
+        ],
+        if (_showFeedback) ...[
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              _bigFeedback(
+                icon: isFare
+                    ? Icons.thumb_up_alt_rounded
+                    : Icons.thumb_up_alt_outlined,
+                label: 'Fick körning',
+                selected: isFare,
+                color: TbColors.live,
+                onPressed: _busyFeedback ? null : () => _pickFeedback('fare'),
+              ),
+              const SizedBox(width: 10),
+              _bigFeedback(
+                icon: isEmpty
+                    ? Icons.thumb_down_alt_rounded
+                    : Icons.thumb_down_alt_outlined,
+                label: 'Ingen kund',
+                selected: isEmpty,
+                color: TbColors.skiffer,
+                onPressed: _busyFeedback ? null : () => _pickFeedback('empty'),
+              ),
+            ],
+          ),
+        ],
+        const SizedBox(height: 6),
+        // Material: ListTile ritar sin tryckeffekt på närmaste Material, och
+        // bladets bakgrund är en DecoratedBox.
+        Material(
+          type: MaterialType.transparency,
+          child: Theme(
+            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+            child: ExpansionTile(
+              // Ny nyckel när vyn byter läge, så initiallyExpanded gäller.
+              key: PageStorageKey('tip-more-${widget.moreOpen}'),
+              initiallyExpanded: widget.moreOpen,
+              tilePadding: EdgeInsets.zero,
+              childrenPadding: const EdgeInsets.only(bottom: 8),
+              expandedCrossAxisAlignment: CrossAxisAlignment.start,
+              title: const Text(
+                'Mer',
+                style: TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: TbColors.midnatt,
+                ),
+              ),
+              children: [
+                _extraActions(),
+                const SizedBox(height: 10),
+                ...widget.more,
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Plats (stor), vad som hänt, det som avgör (stort, färgat efter tonen) och
+/// styrkeordet. Äldre servrar saknar `headline`/`decision`: då visas dagens
+/// rubrik och avgångsraden. "Övrigt" visar bara titeln.
+class _DecisionHeader extends StatelessWidget {
+  const _DecisionHeader({
+    required this.alert,
+    required this.travel,
+    required this.distanceKm,
+    required this.trailing,
+  });
+
+  final Map<String, dynamic> alert;
+  final TravelOptions? travel;
+  final double? distanceKm;
+  final Widget trailing;
+
+  @override
+  Widget build(BuildContext context) {
+    final a = alert;
+    final minor = isMinorTip(a);
+    final ended = isEndedTip(a);
+    final category = categoryOfAlert(a);
+    final strength = strengthOfAlert(a);
+    final big = tipPlace(a) ?? tipHeadline(a);
+    final server = serverHeadline(a);
+    var headline = server.isNotEmpty ? server : tipHeadline(a);
+    if (minor || headline == big) headline = '';
+    final decision = serverDecision(a);
+    final distance = distanceKm ?? (a['distance_km'] as num?);
+
+    Widget? decisionRow;
+    if (ended) {
+      decisionRow = const Text(
+        'Slut',
+        style: TextStyle(
+          fontSize: 22,
+          fontWeight: FontWeight.w800,
+          color: TbColors.skiffer,
+        ),
+      );
+    } else if (decision.isNotEmpty) {
+      decisionRow = Text(
+        decision,
+        style: TextStyle(
+          fontSize: 24,
+          height: 1.15,
+          fontWeight: FontWeight.w800,
+          color: decisionColor(a),
+        ),
+      );
+    } else if (travel != null && !minor) {
+      decisionRow = LiveTravelText(
+        travel!,
+        style: const TextStyle(
+          fontSize: 20,
+          height: 1.15,
+          fontWeight: FontWeight.w800,
+          color: TbColors.midnatt,
+        ),
+      );
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Text(
+                  big,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontFamily: kDisplayFont,
+                    fontSize: 26,
+                    height: 1.15,
+                    fontWeight: FontWeight.w800,
+                    color: TbColors.midnatt,
+                  ),
+                ),
+              ),
+            ),
+            trailing,
+          ],
+        ),
+        if (headline.isNotEmpty) ...[
+          const SizedBox(height: 2),
+          Text(
+            headline,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w700,
+              color: TbColors.midnatt,
+            ),
+          ),
+        ],
+        if (decisionRow != null) ...[const SizedBox(height: 4), decisionRow],
+        if (!minor) ...[
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 12,
+            runSpacing: 4,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              StrengthPill(
+                strength: strength,
+                category: category,
+                muted: ended,
+                large: true,
+              ),
+              if (distance != null)
+                MetaItem(
+                  icon: Icons.near_me_rounded,
+                  text: distanceText(distance),
+                ),
+            ],
+          ),
+        ] else if (distance != null) ...[
+          const SizedBox(height: 6),
+          MetaItem(icon: Icons.near_me_rounded, text: distanceText(distance)),
+        ],
+      ],
+    );
+  }
+}
+
+/// En rad "ikon + kort text" för ett skäl.
+class _ReasonRow extends StatelessWidget {
+  const _ReasonRow({
+    required this.icon,
+    required this.color,
+    required this.text,
+    this.semanticLabel,
+  });
+
+  final IconData icon;
+  final Color color;
+  final String text;
+  final String? semanticLabel;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 3),
+      child: Row(
+        children: [
+          Icon(icon, size: 22, color: color, semanticLabel: semanticLabel),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              text,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: TbColors.midnatt,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

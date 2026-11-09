@@ -58,6 +58,13 @@ BRIEF_MAX_CHARS = 90
 _NUMBER_RE = re.compile(r"\d+(?:[:.]\d{2})?")
 
 
+# Raden får inte sluta mitt i en sats ("... ger resenärer.", "... inställt,").
+_DANGLING_RE = re.compile(
+    r"([,:;–-]|\b(ger|och|eller|för|med|till|från|som|att|av|i|på|vid|samt)\s*[.!]?|\bger\s+(resenärer|resenärerna|passagerare)\s*[.!]?)\s*$",
+    re.IGNORECASE,
+)
+
+
 class BriefOut(BaseModel):
     text: str = ""
 
@@ -173,11 +180,45 @@ def valid(text: str | None, source: str) -> str | None:
         return None
     if "typ: flyg" in source.lower() and re.search(r"färj", lowered):
         return None
+    # "Sista" är ett påstående om tidtabellen. Modellen har skrivit "sista
+    # avgången" när nästa tåg gick 05:05 -- det får stå bara när källan själv
+    # säger att det är sista avgången (source_text skriver då den raden).
+    if "sista" in lowered and "sista avgången" not in source.lower():
+        return None
+    if _DANGLING_RE.search(line):
+        return None
     return line
+
+
+# Järnvägsklassificerarens regler (core/scoring.py). Fritextkällornas tågtips
+# har andra villkor (ambiguous, single_departure ...) och räknas inte hit.
+_RAIL_RULE_IDS = frozenset({
+    "train.line_delayed",
+    "train.vehicle_cancelled.replacement",
+    "train.vehicle_cancelled.alternative_soon",
+    "train.line_paused.last_departure",
+    "train.line_paused.long_gap",
+    "train.line_paused.unknown",
+})
+
+
+def has_structured_lines(o) -> bool:
+    """
+    Tips vars rader servern redan skriver exakt (core/tip_lines.py): tåg ur
+    järnvägsklassificeraren, flyg och färja. De får ingen AI-rad -- den kostar
+    pengar och kunde hitta på ("sista avgången" när nästa tåg gick 05:05).
+    """
+    if getattr(o, "kind", None) in ("flight", "ferry"):
+        return True
+    rule_id = getattr(o, "rule_id", None) or ""
+    return rule_id in _RAIL_RULE_IDS and getattr(o, "departure_at", None) is not None
 
 
 def current_brief(o: Opportunity) -> str | None:
     """Beskedet, bara om det skrevs från tipset som det ser ut nu."""
+    if has_structured_lines(o):
+        # Även ett redan sparat besked: de gamla kunde vara fel.
+        return None
     brief = getattr(o, "brief", None)
     if not brief or getattr(o, "brief_key", None) != key_for(o):
         return None
@@ -191,6 +232,8 @@ def wants_brief(o: Opportunity) -> bool:
     visar kortet som det alltid gjort.
     """
     if o.kind == "road" or o.severity_tier == "ignore" or o.suppressed_at is not None:
+        return False
+    if has_structured_lines(o):
         return False
     return thresholds.is_notify_worthy(
         o.severity_tier, o.demand_score, o.has_alternative, level=thresholds.effective_level(o),

@@ -78,7 +78,7 @@ from django.conf import settings
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from core import areas, presence as presence_rules, thresholds
+from core import areas, presence as presence_rules, thresholds, tip_lines
 from core.combine import group_key
 from core.coverage import RAIL_REGION_KEY, notify_region_catalog
 from core.geo import (
@@ -679,8 +679,10 @@ match_device = decide
 
 # --- Texten på låsskärmen ------------------------------------------------
 
+# Reserv när tipset saknar rader (core/tip_lines.py): bara typer där tierns
+# eget namn stämmer. "line_paused" är medvetet borta -- 435 av 528 starka
+# sådana tips var ETT inställt tåg, och "Hela linjen stoppad" sa emot texten.
 _TIER_PUSH_LABEL = {
-    "line_paused": "Hela linjen stoppad",
     "vehicle_cancelled": "Avgång inställd",
     "road_accident_or_closure": "Olycka/avstängning",
 }
@@ -696,53 +698,48 @@ _MODE_PUSH_LABEL = {
 
 def push_title(opportunity) -> str:
     """
-    En rad en förare läser på en sekund, i rondellen.
+    En rad en förare läser på en sekund, i rondellen: "Ronneby: Tåg inställt".
 
-    Råtiteln är ofta ett naket "Inställd" eller "Försening" utan
-    sammanhang -- Trafiklab skickar genuint inte mer för många larm -- så
-    raden leder med det föraren behöver: var, och vilken sorts störning.
+    Platsen först, sedan rubriken ur core/tip_lines.py -- samma rad som kortet
+    visar. Saknas rubriken (tier "ignore") gäller det gamla: tierns namn eller
+    källans titel.
     """
     places = opportunity.places or []
     place = str(places[0]) if places else ""
-    what = _TIER_PUSH_LABEL.get(opportunity.severity_tier) or opportunity.title or "Ny taxisignal"
+    what = tip_lines.lines_for(opportunity)["headline"]
+    if not what:
+        what = _TIER_PUSH_LABEL.get(opportunity.severity_tier) or opportunity.title or "Ny taxisignal"
     prefix = place or _MODE_PUSH_LABEL.get(opportunity.mode, "")
     return f"{prefix}: {what}" if prefix else what
 
 
 def push_body(opportunity) -> str:
     """
-    Sammanfattningen, med "vad gör resenären i stället?" när vi vet det.
+    Beslutsraden som en mening, plus "Taxi betalas." när ersättning gäller.
 
-    Nästa avgång är det enda som avgör om det är värt att köra dit: står
-    ersättningsbussen redan där finns ingen kund. Vi hittar aldrig på ett
-    alternativ -- fältet är tomt när källan inte sagt något, och då säger
-    notisen inget heller.
+    Samma rad som kortet (core/tip_lines.py), så att notisen och appen aldrig
+    säger olika saker och ingenting står två gånger. Fritexttips kan ha en
+    AI-rad (core/briefs.py) som är mer exakt än "Oklart läge"; den används då.
+    Tom beslutsrad faller tillbaka på källans sammanfattning.
     """
     from core.briefs import current_brief
 
-    parts = []
-    summary = (opportunity.summary or "").strip()
-    # Förarbeskedet när det hunnit skrivas: samma uppgifter, i förarens ord.
+    lines = tip_lines.lines_for(opportunity)
+    decision = lines["decision"]
     brief = current_brief(opportunity)
-    shown = brief or summary[:140]
-    if shown:
-        parts.append(shown)
-    if opportunity.is_last_departure:
-        parts.append("Sista avgången — inget kommer efter.")
-    elif (
-        getattr(opportunity, "next_departure_at", None) is not None
-        and "nästa avgång" not in (brief or summary).lower()
-        and not (brief and opportunity.next_departure_at.astimezone(ZoneInfo("Europe/Stockholm")).strftime("%H:%M") in brief)
-    ):
-        # Järnvägens summary skriver redan ut nästa avgång i sin egen text
-        # ("Nästa avgång går 06:13."). Utan den kontrollen stod samma uppgift
-        # två gånger på låsskärmen, där varje tecken konkurrerar om en
-        # sekunds uppmärksamhet.
-        # Klockslag: en push läses minuter eller timmar efter att den skickades,
-        # och "om 20 min" är då fel. Utan absolut tid säger notisen inget.
-        clock = opportunity.next_departure_at.astimezone(ZoneInfo("Europe/Stockholm")).strftime("%H:%M")
-        parts.append(f"Nästa avgång {clock}.")
-    return " ".join(parts).strip()
+    if brief:
+        text = brief
+    elif decision:
+        # En ensam tid ("23:00") säger inget på en låsskärm.
+        text = f"Kl {decision}" if decision[0].isdigit() else decision
+        text = text if text.endswith(".") else f"{text}."
+    else:
+        text = (opportunity.summary or "").strip()[:140]
+    if getattr(opportunity, "compensation_eligible", False):
+        if text and text[-1] not in ".!?":
+            text += "."
+        text = f"{text} Taxi betalas.".strip()
+    return text
 
 
 def snapshot_of(opportunity) -> dict:

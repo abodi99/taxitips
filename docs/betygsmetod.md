@@ -43,6 +43,12 @@ Två hårda regler:
 2. **Omständigheter räknas inte** när resenären har ett alternativ inom 10 min,
    ersättningstrafik är insatt, eller läget är under 25 (inget att förstärka).
 
+Ett **försenat** (inte inställt) tåg är aldrig strandsatt, hur sent det än är: tåget
+kommer. Dess nivå blir därför högst Medel, och Stark betyder alltid "inget alternativ"
+och är alltid notisvärd. (Före 2026-11-10 räknades en timmes försening som strandsatt;
+405 Starka förseningar i veckan lovade på kortet mer än notisen höll.) Poängen är
+oförändrad.
+
 Flyg och färja är aldrig strandsatta i den här meningen (de som landar har ofta en
 plan) och blir därför högst Medel.
 
@@ -81,7 +87,7 @@ medan tipset lever.
 | Inställt, nästa resa ≥ 60 min | 68 | ja | `train.line_paused.long_gap` |
 | Sista avgången | 80 | ja | `train.line_paused.last_departure` |
 | Inställt, okänt när nästa går | 50, låg säkerhet → högst Medel | ja | `train.line_paused.unknown` |
-| Försenat 30–59 / ≥ 60 min | 40 / 55 | nej / ja | `train.line_delayed` |
+| Försenat 30–59 / ≥ 60 min | 40 / 55 | nej (aldrig, hur sent det än är) | `train.line_delayed` |
 
 Nästa resa frågas i första hand från reseplaneraren (mot samma slutstation), annars
 stationens nästa tåg. Föraren ser bara resan, aldrig vilken tjänst som svarade.
