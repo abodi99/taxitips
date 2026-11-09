@@ -37,7 +37,7 @@ void main() {
     expect(find.textContaining(' kr'), findsNothing);
   });
 
-  testWidgets('tomma fält ger ett tydligt fel, Glömt lösenord kräver e-post', (
+  testWidgets('tomma fält ger ett tydligt fel; glömt lösenord går via BankID', (
     tester,
   ) async {
     await pump(tester);
@@ -47,9 +47,9 @@ void main() {
     await tester.pump();
     expect(find.text('Skriv din e-post och ditt lösenord.'), findsOneWidget);
 
-    await tester.tap(find.text('Glömt lösenord?'));
-    await tester.pump();
-    expect(find.textContaining('Skriv din e-post först'), findsOneWidget);
+    // EN knapp (BankID). Återställning via mejl finns inte längre.
+    expect(find.text('Glömt lösenord?'), findsOneWidget);
+    expect(find.textContaining('Skriv din e-post först'), findsNothing);
   });
 
   testWidgets('lösenordet kan visas och döljas', (tester) async {

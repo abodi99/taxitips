@@ -203,13 +203,13 @@ class SignupScreenState extends State<SignupScreen> {
 
   String? _validate() {
     if (_company.text.trim().isEmpty) {
-      return 'Skriv namnet på företaget du kör för.';
+      return 'Skriv företagets namn.';
     }
     if (!phoneLooksValid(_phone.text)) {
-      return 'Skriv ett svenskt mobilnummer, till exempel 070-123 45 67.';
+      return 'Fel mobilnummer. Exempel: 070 123 45 67';
     }
-    if (!_email.text.contains('@')) return 'Skriv en giltig e-postadress.';
-    if (_password.text.length < 8) return 'Lösenordet behöver minst 8 tecken.';
+    if (!_email.text.contains('@')) return 'Fel e-post.';
+    if (_password.text.length < 8) return 'Lösenordet: minst 8 tecken.';
     return null;
   }
 
@@ -233,33 +233,6 @@ class SignupScreenState extends State<SignupScreen> {
     ),
   );
 
-  Widget _note(String text, {IconData icon = Icons.verified_user_outlined}) =>
-      Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: TbColors.foam,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: TbColors.line),
-        ),
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Icon(icon, color: TbColors.ink, size: 20),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Text(
-                text,
-                style: const TextStyle(
-                  color: TbColors.ink,
-                  fontSize: 14,
-                  height: 1.4,
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-
   ButtonStyle get _primary => FilledButton.styleFrom(
     backgroundColor: TbColors.ink,
     foregroundColor: TbColors.foam,
@@ -267,14 +240,35 @@ class SignupScreenState extends State<SignupScreen> {
     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
   );
 
+  /// Tre korta löften med bock. Lätta att läsa även med lite svenska.
+  Widget _promises() => Column(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      for (final line in kBankIdPromises)
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Row(
+            children: [
+              const Icon(Icons.check_circle, color: TbColors.taxi, size: 24),
+              const SizedBox(width: 12),
+              Text(
+                line,
+                style: const TextStyle(
+                  color: TbColors.ink,
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ),
+        ),
+    ],
+  );
+
   List<Widget> _bankIdStep() => [
-    _title('Starta en veckas gratis prov'),
-    const SizedBox(height: 8),
-    Text(
-      'En bil i ett län i 7 dagar. Inget kort behövs. Under provet visas tåg och buss.',
-      textAlign: TextAlign.center,
-      style: TextStyle(color: Colors.grey.shade600, fontSize: 14, height: 1.4),
-    ),
+    _title('Prova gratis i 7 dagar'),
+    const SizedBox(height: 20),
+    _promises(),
     const SizedBox(height: 24),
     FilledButton.icon(
       onPressed: _bankId,
@@ -282,19 +276,8 @@ class SignupScreenState extends State<SignupScreen> {
       icon: const Icon(Icons.fingerprint),
       label: const Text(
         'Fortsätt med BankID',
-        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+        style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
       ),
-    ),
-    const SizedBox(height: 16),
-    _note(kBankIdNoCommitment),
-    const SizedBox(height: 16),
-    const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _Step(n: 1, text: 'Legitimera dig med BankID'),
-        _Step(n: 2, text: 'Skriv e-post, lösenord, mobil och företag'),
-        _Step(n: 3, text: 'Välj län – provet startar direkt'),
-      ],
     ),
   ];
 
@@ -304,57 +287,41 @@ class SignupScreenState extends State<SignupScreen> {
         : identity.name;
     return [
       _title(hello.isEmpty ? 'Nästan klart' : 'Hej $hello!'),
-      const SizedBox(height: 8),
-      Text(
-        'Du är legitimerad. Nu behöver vi bara det här för att skapa kontot.',
-        textAlign: TextAlign.center,
-        style: TextStyle(
-          color: Colors.grey.shade600,
-          fontSize: 14,
-          height: 1.4,
-        ),
-      ),
       const SizedBox(height: 24),
       TextField(
         controller: _company,
         textCapitalization: TextCapitalization.words,
-        decoration: _field(
-          'Företaget du kör för',
-          Icons.business_outlined,
-          helper: 'Namnet räcker. Organisationsnummer behövs inte nu.',
-        ),
+        decoration: _field('Företag', Icons.business_outlined),
       ),
       const SizedBox(height: 16),
       TextField(
         controller: _phone,
         keyboardType: TextInputType.phone,
-        decoration: _field(
-          'Mobilnummer',
-          Icons.phone_outlined,
-          helper: 'Vi ringer och hjälper dig i gång under provet.',
-        ),
+        decoration: _field('Mobil', Icons.phone_outlined),
       ),
       const SizedBox(height: 16),
       TextField(
         controller: _email,
         keyboardType: TextInputType.emailAddress,
         autocorrect: false,
-        decoration: _field('E-postadress', Icons.email_outlined),
+        decoration: _field('E-post', Icons.email_outlined),
       ),
       const SizedBox(height: 16),
       TextField(
         controller: _password,
         obscureText: _hidePassword,
-        decoration: _field('Lösenord (minst 8 tecken)', Icons.lock_outline)
-            .copyWith(
+        decoration:
+            _field(
+              'Lösenord',
+              Icons.lock_outline,
+              helper: 'Minst 8 tecken',
+            ).copyWith(
               suffixIcon: PasswordVisibilityButton(
                 hidden: _hidePassword,
                 onToggle: () => setState(() => _hidePassword = !_hidePassword),
               ),
             ),
       ),
-      const SizedBox(height: 16),
-      _note(kBankIdLaterDetails, icon: Icons.info_outline),
       if (_error != null) ...[const SizedBox(height: 16), _errorBox(_error!)],
       const SizedBox(height: 24),
       FilledButton(
@@ -370,8 +337,8 @@ class SignupScreenState extends State<SignupScreen> {
                 ),
               )
             : const Text(
-                'Skapa konto och starta provet',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                'Starta provet',
+                style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
               ),
       ),
     ];
@@ -471,7 +438,7 @@ class SignupScreenState extends State<SignupScreen> {
                               borderRadius: BorderRadius.circular(12),
                             ),
                           ),
-                          child: const Text('Jag har redan ett konto'),
+                          child: const Text('Logga in'),
                         ),
                       ],
                     ),
@@ -481,46 +448,6 @@ class SignupScreenState extends State<SignupScreen> {
             ),
           ),
         ),
-      ),
-    );
-  }
-}
-
-class _Step extends StatelessWidget {
-  const _Step({required this.n, required this.text});
-
-  final int n;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 3),
-      child: Row(
-        children: [
-          CircleAvatar(
-            radius: 11,
-            backgroundColor: TbColors.taxi,
-            child: Text(
-              '$n',
-              style: const TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w800,
-                color: TbColors.ink,
-              ),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Text(
-              text,
-              style: const TextStyle(
-                fontWeight: FontWeight.w600,
-                color: TbColors.ink,
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }

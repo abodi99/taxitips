@@ -452,6 +452,23 @@ def _create_bankid_company(*, user_id, email, name, phone, identity, key, eligib
     return company, trial
 
 
+def _account_email(user_id: str, company_id) -> str:
+    return accounts.email_for(user_id) or (
+        Company.objects.filter(id=company_id).values_list("email", flat=True).first() if company_id else ""
+    ) or ""
+
+
+def bankid_account_email(pnr_key: str) -> str | None:
+    """Inloggningen för kontot som hör till personnumret, eller None om det inte finns."""
+    from fleet.models import BankIdIdentity
+
+    row = BankIdIdentity.objects.filter(pnr_key=pnr_key).first()
+    if row is None:
+        return None
+    member = CompanyMember.objects.filter(user_id=row.user_id, status="active").first()
+    return _account_email(str(row.user_id), member.company_id if member else None)
+
+
 def recover_with_bankid(*, ticket: str, new_password: str = "", new_email: str = "", now=None) -> dict:
     """
     Glömt lösenord eller bytt e-post: legitimering med BankID räcker. Gäller
@@ -488,9 +505,7 @@ def recover_with_bankid(*, ticket: str, new_password: str = "", new_email: str =
         user_id = str(row.user_id)
         member = CompanyMember.objects.filter(user_id=user_id, status="active").first()
         company_id = member.company_id if member else None
-        old_email = accounts.email_for(user_id) or (
-            Company.objects.filter(id=company_id).values_list("email", flat=True).first() if company_id else ""
-        ) or ""
+        old_email = _account_email(user_id, company_id)
         try:
             auth_admin.update_user(user_id, password=new_password, email=new_email)
         except auth_admin.EmailTaken as exc:
