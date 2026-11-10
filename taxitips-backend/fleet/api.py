@@ -41,6 +41,7 @@ from fleet import (
     audit,
     commerce,
     company_details,
+    continue_link,
     county_changes,
     device_swaps,
     discounts,
@@ -113,6 +114,7 @@ _DOMAIN_ERRORS = (
     TipReportError,
     PermissionDenied,
     bankid.BankIdError,
+    continue_link.ContinueLinkError,
 )
 
 
@@ -2274,3 +2276,48 @@ def change_contracting_party(request):
         "ok": True, "reviewId": str(review.id), "status": review.status,
         "message": review.customer_message,
     })
+
+
+# ---------------------------------------------------------------------------
+# "Fortsätt här": betalning i två tryck från mejlet (fleet/continue_link.py)
+# ---------------------------------------------------------------------------
+#
+# Utan inloggning. Biljetten ligger i kroppen (aldrig i adressen, så att den
+# inte hamnar i åtkomstloggarna) och ger bara rätt att läsa erbjudandet, ange
+# organisationsnumret en gång och starta kassan för provets platser. Inget
+# av de tre svaren eller anropen loggar biljetten.
+
+
+def _continue_company(request, limit) -> tuple[str, dict]:
+    ratelimit.enforce(limit, _bankid_ip(request))
+    body = _body(request)
+    return continue_link.read(body.get("token")), body
+
+
+@csrf_exempt
+@require_POST
+@handle
+def continue_offer(request):
+    """POST /api/fleet/continue/offer {token} -> vad som fortsätter och vad det kostar."""
+    company_id, _body_ = _continue_company(request, ratelimit.CONTINUE_OFFER)
+    return _json(request, continue_link.offer(company_id))
+
+
+@csrf_exempt
+@require_POST
+@handle
+def continue_org_number(request):
+    """POST /api/fleet/continue/org-number {token, orgNumber, legalName?} -- en gång, när numret saknas."""
+    company_id, body = _continue_company(request, ratelimit.CONTINUE_ORG)
+    ratelimit.enforce(ratelimit.REGISTRY_LOOKUP, _bankid_ip(request))
+    result = continue_link.set_org_number(company_id, body)
+    return _json(request, {"ok": True, **result})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def continue_checkout(request):
+    """POST /api/fleet/continue/checkout {token, accepted: true} -> {paymentUrl, ...}"""
+    company_id, body = _continue_company(request, ratelimit.CONTINUE_CHECKOUT)
+    return _json(request, continue_link.checkout(company_id, body))

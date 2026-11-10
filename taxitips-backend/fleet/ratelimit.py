@@ -77,6 +77,13 @@ CLIENT_LOG_ALL = Limit("client_log_all", limit=3000, window_seconds=3600)
 WEB_LEAD = Limit("web_lead", limit=8, window_seconds=3600)
 WEB_LEAD_ALL = Limit("web_lead_all", limit=200, window_seconds=3600)
 
+# "Fortsätt här"-länken (fleet/continue_link.py): ingen inloggning, så bromsen
+# är per nät. Länken är signerad och går inte att gissa; gränserna finns för
+# att inte låta sidan bli en gratis väg mot Bolagsverket och Stripe.
+CONTINUE_OFFER = Limit("continue_offer", limit=120, window_seconds=3600)
+CONTINUE_ORG = Limit("continue_org", limit=15, window_seconds=3600)
+CONTINUE_CHECKOUT = Limit("continue_checkout", limit=20, window_seconds=3600)
+
 
 def _bucket(limit: Limit, identity: str) -> str:
     digest = hashlib.sha256(f"{limit.key}:{identity}".encode()).hexdigest()[:32]

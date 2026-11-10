@@ -121,7 +121,8 @@ class TrialMailTests(TrialFixture):
     def test_the_reminder_has_the_price_the_portal_will_show_and_a_link(self):
         company, trial = self.trial_company()
         row = notifications.trial_ending(company.id, "agare@provtaxi.test", trial)
-        self.assertIn("https://taxitips.se/portal#fortsatt", row.body)
+        self.assertIn("https://taxitips.se/fortsatt#t=", row.body)
+        self.assertNotIn("portal#fortsatt", row.body)
         self.assertIn("ABC123, DEF456", row.body)
         # Två bilar à 799 kr, exklusive moms -- samma motor som portalens offert.
         self.assertIn("1\xa0598,00 kr i månaden exkl. moms", row.body)
@@ -147,7 +148,8 @@ class TrialMailTests(TrialFixture):
         with locmem():
             call_command("fleet_tick", stdout=StringIO())
         row = OutboxMessage.objects.get(category="trial_ended")
-        self.assertIn("#fortsatt", row.body)
+        self.assertIn("https://taxitips.se/fortsatt#t=", row.body)
+        self.assertNotIn("portal#fortsatt", row.body)
         self.assertEqual(row.to_address, company.email)
 
 

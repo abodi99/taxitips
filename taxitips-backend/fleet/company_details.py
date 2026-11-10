@@ -193,6 +193,18 @@ def set_org_number(principal: roles.Principal, body: dict) -> dict:
     )
 
 
+def set_org_number_for_link(company_id, body: dict) -> dict:
+    """
+    Samma sak som `set_org_number`, men för "Fortsätt här"-länken i mejlet
+    (fleet/continue_link.py): där finns ingen inloggad användare, bara ett
+    signerat bevis för bolaget. Alla kontroller i `add_org_number` gäller
+    oförändrade -- bara en gång, bara när numret saknas -- och ett nummer som
+    redan finns kan fortfarande bara bytas via granskningen. Granskningsraden
+    får `actor_kind="customer"` utan användar-id.
+    """
+    return add_org_number(company_id, body, actor_user_id=None, actor_kind="customer")
+
+
 def add_org_number(company_id, body: dict, *, actor_user_id, actor_kind: str = "customer") -> dict:
     """
     Sätter organisationsnumret första gången, med alla kontroller (Bolagsverket,

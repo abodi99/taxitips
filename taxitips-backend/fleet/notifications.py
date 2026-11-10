@@ -33,6 +33,7 @@ from datetime import timedelta
 from django.conf import settings
 from django.utils import timezone
 
+from fleet import continue_link
 from fleet.models import OutboxMessage
 
 log = logging.getLogger(__name__)
@@ -263,11 +264,45 @@ def trial_started(company_id, to_address: str, trial) -> OutboxMessage | None:
     )
 
 
+def _continue_sms(company_id, trial, stage: str, text: str, link: str) -> bool:
+    """
+    Samma länk som mejlet som SMS, för den som har ett svenskt mobilnummer
+    på profilen. Avstängt utan 46elks-nycklar (fleet/sms.py). Cachenyckeln
+    (bolag + prov + steg) hindrar att en omkörd fleet_tick eller ett nytt
+    försök skickar samma SMS två gånger; misslyckas utskicket släpps nyckeln
+    så att nästa körning får försöka igen. SMS-fel fäller aldrig mejlet.
+    """
+    from django.core.cache import cache
+
+    from fleet import signup_checks, sms
+    from fleet.models import CompanyProfile
+
+    try:
+        if not sms.configured():
+            return False
+        profile = CompanyProfile.objects.filter(company_id=company_id).first()
+        phone = signup_checks.normalize_phone(getattr(profile, "contact_phone", ""))
+        if not phone:
+            return False
+        key = f"fleet:sms:{dedupe_key('continue_sms', company_id, trial.id, stage)}"
+        if not cache.add(key, 1, 60 * 24 * 3600):
+            return False
+        if sms.send(phone, f"{text} {link}"):
+            return True
+        cache.delete(key)
+    except Exception:
+        log.exception("fleet.notifications: SMS-påminnelsen fallerade")
+    return False
+
+
 def trial_ending(company_id, to_address: str, trial, *, stage: str = "3d") -> OutboxMessage | None:
     """
     Påminnelse före provslut: `3d` / `1d`, samt `card_missing*` när kort saknas.
     """
     offer = trial_offer(company_id, trial)
+    # En personlig länk som går rakt till betalsidan utan inloggning
+    # (fleet/continue_link.py). Biljetten ligger i fragmentet efter #.
+    link = continue_link.url(company_id)
     # Svensk tid: ett prov som slutar 00:30 svensk tid slutar inte "i går" i UTC.
     ends = timezone.localtime(trial.ends_at)
     last_day = stage.endswith("1d")
@@ -288,7 +323,7 @@ def trial_ending(company_id, to_address: str, trial, *, stage: str = "3d") -> Ou
             + "Ni har ännu inte sparat kort för auto-förnyelse.\n\n"
             + _TRIAL_SCOPE + "\n"
             + _offer_lines(offer)
-            + f"\nBekräfta platserna och spara kort här: {portal_url('fortsatt')}\n\n"
+            + f"\nFortsätt här (ingen inloggning behövs): {link}\n\n"
             "Utan sparat kort stängs åtkomsten när provet tar slut -- utan debitering. "
             "Med kort dras första månadsbeloppet automatiskt den dagen.\n"
             + _SIGNATURE
@@ -299,7 +334,7 @@ def trial_ending(company_id, to_address: str, trial, *, stage: str = "3d") -> Ou
             "Hej!\n\n"
             f"Provperioden slutar {when}.\n\n"
             + _offer_lines(offer)
-            + f"\nBekräfta platserna och spara kort: {portal_url('fortsatt')}\n\n"
+            + f"\nFortsätt här (ingen inloggning behövs): {link}\n\n"
             "Har ni redan sparat kort dras första betalningen automatiskt i morgon. "
             "Utan kort stängs åtkomsten utan debitering.\n"
             + _SIGNATURE
@@ -311,29 +346,45 @@ def trial_ending(company_id, to_address: str, trial, *, stage: str = "3d") -> Ou
             f"Provperioden slutar {when}.\n\n"
             + _TRIAL_SCOPE + "\n"
             + _offer_lines(offer)
-            + f"\nBekräfta platserna och spara kort: {portal_url('fortsatt')}\n\n"
+            + f"\nFortsätt här (ingen inloggning behövs): {link}\n\n"
             "Med sparat kort fortsätter abonnemanget automatiskt. "
             "Utan kort stängs åtkomsten utan debitering.\n"
             + _SIGNATURE
         )
-    return queue(
+    # Mejlets dubblettnyckel är det hållbara skyddet mot dubbla SMS: cachen
+    # kan vara processlokal, och fleet_tick körs varje timme.
+    fresh = not OutboxMessage.objects.filter(
+        dedupe_key=dedupe_key("trial_ending", company_id, trial.id, stage)
+    ).exists()
+    row = queue(
         category="trial_ending", company_id=company_id, to_address=to_address,
         subject=subject,
         body=body,
         payload={"stage": stage, "offer": offer or {}},
         key_parts=(company_id, trial.id, stage),
     )
+    # Bara sista dygnet för den som inte sparat kort: med sparat kort ("1d")
+    # fortsätter abonnemanget av sig självt, och "Fortsätt här" vore missvisande.
+    if fresh and stage == "card_missing_1d":
+        _continue_sms(company_id, trial, "1d", "Taxi Tips: Provet slutar i morgon. Fortsätt här:", link)
+    return row
 
 
 def trial_ended(company_id, to_address: str, trial) -> OutboxMessage | None:
     """Provet löpte ut utan kort/commit. Dörren står öppen: samma länk, och priset."""
     offer = trial_offer(company_id, trial)
+    link = continue_link.url(company_id)
     price = (
         f"Att fortsätta med {_offer_items(offer)} kostar {_money(offer['monthly_ore'])} "
         f"i månaden exkl. moms ({_money(offer['monthly_total_ore'])} inkl. moms). "
         "Ni ser beloppet igen innan ni godkänner.\n\n"
         if offer else ""
     )
+    fresh = not OutboxMessage.objects.filter(
+        dedupe_key=dedupe_key("trial_ended", company_id, trial.id)
+    ).exists()
+    if fresh:
+        _continue_sms(company_id, trial, "ended", "Taxi Tips: Provet är slut. Fortsätt här:", link)
     return queue(
         category="trial_ended", company_id=company_id, to_address=to_address,
         subject="Provperioden är slut",
@@ -344,7 +395,7 @@ def trial_ended(company_id, to_address: str, trial) -> OutboxMessage | None:
             "kundportalen. Med abonnemang får förarna också flyg, färjor, evenemang "
             "och trafikolyckor -- inte bara tåg och buss.\n\n"
             + price
-            + f"Fortsätt när ni vill: {portal_url('fortsatt')}\n"
+            + f"Fortsätt här (ingen inloggning behövs): {link}\n"
             + _SIGNATURE
         ),
         payload={"offer": offer or {}},
