@@ -131,7 +131,7 @@ def _assign(*, license: License, user_id, email: str, actor_user_id, now, via: s
 def assign_to_self(*, license: License, user_id, email: str = "", actor_user_id=None, now=None) -> License:
     """Registrera medlemskapet på sitt eget konto."""
     if not user_id:
-        raise MembershipError("login_required", "Logga in för att registrera medlemskapet.", status=401)
+        raise MembershipError("login_required", "Logga in för att registrera platsen.", status=401)
     return _assign(license=license, user_id=user_id, email=email, actor_user_id=actor_user_id, now=now, via="self")
 
 
@@ -231,7 +231,7 @@ def resend_invite(license: License, *, actor_user_id=None, now=None):
             "nothing_to_resend", "Platsen väntar inte på någon inbjudan.", status=409,
         )
     if license.status not in OPEN_STATUSES:
-        raise MembershipError("membership_closed", "Medlemskapet är avslutat.", status=409)
+        raise MembershipError("membership_closed", "Platsen är avslutad.", status=409)
     return send_invite(license, email=license.assignee_email, actor_user_id=actor_user_id, now=now)
 
 
@@ -395,25 +395,18 @@ def _known_user_for_email(email: str):
 
 def set_county(*, license: License, base: str, extras: list[str] | None = None, actor_user_id=None, now=None):
     """
-    Välj län för medlemskapet.
-
-    Provet byter direkt och kostnadsfritt (`licensing.set_trial_counties`). En
-    betald licens byter via en beställning, så att fakturan stämmer -- samma
-    regel som förut (fleet/licensing.py), och därför nekas det här.
+    Välj län för platsen. Både provplats och betald plats byter direkt och med
+    verkan nu (huvudvägen sedan 2026-11-10): priset är detsamma oavsett län, så
+    ingen beställning behövs. Gränsen är två byten per kalendermånad.
     """
-    if license.status != License.Status.TRIAL:
-        raise MembershipError(
-            "paid_license",
-            "Medlemskapet är betalt. Län ändras via en beställning.",
-        )
-    if license.base_county:
-        # Ett byte: samma regler som provbilens länbyte (fleet/county_changes.py)
-        # -- inte fler län än platsen har (§7: självregistrerat prov = ett län)
-        # och två byten per kalendermånad (§8). Förut gick den här vägen förbi
-        # båda, och en provplats kunde få alla län gratis.
-        from fleet import county_changes
+    from fleet import county_changes
 
-        result = county_changes.change_trial_counties(
+    is_trial = license.status == License.Status.TRIAL
+    if license.base_county or not is_trial:
+        # Ett byte: samma regler för alla platser (fleet/county_changes.py) --
+        # inte fler län än platsen har (§7: självregistrerat prov = ett län)
+        # och två byten per kalendermånad (§8).
+        result = county_changes.change_counties(
             license, base=base, extras=extras, actor_user_id=actor_user_id, now=now,
         )
         base, extra_codes = result["base"], result["extras"]

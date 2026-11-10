@@ -52,12 +52,14 @@ class OwnerManageTests(FleetTestCase):
         self.assertEqual(license.status, License.Status.CANCELED)
         self.assertIsNone(sessions.active_session_for_device(self.data["device"].id))
 
-    def test_a_paid_car_is_never_changed_directly(self):
+    def test_a_paid_seat_is_never_removed_directly_but_changes_county_directly(self):
         license = self.data["license"]
         License.objects.filter(id=license.id).update(status=License.Status.ACTIVE)
-        for path in (f"/api/fleet/trial/vehicles/{license.id}/county", f"/api/fleet/trial/vehicles/{license.id}/remove"):
-            with self.subTest(path=path):
-                self.assertEqual(self.post(path, {"base": "12"}).json()["reason"], "paid_license")
+        self.assertEqual(
+            self.post(f"/api/fleet/trial/vehicles/{license.id}/remove", {}).json()["reason"], "paid_license",
+        )
+        changed = self.post(f"/api/fleet/trial/vehicles/{license.id}/county", {"base": "12"})
+        self.assertEqual(changed.json()["base"], "12", changed.content)
 
     def test_another_companys_car_does_not_exist_for_you(self):
         other = self.full_setup(county="14", plate="ANNAN1")

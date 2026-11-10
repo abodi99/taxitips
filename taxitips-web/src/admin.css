@@ -1230,7 +1230,7 @@ code.break {
   cursor: pointer;
 }
 .cust-row {
-  grid-template-columns: minmax(0, 1.6fr) auto auto minmax(0, 1.4fr);
+  grid-template-columns: minmax(0, 1.6fr) 5.5rem 5.5rem minmax(0, 1.4fr);
 }
 .cust-row + .cust-row {
   border-top: 1px solid var(--line);
@@ -1343,7 +1343,6 @@ ul.todo li + li {
   .cust-row {
     grid-template-columns: minmax(0, 1fr) auto;
   }
-  .cust-steps,
   .cust-next {
     grid-column: 1 / -1;
   }
@@ -3505,4 +3504,251 @@ button.dash-stat:hover {
 }
 .wa-steps li + li {
   margin-top: 0.4rem;
+}
+
+
+/* --- Grupperad meny: Drift och Mer fäller ut sina vyer ----------------- */
+
+.side-more + .side-more {
+  margin-top: 0.1rem;
+  border-top: 0;
+  padding-top: 0;
+}
+.side-more-toggle .st-dot {
+  margin-left: auto;
+  margin-right: 0.4rem;
+}
+
+/* --- Hem: "Att göra" -------------------------------------------------- */
+
+.todo-cta {
+  font-weight: 700;
+  font-size: 0.85rem;
+  white-space: nowrap;
+  padding: 0.35rem 0.8rem;
+  border-radius: var(--radius-pill);
+  background: var(--midnatt);
+  color: var(--vit);
+}
+.todo-row:hover .todo-cta {
+  background: var(--midnatt-mjuk);
+}
+.todo-row.is-danger .todo-cta {
+  background: var(--danger);
+}
+.attn-kpis .status-inline {
+  margin-bottom: 0.75rem;
+}
+
+/* --- Kundlistan --------------------------------------------------------- */
+
+.cust-hints {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  font-size: 0.8rem;
+}
+.id-chip {
+  display: inline-block;
+  padding: 0.05rem 0.5rem;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line-strong);
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+.cust-seats {
+  white-space: nowrap;
+  font-size: 0.9rem;
+}
+.filter-more {
+  position: relative;
+}
+.filter-more > summary {
+  list-style: none;
+  cursor: pointer;
+}
+.filter-more > summary::-webkit-details-marker {
+  display: none;
+}
+.filter-more-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.5rem;
+}
+
+/* --- Kundsidan: tidslinje, nästa steg, delar ---------------------------- */
+
+.kund-facts {
+  margin: 0.2rem 0 0;
+  font-weight: 600;
+}
+.tl {
+  list-style: none;
+  display: flex;
+  margin: 0 0 1rem;
+  padding: 0.9rem 0.5rem 0.8rem;
+  background: var(--vit);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+.tl-step {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.2rem;
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+.tl-step::before {
+  content: "";
+  position: absolute;
+  top: 0.45rem;
+  right: 50%;
+  width: 100%;
+  height: 2px;
+  background: var(--line-strong);
+}
+.tl-step:first-child::before {
+  display: none;
+}
+.tl-step.is-done::before,
+.tl-step.is-current::before {
+  background: var(--ok);
+}
+.tl-dot {
+  position: relative;
+  z-index: 1;
+  width: 0.95rem;
+  height: 0.95rem;
+  border-radius: 50%;
+  background: var(--vit);
+  border: 2px solid var(--line-strong);
+  box-sizing: border-box;
+}
+.tl-step.is-done .tl-dot {
+  background: var(--ok);
+  border-color: var(--ok);
+}
+.tl-step.is-current {
+  color: var(--ink);
+}
+.tl-step.is-current .tl-dot {
+  background: var(--guld);
+  border-color: var(--midnatt);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--guld) 30%, transparent);
+}
+.tl-step.is-ended .tl-dot {
+  background: var(--ljusgra-djup);
+  border-color: var(--skiffer);
+  box-shadow: none;
+}
+.tl-step.is-skipped {
+  opacity: 0.55;
+}
+.tl-step.is-skipped .tl-dot {
+  border-style: dashed;
+}
+.tl-step b {
+  font-weight: 700;
+}
+.tl-note {
+  font-size: 0.8rem;
+  min-height: 1.1em;
+  overflow-wrap: anywhere;
+}
+
+.next-card {
+  margin: 0 0 1rem;
+  padding: 1rem 1.1rem;
+  background: color-mix(in srgb, var(--guld) 14%, var(--vit));
+  border: 1px solid color-mix(in srgb, var(--guld) 45%, var(--line));
+  border-radius: var(--radius);
+}
+.next-card h2 {
+  margin: 0 0 0.35rem;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+.next-text {
+  margin: 0;
+  font-weight: 700;
+  font-size: 1.05rem;
+}
+.next-auto {
+  margin: 0.35rem 0 0;
+  color: var(--ink-soft);
+  font-size: 0.92rem;
+}
+.next-buttons {
+  margin-top: 0.8rem;
+}
+.next-also {
+  list-style: none;
+  margin: 0.8rem 0 0;
+  padding: 0.6rem 0 0;
+  border-top: 1px solid color-mix(in srgb, var(--guld) 35%, var(--line));
+  font-size: 0.9rem;
+}
+.next-also li + li {
+  margin-top: 0.25rem;
+}
+
+.sec > summary {
+  display: flex;
+  align-items: center;
+}
+.sec > summary h2 {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+.sec > summary::after {
+  content: "";
+  margin-left: auto;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-right: 2px solid var(--ink-soft);
+  border-bottom: 2px solid var(--ink-soft);
+  transform: rotate(45deg);
+  transition: transform 0.15s ease;
+}
+.sec[open] > summary::after {
+  transform: rotate(-135deg);
+}
+.sec-body > .card,
+.sec-body > details.card {
+  box-shadow: none;
+}
+
+.org-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  align-items: end;
+}
+
+@media (max-width: 760px) {
+  .cust-row .cust-seats {
+    display: none;
+  }
+  .tl {
+    padding: 0.8rem 0.25rem 0.7rem;
+  }
+  .tl-step {
+    font-size: 0.78rem;
+  }
+  .tl-note {
+    font-size: 0.7rem;
+  }
+  .todo-cta {
+    padding: 0.3rem 0.6rem;
+  }
 }

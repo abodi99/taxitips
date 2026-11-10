@@ -145,11 +145,23 @@ def _new_join_code() -> str:
     raise SalesError("join_code_failed", "Kunde inte skapa en bolagskod. Försök igen.", status=500)
 
 
+def _stored_phone(value) -> str:
+    """
+    Mobilnumret i E.164 när det går att tolka (som vid självregistreringen),
+    annars som det skrevs. Provspärren på telefon (`phone_used_by_other_trial`)
+    jämför just det formatet.
+    """
+    from fleet import signup_checks
+
+    raw = _clean(value, 40)
+    return signup_checks.normalize_phone(raw) or raw
+
+
 @transaction.atomic
 def create_company(
     *,
     name: str,
-    org_number: str,
+    org_number: str = "",
     country: str = "SE",
     legal_name: str = "",
     contact_name: str,
@@ -159,32 +171,39 @@ def create_company(
     billing_email: str = "",
     billing_reference: str = "",
     billing_address: dict | None = None,
-    verification_note: str,
+    verification_note: str = "",
     actor_user_id,
 ) -> Company:
     """
     Lägger upp ett nytt kundföretag.
 
-    `verification_note` är obligatorisk av samma skäl som för säljarinbjudan
-    (§7): den är det enda spåret av HUR säljaren kontrollerade att personen i
-    telefon får företräda bolaget.
+    Organisationsnumret är valfritt (sedan 2026-11-10): säljaren lägger upp en
+    kund med bara namn, kontakt, e-post och telefon, på samma sätt som en
+    BankID-registrering saknar nummer. Det krävs först vid första köpet
+    (`company_details.require_company_details`). Utan nummer finns inget att
+    kontrollera mot Bolagsverket och ingen dubblettkontroll på nummer.
+
+    `verification_note` är obligatorisk NÄR ett organisationsnummer anges, av
+    samma skäl som för säljarinbjudan (§7): den är det enda spåret av HUR
+    säljaren kontrollerade att personen i telefon får företräda bolaget.
     """
     country = (country or "SE").upper()
-    if not orgnr.is_valid(org_number, country):
+    has_org = bool(str(org_number or "").strip())
+    if has_org and not orgnr.is_valid(org_number, country):
         raise SalesError("invalid_org_number", "Organisationsnumret går inte att tolka.")
-    normalized = orgnr.normalize(org_number, country)
+    normalized = orgnr.normalize(org_number, country) if has_org else ""
     # Registret fyller i det säljaren lämnat tomt: namn, juridiskt namn och
     # postadress. Säljaren får lägga upp ett avregistrerat bolag -- det kan
     # finnas skäl -- men admin visar statusen i rött.
     registry = None
-    if country == "SE":
+    if country == "SE" and has_org:
         from fleet import bolagsverket
 
         registry = bolagsverket.try_lookup(normalized)
     name = _clean(name, 200) or (registry.name if registry and registry.found else "")
     if not name:
         raise SalesError("name_required", "Ange företagets namn.")
-    existing = existing_company_for(normalized, country)
+    existing = existing_company_for(normalized, country) if has_org else None
     if existing is not None:
         raise SalesError(
             "company_exists",
@@ -197,14 +216,19 @@ def create_company(
     contact_email = _email(contact_email, "kontaktpersonens e-post", required=True)
     billing_email = _email(billing_email, "fakturamejlen") or contact_email
     note = _clean(verification_note, 1000)
-    if not note:
+    if not note and has_org:
         raise SalesError(
             "verification_note_required",
             "Skriv hur du kontrollerade att kontaktpersonen får företräda bolaget.",
         )
+    if not note:
+        note = (
+            "Upplagd av säljare utan organisationsnummer. Företaget och behörigheten är "
+            "inte kontrollerade. Organisationsnummer anges före första köpet."
+        )
 
     company = Company.objects.create(
-        id=uuid.uuid4(), name=name, email=billing_email, org_number=normalized,
+        id=uuid.uuid4(), name=name, email=billing_email, org_number=normalized or None,
         join_code=_new_join_code(), seats=1,
         # Den gamla statusen i `companies` ger ingen åtkomst för ett företag
         # som har ett abonnemang i den nya modellen -- `inactive` gör att den
@@ -215,10 +239,10 @@ def create_company(
         company_id=company.id, country=country, org_number=normalized,
         legal_name=_clean(legal_name, 200) or name,
         contact_name=contact_name, contact_role=_clean(contact_role, 100),
-        contact_email=contact_email, contact_phone=_clean(contact_phone, 40),
+        contact_email=contact_email, contact_phone=_stored_phone(contact_phone),
         billing_email=billing_email, billing_reference=_clean(billing_reference, 100),
         billing_address=_address(billing_address),
-        verification_status=VerificationStatus.VERIFIED,
+        verification_status=VerificationStatus.VERIFIED if has_org else VerificationStatus.UNVERIFIED,
         verification_note=note,
     )
     if registry is not None:
@@ -332,7 +356,7 @@ def _add_trial_vehicles(trial: Trial, specs: list[orders.VehicleSpec], *, actor_
     if current + len(specs) > trial.vehicle_limit:
         raise SalesError(
             "trial_vehicle_limit",
-            f"Högst {trial.vehicle_limit} medlemskap ({current} finns redan).",
+            f"Högst {trial.vehicle_limit} platser ({current} finns redan).",
         )
     if trial.source == Trial.Source.SELF_SIGNUP and any(
         c != s.base_county for s in specs for c in s.extra_counties
@@ -375,6 +399,35 @@ def _profile_or_error(company: Company) -> CompanyProfile:
     return profile
 
 
+def contact_trial_key(profile: CompanyProfile, *, now=None) -> str:
+    """
+    Provspärrens nyckel för en kund som säljaren lagt upp UTAN organisationsnummer.
+
+    Vid BankID-registrering är nyckeln personen (`bankid.trial_key`). En kund
+    som lagts upp i telefon har ingen legitimerad person, så vi låser på det
+    säljaren faktiskt har: kontaktens e-postadress (gemener). Mobilnumret
+    kontrolleras dessutom mot andra bolags prov (`phone_used_by_other_trial`),
+    som i självregistreringen, så att ett nytt bolagsnamn med samma telefon inte
+    ger ett andra prov. Ett organisationsnummer som anges senare ändrar inte
+    nyckeln -- spärren gäller fortfarande personen.
+    """
+    from fleet import signup_checks
+
+    email = (profile.contact_email or "").strip().lower()
+    if not email:
+        raise SalesError("contact_required", "Ange kontaktpersonens e-post för att starta provet.")
+    phone = signup_checks.normalize_phone(profile.contact_phone)
+    if phone and signup_checks.phone_used_by_other_trial(
+        phone, exclude_company_id=profile.company_id, now=now,
+    ):
+        raise SalesError(
+            "phone_in_use",
+            "Mobilnumret har redan använts för en provperiod i ett annat företag.",
+            status=409,
+        )
+    return f"CONTACT:{email}"
+
+
 @transaction.atomic
 def start_trial(
     company: Company,
@@ -395,15 +448,35 @@ def start_trial(
     """
     now = now or timezone.now()
     specs = _vehicle_specs(vehicles)
+    if any(c != s.base_county for s in specs for c in s.extra_counties):
+        # Extra län säljs inte längre (2026-11-10): varje plats gäller ett län.
+        raise SalesError("extra_counties_not_sold", "Extra län säljs inte längre. Varje plats gäller ett län.")
     trial = trials.active_trial(company.id)
     if trial is None:
-        profile = _profile_or_error(company)
+        profile = CompanyProfile.objects.filter(company_id=company.id).first()
+        if profile is None:
+            raise SalesError("org_number_missing", "Företaget saknar kunduppgifter.")
         planned = int(days) if days not in (None, "") else None
+        trial_key = ""
+        if not profile.org_number:
+            trial_key = contact_trial_key(profile, now=now)
         trial = trials.create_trial(
             company_id=company.id, country=profile.country, org_number=profile.org_number,
             source=Trial.Source.SALES, requires_payment_method=False,
-            planned_days=planned, actor_user_id=actor_user_id, now=now,
+            planned_days=planned, actor_user_id=actor_user_id, trial_key=trial_key, now=now,
         )
+        if len(specs) > trial.vehicle_limit:
+            # Säljaren har själv valt antalet platser i formuläret; gränsen på en
+            # är till för självregistreringen. Loggas som en vanlig gränsändring.
+            wanted = min(len(specs), trials.TRIAL_MANUAL_MAX_VEHICLES)
+            Trial.objects.filter(id=trial.id).update(vehicle_limit=wanted)
+            trial.refresh_from_db()
+            audit.record(
+                "trial_vehicle_limit_set", company_id=company.id, actor_user_id=actor_user_id,
+                actor_kind="sales", subject_type="trial", subject_id=trial.id,
+                detail={"before": trials.SALES_TRIAL_VEHICLE_LIMIT, "after": wanted,
+                        "reason": "Antal platser valt när kunden lades upp"},
+            )
     _add_trial_vehicles(trial, specs, actor_user_id=actor_user_id, now=now)
     orders.get_or_create_subscription(company.id)
     audit.record(
@@ -444,11 +517,11 @@ def create_coupon(
         vehicle_limit = int(vehicle_limit or 3)
         max_redemptions = int(max_redemptions) if max_redemptions not in (None, "") else None
     except (TypeError, ValueError):
-        raise SalesError("invalid_number", "Dagar, bilar och antal inlösen ska vara heltal.")
+        raise SalesError("invalid_number", "Dagar, platser och antal inlösen ska vara heltal.")
     if not 1 <= days <= COUPON_MAX_DAYS:
         raise SalesError("invalid_days", f"Dagar: 1–{COUPON_MAX_DAYS}.")
     if not 1 <= vehicle_limit <= COUPON_MAX_VEHICLES:
-        raise SalesError("invalid_vehicle_limit", f"Bilar: 1–{COUPON_MAX_VEHICLES}.")
+        raise SalesError("invalid_vehicle_limit", f"Platser: 1–{COUPON_MAX_VEHICLES}.")
     if max_redemptions is not None and max_redemptions < 1:
         raise SalesError("invalid_max", "Antal inlösen ska vara minst 1, eller tomt för obegränsat.")
     try:

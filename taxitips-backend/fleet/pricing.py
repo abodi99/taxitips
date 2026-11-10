@@ -5,14 +5,31 @@ Klienten räknar aldrig ut ett belopp. Den visar det den fick, och den order
 kunden godkänner bär exakt de raderna -- annars går en faktura inte att
 förklara i efterhand.
 
-**Reglerna** (prisversion `2026-09-v1`, alla belopp exklusive moms):
+**Reglerna.** Det finns två prislistor. Alla belopp är exklusive moms.
+
+`2026-11-v1` ("Prislista 2026-11") är förvald sedan 2026-11-10:
+
+* 399 kr per plats och månad, oavsett antal. Ingen volymrabatt (tröskeln
+  finns kvar i modellen men båda priserna är lika), ingen introduktion.
+* Ett län ingår per plats. Extra län säljs inte längre
+  (`extra_counties_sold`), men rader som redan har extra län behåller dem och
+  prissätts fortfarande med listans `extra_county_price_ore`.
+* Rabatter ges manuellt (kuponger och företagsrabatt), aldrig automatiskt.
+
+`2026-09-v1` ("Grundprislista 2026") ligger kvar för historiken och för
+abonnemang som pekar på den tills de flyttas (`fleet/price_moves.py`):
 
 * 1--9 köpta billicenser: 799 kr per bil och månad.
 * Minst 10 köpta billicenser: 749 kr för SAMTLIGA köpta licenser, inte bara
   de över gränsen.
-* Extra län: 199 kr per bil, extra län och månad. Rabatteras aldrig.
+* Extra län: 199 kr per bil, extra län och månad. Rabatteras aldrig. Säljs
+  bara på den här listan.
 * Introduktion: 699 kr per bil och månad under företagets första tre
-  sammanhängande betalmånader.
+  sammanhängande betalmånader (avstängd i produktion).
+
+Nya abonnemang, och abonnemang som aldrig betalats (status `none`), följer
+alltid den förvalda listan (`orders.get_or_create_subscription`); en betalande
+kund behåller sin lista tills någon uttryckligen flyttar den.
 
 **"Introduktion och volymrabatt kombineras inte" -- hur det tolkas här.**
 Texten säger att de inte får staplas, inte vilken som vinner. Motorn lägger
@@ -28,7 +45,8 @@ delen av perioden, räknat på sekunder och avrundat till närmaste öre. Belopp
 "nu" är skillnaden mellan det nya och det gamla månadsbeloppet, proportionerat
 -- inte priset på det tillagda ensamt. Det är enda sättet att få 9 -> 10 rätt:
 den tionde bilen gör alla nio billigare, och kunden ska betala mellanskillnaden
-(10 x 749 - 9 x 799 = 299 kr/mån), inte 749 kr.
+(10 x 749 - 9 x 799 = 299 kr/mån), inte 749 kr. (Gäller listor med
+volymsteg; på 2026-11-v1 är nivåerna lika och steget blir noll.)
 
 **Moms.** `vat_rate_bp` på prisversionen, i hundradels procent (2500 = 25 %).
 Det fanns ingen momshantering att återanvända i kodbasen -- bara strängen
@@ -43,6 +61,18 @@ from datetime import date, datetime, timedelta
 
 from fleet.discounts import DiscountSpec
 from fleet.models import PriceVersion, Subscription
+
+# Prislistor där extra län fortfarande säljs. Det finns inget fält för det på
+# PriceVersion (och ingen migration ska behövas för en affärsregel), så regeln
+# bor här: listan före 2026-11 sålde extra län, alla senare gör det inte. En ny
+# lista är alltså "utan extra län" automatiskt. Befintliga extra län på en
+# lista som inte säljer dem prissätts ändå -- vi nekar bara NYA.
+PRICE_VERSIONS_SELLING_EXTRA_COUNTIES = frozenset({"2026-09-v1"})
+
+
+def extra_counties_sold(price: PriceVersion) -> bool:
+    """Får kunden lägga till NYA extra län på den här prislistan?"""
+    return price.id in PRICE_VERSIONS_SELLING_EXTRA_COUNTIES
 
 
 @dataclass(frozen=True)
@@ -226,7 +256,7 @@ def _apply_company_discount(lines: list[LineItem], discount: DiscountSpec | None
         label = "Rabatt (fast belopp)"
     if off <= 0:
         return lines
-    note = discount.description or "Gäller billicenser, inte extra län."
+    note = discount.description or "Gäller platser, inte extra län."
     return [
         *lines,
         LineItem(
@@ -280,7 +310,7 @@ def monthly_quote(
                 amount_ore=price.extra_county_price_ore * extra_counties,
                 # Uttryckligt: länstillägg rabatteras inte, varken av volym
                 # eller av introduktionen.
-                note="Per bil och extra län. Omfattas inte av volymrabatt eller introduktionspris.",
+                note="Per plats och extra län. Omfattas inte av volymrabatt eller introduktionspris.",
             )
         )
 
@@ -300,10 +330,10 @@ def monthly_quote(
 
 def _license_label(basis: str, price: PriceVersion) -> str:
     if basis == "intro":
-        return "Billicenser (introduktionspris)"
+        return "Platser (introduktionspris)"
     if basis == "volume":
-        return f"Billicenser (volympris från {price.volume_threshold} bilar)"
-    return "Billicenser"
+        return f"Platser (volympris från {price.volume_threshold} platser)"
+    return "Platser"
 
 
 def _license_note(basis: str, price: PriceVersion, licenses: int) -> str:
@@ -313,8 +343,8 @@ def _license_note(basis: str, price: PriceVersion, licenses: int) -> str:
             "sammanhängande betalmånader. Kombineras inte med volymrabatt."
         )
     if basis == "volume":
-        return f"Gäller samtliga {licenses} köpta licenser, inte bara de över gränsen."
-    return f"Under {price.volume_threshold} bilar. Från {price.volume_threshold} bilar gäller volympriset."
+        return f"Gäller samtliga {licenses} köpta platser, inte bara de över gränsen."
+    return f"Under {price.volume_threshold} platser. Från {price.volume_threshold} platser gäller volympriset."
 
 
 # ---------------------------------------------------------------------------
@@ -496,7 +526,7 @@ def _delta_lines(before: Quote, after: Quote) -> list[LineItem]:
             out.append(
                 LineItem(
                     key="licenses",
-                    label=target.label if target else "Billicenser",
+                    label=target.label if target else "Platser",
                     quantity=target.quantity if target else 0,
                     unit_price_ore=target.unit_price_ore if target else 0,
                     amount_ore=after_amount - before_amount,
@@ -545,7 +575,8 @@ def next_period_end(period_end: datetime) -> datetime:
 
 
 __all__ = [
-    "ChangeQuote", "LineItem", "Quote", "default_price_version", "intro_active",
+    "ChangeQuote", "LineItem", "PRICE_VERSIONS_SELLING_EXTRA_COUNTIES", "Quote",
+    "default_price_version", "extra_counties_sold", "intro_active",
     "intro_available", "intro_window", "monthly_quote", "next_period_end",
     "proration_factor", "prorate", "quote_change", "vat_of",
 ]

@@ -355,7 +355,7 @@ def grant_membership(
     now = now or timezone.now()
     reason = str(reason or "").strip()
     if not reason:
-        raise GrantError("reason_required", "Skriv varför medlemskapet beviljas utan kostnad.")
+        raise GrantError("reason_required", "Skriv varför platsen beviljas utan kostnad.")
     if ends_at and ends_at <= now:
         raise GrantError("invalid_ends_at", "Slutdatumet måste vara i framtiden.")
     if not user_id and not str(email or "").strip():
@@ -367,7 +367,7 @@ def grant_membership(
     already = _existing_open(company_id, user_id=resolved_user, email=resolved_email)
     if already is not None:
         raise GrantError(
-            "grant_exists", "Personen har redan ett beviljat medlemskap i det här bolaget.",
+            "grant_exists", "Personen har redan en beviljad plats i det här bolaget.",
             status=409, detail={"grantId": str(already.id)},
         )
 

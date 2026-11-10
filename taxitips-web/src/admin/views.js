@@ -59,34 +59,7 @@ function kpi(label, value, { alert = false, view = "" } = {}) {
   return `<${tag} class="kpi${alert ? " kpi-alert" : ""}"${attrs}><span>${esc(label)}</span><b>${value}</b></${tag}>`;
 }
 
-/* --- Kundens cykel ----------------------------------------------------
- *
- * Fem steg, i den ordning en kund faktiskt går igenom dem. Samma regler
- * används för listan (vad är nästa steg för varje kund?) och för kundsidan
- * (vilket steg öppnas, vad är klart). En sanning, två vyer.
- */
-
-export const STEPS = [
-  { id: "foretag", title: "Företag", todo: "Kontrollera behörighet" },
-  { id: "bilar", title: "Medlemskap", todo: "Lägg till medlemskap" },
-  { id: "forare", title: "Förare", todo: "Tilldela konton" },
-  { id: "konto", title: "Kundkonto", todo: "Bjud in kundens admin" },
-  { id: "betalning", title: "Betalning", todo: "Ordna betalning" },
-];
-
-/** Vilka steg är klara, räknat ur listraden (GET /api/admin/companies). */
-function doneFromRow(c) {
-  const paying = ["active", "past_due"].includes(c.subscriptionStatus) && c.hadPayment;
-  return {
-    // Utan profil är det en kund från före självregistreringen: inget att kontrollera.
-    foretag: c.verificationStatus === "verified" || !c.verificationStatus,
-    bilar: (c.licenses ?? 0) > 0,
-    // Kontobaserat: en plats räknas som bemannad när den är tilldelad ett konto.
-    forare: (c.membershipsAssigned ?? c.phones ?? 0) > 0,
-    konto: (c.members ?? 0) > 0,
-    betalning: paying,
-  };
-}
+/* --- Kundens läge, ur samma fält som kundsidan visar ------------------- */
 
 /** Samma sak ur kundsidans svar (GET /api/admin/companies/<id>). */
 function doneFromDetail(d) {
@@ -101,9 +74,12 @@ function doneFromDetail(d) {
   };
 }
 
-function firstOpen(done) {
-  return STEPS.find((st) => !done[st.id]) ?? null;
-}
+const DAY_MS = 86400000;
+const daysTo = (iso) => (iso ? Math.ceil((new Date(iso) - Date.now()) / DAY_MS) : null);
+const ENDED_REASONS = ["trial_ended", "canceled", "period_expired"];
+const ORG_MISSING = "Org.nr saknas – behövs vid köp";
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+const inDays = (n) => (n <= 0 ? "idag" : n === 1 ? "imorgon" : `om ${n} dagar`);
 
 const ACCESS_TEXT = {
   trial_not_started: "provet startar när första kontot loggar in i appen",
@@ -118,45 +94,82 @@ const ACCESS_TEXT = {
   unknown_company: "företaget saknas",
 };
 
-/** Status i ett ord, för listan och kundsidans rubrik. */
-function customerStatus(c, { suspended, paused, trial, subscriptionStatus, accessOk }) {
+/** Status i ett ord: samma ord i listan och på kundsidan. */
+function customerStatus({ suspended, paused, trial, subscriptionStatus, cancelAtPeriodEnd, endedReason }) {
   if (suspended) return ["pill-danger", "Avstängd"];
-  if (paused) return ["pill-warn", "Pausad"];
   if (subscriptionStatus === "past_due") return ["pill-danger", "Obetald"];
-  if (c.cancelAtPeriodEnd) return ["pill-warn", "Säger upp"];
-  if (subscriptionStatus === "active") return ["pill-ok", "Betalande"];
-  if (trial?.status === "active") return ["pill-warn", "Prov pågår"];
-  if (trial?.status === "pending") return ["pill-warn", "Prov väntar"];
-  if (subscriptionStatus === "canceled") return ["", "Avslutad"];
-  return accessOk ? ["pill-ok", "Aktiv"] : ["", "Ny"];
+  if (subscriptionStatus === "active") {
+    return cancelAtPeriodEnd ? ["pill-warn", "Uppsagd"] : ["pill-ok", "Betalar"];
+  }
+  if (trial && ["active", "pending"].includes(trial.status)) return ["pill-warn", "Prov"];
+  if (paused) return ["pill-warn", "Pausad"];
+  if (subscriptionStatus === "canceled" || endedReason) return ["", "Slut"];
+  return ["", "Ny"];
 }
+
+/** Listraden (GET /api/admin/companies) till customerStatus. */
+const statusOfRow = (c) => ({
+  suspended: c.suspended,
+  trial: c.trial,
+  subscriptionStatus: c.subscriptionStatus,
+  cancelAtPeriodEnd: c.cancelAtPeriodEnd,
+  endedReason: ENDED_REASONS.includes(c.accessReason),
+});
+
+/** Kundsidans svar (GET /api/admin/companies/<id>) till customerStatus. */
+const statusOfDetail = (d) => ({
+  suspended: !!d.suspension,
+  paused: !!d.pause,
+  trial: d.trial,
+  subscriptionStatus: d.subscription?.status,
+  cancelAtPeriodEnd: d.subscription?.cancelAtPeriodEnd,
+  endedReason: ENDED_REASONS.includes(d.access?.reason) || ["ended", "canceled"].includes(d.trial?.status),
+});
 
 function statusPill([cls, label]) {
   return `<span class="pill ${cls}">${esc(label)}</span>`;
 }
 
-/** Det som faktiskt kräver någon: en rad per kund, med skälet först. */
+/**
+ * Det som faktiskt kräver någon: en rad per kund, med skälet först. `sec` är
+ * delen av kundsidan som öppnas, `go` texten på knappen.
+ */
 function attention(c) {
-  const days = c.trial?.endsAt ? Math.ceil((new Date(c.trial.endsAt) - Date.now()) / 86400000) : null;
+  const days = daysTo(c.trial?.endsAt);
   const healthyPaid = c.subscriptionStatus === "active" && !c.cancelAtPeriodEnd;
   if (c.suspended) return null;
-  if (c.subscriptionStatus === "past_due") return { why: "Betalningen har inte kommit in", step: "betalning", level: 3 };
-  if (c.cancelAtPeriodEnd) return { why: "Säger upp vid periodens slut – ring och fråga varför", step: "betalning", level: 2 };
-  if (c.unpaidOrders) return { why: "Beställning väntar på betalning", step: "betalning", level: 2 };
+  if (c.subscriptionStatus === "past_due") {
+    return { why: "Betalningen har inte gått igenom", sec: "betalning", level: 5, go: "Se betalning" };
+  }
+  if (c.trial?.status === "active" && days !== null && days <= 3 && c.subscriptionStatus !== "active") {
+    return { why: `Provet slutar ${inDays(days)} – inget köp än`, sec: "betalning", level: 4, go: "Skicka betallänk" };
+  }
+  if (c.cancelAtPeriodEnd) {
+    return { why: "Har sagt upp – ring och fråga varför", sec: "betalning", level: 2, go: "Öppna kunden" };
+  }
+  if (c.unpaidOrders) {
+    return { why: "Beställning väntar på betalning", sec: "betalning", level: 3, go: "Se betalning" };
+  }
   // Friska betalande utan öppen faktura: inget brus — Uppföljning tar risklägen.
   if (healthyPaid) return null;
-  if (c.verificationStatus === "unverified") return { why: "Registrerade sig själv – kontrollera behörigheten", step: "foretag", level: 2 };
-  if (c.trial?.status === "active" && days !== null && days <= 3) return { why: `Provet slutar om ${Math.max(days, 0)} dag(ar) – dags att sälja`, step: "betalning", level: 2 };
-  if (c.trial && !(c.membershipsAssigned ?? c.phones) && c.licenses) return { why: "Har medlemskap men inget konto tilldelat", step: "forare", level: 1 };
-  if (c.trial && !c.licenses) return { why: "Har inga medlemskap än", step: "betalning", level: 1 };
+  if (c.verificationStatus === "unverified") {
+    return { why: "Ny registrering – ring och kontrollera", sec: "uppgifter", level: 3, go: "Öppna kunden" };
+  }
+  if (c.trial && !(c.membershipsAssigned ?? c.phones) && c.licenses) {
+    return { why: "Har platser men inget konto tilldelat", sec: "platser", level: 1, go: "Tilldela" };
+  }
+  if (c.trial && !c.licenses) {
+    return { why: "Har inga platser än", sec: "betalning", level: 1, go: "Lägg till plats" };
+  }
   return null;
 }
 
 /* --- Hem ---------------------------------------------------------------- */
 
 /**
- * Att-göra-läge: inkorg (support, tipprapporter, granskningar, CRM) överst
- * med ett klick, sedan kundrader, statusrad och nyckeltal.
+ * Hem: en lista, viktigast först. Varje rad är vem, vad och en knapp. Inkorgen
+ * (support, tipprapporter, granskningar, CRM) och kunderna som behöver något
+ * ligger i samma lista; nyckeltal och datakällor är hopfällda under.
  */
 export function oversikt(d, list = { companies: [] }, inbox = {}) {
   const supportWaiting = inbox.supportWaiting ?? 0;
@@ -167,97 +180,61 @@ export function oversikt(d, list = { companies: [] }, inbox = {}) {
   const statusLine = inbox.statusLine ?? "";
   const subs = d.subscriptions ?? {};
   const companies = list.companies ?? [];
-  const todo = companies
-    .map((c) => ({ c, a: attention(c) }))
-    .filter((x) => x.a)
-    .sort((x, y) => y.a.level - x.a.level);
-  const trialsEnding = companies.filter((c) => {
-    if (c.trial?.status !== "active" || !c.trial.endsAt) return false;
-    const days = Math.ceil((new Date(c.trial.endsAt) - Date.now()) / 86400000);
-    return days >= 0 && days <= 3;
-  }).length;
 
-  const inboxItems = [
+  const goto = (view, filter = "") =>
+    `data-action="goto" data-view="${esc(view)}"${filter ? ` data-filter="${esc(filter)}"` : ""}`;
+  const items = [
     supportWaiting ? {
-      view: "support",
-      label: supportWaiting === 1 ? "1 fråga väntar i supporten" : `${supportWaiting} frågor väntar i supporten`,
-      go: "Öppna support",
-      level: 3,
-      danger: true,
+      level: 6, who: "Support", go: "Öppna support", attrs: goto("support"),
+      what: supportWaiting === 1 ? "1 fråga väntar på svar" : `${supportWaiting} frågor väntar på svar`,
+    } : null,
+    ...companies.map((c) => {
+      const a = attention(c);
+      return a ? {
+        level: a.level, who: c.name, what: a.why, go: a.go,
+        attrs: `data-action="open-company" data-id="${esc(c.id)}" data-tab="${esc(a.sec)}"`,
+      } : null;
+    }),
+    reviewsOpen ? {
+      level: 3, who: "Riskgranskning", go: "Granska", attrs: goto("granskning"),
+      what: reviewsOpen === 1 ? "1 granskning väntar" : `${reviewsOpen} granskningar väntar`,
     } : null,
     tipReportsOpen ? {
-      view: "tipprapporter",
-      label: tipReportsOpen === 1 ? "1 tipprapport att granska" : `${tipReportsOpen} tipprapporter att granska`,
-      go: "Granska",
-      level: 3,
-      danger: true,
-    } : null,
-    reviewsOpen ? {
-      view: "granskning",
-      label: reviewsOpen === 1 ? "1 riskgranskning väntar" : `${reviewsOpen} riskgranskningar väntar`,
-      go: "Öppna",
-      level: 3,
-      danger: true,
+      level: 3, who: "Tipprapporter", go: "Granska", attrs: goto("tipprapporter"),
+      what: tipReportsOpen === 1 ? "1 rapport att granska" : `${tipReportsOpen} rapporter att granska`,
     } : null,
     crmOverdue ? {
-      view: "pipeline",
-      filter: "tasks",
-      label: crmOverdue === 1 ? "1 försenad CRM-uppgift" : `${crmOverdue} försenade CRM-uppgifter`,
-      go: "Öppna uppgifter",
-      level: 2,
+      level: 2, who: "CRM", go: "Öppna uppgifter", attrs: goto("pipeline", "tasks"),
+      what: crmOverdue === 1 ? "1 försenad uppgift" : `${crmOverdue} försenade uppgifter`,
     } : null,
-    trialsEnding ? {
-      view: "kunder",
-      filter: "prov",
-      label: trialsEnding === 1
-        ? "1 prov slutar inom 3 dagar"
-        : `${trialsEnding} prov slutar inom 3 dagar`,
-      go: "Visa prov",
-      level: 2,
-    } : null,
-  ].filter(Boolean);
+  ].filter(Boolean).sort((a, b) => b.level - a.level);
 
   return `
     <div class="page-head">
-      <div><h1>Hem</h1><p class="muted">Det som behöver dig just nu. Ett klick tar dig dit.</p></div>
+      <div><h1>Hem</h1></div>
       <button class="btn btn-primary" data-action="goto" data-view="nykund">+ Ny kund</button>
     </div>
 
-    ${inboxItems.length ? `
-    <div class="card attn-inbox">
-      <h2>Inkorg</h2>
-      <ul class="todo">${inboxItems.map((item) => `
-        <li><button class="todo-row${item.danger ? " is-danger" : ""}" data-action="goto"
-          data-view="${esc(item.view)}"${item.filter ? ` data-filter="${esc(item.filter)}"` : ""}>
-          <span class="todo-dot lvl-${item.level}" aria-hidden="true"></span>
-          <span class="todo-main"><b>${esc(item.label)}</b></span>
-          <span class="todo-go">${esc(item.go)} →</span>
-        </button></li>`).join("")}</ul>
-    </div>` : ""}
-
     <div class="card">
-      <h2>Kunder som behöver åtgärd <span class="muted">(${esc(todo.length)})</span></h2>
-      ${todo.length ? `<ul class="todo">${todo.map(({ c, a }) => `
-        <li><button class="todo-row" data-action="open-company" data-id="${esc(c.id)}" data-tab="${esc(a.step)}">
-          <span class="todo-dot lvl-${a.level}" aria-hidden="true"></span>
-          <span class="todo-main"><b>${esc(c.name)}</b><span class="muted">${esc(a.why)}</span></span>
-          <span class="todo-go">${esc(STEPS.find((st) => st.id === a.step)?.title ?? "")} →</span>
+      <h2>Att göra${items.length ? ` <span class="muted">(${esc(items.length)})</span>` : ""}</h2>
+      ${items.length ? `<ul class="todo">${items.map((item) => `
+        <li><button class="todo-row${item.level >= 5 ? " is-danger" : ""}" ${item.attrs}>
+          <span class="todo-dot lvl-${Math.min(item.level, 3)}" aria-hidden="true"></span>
+          <span class="todo-main"><b>${esc(item.who)}</b><span class="muted">${esc(item.what)}</span></span>
+          <span class="todo-cta">${esc(item.go)}</span>
         </button></li>`).join("")}</ul>`
-        : `<p class="muted">${inboxItems.length
-          ? "Inga kunder kräver åtgärd just nu."
-          : "Inget att göra just nu."}</p>`}
+        : '<p class="muted">Inget att göra just nu.</p>'}
     </div>
-
-    ${statusReport ? `
-    <button type="button" class="status-inline st-${esc(statusReport.overall ?? "ok")}"
-      data-action="goto" data-view="status">
-      <span class="st-dot st-${esc(statusReport.overall ?? "ok")}" aria-hidden="true"></span>
-      <span>Datakällor: ${esc(statusLine || "okänt")}</span>
-      <span class="todo-go">Status →</span>
-    </button>` : ""}
 
     <details class="card attn-kpis">
       <summary>Nyckeltal</summary>
+      ${statusReport ? `
+      <button type="button" class="status-inline st-${esc(statusReport.overall ?? "ok")}"
+        data-action="goto" data-view="status">
+        <span class="st-dot st-${esc(statusReport.overall ?? "ok")}" aria-hidden="true"></span>
+        <span>Datakällor: ${esc(statusLine || "okänt")}</span>
+        <span class="todo-go">Status →</span>
+      </button>` : ""}
       <div class="kpis">
         ${kpi("Kunder", esc(d.companies), { view: "kunder" })}
         ${kpi("Betalande", esc(subs.active ?? 0), { view: "kunder" })}
@@ -271,9 +248,12 @@ export function oversikt(d, list = { companies: [] }, inbox = {}) {
 
 /* --- Kunder ------------------------------------------------------------- */
 
-const FILTERS = [
+/** Synliga direkt, och de som ligger bakom knappen Filter. */
+const FILTERS_MAIN = [
   ["alla", "Alla"],
   ["atgard", "Behöver åtgärd"],
+];
+const FILTERS_MORE = [
   ["prov", "Prov"],
   ["betalande", "Betalande"],
   ["avstangda", "Avstängda"],
@@ -292,9 +272,36 @@ function matchesFilter(c, filter) {
   }
 }
 
+/** "BankID ✓" och/eller org.nr-saknas: en lugn upplysning, inget fel. */
+function identityHints(orgNumber, bankId) {
+  return [
+    bankId ? '<span class="id-chip">BankID ✓</span>' : "",
+    orgNumber ? "" : `<span class="muted">${esc(ORG_MISSING)}</span>`,
+  ].filter(Boolean).join(" ");
+}
+
+/** Nästa händelse i kundens liv, ur listraden. */
+function nextEvent(c) {
+  if (c.suspended) return "";
+  if (c.subscriptionStatus === "past_due") return "betalningen saknas";
+  if (c.subscriptionStatus === "active") {
+    if (!c.periodEnd) return "";
+    return c.cancelAtPeriodEnd ? `åtkomsten slutar ${date(c.periodEnd)}` : `förnyelse ${date(c.periodEnd)}`;
+  }
+  if (c.trial?.status === "active" && c.trial.endsAt) return `provet slutar ${date(c.trial.endsAt)}`;
+  if (c.trial?.status === "pending") return "provet startar vid första inloggningen";
+  return "";
+}
+
 export function kunder(list, query = "", filter = "alla") {
   const all = list.companies ?? [];
   const rows = all.filter((c) => matchesFilter(c, filter));
+  const chip = ([id, label]) => `<button class="chip" role="tab" data-action="kund-filter" data-filter="${id}"
+    aria-selected="${id === filter}">${esc(label)} <span class="muted">${esc(
+      id === "arkiverade" ? (list.archivedCount ?? 0)
+        : filter === "arkiverade" ? "" : all.filter((c) => matchesFilter(c, id)).length,
+    )}</span></button>`;
+  const moreActive = FILTERS_MORE.find(([id]) => id === filter);
   return `
     <div class="page-head">
       <h1>Kunder</h1>
@@ -302,29 +309,28 @@ export function kunder(list, query = "", filter = "alla") {
     </div>
     <form class="toolbar" id="searchForm">
       <label class="visually-hidden" for="q">Sök</label>
-      <input id="q" name="q" value="${esc(query)}" placeholder="Sök namn eller orgnr" />
+      <input id="q" name="q" value="${esc(query)}" placeholder="Sök namn eller org.nr" />
       <button class="btn btn-quiet" type="submit">Sök</button>
     </form>
     <div class="chips" role="tablist" aria-label="Filter">
-      ${FILTERS.map(([id, label]) => `<button class="chip" role="tab" data-action="kund-filter" data-filter="${id}"
-        aria-selected="${id === filter}">${esc(label)} <span class="muted">${esc(
-          id === "arkiverade" ? (list.archivedCount ?? 0)
-            : filter === "arkiverade" ? "" : all.filter((c) => matchesFilter(c, id)).length,
-        )}</span></button>`).join("")}
+      ${FILTERS_MAIN.map(chip).join("")}
+      <details class="filter-more"${moreActive ? " open" : ""}>
+        <summary class="btn btn-quiet btn-small">Filter${moreActive ? `: ${esc(moreActive[1])}` : ""}</summary>
+        <div class="filter-more-items">${FILTERS_MORE.map(chip).join("")}</div>
+      </details>
     </div>
     <div class="card list-card">
       ${rows.length ? rows.map((c) => {
-        const done = doneFromRow(c);
-        const next = firstOpen(done);
-        const a = attention(c);
+        const next = nextEvent(c);
+        const hints = identityHints(c.orgNumber, c.bankId === true);
         return `
-        <button class="cust-row" data-action="open-company" data-id="${esc(c.id)}" data-tab="${esc(a?.step ?? "")}">
+        <button class="cust-row" data-action="open-company" data-id="${esc(c.id)}" data-tab="${esc(attention(c)?.sec ?? "")}">
           <span class="cust-main"><b>${esc(c.name)}</b>
-            <span class="muted mono">${esc(c.orgNumber || "—")}</span></span>
-          <span class="cust-steps" aria-label="Steg klara">${STEPS.map((st) =>
-            `<i class="${done[st.id] ? "on" : ""}" title="${esc(st.title)}"></i>`).join("")}</span>
-          <span class="cust-status">${statusPill(customerStatus(c, c))}</span>
-          <span class="cust-next muted">${esc(a?.why ?? (next ? next.todo : "Klar"))}</span>
+            ${c.orgNumber ? `<span class="muted mono">${esc(c.orgNumber)}</span>` : ""}
+            ${hints ? `<span class="cust-hints">${hints}</span>` : ""}</span>
+          <span class="cust-status">${statusPill(customerStatus(statusOfRow(c)))}</span>
+          <span class="cust-seats muted">${esc(plural(c.licenses ?? 0, "plats", "platser"))}</span>
+          <span class="cust-next muted">${next ? `Nästa: ${esc(next)}` : "—"}</span>
         </button>`;
       }).join("") : '<p class="muted">Inga kunder här.</p>'}
     </div>
@@ -333,199 +339,302 @@ export function kunder(list, query = "", filter = "alla") {
 
 /* --- En kund ------------------------------------------------------------
  *
- * Fyra flikar, samma ord som i portalen och appen: översikt, medlemskap
- * (platser och konton), inloggning till portalen, betalning (sälj och
- * debitering). Manuella undantag ligger under Betalning eller ihopfällda.
+ * Uppifrån: rubrik, en tidslinje (Registrerad → Prov → Betalar → Uppsagd),
+ * ETT kort med nästa steg och knapparna för det, och sedan fyra hopfällda
+ * delar: Platser, Betalning, Uppgifter, Historik. Farliga saker sist.
  */
 
-export const KUND_TABS = [
-  { id: "oversikt", title: "Översikt" },
-  { id: "bilar", title: "Medlemskap" },
-  { id: "konton", title: "Inloggningar" },
-  { id: "betalning", title: "Betalning" },
+const SECTIONS = [
+  ["platser", "Platser"],
+  ["betalning", "Betalning"],
+  ["uppgifter", "Uppgifter"],
+  ["historik", "Historik"],
 ];
 
-/** Sällan använda flikar — under Mer på kundkortet. */
-export const KUND_TABS_MORE = [
-  { id: "foretag", title: "Företag" },
-  { id: "historik", title: "Historik" },
-];
+const SECTION_FOR = {
+  platser: "platser", bilar: "platser", forare: "platser",
+  betalning: "betalning",
+  uppgifter: "uppgifter", foretag: "uppgifter", konton: "uppgifter", konto: "uppgifter",
+  historik: "historik",
+};
 
-const ALL_KUND_TABS = [...KUND_TABS, ...KUND_TABS_MORE];
-
-/** Ett steg i cykeln (Hem, Kunder) till fliken där det görs. */
-const TAB_FOR = { foretag: "foretag", bilar: "bilar", forare: "bilar", konto: "konton", betalning: "betalning" };
-
+/** Ett gammalt flik-, steg- eller delnamn till delen på kundsidan ("" = ingen). */
 export function kundTab(tab) {
-  if (ALL_KUND_TABS.some((t) => t.id === tab)) return tab;
-  return TAB_FOR[tab] ?? "oversikt";
+  return SECTION_FOR[tab] ?? "";
 }
 
 /** Det som är fel eller saknas, i den ordning det brådskar. */
 function issues(d) {
   const s = d.subscription;
-  const t = d.trial;
   const done = doneFromDetail(d);
   const list = [];
-  const add = (level, text, tab, label) => list.push({ level, text, tab, label });
+  const add = (level, text, sec, label, target = "") => list.push({ level, text, sec, label, target });
   if (s?.status === "past_due") add(3, "Betalningen har inte kommit in.", "betalning", "Betalning");
-  const unpaid = (d.orders ?? []).filter((o) => o.status === "pending_payment" && !["canceled", "failed"].includes(o.status)).length;
-  if (unpaid) add(2, `${unpaid} beställning(ar) väntar på betalning.`, "betalning", "Betalning");
-  if (s?.cancelAtPeriodEnd) add(2, `Har sagt upp. Åtkomsten slutar ${date(s.accessUntil)}.`, "betalning", "Betalning");
+  const unpaid = (d.orders ?? []).filter((o) => o.status === "pending_payment").length;
+  if (unpaid) add(2, `${plural(unpaid, "beställning väntar", "beställningar väntar")} på betalning.`, "betalning", "Se beställningar");
   if (d.profile?.verificationStatus && d.profile.verificationStatus !== "verified") {
-    add(2, "Registrerade sig själv – behörigheten är inte kontrollerad.", "foretag", "Kontrollera");
+    add(2, "Behörigheten är inte kontrollerad.", "uppgifter", "Kontrollera");
   }
-  if (t?.status === "active" && t.endsAt) {
-    const days = Math.ceil((new Date(t.endsAt) - Date.now()) / 86400000);
-    if (days <= 3) add(2, `Provet slutar om ${Math.max(days, 0)} dag(ar).`, "betalning", "Betalning");
-  }
-  if (!done.bilar) add(1, "Har inga medlemskap.", "betalning", "Lägg till medlemskap");
-  else if (!done.forare) add(1, "Inget konto är tilldelat något medlemskap.", "bilar", "Tilldela konton");
-  if (!done.konto) add(1, "Ingen kan logga in i kundportalen.", "konton", "Bjud in");
-  if (!d.suspension && !d.pause && d.access && !d.access.ok && !list.some((i) => i.level === 3)) {
-    add(2, `Får inga tips: ${ACCESS_TEXT[d.access.reason] ?? d.access.reason}.`, "betalning", "Betalning");
-  }
+  if (!done.bilar) add(1, "Har inga platser.", "betalning", "Lägg till plats", "salesPanel");
+  else if (!done.forare) add(1, "Inget konto är tilldelat någon plats.", "platser", "Tilldela");
+  if (!done.konto) add(1, "Ingen kan logga in i kundportalen.", "uppgifter", "Bjud in", "ownerCard");
   const reviews = (d.reviews ?? []).filter((r) => r.status === "open").length;
-  if (reviews) add(1, `${reviews} riskgranskning(ar) väntar.`, "", "");
+  if (reviews) add(1, `${plural(reviews, "riskgranskning väntar", "riskgranskningar väntar")}.`, "", "Granskning");
   return list.sort((a, b) => b.level - a.level);
 }
 
-export function kund(d, config = null, tab = "", pending = null, crm = null, loginLink = null) {
+/* --- Tidslinjen ------------------------------------------------------- */
+
+/** "dag X av Y" för ett pågående prov, ur startat/slutdatum. */
+function trialDayText(t) {
+  if (t?.status !== "active" || !t.startedAt || !t.endsAt) return "";
+  const total = Math.max(1, Math.round((new Date(t.endsAt) - new Date(t.startedAt)) / DAY_MS));
+  const day = Math.min(total, Math.max(1, Math.floor((Date.now() - new Date(t.startedAt)) / DAY_MS) + 1));
+  return `dag ${day} av ${total}`;
+}
+
+/** Fyra steg i den ordning en kund går dem. Allt ur kundsidans svar. */
+function timeline(d) {
+  const s = d.subscription;
+  const t = d.trial;
+  const cancelled = !!(s?.cancelAtPeriodEnd || s?.status === "canceled");
+  const paying = !!(s && (["active", "past_due"].includes(s.status)
+    || (s.status === "canceled" && s.hadSuccessfulPayment)));
+  const trialReached = !!(t && t.status !== "canceled") || (t?.status === "canceled" && !!t.startedAt);
+  const trialOpen = !!(t && ["pending", "active"].includes(t.status));
+  const steps = [
+    { id: "reg", label: "Registrerad", reached: true, note: date(d.company.createdAt) },
+    {
+      id: "prov", label: "Prov", reached: trialReached,
+      note: !trialReached ? "" : trialOpen
+        ? (t.status === "pending" ? "väntar på första inloggning" : trialDayText(t))
+        : t.endsAt ? `slutade ${date(t.endsAt)}` : "slut",
+    },
+    {
+      id: "betalar", label: "Betalar", reached: paying,
+      note: !paying ? "" : s.status === "past_due" ? "betalning saknas"
+        : s.periodEnd ? `betalt till ${date(s.periodEnd)}` : "",
+    },
+    {
+      id: "uppsagd", label: "Uppsagd", reached: cancelled,
+      note: !cancelled ? "" : s.status === "canceled"
+        ? `avslutad ${date(s.periodEnd)}`
+        : `slutar ${date(s.accessUntil || s.periodEnd)}`,
+    },
+  ];
+  const last = steps.reduce((acc, st, i) => (st.reached ? i : acc), 0);
+  const endedTrial = last === 1 && !trialOpen;
+  return `
+    <ol class="tl" aria-label="Kundens väg">
+      ${steps.map((st, i) => {
+        const cls = i === last ? (endedTrial ? "is-current is-ended" : "is-current")
+          : st.reached ? "is-done" : i < last ? "is-skipped" : "";
+        return `<li class="tl-step ${cls}"${i === last ? ' aria-current="step"' : ""}>
+          <span class="tl-dot" aria-hidden="true"></span>
+          <b>${esc(st.label)}</b>
+          <span class="tl-note">${esc(st.note || "")}</span>
+        </li>`;
+      }).join("")}
+    </ol>`;
+}
+
+/* --- Nästa steg ------------------------------------------------------- */
+
+/** Dagar före provslut då systemet skickar påminnelse (fleet_tick: 3 och 1). */
+function trialMailDates(t) {
+  if (t?.status !== "active" || !t.endsAt) return [];
+  const end = new Date(t.endsAt).getTime();
+  return [3, 1].map((n) => end - n * DAY_MS).filter((ts) => ts > Date.now()).map((ts) => date(new Date(ts).toISOString()));
+}
+
+/**
+ * Vad som händer härnäst och vad systemet gör självt. Allt räknas ur fälten i
+ * kundsidans svar -- inget påstås som inte går att läsa ur datat.
+ */
+function nextStep(d, config) {
+  const s = d.subscription;
+  const t = d.trial;
+  const sell = !!config?.canSell;
+  const manage = !!config?.canManage;
+  const auto = [];
+  let text = "";
+  const btn = (label, attrs, primary = false) =>
+    `<button class="btn btn-small ${primary ? "btn-primary" : "btn-quiet"}" type="button" ${attrs}>${esc(label)}</button>`;
+  const sec = (label, section, target = "", primary = false) =>
+    btn(label, `data-action="sec-open" data-sec="${section}"${target ? ` data-target="${target}"` : ""}`, primary);
+  const buttons = [];
+
+  const trialOpen = t && ["pending", "active"].includes(t.status);
+  const days = daysTo(t?.endsAt);
+
+  if (d.suspension) {
+    text = "Företaget är avstängt. Förarna får inga tips och ingen kan logga in.";
+    if (manage) buttons.push(btn("Häv avstängningen", `data-action="block-lift" data-block="${esc(d.suspension.id)}"`, true));
+  } else if (s?.status === "past_due") {
+    text = "Betalningen har inte gått igenom.";
+    if (s.graceUntil) {
+      auto.push(`betalningsfrist till ${date(s.graceUntil)}`);
+      if (!s.renewalStopped) auto.push(`förnyelsen stoppas ${date(s.graceUntil)} om betalningen uteblir`);
+    } else {
+      auto.push("ingen betalningsfrist gäller");
+    }
+    if (s.renewalStopped) auto.push("förnyelsen är redan stoppad");
+    if (sell) buttons.push(sec("Skicka betallänk", "betalning", "salesPanel", true));
+    if (manage) buttons.push(btn("Ge 7 dagar till", 'data-action="extend" data-days="7"'));
+  } else if (s?.status === "active" && s.cancelAtPeriodEnd) {
+    text = `Kunden har sagt upp. Åtkomsten slutar ${date(s.accessUntil || s.periodEnd)}.`;
+    auto.push(`ingen mer debitering efter ${date(s.accessUntil || s.periodEnd)}`);
+    if (sell) buttons.push(btn("Ångra uppsägningen", 'data-action="undo-cancel"', true));
+  } else if (s?.status === "active") {
+    text = s.periodEnd
+      ? `Nästa förnyelse ${date(s.periodEnd)}${s.monthlyOre ? ` (${money(s.monthlyOre)} exkl. moms)` : ""}.`
+      : "Abonnemanget är aktivt.";
+    if (s.renewalStopped) auto.push("förnyelsen är stoppad – ingen ny period dras");
+    else if (s.periodEnd) auto.push(`förnyas automatiskt ${date(s.periodEnd)}`);
+    if (s.graceUntil) auto.push(`betalningsfrist vid missad betalning: till ${date(s.graceUntil)}`);
+    if (sell) buttons.push(sec("Lägg till plats", "betalning", "salesPanel", true));
+  } else if (trialOpen && t.status === "pending") {
+    text = `Bjud in föraren. Provet (${t.plannedDays ?? config?.trial?.days ?? 7} dagar) startar när första kontot loggar in i appen.`;
+    auto.push("provet startar vid första inloggningen");
+    buttons.push(sec("Bjud in förare", "platser", "inviteCard", true));
+  } else if (trialOpen) {
+    const mails = trialMailDates(t);
+    text = `Provet slutar ${date(t.endsAt)}${trialDayText(t) ? ` (${trialDayText(t)})` : ""}.`;
+    if (mails.length) auto.push(`påminnelsemejl ${mails.join(" och ")}`);
+    auto.push(`provet slutar av sig självt ${date(t.endsAt)}`);
+    // Fälten finns först när servern skickar dem: påstå inget annars.
+    if (t.committed === true) auto.push("första debiteringen sker när provet slutar");
+    else if (t.committed === false) auto.push("ingen debitering sker eftersom ingen beställning är gjord");
+    if (sell) {
+      buttons.push(sec("Skicka betallänk", "betalning", "salesPanel", days !== null && days <= 3));
+      buttons.push(btn("Förläng prov 7 dagar", 'data-action="trial-extend" data-days="7"', !(days !== null && days <= 3)));
+    }
+  } else if (t || ENDED_REASONS.includes(d.access?.reason)) {
+    text = t?.endsAt && t.status !== "pending"
+      ? `Provet tog slut ${date(t.endsAt)}. Kunden har inte köpt.`
+      : "Kunden har inget aktivt abonnemang.";
+    auto.push("inget sker automatiskt");
+    if (sell) buttons.push(sec("Lägg beställning", "betalning", "salesPanel", true));
+  } else {
+    text = "Kunden har registrerat sig men har inget prov eller abonnemang än.";
+    auto.push("inget sker automatiskt förrän ett prov eller en beställning finns");
+    if (sell) {
+      buttons.push(sec("Starta prov", "betalning", "salesPanel", true));
+      buttons.push(sec("Skicka betallänk", "betalning", "salesPanel"));
+    }
+  }
+
+  if (!d.suspension) {
+    // Ett prov som väntar på första inloggningen säger redan varför ingen får tips.
+    if (d.access && !d.access.ok && !d.pause && s?.status !== "past_due" && !(trialOpen && t.status === "pending")) {
+      text += ` Förarna får inga tips: ${ACCESS_TEXT[d.access.reason] ?? d.access.reason}.`;
+    }
+    if (sell && !(trialOpen && t.status === "pending") && (s || t)) buttons.push(sec("Lägg till plats", "betalning", "salesPanel"));
+    if (manage) buttons.push(sec("Ge rabatt eller kupong", "betalning", "discountCard"));
+    if (sell && !d.pause) buttons.push(btn("Pausa tipsen", 'data-action="company-pause"'));
+    if (sell && !(d.members ?? []).some((m) => m.status === "active")) {
+      buttons.push(sec("Ge portal-inloggning", "uppgifter", "ownerCard"));
+    }
+  }
+
+  const more = issues(d).filter((i) => i.level < 3 || i.sec !== "betalning" || s?.status !== "past_due");
+  return `
+    <div class="next-card">
+      <h2>Nästa steg</h2>
+      <p class="next-text">${esc(text)}</p>
+      <p class="next-auto"><b>Sker automatiskt:</b> ${esc(auto.join(" · ") || "inget just nu")}.</p>
+      ${buttons.length ? `<div class="btn-row next-buttons">${buttons.join("")}</div>` : ""}
+      ${more.length ? `<ul class="next-also">${more.map((i) => `
+        <li><span>${esc(i.text)}</span>${i.sec
+          ? ` <button class="linklike" type="button" data-action="sec-open" data-sec="${esc(i.sec)}"${i.target ? ` data-target="${esc(i.target)}"` : ""}>${esc(i.label)} →</button>`
+          : ` <button class="linklike" type="button" data-action="goto" data-view="granskning">${esc(i.label)} →</button>`}</li>`).join("")}</ul>` : ""}
+    </div>`;
+}
+
+/* --- Sidan -------------------------------------------------------------- */
+
+/** Platser i rubriken: "3 platser · Västra Götalands län · 1 197,00 kr/mån". */
+function headerFacts(d, open) {
+  const s = d.subscription;
+  const counties = [...new Set(open.map((l) => l.baseCounty).filter(Boolean))].map(countyName);
+  const where = counties.length <= 2 ? counties.join(", ") : `${counties.length} län`;
+  const amount = s && ["active", "past_due"].includes(s.status) && s.monthlyOre
+    ? `${money(s.monthlyOre)}/mån` : "";
+  return [plural(open.length, "plats", "platser"), where, amount].filter(Boolean).join(" · ");
+}
+
+/** En hopfällbar del. `attention` öppnar den och sätter en prick. */
+function section(id, title, count, body, isOpen, flagged) {
+  return `
+    <details class="card sec" data-sec="${id}"${isOpen ? " open" : ""}>
+      <summary><h2>${esc(title)}${count != null && count !== "" ? ` <span class="muted">(${esc(count)})</span>` : ""}${
+        flagged ? '<span class="ktab-dot" aria-label="behöver åtgärd"></span>' : ""}</h2></summary>
+      <div class="sec-body">${body}</div>
+    </details>`;
+}
+
+export function kund(d, config = null, tab = "", pending = null, crm = null, loginLink = null, secOpen = {}) {
   const c = d.company;
   const p = d.profile ?? {};
-  const active = kundTab(tab);
-  const status = customerStatus(c, {
-    suspended: !!d.suspension, paused: !!d.pause, trial: d.trial, subscriptionStatus: d.subscription?.status,
-    accessOk: d.access?.ok,
-  });
+  const status = customerStatus(statusOfDetail(d));
   const open = (d.licenses ?? []).filter((l) => LICENSE_OPEN.includes(l.status));
   const found = issues(d);
-  const badge = {
-    bilar: open.length,
-    konton: (d.members ?? []).filter((m) => m.status === "active").length,
-  };
-  const alertTabs = new Set(found.filter((i) => i.level >= 2).map((i) => i.tab));
-  const moreActive = KUND_TABS_MORE.some((t) => t.id === active);
-  const panel = {
-    oversikt: () => tabOversikt(d, config, crm, found),
-    bilar: () => tabBilar(d, config, pending),
-    konton: () => tabKonton(d, config, loginLink),
-    betalning: () => tabBetalning(d, config),
-    foretag: () => tabForetag(d, config, crm),
-    historik: () => tabHistorik(d),
-  }[active]();
+  const wanted = kundTab(tab);
+  const flagged = new Set(found.filter((i) => i.level >= 2).map((i) => i.sec));
+  const isOpen = (id) => secOpen[id] ?? (wanted === id || flagged.has(id));
   const contact = [
     p.contactName ? esc(p.contactName) : "",
     p.contactPhone ? `<a href="tel:${esc(p.contactPhone.replace(/\s/g, ""))}">${esc(p.contactPhone)}</a>` : "",
     p.contactEmail ? `<a href="mailto:${esc(p.contactEmail)}">${esc(p.contactEmail)}</a>` : "",
   ].filter(Boolean).join(" · ");
-  const next = found[0];
+  const orgNumber = c.orgNumber || p.orgNumber || "";
+  const bankId = c.bankId === true;
+  const hints = identityHints(orgNumber, bankId);
+  const members = (d.members ?? []).filter((m) => m.status === "active").length;
+  const unpaid = (d.orders ?? []).filter((o) => o.status === "pending_payment").length;
 
   return `
     <button class="back-link" data-action="back">← Alla kunder</button>
     <div class="page-head">
       <div><h1>${esc(c.name)} ${statusPill(status)}</h1>
-        <p class="muted"><span class="mono">${esc(c.orgNumber || "—")}</span>${contact ? ` · ${contact}` : ""}</p></div>
+        <p class="kund-facts">${esc(headerFacts(d, open))}</p>
+        <p class="muted">${orgNumber ? `<span class="mono">${esc(orgNumber)}</span>` : ""}${
+          hints ? `${orgNumber ? " · " : ""}${hints}` : ""}${contact ? ` · ${contact}` : ""}</p></div>
       <div class="btn-row">
         <button class="btn btn-quiet" data-action="support-start">Chatta med kunden</button>
-        ${config?.canSell && !d.suspension && !d.pause
-          ? '<button class="btn btn-quiet" data-action="company-pause">Pausa tipsen</button>' : ""}
       </div>
     </div>
 
     ${d.suspension ? `
       <div class="suspended-banner" role="alert">
         <b>Företaget är avstängt.</b> ${esc(d.suspension.reason)}
-        ${config?.canManage ? `<button class="btn btn-quiet" data-action="block-lift" data-block="${esc(d.suspension.id)}">Häv avstängningen</button>` : ""}
       </div>` : d.pause ? `
       <div class="paused-banner" role="status">
         <b>Tipsen är pausade.</b> ${esc(d.pause.reason)}
-        <span class="muted">Ingen tips och inga notiser. Kunden ser ett neutralt besked i appen och kan
-          ordna medlemskapet i kundportalen.</span>
+        <span class="muted">Inga tips och inga notiser. Kunden ser ett neutralt besked i appen och kan
+          ordna platserna i kundportalen.</span>
         ${config?.canSell ? '<button class="btn btn-quiet" data-action="company-resume">Återuppta tipsen</button>' : ""}
-      </div>` : `
-      <p class="access-line ${d.access?.ok ? "ok" : "bad"}">${d.access?.ok
-        ? `Förarna får tips${d.access.validUntil ? ` till ${esc(date(d.access.validUntil))}` : ""}.`
-        : `Förarna får inga tips: ${esc(ACCESS_TEXT[d.access?.reason] ?? d.access?.reason ?? "okänt skäl")}.`}</p>`}
-
-    ${next && active === "oversikt" ? `
-      <div class="next-action">
-        <p><b>Nästa steg:</b> ${esc(next.text)}</p>
-        ${next.tab
-          ? `<button class="btn btn-primary" data-action="kund-tab" data-tab="${esc(next.tab)}">${esc(next.label || "Öppna")} →</button>`
-          : `<button class="btn btn-primary" data-action="goto" data-view="granskning">${esc(next.label || "Granskning")} →</button>`}
       </div>` : ""}
 
-    <div class="ktabs-wrap">
-    <nav class="ktabs" aria-label="Kundens sidor">
-      ${KUND_TABS.map((t) => `
-        <button class="ktab" data-action="kund-tab" data-tab="${t.id}" aria-current="${t.id === active ? "page" : "false"}">
-          ${esc(t.title)}${badge[t.id] != null ? ` <span class="ktab-n">${esc(badge[t.id])}</span>` : ""}${alertTabs.has(t.id) ? '<span class="ktab-dot" aria-label="behöver åtgärd"></span>' : ""}
-        </button>`).join("")}
-      <details class="ktab-more"${moreActive ? " open" : ""}>
-        <summary class="ktab ktab-more-toggle${moreActive ? " is-on" : ""}">Mer${
-          KUND_TABS_MORE.some((t) => alertTabs.has(t.id))
-            ? '<span class="ktab-dot" aria-label="behöver åtgärd"></span>' : ""
-        }</summary>
-        <div class="ktab-more-menu" role="menu">
-          ${KUND_TABS_MORE.map((t) => `
-            <button type="button" role="menuitem" class="ktab-more-item" data-action="kund-tab" data-tab="${t.id}"
-              aria-current="${t.id === active ? "page" : "false"}">${esc(t.title)}${
-                alertTabs.has(t.id) ? '<span class="ktab-dot" aria-label="behöver åtgärd"></span>' : ""
-              }</button>`).join("")}
-        </div>
-      </details>
-    </nav>
-    </div>
+    ${timeline(d)}
+    ${nextStep(d, config)}
 
-    <section class="step-panel">${panel}</section>
+    ${section("platser", "Platser", open.length, tabPlatser(d, config, pending), isOpen("platser"),
+      flagged.has("platser"))}
+    ${section("betalning", "Betalning", unpaid || "", tabBetalning(d, config), isOpen("betalning"), flagged.has("betalning"))}
+    ${section("uppgifter", "Uppgifter", members ? `${members} inloggning${members === 1 ? "" : "ar"}` : "", tabUppgifter(d, config, loginLink), isOpen("uppgifter"), flagged.has("uppgifter"))}
+    ${section("historik", "Historik", (d.audit ?? []).length, `${crmNotesCard(crm, config)}${tabHistorik(d)}<div data-sec-mount="activity"></div>`, isOpen("historik"), false)}
+
+    ${config?.canManage || d.archive ? `
+    <details class="card danger-zone">
+      <summary><h2>Stäng av, arkivera eller radera</h2></summary>
+      ${dangerZone(d, config)}
+      ${archiveCard(d, config)}
+    </details>` : ""}
   `;
 }
 
-/* --- Översikt ----------------------------------------------------------- */
-
-function tile(tab, label, value, sub = "") {
-  return `<button type="button" class="ktile" data-action="kund-tab" data-tab="${esc(tab)}">
-    <span class="ktile-label">${esc(label)}</span><b>${value}</b>${sub ? `<span class="muted">${sub}</span>` : ""}</button>`;
-}
-
-function tabOversikt(d, config, crm, found) {
-  const s = d.subscription;
-  const t = d.trial;
-  const open = (d.licenses ?? []).filter((l) => LICENSE_OPEN.includes(l.status));
-  const assigned = open.filter((l) => l.assigned).length;
-  const members = (d.members ?? []).filter((m) => m.status === "active" && !m.blocked).length;
-  const plan = s && ["active", "past_due"].includes(s.status)
-    ? pill(s.status)
-    : t && ["pending", "active"].includes(t.status) ? '<span class="pill pill-warn">Prov</span>' : pill(s?.status ?? "none");
-  const planSub = s?.monthlyOre && ["active", "past_due"].includes(s.status)
-    ? `${esc(money(s.monthlyOre))}/mån exkl. moms${s.periodEnd ? ` · betalt till ${esc(date(s.periodEnd))}` : ""}`
-    : t?.status === "active" ? `till ${esc(date(t.endsAt))}`
-      : t?.status === "pending" ? "startar när första kontot loggar in" : "";
-  return `
-    <div class="card">
-      <h2>Att åtgärda</h2>
-      ${found.length ? `<ul class="todo">${found.map((i) => `
-        <li><button class="todo-row" ${i.tab ? `data-action="kund-tab" data-tab="${esc(i.tab)}"` : 'data-action="goto" data-view="granskning"'}>
-          <span class="todo-dot lvl-${i.level}" aria-hidden="true"></span>
-          <span class="todo-main"><b>${esc(i.text)}</b></span>
-          <span class="todo-go">${esc(i.label || "Granskning")} →</span>
-        </button></li>`).join("")}</ul>`
-        : '<p class="ok">Inget att åtgärda. Kunden har medlemskap, konton, inloggning och betalning på plats.</p>'}
-    </div>
-
-    <div class="ktiles">
-      ${tile("betalning", "Abonnemang", plan, planSub)}
-      ${tile("bilar", "Medlemskap", esc(open.length), `${esc(assigned)} tilldelade konton`)}
-      ${tile("konton", "Inloggningar", esc(members), members ? "ägare och administratörer" : "ingen kan logga in")}
-      ${tile("foretag", "Behörighet", d.profile?.verificationStatus ? verificationPill(d.profile.verificationStatus) : '<span class="pill">Äldre kund</span>')}
-    </div>
-
-    ${crmNotesCard(crm, config)}
-  `;
-}
-
-/* --- Medlemskap --------------------------------------------------------- */
+/* --- Platser --------------------------------------------------------- */
 
 /**
  * Bjud in till en ledig plats — samma som i kundportalen. Nya platser köps
@@ -533,7 +642,7 @@ function tabOversikt(d, config, crm, found) {
  */
 function membershipLabel(l) {
   if (l.vehicle) return l.vehicle;
-  return `Medlemskap · ${l.baseCounty ? countyName(l.baseCounty) : "utan län"}`;
+  return `Plats · ${l.baseCounty ? countyName(l.baseCounty) : "utan län"}`;
 }
 
 function inviteUnassignedBlock(d, config) {
@@ -542,7 +651,7 @@ function inviteUnassignedBlock(d, config) {
   const free = open.filter((l) => !l.assigned);
   if (!free.length) return "";
   return `
-    <div class="card">
+    <div class="card" id="inviteCard">
       <h2>Bjud in ett konto</h2>
       <p class="muted">Personen får platsen på e-posten. När hen loggar in i appen binds kontot
         — samma väg som i kundportalen.</p>
@@ -566,8 +675,8 @@ function addMembershipBlock(d, config) {
         beviljas utan kostnad nedan. Vanliga sälj skapar platser under Betalning.</p>
       <div class="county-add">
         <input id="newMemberEmail" type="email" placeholder="namn@bolaget.se" autocomplete="off" />
-        <select id="newMemberCounty" aria-label="Baslän för den nya platsen">
-          <option value="">Baslän (valfritt)</option>
+        <select id="newMemberCounty" aria-label="Län för den nya platsen">
+          <option value="">Län (valfritt)</option>
           ${counties.map((c) => `<option value="${esc(c.code)}">${esc(c.name)}</option>`).join("")}
         </select>
         <button class="btn btn-quiet btn-small" data-action="membership-create">Skapa plats</button>
@@ -633,7 +742,7 @@ function grantEditRow(g, config) {
 }
 
 /**
- * Manuellt beviljande (fleet/grants.py): medlemskap utan kostnad till en
+ * Manuellt beviljande (fleet/grants.py): plats utan kostnad till en
  * person, med valda tipskategorier och län. Kräver canManage -- det flyttar
  * rättigheter utan betalning, samma gräns som kuponger. Skäl och tidsgräns
  * är obligatoriska att ta ställning till; beslutet loggas och visas här i
@@ -655,7 +764,7 @@ function grantsCard(d, config) {
   return `
     <details class="card"${active ? " open" : ""}>
       <summary>Beviljat utan kostnad <span class="muted">(${esc(active)})</span></summary>
-      <p class="muted">Medlemskap utan betalning, till en person, med de kategorier och län du väljer.
+      <p class="muted">Plats utan betalning, till en person, med de kategorier och län du väljer.
         Ingen order, ingen faktura och ingen ändring i Stripe — platsen räknas inte mot nästa faktura.
         Skälet loggas. Ett bolag som redan betalar behåller alla kategorier.</p>
       ${config?.canManage ? `
@@ -696,7 +805,7 @@ function grantsCard(d, config) {
     </details>`;
 }
 
-function tabBilar(d, config, pending) {
+function tabPlatser(d, config, pending) {
   const devices = d.devices ?? [];
   const notifyHtml = d.notify ? notifyCard({ ...d.notify, canManage: !!config?.canSell }, {
     countyNames: Object.fromEntries((d.notify.countyCatalog ?? []).map((c) => [c.code, c.name])),
@@ -742,53 +851,39 @@ function phonesCard(d, config) {
 }
 
 const PENDING_KIND = {
-  change_base_county: "Byt baslän",
-  remove_county: "Ta bort extra län",
-  reduce_licenses: "Avsluta medlemskap",
+  reduce_licenses: "Avsluta platser",
   cancel_subscription: "Uppsägning",
 };
 
-/** Baslän för alla medlemskap på en gång, och det som väntar på förnyelsen. */
+/**
+ * Det som väntar på förnyelsen. Länbyten är direkta nu och visas inte här;
+ * en gammal väntande länändring ligger kvar i databasen men göms.
+ */
 function companyChangesCard(d, config) {
   if (!config?.canSell) return "";
   const open = (d.licenses ?? []).filter((l) => LICENSE_OPEN.includes(l.status));
-  const pending = d.pendingChanges ?? [];
-  const anyPaid = open.some((l) => l.status !== "trial");
-  const canBase = open.length > 1 && (!anyPaid || config.canManage);
-  if (!canBase && !pending.length) return "";
-  const counties = config?.counties ?? [];
-  const subject = (id) => open.find((l) => l.id === id)?.vehicle || "medlemskap";
+  const pending = (d.pendingChanges ?? []).filter((p) => PENDING_KIND[p.kind]);
+  if (!pending.length) return "";
+  const subject = (id) => open.find((l) => l.id === id)?.vehicle || "plats";
   const describe = (p) => {
     const pl = p.payload ?? {};
-    if (p.kind === "change_base_county") return `${subject(pl.licenseId)} → ${countyName(pl.county)}`;
-    if (p.kind === "remove_county") return `${countyName(pl.county)} på ${subject(pl.licenseId)}`;
     if (p.kind === "reduce_licenses") return (pl.licenseIds ?? []).map(subject).filter(Boolean).join(", ");
     return pl.reason ? `Orsak: ${pl.reason}` : "";
   };
-  const body = `
-      ${canBase ? `
-      <h3>Byt baslän på alla medlemskap direkt</h3>
-      <p class="muted">Påverkar inte priset. Ett extra län som blir baslän tas bort. Skälet loggas.</p>
-      <div class="county-add">
-        <select id="companyBase" aria-label="Nytt baslän för alla medlemskap">
-          <option value="">Välj län …</option>
-          ${counties.map((c) => `<option value="${esc(c.code)}">${esc(c.name)}</option>`).join("")}
-        </select>
-        <button class="btn btn-quiet btn-small" data-action="company-base-now">Byt för alla medlemskap</button>
-      </div>` : ""}
-      ${pending.length ? `<h3>Väntar på förnyelsen</h3><table><thead><tr><th>Ändring</th><th>Gäller från</th><th></th></tr></thead>
+  return `
+    <div class="card">
+      <h2>Väntar på förnyelsen</h2>
+      <table><thead><tr><th>Ändring</th><th>Gäller från</th><th></th></tr></thead>
         <tbody>${pending.map((p) => `
-          <tr><td data-label="Ändring"><b>${esc(PENDING_KIND[p.kind] ?? p.kind)}</b>
+          <tr><td data-label="Ändring"><b>${esc(PENDING_KIND[p.kind])}</b>
               <div class="muted">${esc(describe(p))}</div></td>
             <td data-label="Gäller från">${esc(date(p.effectiveAt))}</td>
             <td>${config.canManage && p.kind !== "cancel_subscription"
               ? `<button class="btn btn-quiet btn-small" data-action="pending-undo" data-change="${esc(p.id)}"
-                  data-label="${esc(PENDING_KIND[p.kind] ?? p.kind)}">Ångra</button>`
+                  data-label="${esc(PENDING_KIND[p.kind])}">Ångra</button>`
               : p.kind === "cancel_subscription" ? '<span class="muted">Ångras under Betalning</span>' : ""}</td></tr>`).join("")}
-        </tbody></table>` : ""}`;
-  return pending.length
-    ? `<div class="card"><h2>Ändringar för hela företaget</h2>${body}</div>`
-    : `<details class="card"><summary>Byt baslän på alla medlemskap</summary>${body}</details>`;
+        </tbody></table>
+    </div>`;
 }
 
 /* --- Inloggningar ------------------------------------------------------- */
@@ -811,25 +906,11 @@ function tabKonton(d, config, loginLink) {
 
 function tabBetalning(d, config) {
   const s = d.subscription;
-  const t = d.trial;
   return `
-    ${addCarsBlock(d, config)}
-    <div class="card">
-      <h2>Just nu</h2>
-      <dl class="kv">
-        <dt>Läge</dt><dd>${s ? pill(s.status) : "—"}
-          ${t && ["pending", "active"].includes(t.status) ? `<span class="pill pill-warn">Prov ${t.startedAt ? `till ${esc(date(t.endsAt))}` : "startar när första kontot loggar in"}</span>` : ""}
-          ${s?.cancelAtPeriodEnd ? '<span class="pill pill-warn">Uppsagt</span>' : ""}</dd>
-        ${s?.periodEnd ? `<dt>Betalt till</dt><dd>${esc(date(s.periodEnd))}</dd>` : ""}
-        ${s?.monthlyOre ? `<dt>Per månad</dt><dd>${esc(money(s.monthlyOre))} exkl. moms</dd>` : ""}
-        ${s?.licenseCount != null ? `<dt>Platser</dt><dd>${esc(s.licenseCount)}</dd>` : ""}
-        ${s?.extraCountyCount != null ? `<dt>Extra län</dt><dd>${esc(s.extraCountyCount)}</dd>` : ""}
-        ${s?.packageSummary ? `<dt>Paket</dt><dd>${esc(s.packageSummary)}</dd>` : ""}
-        ${d.discount ? `<dt>Rabatt</dt><dd>${d.discount.kind === "percent_bp"
-          ? `${esc((d.discount.value / 100).toFixed(2))} %` : `${esc(money(d.discount.value))}/mån`}</dd>` : ""}
-      </dl>
-    </div>
+    ${s?.packageSummary ? `<p class="muted">Paket: ${esc(s.packageSummary)}${
+      s.priceVersion ? ` · prislista ${esc(s.priceVersion)}` : ""}</p>` : ""}
     ${ordersCard(d.orders, config)}
+    ${addCarsBlock(d, config)}
     ${trialExtendBlock(d, config)}
     ${grantsCard(d, config)}
     ${config?.canManage ? `
@@ -848,23 +929,22 @@ function tabBetalning(d, config) {
     ${config?.canManage && !["canceled"].includes(d.subscription?.status) ? `
     <details class="card danger-zone">
       <summary>Avsluta direkt</summary>
-      <p class="muted">Åtkomsten upphör nu, alla medlemskap och förarpass avslutas och Stripe slutar debitera.
+      <p class="muted">Åtkomsten upphör nu, alla platser och förarpass avslutas och Stripe slutar debitera.
         Ingen återbetalning görs automatiskt.</p>
       <div class="btn-row"><button class="btn btn-danger" data-action="terminate-now">Avsluta direkt</button></div>
     </details>` : ""}
   `;
 }
 
-/* --- Företag ------------------------------------------------------------ */
+/* --- Uppgifter ----------------------------------------------------------- */
 
-function tabForetag(d, config, crm) {
+function tabUppgifter(d, config, loginLink) {
   const p = d.profile ?? {};
-  const deal = crm?.deal;
   return `
     ${verificationCard(d, config)}
     ${config?.canSell ? profileBlock(d) : `
     <div class="card">
-      <h2>Uppgifter</h2>
+      <h2>Kontakt</h2>
       <dl class="kv">
         <dt>Kontakt</dt><dd>${esc(p.contactName || "—")} ${p.contactRole ? `<span class="muted">(${esc(p.contactRole)})</span>` : ""}</dd>
         <dt>E-post</dt><dd>${esc(p.contactEmail || "—")}</dd>
@@ -875,21 +955,17 @@ function tabForetag(d, config, crm) {
     <div class="card">
       <div class="card-head">
         <h2>Bolagsverket</h2>
-        ${config?.canSell && (p.country ?? "SE") === "SE" ? `<div class="btn-row">
+        ${config?.canSell && (p.country ?? "SE") === "SE" && (p.orgNumber || d.company.orgNumber) ? `<div class="btn-row">
           <button class="btn btn-quiet btn-small" data-action="registry-refresh">Hämta igen</button>
           ${p.registry?.found ? `<button class="btn btn-quiet btn-small" data-action="registry-refresh" data-overwrite="1">Använd registrets adress</button>` : ""}
         </div>` : ""}
       </div>
       ${p.registry ? registryBlock(p.registry, { checkedAt: p.registryCheckedAt })
-        : '<p class="muted">Inte uppslaget än. Tryck på <b>Hämta igen</b>.</p>'}
-      ${deal?.id ? `<p class="muted small"><button type="button" class="linklike" data-action="crm-open-deal" data-deal="${esc(deal.id)}">Öppna i CRM</button></p>` : ""}
+        : (p.orgNumber || d.company.orgNumber)
+          ? '<p class="muted">Inte uppslaget än. Tryck på <b>Hämta igen</b>.</p>'
+          : `<p class="muted">${esc(ORG_MISSING)}. Bolaget slås upp när kunden anger org.nr vid sin första beställning.</p>`}
     </div>
-    ${config?.canManage || d.archive ? `
-    <details class="card danger-zone">
-      <summary><h2>Stäng av, arkivera eller radera</h2></summary>
-      ${dangerZone(d, config)}
-      ${archiveCard(d, config)}
-    </details>` : ""}
+    ${tabKonton(d, config, loginLink)}
   `;
 }
 
@@ -902,14 +978,14 @@ const ACTOR = {
 
 const AUDIT = {
   account_closed: "Kontot avslutades",
-  admin_base_county_set: "Baslän bytt direkt",
-  admin_company_base_county_set: "Baslän bytt på alla medlemskap",
+  admin_base_county_set: "Län bytt direkt",
+  admin_company_base_county_set: "Län bytt på alla platser",
   admin_company_verification: "Behörighet bedömd",
   admin_device_blocked: "Telefon spärrad",
   admin_driver_invite_resent: "Förarinbjudan skickad igen",
   admin_driver_invite_revoked: "Förarinbjudan återkallad",
   admin_driver_invited: "Förare inbjuden med e-post",
-  admin_license_removed: "Bil borttagen",
+  admin_license_removed: "Plats borttagen",
   admin_member_changed: "Inloggning ändrad",
   admin_pairing_code_issued: "Förarkod skapad",
   admin_pending_change_undone: "Väntande ändring ångrad",
@@ -917,17 +993,17 @@ const AUDIT = {
   admin_test_push: "Testnotis skickad",
   admin_device_notify_prefs_changed: "Notiser ändrade på telefon (support)",
   admin_company_notify_default_changed: "Standard för notiser ändrad (support)",
-  admin_trial_counties_set: "Provbilens län ändrade",
+  admin_trial_counties_set: "Län ändrat på plats",
   admin_vehicle_changed: "Regnr bytt",
   admin_vehicle_released: "Bilen frigjord",
-  base_county_changed: "Baslän bytt",
+  base_county_changed: "Län bytt",
   company_archived: "Arkiverat",
   company_details_updated: "Uppgifter ändrade",
   company_discount_cleared: "Rabatt borttagen",
   company_discount_set: "Rabatt satt",
   company_unarchived: "Återställt från arkivet",
   contracting_party_change_requested: "Byte av avtalspart begärt",
-  county_activated: "Län tillagt",
+  county_activated: "Län tillagt (äldre avtal)",
   county_removal_scheduled: "Län tas bort vid förnyelse",
   coupon_redeemed: "Kupong inlöst",
   device_approved: "Telefon godkänd",
@@ -941,8 +1017,8 @@ const AUDIT = {
   driver_invited: "Förare inbjuden med e-post",
   driver_relogin: "Förare loggade in igen",
   join_request_created: "Telefon bad om att få gå med",
-  license_created: "Bil tillagd",
-  licenses_reduced: "Bilar avslutade",
+  license_created: "Plats tillagd",
+  licenses_reduced: "Platser avslutade",
   member_removed: "Inloggning borttagen",
   order_applied: "Beställning genomförd",
   order_canceled: "Beställning avbruten",
@@ -973,7 +1049,7 @@ const AUDIT = {
   trial_ended: "Provet slutade",
   trial_extended: "Provet förlängt",
   trial_started: "Provet startade",
-  trial_vehicle_removed: "Provbil borttagen",
+  trial_vehicle_removed: "Provplats borttagen",
   vehicle_created: "Bil skapad",
 };
 
@@ -1050,7 +1126,7 @@ function membersCard(d, config) {
     <div class="card">
       <h2>Vem kan logga in</h2>
       <p class="muted">Ägare och administratörer i kundportalen och appens adminläge. Förarplatser bjuds in
-        under <button class="linklike" data-action="kund-tab" data-tab="bilar">Medlemskap</button>.</p>
+        under <button class="linklike" data-action="sec-open" data-sec="platser">Platser</button>.</p>
       ${members.length ? `<div class="table-scroll"><table>
         <thead><tr><th>Konto</th><th>Roll</th><th>Status</th><th></th></tr></thead>
         <tbody>${members.map((m) => `
@@ -1081,7 +1157,7 @@ function membersCard(d, config) {
             </div>` : ""}</td>
           </tr>`).join("")}</tbody></table></div>`
         : '<p class="muted">Ingen kan logga in än. Bjud in kundens ägare nedan.</p>'}
-      <p class="muted small"><b>Ägare</b> gör allt. <b>Bilar och förare</b> sköter medlemskap, län och konton.
+      <p class="muted small"><b>Ägare</b> gör allt. <b>Bilar och förare</b> sköter platser, län och konton.
         <b>Ekonomi</b> ser och betalar fakturor.</p>
     </div>`;
 }
@@ -1156,17 +1232,15 @@ function membershipsCard(d, config, pending = null) {
   const sell = !!config?.canSell;
   const manage = !!config?.canManage;
   const counties = config?.counties ?? [];
-  const extraPrice = money(config?.price?.extraCountyOre);
   const name = (code) => countyName(code);
   return `
     <div class="card">
-      <h2>Medlemskap <span class="muted">(${esc(open.length)})</span></h2>
+      <h2>Platser <span class="muted">(${esc(open.length)})</span></h2>
       <p class="muted">En plats gäller ett konto i ett län, samma som i appen och portalen.
         Bjud in med e-post — personen loggar in i appen och tar platsen där.</p>
       ${open.length ? open.map((l) => {
         const trial = l.status === "trial";
         const extras = l.extraCounties ?? [];
-        const free = counties.filter((c) => !(l.counties ?? []).includes(c.code) && c.code !== l.baseCounty);
         const mine = pending?.licenseId === l.id ? pending : null;
         const data = `data-license="${esc(l.id)}" data-base="${esc(l.baseCounty)}" data-extras="${esc(extras.join(","))}" data-plate="${esc(l.vehicle)}" data-trial="${trial ? "1" : ""}"`;
         const title = membershipLabel(l);
@@ -1177,43 +1251,27 @@ function membershipsCard(d, config, pending = null) {
             ${l.assignmentKind === "temporary" && l.vehicle ? '<span class="pill pill-warn">Ersättningsbil</span>' : ""}
           </div>
           <div class="county-chips" aria-label="Län">
-            <span class="county-chip base" title="Ingår i medlemskapets pris">${esc(name(l.baseCounty))} <small>baslän</small></span>
-            ${extras.map((c) => `<span class="county-chip">${esc(name(c))}
-              ${sell ? `<button class="chip-x" data-action="county-remove" data-county="${esc(c)}" ${data}
-                aria-label="Ta bort ${esc(name(c))}" title="Ta bort ${esc(name(c))}">✕</button>` : ""}</span>`).join("")}
-            ${l.scheduledBaseCounty ? `<span class="muted">baslän byts till ${esc(name(l.scheduledBaseCounty))} vid förnyelse</span>` : ""}
+            <span class="county-chip base">Län: ${esc(name(l.baseCounty))}</span>
+            ${l.scheduledBaseCounty ? `<span class="muted">byts till ${esc(name(l.scheduledBaseCounty))} vid förnyelse</span>` : ""}
           </div>
+          ${extras.length ? `<p class="muted small">Fler län (äldre avtal): ${esc(extras.map(name).join(", "))}</p>` : ""}
+          ${l.activePhone ? `<p class="muted small">Telefon: ${esc(l.activePhone.label || "ansluten")}</p>` : ""}
           ${countyChangesRow(l, sell)}
           ${membershipRow(l, sell)}
-          ${l.status === "pending_cancel" ? `<p class="muted">Medlemskapet avslutas vid nästa förnyelse${l.endsAt ? ` (${esc(date(l.endsAt))})` : ""}.</p>` : ""}
+          ${l.status === "pending_cancel" ? `<p class="muted">Platsen avslutas vid nästa förnyelse${l.endsAt ? ` (${esc(date(l.endsAt))})` : ""}.</p>` : ""}
 
-          ${sell ? `
-          <details class="car-edit" ${mine ? "open" : ""}>
-            <summary>Ändra medlemskapets län</summary>
-            <div class="car-actions">
-              ${l.status !== "pending_cancel" ? `
-              <div class="county-add">
-                <select data-add-county="${esc(l.id)}" aria-label="Välj län att lägga till">
-                  <option value="">+ Lägg till län …</option>
-                  ${free.map((c) => `<option value="${esc(c.code)}">${esc(c.name)}</option>`).join("")}
-                </select>
-                <button class="btn btn-quiet btn-small" data-action="county-add" ${data}>Lägg till</button>
-                <span class="muted">${trial ? "gratis under provet" : `+${esc(extraPrice)}/mån`}</span>
-              </div>
-              <div class="county-add">
-                <select data-base-for="${esc(l.id)}" aria-label="Byt baslän">
-                  <option value="">Byt baslän …</option>
-                  ${counties.filter((c) => c.code !== l.baseCounty).map((c) => `<option value="${esc(c.code)}">${esc(c.name)}</option>`).join("")}
-                </select>
-                <button class="btn btn-quiet btn-small" data-action="base-change" ${data}>${trial ? "Byt" : "Byt vid förnyelse"}</button>
-                ${!trial && manage ? `<button class="btn btn-quiet btn-small" data-action="base-change-now" ${data}
-                  title="Byter direkt i stället för vid förnyelsen. Påverkar inte priset.">Byt nu</button>` : ""}
-              </div>` : ""}
-              <div class="btn-row">
-                ${l.status !== "pending_cancel" ? `<button class="btn btn-danger btn-small" data-action="car-remove" ${data}>Ta bort medlemskapet</button>` : ""}
-              </div>
+          ${sell && l.status !== "pending_cancel" ? `
+          <div class="car-actions">
+            <div class="county-add">
+              <select data-base-for="${esc(l.id)}" aria-label="Byt län">
+                <option value="">Byt län …</option>
+                ${counties.filter((c) => c.code !== l.baseCounty).map((c) => `<option value="${esc(c.code)}">${esc(c.name)}</option>`).join("")}
+              </select>
+              <button class="btn btn-quiet btn-small" data-action="base-change" ${data}
+                title="Gäller direkt. Högst 2 byten per månad.">Byt län</button>
+              <button class="btn btn-danger btn-small" data-action="car-remove" ${data}>Ta bort platsen</button>
             </div>
-          </details>` : ""}
+          </div>` : ""}
 
           ${mine ? `
           <div class="pending-change" role="region" aria-label="Offert">
@@ -1228,8 +1286,8 @@ function membershipsCard(d, config, pending = null) {
             </div>
           </div>` : ""}
         </div>`;
-      }).join("") : '<p class="muted">Inga medlemskap än. Lägg till under Betalning.</p>'}
-      ${closed ? `<p class="muted">${esc(closed)} avslutat medlemskap visas inte.</p>` : ""}
+      }).join("") : '<p class="muted">Inga platser än. Lägg till under Betalning.</p>'}
+      ${closed ? `<p class="muted">${esc(plural(closed, "avslutad plats visas", "avslutade platser visas"))} inte.</p>` : ""}
     </div>`;
 }
 

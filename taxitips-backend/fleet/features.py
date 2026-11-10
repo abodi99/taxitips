@@ -47,11 +47,11 @@ LOCKED_REASON = "feature_locked"
 # Visas i appen: neutral, utan pris eller väg till köp (App Store 3.1.1,
 # Google Play Payments). Samma ord som appens lib/membership_copy.dart.
 LOCKED_MESSAGE = (
-    "Ingår inte i provet. Ditt företags administratör hanterar medlemskapet på webben."
+    "Ingår inte i provet. Ditt företags administratör hanterar abonnemanget på webben."
 )
 # Samma sak för ett beviljande med valda kategorier: det är inget prov.
 GRANT_LOCKED_MESSAGE = (
-    "Ingår inte i ditt medlemskap. Ditt företags administratör hanterar medlemskapet på webben."
+    "Ingår inte i ditt abonnemang. Ditt företags administratör hanterar abonnemanget på webben."
 )
 
 

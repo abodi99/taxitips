@@ -174,7 +174,7 @@ export const api = {
     }),
 };
 
-/** Ören -> "799,00 kr". Backenden räknar; portalen visar bara. */
+/** Ören -> "123,00 kr". Backenden räknar; portalen visar bara. */
 export function money(ore, currency = "SEK") {
   return new Intl.NumberFormat("sv-SE", {
     style: "currency",

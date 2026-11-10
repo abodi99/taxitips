@@ -131,7 +131,7 @@ def state(company_id, now=None) -> State:
     if window.ok:
         blocked_by = "access"
         archive_blocker = (
-            "Bolaget har ett beviljat medlemskap och har därför fortfarande åtkomst. "
+            "Bolaget har en beviljad plats och har därför fortfarande åtkomst. "
             "Avsluta direkt, så återkallas det."
             if window.reason == "free_grant" else
             "Bolaget har fortfarande åtkomst (abonnemang eller prov). Avsluta direkt först. "
@@ -156,7 +156,7 @@ def state(company_id, now=None) -> State:
         # medan bolaget fortfarande kör.
         delete_blocker = (
             "Bolaget har fortfarande åtkomst. Avsluta direkt först, så att "
-            "medlemskapet stängs och Stripe slutar debitera."
+            "platserna stängs och Stripe slutar debitera."
         )
 
     return State(

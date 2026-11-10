@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Taxi Tips — Kundportal</title>
-  <meta name="description" content="Hantera medlemskap, konton och abonnemang." />
+  <meta name="description" content="Hantera platser, konton och abonnemang." />
   <meta name="robots" content="noindex" />
   <link rel="icon" href="/favicon.ico" sizes="any" />
   <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
@@ -75,15 +75,15 @@
 
       <aside class="auth-panel" aria-label="Om kundportalen">
         <p class="auth-panel-title">Kundportalen</p>
-        <p class="auth-panel-lead">Här sköter kontoret medlemskapen, kontona
+        <p class="auth-panel-lead">Här sköter kontoret platserna, kontona
           och abonnemanget.</p>
         <ul class="auth-points">
-          <li data-icon="drivers"><strong>Medlemskap och konton</strong>
+          <li data-icon="drivers"><strong>Platser och konton</strong>
             <span>Bjud in konton med e-post. De loggar in i appen.</span></li>
-          <li data-icon="map-pin"><strong>Län per medlemskap</strong>
-            <span>Varje medlemskap har ett baslän. Extra län läggs till under Medlemskap.</span></li>
+          <li data-icon="map-pin"><strong>Län per plats</strong>
+            <span>Varje plats har ett län. Du byter län själv, högst två gånger per månad.</span></li>
           <li data-icon="office"><strong>Abonnemang och fakturor</strong>
-            <span>Provet, medlemskapet, kortet och kvittona på ett ställe.</span></li>
+            <span>Provet, platserna, kortet och kvittona på ett ställe.</span></li>
         </ul>
         <p class="auth-help">Frågor? <a href="mailto:hej@taxitips.se">hej@taxitips.se</a></p>
       </aside>
@@ -95,7 +95,7 @@
       <nav class="tabs" aria-label="Portalens vyer">
         <div class="tabs-primary" role="tablist">
           <button class="tab" role="tab" data-view="oversikt" aria-selected="true">Hem</button>
-          <button class="tab" role="tab" data-view="medlemskap" aria-selected="false">Medlemskap</button>
+          <button class="tab" role="tab" data-view="medlemskap" aria-selected="false">Platser</button>
           <button class="tab" role="tab" data-view="abonnemang" aria-selected="false">Abonnemang</button>
         </div>
         <div class="tab-more">
@@ -123,13 +123,13 @@
     <form method="dialog"><button class="btn btn-primary">Klar</button></form>
   </dialog>
 
-  <!-- Lägg till medlemskap: ett län ur en lista och vem som håller platsen.
+  <!-- Lägg till plats: ett län ur en lista och vem som håller platsen.
        Ingen registreringsnummer och inga webbläsar-popupper -- hela flödet
        (län, konto, pris, betalning) sker i den här rutan, byggd för mobilen. -->
   <dialog id="addMembershipDialog" class="code-dialog add-membership-dialog"
     aria-labelledby="addMembershipTitle">
-    <h2 id="addMembershipTitle">Lägg till medlemskap</h2>
-    <p class="muted">Ett medlemskap gäller ett län. Alla län kostar lika mycket.</p>
+    <h2 id="addMembershipTitle">Lägg till plats</h2>
+    <p class="muted">En plats gäller ett konto i ett län. Alla län kostar lika mycket.</p>
 
     <form id="addMembershipForm" novalidate>
       <div class="add-field">

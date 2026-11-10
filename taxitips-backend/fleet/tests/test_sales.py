@@ -18,7 +18,7 @@ from django.test import Client, override_settings
 from django.utils import timezone
 
 from billing.models import Company, CompanyMember
-from fleet import access, orders, sessions, webhook_events
+from fleet import access, orders, sessions, trials, webhook_events
 from fleet.models import (
     AuditEvent,
     CompanyProfile,
@@ -427,7 +427,7 @@ class SalesTrialTests(SalesTestCase):
         """
         company = self.new_company()
         response = self.post(f"/api/admin/companies/{company.id}/trial", {
-            "vehicles": self.vehicles("GBG001", county="14", extras=["12"]),
+            "vehicles": self.vehicles("GBG001", county="14"),
         })
         self.assertEqual(response.status_code, 200, response.content)
         license = License.objects.get(company_id=company.id)
@@ -454,7 +454,7 @@ class SalesTrialTests(SalesTestCase):
         ).json()
         self.assertTrue(body["entitled"], body)
         self.assertEqual(len(body["alerts"]), 1)
-        self.assertEqual(access.license_counties(license.id), ("12", "14"))
+        self.assertEqual(access.license_counties(license.id), ("14",))
 
     def test_a_trial_without_plates_creates_membership_seats(self):
         """Säljpanelen skapar platser utan regnr, samma som portalen."""
@@ -467,10 +467,11 @@ class SalesTrialTests(SalesTestCase):
         self.assertEqual(license.status, License.Status.TRIAL)
         self.assertFalse(license.assignments.filter(ended_at__isnull=True).exists())
 
-    def test_the_trial_is_limited_to_three_vehicles(self):
+    def test_the_trial_is_limited_to_the_manual_maximum(self):
+        """Säljaren väljer antalet platser själv, men inte fler än det manuella taket."""
         company = self.new_company()
         response = self.post(f"/api/admin/companies/{company.id}/trial", {
-            "vehicles": self.vehicles("A1", "A2", "A3", "A4"),
+            "vehicles": self.vehicles(*[f"A{i}" for i in range(trials.TRIAL_MANUAL_MAX_VEHICLES + 1)]),
         })
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["reason"], "trial_vehicle_limit")
@@ -488,26 +489,13 @@ class SalesTrialTests(SalesTestCase):
         self.assertEqual(response.status_code, 400)
         self.assertEqual(response.json()["reason"], "trial_used_recently")
 
-    def test_converting_a_trial_drops_counties_that_were_not_ordered(self):
+    def test_extra_counties_are_not_sold_in_a_new_trial(self):
         company = self.new_company()
-        self.post(f"/api/admin/companies/{company.id}/trial", {
+        response = self.post(f"/api/admin/companies/{company.id}/trial", {
             "vehicles": self.vehicles("C1", county="14", extras=["01", "12"]),
         })
-        license = License.objects.get(company_id=company.id)
-        trial = Trial.objects.get(company_id=company.id)
-        trials_start = timezone.now()
-        Trial.objects.filter(id=trial.id).update(
-            status=Trial.Status.ACTIVE, started_at=trials_start,
-            ends_at=trials_start + timedelta(days=14),
-        )
-        plan = orders.plan_change(company.id, add_vehicles=[
-            orders.VehicleSpec(plate="C1", base_county="14", extra_counties=["01"]),
-        ])
-        order = orders.create_order(company.id, plan)
-        orders.mark_order_paid(order)
-        license.refresh_from_db()
-        self.assertEqual(license.status, License.Status.ACTIVE)
-        self.assertEqual(access.license_counties(license.id), ("01", "14"))
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.json()["reason"], "extra_counties_not_sold")
 
     def test_uncovered_county_cannot_be_sold(self):
         company = self.new_company()
@@ -701,7 +689,7 @@ class OrderTests(SalesTestCase):
         lines = [(i["price_data"]["unit_amount"], i["quantity"]) for i in create["items"]]
         self.assertEqual(lines, [(79900, 2), (19900, 2)])
         self.assertEqual(sum(u * q for u, q in lines), 2 * 79900 + 2 * 19900)
-        self.assertEqual(create["description"], "2 bilar (H1, H2) · Skåne län, Västra Götalands län")
+        self.assertEqual(create["description"], "2 platser (H1, H2) · Skåne län, Västra Götalands län")
         self.assertEqual(create["metadata"]["extra_counties"], "2")
         self.assertEqual(create["collection_method"], "charge_automatically")
         customer = [c for c in fake.calls if c[0] == "Customer.create"][0][1]
@@ -841,7 +829,7 @@ class OrderTests(SalesTestCase):
         new = [i for i in modify["items"] if "price_data" in i]
         self.assertEqual({i["price_data"]["product"] for i in new} - {"prod_extra"}, {"prod_lic"})
         self.assertEqual(modify["proration_behavior"], "none")
-        self.assertTrue(modify["description"].startswith("1 bil"))
+        self.assertTrue(modify["description"].startswith("1 plats"))
 
     def test_an_upgrade_is_charged_separately_and_the_monthly_amount_waits_for_payment(self):
         data = self.full_setup()

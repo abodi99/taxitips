@@ -353,6 +353,17 @@ def companies(request):
         subscriptions=subs,
         blocked=suspended,
     )
+    # Bolag där någon med inloggning har legitimerat sig med BankID
+    # (fleet/bankid.py). Ett fält, så att webben inte gissar på att
+    # organisationsnumret saknas -- det gör det också för bolag som lagts upp
+    # för hand.
+    from fleet.models import BankIdIdentity
+
+    bankid_users = set(BankIdIdentity.objects.values_list("user_id", flat=True))
+    bankid_companies = {
+        m.company_id for m in CompanyMember.objects.filter(company_id__in=ids, status="active")
+        if m.user_id in bankid_users
+    } if bankid_users else set()
     out = []
     for company in rows:
         sub = subs.get(company.id)
@@ -361,6 +372,7 @@ def companies(request):
             "id": str(company.id),
             "name": company.name,
             "orgNumber": company.org_number or "",
+            "bankId": company.id in bankid_companies,
             "joinCode": company.join_code,
             "legacyStatus": company.status,
             "subscriptionStatus": sub.status if sub else "none",
@@ -501,6 +513,7 @@ def company_detail(request, company_id):
         "company": {
             "id": str(company.id), "name": company.name, "email": company.email or "",
             "orgNumber": company.org_number or "", "joinCode": company.join_code,
+            "bankId": _company_has_bankid(company.id),
             "legacyStatus": company.status, "legacySubscriptionStatus": company.subscription_status,
             "stripeCustomerId": company.stripe_customer_id or "",
             "createdAt": _iso(company.created_at),
@@ -546,7 +559,10 @@ def company_detail(request, company_id):
              "startedAt": _iso(trial.started_at), "endsAt": _iso(trial.ends_at),
              "plannedDays": trial.planned_days,
              "vehicleLimit": trial.vehicle_limit,
-             "vehicles": trials.trial_vehicle_count(trial)}
+             "vehicles": trials.trial_vehicle_count(trial),
+             # Kort sparat för fortsättningen: då dras första betalningen
+             # när provet tar slut i stället för att det stängs.
+             "committed": _trial_committed(company.id)}
             if trial else None
         ),
         "discount": discounts.discount_row(discounts.active_discount(company.id, now=now)),
@@ -781,7 +797,7 @@ def assign_membership(request, license_id):
     principal = _staff(request, Perm.ADMIN_SELL)
     license = License.objects.filter(id=license_id).first()
     if license is None:
-        raise membership.MembershipError("unknown_license", "Medlemskapet finns inte.", status=404)
+        raise membership.MembershipError("unknown_license", "Platsen finns inte.", status=404)
     body = _body(request)
     email = str(body.get("email") or "").strip()
     user_id = str(body.get("userId") or body.get("user_id") or "").strip()
@@ -812,7 +828,7 @@ def unassign_membership(request, license_id):
     principal = _staff(request, Perm.ADMIN_SELL)
     license = License.objects.filter(id=license_id).first()
     if license is None:
-        raise membership.MembershipError("unknown_license", "Medlemskapet finns inte.", status=404)
+        raise membership.MembershipError("unknown_license", "Platsen finns inte.", status=404)
     updated = membership.unassign(license=license, actor_user_id=principal.user_id)
     _record(
         principal, "membership_unassigned", company_id=license.company_id,
@@ -1423,3 +1439,17 @@ def delete_company(request, company_id):
         confirm_name=str(_body(request).get("confirmName") or ""),
     )
     return _json(request, {"ok": True, "deleted": counts})
+
+
+def _company_has_bankid(company_id) -> bool:
+    """Har någon aktiv inloggning i bolaget legitimerat sig med BankID?"""
+    from fleet.models import BankIdIdentity
+
+    users = CompanyMember.objects.filter(company_id=company_id, status="active").values_list("user_id", flat=True)
+    return BankIdIdentity.objects.filter(user_id__in=list(users)).exists()
+
+
+def _trial_committed(company_id) -> bool:
+    from fleet import commerce
+
+    return commerce.has_active_trial_commit(company_id)

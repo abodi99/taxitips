@@ -865,7 +865,7 @@ def alerts(request):
         return _json(request, {
             "alerts": [], "context": [], "favorites": [],
             "entitled": False, "reason": "no_entitled_county",
-            "message": "Billicensen har inget län som matchar ditt filter.",
+            "message": "Platsen har inget län som matchar ditt filter.",
         })
     lat, lon, regions, counties, municipalities = area
 
@@ -1030,7 +1030,7 @@ def alert_history(request):
     if area is None:
         return _json(request, {
             "alerts": [], "entitled": False, "reason": "no_entitled_county",
-            "message": "Billicensen har inget län som matchar ditt filter.",
+            "message": "Platsen har inget län som matchar ditt filter.",
         })
     lat, lon, regions, counties, municipalities = area
 

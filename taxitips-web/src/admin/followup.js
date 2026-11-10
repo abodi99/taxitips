@@ -137,7 +137,10 @@ export function callsCell(attempts, lastIso) {
 function flagList(flags) {
   if (!flags?.length) return "";
   return `<ul class="fu-flags">${flags.map((f) =>
-    `<li class="fu-flag fu-${esc(f.level)}">${esc(f.text)}</li>`).join("")}</ul>`;
+    f.code === "org_number_later"
+      // Lugn info, inte ett fel: personen är legitimerad, bolaget anges vid köp.
+      ? `<li class="fu-flag fu-info fu-bankid" title="${esc(f.text)}">BankID ✓</li>`
+      : `<li class="fu-flag fu-${esc(f.level)}">${esc(f.text)}</li>`).join("")}</ul>`;
 }
 
 function warnCount(flags) {
@@ -177,7 +180,7 @@ function row(r, outcomes, churnReasons) {
     <tr class="fu-row" data-fu-row="${id}">
       <td>
         <span class="fu-name">${esc(r.legalName || r.name)}</span>${warnCount(r.flags)}
-        <span class="fu-sub">${esc([r.orgNumber, r.kind === "person" ? "EF" : "", r.registryCity].filter(Boolean).join(" · "))}</span>
+        <span class="fu-sub">${esc([r.orgNumber || "Org.nr saknas – behövs vid köp", r.kind === "person" ? "EF" : "", r.registryCity].filter(Boolean).join(" · "))}</span>
       </td>
       <td><span class="pill ${tone}" title="${esc(title)}">${esc(label)}</span></td>
       <td>

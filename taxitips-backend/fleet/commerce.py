@@ -415,7 +415,7 @@ def commit_trial_continuation(
     """
     if not plan.request.get("addVehicles"):
         raise orders.OrderError(
-            "vehicles_required", "Välj vilka bilar som ska fortsätta.", status=400,
+            "vehicles_required", "Välj vilka platser som ska fortsätta.", status=400,
         )
     old = pending_trial_commit_order(company_id)
     if old is not None:

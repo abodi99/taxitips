@@ -199,7 +199,7 @@ def _offer_items(offer: dict) -> str:
     counties = [_county_name(c) for c in offer.get("counties") or []]
     n = offer["count"]
     if plates and not counties:
-        return f"era {n} {'bil' if n == 1 else 'bilar'} ({', '.join(plates)})"
+        return f"era {n} {'plats' if n == 1 else 'platser'} ({', '.join(plates)})"
     what = "er plats" if n == 1 else f"era {n} platser"
     return f"{what} ({', '.join(plates + counties)})"
 
@@ -207,7 +207,7 @@ def _offer_items(offer: dict) -> str:
 def _offer_lines(offer: dict | None) -> str:
     if not offer:
         return (
-            "Vill ni fortsätta bekräftar ni bilarna och sparar kort i kundportalen. "
+            "Vill ni fortsätta bekräftar ni platserna och sparar kort i kundportalen. "
             "Första månadsbeloppet dras när provet tar slut:\n"
         )
     return (
@@ -222,15 +222,15 @@ def _offer_lines(offer: dict | None) -> str:
 # Vad provet visar och vad abonnemanget lägger till (fleet/features.py). Står i
 # mejlen och aldrig som köpknapp i appen (docs/fleet-abonnemang.md §9c).
 _TRIAL_SCOPE = (
-    "Under provet visar appen tåg och buss i bilens län: inställda tåg, sista "
+    "Under provet visar appen tåg och buss i platsens län: inställda tåg, sista "
     "avgången och ersättningstrafik. Med abonnemang får förarna också flyg (ankomster), "
-    "färjor, evenemang (när publiken går hem) och trafikolyckor, och bilarna kan ha "
+    "färjor, evenemang (när publiken går hem) och trafikolyckor, och platserna kan ha "
     "fler län.\n"
 )
 
 
 def _cars(n: int) -> str:
-    return "en bil" if n == 1 else f"upp till {n} bilar"
+    return "en plats" if n == 1 else f"upp till {n} platser"
 
 
 _SIGNATURE = (
@@ -249,11 +249,11 @@ def trial_started(company_id, to_address: str, trial) -> OutboxMessage | None:
             f"Den omfattar {_cars(trial.vehicle_limit)} och kostar ingenting.\n\n"
             + _TRIAL_SCOPE
             + "\nSå kommer ni igång:\n"
-            "1. Bjud in förarna med e-post: tryck på bilen i appen (Inställningar) eller "
-            "under Bilar i kundportalen. Föraren får ett mejl, väljer ett lösenord och "
-            "loggar in i appen med e-post och lösenord -- bilen och länen har ni redan valt.\n"
+            "1. Bjud in förarna med e-post: tryck på platsen i appen (Inställningar) eller "
+            "under Platser i kundportalen. Föraren får ett mejl, väljer ett lösenord och "
+            "loggar in i appen med e-post och lösenord -- platsen och länet har ni redan valt.\n"
             "2. Kör ni själva: \"Kör bilen själv med den här telefonen\".\n\n"
-            "För att fortsätta efter provet: bekräfta bilarna och spara kort i kundportalen. "
+            "För att fortsätta efter provet: bekräfta platserna och spara kort i kundportalen. "
             "Då dras första betalningen automatiskt när provet tar slut. Utan sparat kort "
             "stängs åtkomsten utan debitering.\n\n"
             f"Spara kort här: {portal_url('fortsatt')}\n"
@@ -288,7 +288,7 @@ def trial_ending(company_id, to_address: str, trial, *, stage: str = "3d") -> Ou
             + "Ni har ännu inte sparat kort för auto-förnyelse.\n\n"
             + _TRIAL_SCOPE + "\n"
             + _offer_lines(offer)
-            + f"\nBekräfta bilarna och spara kort här: {portal_url('fortsatt')}\n\n"
+            + f"\nBekräfta platserna och spara kort här: {portal_url('fortsatt')}\n\n"
             "Utan sparat kort stängs åtkomsten när provet tar slut -- utan debitering. "
             "Med kort dras första månadsbeloppet automatiskt den dagen.\n"
             + _SIGNATURE
@@ -299,7 +299,7 @@ def trial_ending(company_id, to_address: str, trial, *, stage: str = "3d") -> Ou
             "Hej!\n\n"
             f"Provperioden slutar {when}.\n\n"
             + _offer_lines(offer)
-            + f"\nBekräfta bilarna och spara kort: {portal_url('fortsatt')}\n\n"
+            + f"\nBekräfta platserna och spara kort: {portal_url('fortsatt')}\n\n"
             "Har ni redan sparat kort dras första betalningen automatiskt i morgon. "
             "Utan kort stängs åtkomsten utan debitering.\n"
             + _SIGNATURE
@@ -311,7 +311,7 @@ def trial_ending(company_id, to_address: str, trial, *, stage: str = "3d") -> Ou
             f"Provperioden slutar {when}.\n\n"
             + _TRIAL_SCOPE + "\n"
             + _offer_lines(offer)
-            + f"\nBekräfta bilarna och spara kort: {portal_url('fortsatt')}\n\n"
+            + f"\nBekräfta platserna och spara kort: {portal_url('fortsatt')}\n\n"
             "Med sparat kort fortsätter abonnemanget automatiskt. "
             "Utan kort stängs åtkomsten utan debitering.\n"
             + _SIGNATURE
@@ -340,7 +340,7 @@ def trial_ended(company_id, to_address: str, trial) -> OutboxMessage | None:
         body=(
             "Hej!\n\n"
             "Provperioden är slut och ingenting har debiterats. Förarna får inga fler "
-            "tips förrän ni har valt vilka bilar som ska fortsätta och betalat i "
+            "tips förrän ni har valt vilka platser som ska fortsätta och betalat i "
             "kundportalen. Med abonnemang får förarna också flyg, färjor, evenemang "
             "och trafikolyckor -- inte bara tåg och buss.\n\n"
             + price
@@ -448,7 +448,7 @@ def driver_invite(invite, *, company_name: str, plate: str, link: str = "") -> O
             + step_one
             + "2. Hämta appen Taxi Tips i App Store eller Google Play.\n"
             f"3. Öppna appen, tryck \"Logga in\" och skriv {invite.email} och ditt lösenord.\n\n"
-            "Bilen och länen har din chef redan valt.\n\n"
+            "Platsen och länet har din chef redan valt.\n\n"
             "Länken fungerar en gång och inbjudan gäller i sju dagar. Har länken gått ut: "
             "tryck \"Glömt lösenord?\" i appen. Väntade du dig inte det här mejlet kan du "
             "strunta i det.\n"
@@ -552,7 +552,7 @@ def send_now(row: OutboxMessage | None) -> bool:
 
 MEMBER_ROLE_TEXT = {
     "company_owner": "som ägare",
-    "fleet_admin": "för att sköta bilar och förare",
+    "fleet_admin": "för att sköta platser och förare",
     "finance": "för att sköta betalning och fakturor",
 }
 
@@ -576,7 +576,7 @@ def member_invite(invite, *, link: str, company_name: str, inviter: str = "", se
             f"{who} har bjudit in dig till {company} i Taxi Tips{(' ' + role) if role else ''}.\n\n"
             "Logga in här – du får välja ett lösenord direkt:\n"
             f"{link}\n\n"
-            "Du kommer till kundportalen på taxitips.se, där du ser bilarna, förarna och "
+            "Du kommer till kundportalen på taxitips.se, där du ser platserna, förarna och "
             "abonnemanget. Samma inloggning fungerar i appen.\n\n"
             "Länken fungerar en gång och inbjudan gäller i 14 dagar. Har länken gått ut: gå till "
             f"{portal_url()} och tryck \"Glömt lösenord\" med {invite.email}.\n\n"

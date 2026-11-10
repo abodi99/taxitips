@@ -671,7 +671,7 @@ def return_from_replacement(*, license: License, actor_user_id=None, now=None):
 def assert_trial_license(license: License) -> None:
     if license.status != License.Status.TRIAL:
         raise LicensingError(
-            "paid_license", "Bilen är betald. Län på en betald bil ändras via en beställning.",
+            "paid_license", "Platsen är betald. Den här åtgärden gäller bara provplatser.",
         )
 
 
@@ -711,7 +711,7 @@ def remove_trial_license(license: License, *, now=None) -> int:
 
     if license.status != License.Status.TRIAL:
         raise LicensingError(
-            "paid_license", "Bilen är betald och avslutas vid förnyelse, inte direkt.",
+            "paid_license", "Platsen är betald och avslutas vid förnyelse, inte direkt.",
         )
     now = now or timezone.now()
     with transaction.atomic():

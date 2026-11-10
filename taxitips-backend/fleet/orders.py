@@ -82,12 +82,37 @@ class OrderError(Exception):
 def get_or_create_subscription(company_id, *, price_version: PriceVersion | None = None) -> Subscription:
     subscription = Subscription.objects.filter(company_id=company_id).first()
     if subscription is not None:
-        return subscription
+        return _follow_default_if_unpaid(subscription)
     return Subscription.objects.create(
         company_id=company_id,
         price_version=price_version or pricing.default_price_version(),
         status=SubscriptionStatus.NONE,
     )
+
+
+def _follow_default_if_unpaid(subscription: Subscription) -> Subscription:
+    """
+    Ett abonnemang som aldrig betalats följer den förvalda prislistan.
+
+    Raden skapas vid registreringen och pekar då på den lista som var förvald
+    just då. Byter vi lista medan företaget går på prov ska provets erbjudande
+    och mejlen visa det nya priset, inte det de registrerade sig under. Det
+    sker på ETT ställe: här, där prislistan för offerter hämtas. En kund som
+    betalat (status annat än `none`, Stripe-abonnemang eller en lyckad
+    betalning) rörs aldrig -- hens lista byts bara av en uttrycklig flytt.
+    """
+    if (
+        subscription.status != SubscriptionStatus.NONE
+        or subscription.had_successful_payment
+        or subscription.stripe_subscription_id
+    ):
+        return subscription
+    default = PriceVersion.objects.filter(is_default=True).first()
+    if default is None or default.id == subscription.price_version_id:
+        return subscription
+    Subscription.objects.filter(id=subscription.id).update(price_version=default)
+    subscription.price_version = default
+    return subscription
 
 
 def _intro_next_period(subscription: Subscription, now) -> bool:
@@ -229,6 +254,13 @@ def plan_change(
     new_extra = current_extra + added_extra - removed_extra - canceled_extra
     if new_licenses < 0 or new_extra < 0:
         raise OrderError("invalid_change", "Ändringen går inte att räkna ut.")
+    # Extra län säljs inte längre på nyare prislistor. Det är TILLÄGG som nekas;
+    # att behålla eller ta bort ett befintligt län går som förut och prissätts
+    # med listans egen länsavgift.
+    if added_extra > 0 and not pricing.extra_counties_sold(price):
+        raise OrderError(
+            "extra_counties_not_sold", "Fler län säljs inte längre. Varje plats gäller ett län."
+        )
 
     immediate = bool(add_vehicles or add_counties or immediate_base_counties)
     kind = _kind_for(add_vehicles, add_counties, remove_counties, cancel_license_ids, base_county_changes)

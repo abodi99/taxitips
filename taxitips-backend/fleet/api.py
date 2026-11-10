@@ -864,11 +864,11 @@ def membership_session_start(request):
     if not license_id:
         row = membership.active_membership_for_user(user_id)
         if row is None:
-            raise sessions.SessionError("membership_required", "Inget medlemskap på kontot.", status=404)
+            raise sessions.SessionError("membership_required", "Ingen plats på kontot.", status=404)
         license_id = row.id
     license = License.objects.filter(id=license_id).first()
     if license is None:
-        raise sessions.SessionError("unknown_license", "Medlemskapet finns inte.", status=404)
+        raise sessions.SessionError("unknown_license", "Platsen finns inte.", status=404)
     window = access.company_window(license.company_id)
     if not window.ok:
         return _json(
@@ -979,7 +979,8 @@ def membership_county(request, license_id):
     """
     POST /api/fleet/memberships/<id>/county  {"base": "12", "extras": ["13"]}
 
-    Provet byter län direkt. Antingen företagets administratör (Bearer +
+    Platsen byter län direkt, provplats som betald (sedan 2026-11-10), högst två
+    gånger per kalendermånad. Antingen företagets administratör (Bearer +
     MANAGE_VEHICLES) eller kontot medlemskapet är tilldelat -- det senare är
     flödet \"registrera dig, bekräfta med kod, tillbaka i appen och välj län\".
     """
@@ -987,7 +988,7 @@ def membership_county(request, license_id):
 
     license = License.objects.filter(id=license_id).first()
     if license is None:
-        raise membership.MembershipError("unknown_license", "Medlemskapet finns inte.", status=404)
+        raise membership.MembershipError("unknown_license", "Platsen finns inte.", status=404)
     body = _body(request)
     auth = request.headers.get("Authorization", "")
     payload = verify_supabase_jwt(auth[7:].strip()) if auth.lower().startswith("bearer ") else None
@@ -997,7 +998,7 @@ def membership_county(request, license_id):
     else:
         principal = _principal(request, Perm.MANAGE_VEHICLES)
         if str(principal.company_id) != str(license.company_id):
-            raise PermissionDenied("not_allowed", "Du får inte ändra det här medlemskapet.", status=403)
+            raise PermissionDenied("not_allowed", "Du får inte ändra den här platsen.", status=403)
         actor = principal.user_id
     base, extras = membership.set_county(
         license=license, base=body.get("base") or "",
@@ -1263,6 +1264,11 @@ def _plan_from_body(company_id, body: dict, now=None) -> orders.ChangePlan:
         )
         for v in (body.get("addVehicles") or [])
     ]
+    # `baseCountyChanges` (betalt baslänsbyte vid förnyelsen) är kvar bara för
+    # äldre portalversioner. Sedan 2026-11-10 är det direkta bytet
+    # (`memberships/<id>/county`) huvudvägen för alla platser; ett direkt byte
+    # ersätter ett schemalagt här (county_changes._change_paid) och båda delar
+    # samma månadsgräns, så vägarna motsäger inte varandra.
     return orders.plan_change(
         company_id,
         add_vehicles=specs,
@@ -1398,7 +1404,7 @@ def trial_commit(request):
     if not body.get("accepted"):
         raise orders.OrderError(
             "acceptance_required",
-            "Godkänn vilka bilar som fortsätter och att kortet sparas.",
+            "Godkänn vilka platser som fortsätter och att kortet sparas.",
         )
     portal = getattr(settings, "FLEET_PORTAL_URL", "https://taxitips.se/portal").rstrip("/")
     success = body.get("successUrl") or f"{portal}?trial_commit=ok#fortsatt"
@@ -1851,7 +1857,7 @@ def trial_vehicles(request):
     if trial is None:
         raise trials.TrialError(
             "no_active_trial",
-            "Företaget har ingen pågående provperiod. Fler bilar beställs hos TaxiTips.",
+            "Företaget har ingen pågående provperiod. Fler platser beställs hos TaxiTips.",
         )
     with transaction.atomic():
         created = sales._add_trial_vehicles(
@@ -2183,24 +2189,26 @@ def trial_vehicle_county(request, license_id):
     """
     POST /api/fleet/trial/vehicles/<id>/county {"base": "01", "extras": ["12"]?}
 
-    Ägaren byter län på en provbil i appen eller portalen. Kostar inget under
-    provet; en betald bil byter län via en beställning. Högst två byten per bil
-    och månad (`county_change_limit`, fleet/county_changes.py). Utan `extras`
-    behålls bilens extra län.
+    Ägaren byter län på en plats i appen eller portalen. Direkt och utan kostnad
+    för både prov- och betalda platser (sedan 2026-11-10: priset är detsamma
+    oavsett län). Högst två byten per plats och månad (`county_change_limit`,
+    fleet/county_changes.py). Utan `extras` behålls platsens extra län.
     """
     principal = _principal(request, Perm.MANAGE_VEHICLES)
     license = _company_license(principal, license_id)
     body = _body(request)
-    result = county_changes.change_trial_counties(
+    was_trial = license.status == License.Status.TRIAL
+    result = county_changes.change_counties(
         license, base=body.get("base") or "",
         extras=list(body.get("extras") or []) if "extras" in body else None,
         actor_user_id=principal.user_id,
     )
-    audit.record(
-        "trial_counties_set", company_id=principal.company_id, actor_user_id=principal.user_id,
-        actor_kind="customer", subject_type="license", subject_id=license.id,
-        detail={"base": result["base"], "extras": result["extras"], "counted": result["counted"]},
-    )
+    if was_trial:  # den betalda vägen loggar sig själv (seat_county_changed)
+        audit.record(
+            "trial_counties_set", company_id=principal.company_id, actor_user_id=principal.user_id,
+            actor_kind="customer", subject_type="license", subject_id=license.id,
+            detail={"base": result["base"], "extras": result["extras"], "counted": result["counted"]},
+        )
     return _json(request, {"ok": True, **result})
 
 

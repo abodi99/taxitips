@@ -98,16 +98,16 @@ export function setupSteps(data) {
     },
     {
       id: "memberships",
-      title: "Skaffa medlemskap",
-      hint: "En licens = en plats för ett konto, inte en bil.",
+      title: "Skaffa plats",
+      hint: "En plats = ett konto i ett län, inte en bil.",
       done: hasMemberships,
       goto: "abonnemang",
-      cta: "Skaffa medlemskap",
+      cta: "Skaffa plats",
     },
     {
       id: "accounts",
       title: "Bjud in konton",
-      hint: "Tilldela varje medlemskap ett konto med e-post.",
+      hint: "Tilldela varje plats ett konto med e-post.",
       done: hasAccounts,
       goto: "medlemskap",
       cta: "Bjud in konto",
@@ -120,8 +120,8 @@ export function setupSteps(data) {
 function payStep({ payOk, hasMemberships, cs, trial }) {
   const pay = {
     id: "pay",
-    title: "Fortsätt med medlemskap",
-    hint: "Betala första månaden hos Stripe. Provet övergår då i medlemskapet.",
+    title: "Fortsätt efter provet",
+    hint: "Betala första månaden hos Stripe. Provet övergår då till betalda platser.",
     done: payOk,
     goto: "abonnemang",
     cta: "Till abonnemang",
@@ -131,9 +131,9 @@ function payStep({ payOk, hasMemberships, cs, trial }) {
   };
   if (payOk || !hasMemberships) return pay;
   if (cs?.kind === "commit") {
-    pay.cta = "Teckna medlemskap";
+    pay.cta = "Köp platser";
     pay.action = "continue-trial";
-    pay.hint = "Du betalar första månaden direkt. Provet övergår då i medlemskapet.";
+    pay.hint = "Du betalar första månaden direkt. Provet övergår då till betalda platser.";
   } else if (cs?.kind === "finish_card") {
     pay.cta = "Öppna betalsidan";
     pay.href = trial?.paymentUrl || null;
@@ -143,8 +143,8 @@ function payStep({ payOk, hasMemberships, cs, trial }) {
     pay.action = "continue-trial";
     pay.hint = "Provet är slut. Betala för att behålla åtkomsten.";
   } else if (trial && ["pending", "active"].includes(trial.status)) {
-    pay.cta = "Se medlemskap";
-    pay.hint = "När medlemskap och konton är på plats: fortsätt efter provet här.";
+    pay.cta = "Se platser";
+    pay.hint = "När platser och konton är på plats: fortsätt efter provet här.";
   }
   return pay;
 }
@@ -167,7 +167,7 @@ function journeyCard(data) {
   if (!remaining.length) {
     return `<div class="card journey-done">
       <h2>Ni är igång</h2>
-      <p class="muted">Medlemskap, konton och betalning är på plats. Titta tillbaka
+      <p class="muted">Platser, konton och betalning är på plats. Titta tillbaka
         hit om något behöver åtgärdas.</p>
     </div>`;
   }
@@ -231,7 +231,7 @@ function trialBanner(data) {
 
 /** En provplats som text: registreringsnumret, eller kontoplatsens län. */
 function continueItem(c) {
-  return c.plate ? c.plate : `Medlemskap · ${countyName(c.baseCounty)}`;
+  return c.plate ? c.plate : `Plats · ${countyName(c.baseCounty)}`;
 }
 
 /**
@@ -271,7 +271,7 @@ function continueCard(data) {
       <h2>Spara kortet för att fortsätta</h2>
       <p>${items}</p>
       ${price}
-      <p class="muted">Ni har bekräftat medlemskapen. Öppna Stripes sida och spara
+      <p class="muted">Ni har bekräftat platserna. Öppna Stripes sida och spara
         kortet — ingen dragning sker förrän provet tar slut
         (${esc(date(trial.endsAt))}).</p>
       <div class="btn-row">
@@ -283,19 +283,19 @@ function continueCard(data) {
 
   if (state.kind === "commit") {
     return `<div class="card continue-card" id="fortsatt">
-      <h2>Fortsätt med medlemskap</h2>
+      <h2>Fortsätt efter provet</h2>
       <p>${items} ·
         provet slutar ${esc(date(trial.endsAt))}</p>
       ${price}
-      <p class="muted">Teckna medlemskapet när du vill. Du betalar första månaden direkt hos
-        Stripe, sedan en gång i månaden tills ni säger upp. Provet övergår då i medlemskapet.</p>
-      <div class="btn-row"><button class="btn btn-primary btn-lg" data-action="continue-trial">Teckna medlemskap</button></div>
+      <p class="muted">Köp platserna när du vill. Du betalar första månaden direkt hos
+        Stripe, sedan en gång i månaden tills ni säger upp. Provet övergår då till betalda platser.</p>
+      <div class="btn-row"><button class="btn btn-primary btn-lg" data-action="continue-trial">Köp platser</button></div>
     </div>`;
   }
 
   // Prov slut utan kort: betala nu (gamla flödet).
   return `<div class="card continue-card" id="fortsatt">
-      <h2>Fortsätt med medlemskap</h2>
+      <h2>Fortsätt efter provet</h2>
       <p>${items}</p>
       ${price}
       <p class="muted">Provet är slut. Du ser priset innan du godkänner.
@@ -340,8 +340,8 @@ export function oversikt(data) {
   if (data.company?.legacyAccessUntil) {
     notices.push(`<div class="notice">
       <b>Övergång pågår.</b> Era telefoner fungerar som förut till
-      ${esc(date(data.company.legacyAccessUntil))}. Lägg upp medlemskapen och bjud
-      in konton under <em>Medlemskap</em> före dess.
+      ${esc(date(data.company.legacyAccessUntil))}. Lägg upp platserna och bjud
+      in konton under <em>Platser</em> före dess.
     </div>`);
   }
 
@@ -355,7 +355,7 @@ export function oversikt(data) {
       setupDone
         ? `<div class="status-strip" aria-label="Läge just nu">
             <div><span class="muted">Abonnemang</span><b>${statusPill(sub.status)}</b></div>
-            <div><span class="muted">Medlemskap</span><b>${esc(data.licenseCount ?? 0)}</b></div>
+            <div><span class="muted">Platser</span><b>${esc(data.licenseCount ?? 0)}</b></div>
             <div><span class="muted">Nästa betalning</span><b>${esc(date(sub.currentPeriodEnd) || "—")}</b></div>
           </div>`
         : ""
@@ -364,9 +364,9 @@ export function oversikt(data) {
     ${
       setupDone && (data.licenses ?? []).length
         ? `<div class="card">
-             <h2>Medlemskap just nu</h2>
+             <h2>Platser just nu</h2>
              ${membershipList(data)}
-             <div class="btn-row"><button type="button" class="btn btn-quiet" data-goto="medlemskap">Hantera medlemskap</button></div>
+             <div class="btn-row"><button type="button" class="btn btn-quiet" data-goto="medlemskap">Hantera platser</button></div>
            </div>`
         : ""
     }
@@ -378,7 +378,7 @@ export function oversikt(data) {
 function membershipList(data) {
   const rows = data.licenses ?? [];
   if (!rows.length) {
-    return `<p class="muted">Inga medlemskap upplagda än.</p>`;
+    return `<p class="muted">Inga platser upplagda än.</p>`;
   }
   return `<ul class="car-list">${rows
     .map((row) => {
@@ -406,9 +406,9 @@ function vantandeAndringar(data) {
   const pending = data.pendingChanges ?? [];
   if (!pending.length) return "";
   const label = {
-    reduce_licenses: "Medlemskap avslutas",
-    remove_county: "Extra län tas bort",
-    change_base_county: "Baslänet byts",
+    reduce_licenses: "Platser avslutas",
+    remove_county: "Fler län (äldre avtal) tas bort",
+    change_base_county: "Länet byts",
     cancel_subscription: "Abonnemanget avslutas",
   };
   return `<div class="card">
@@ -439,7 +439,7 @@ function membershipStatusPill(status) {
 /** Namnet på ett medlemskap i listor: baslänet identifierar platsen. */
 function membershipLabel(row) {
   const county = row.baseCounty ? countyName(row.baseCounty) : "utan län";
-  return `Medlemskap · ${county}`;
+  return `Plats · ${county}`;
 }
 
 /** Baslänet som text, även innan provplatsen fått ett län. */
@@ -466,7 +466,7 @@ function membershipOverview(data, rows, userId) {
   const paidCount = rows.length - trialCount;
   const mine = rows.find((r) => userId && String(r.assigneeUserId) === String(userId));
   return `<div class="card membership-overview" aria-labelledby="membershipOverviewTitle">
-    <h2 id="membershipOverviewTitle">Medlemskap</h2>
+    <h2 id="membershipOverviewTitle">Platser</h2>
     <p class="muted">En plats gäller ett <b>konto</b> i ett län, inte en bil.
       Alla län kostar lika mycket. Den som håller platsen loggar in i appen och
       tar den där.</p>
@@ -477,8 +477,8 @@ function membershipOverview(data, rows, userId) {
     </dl>
     <p class="membership-managed">${
       mine
-        ? `Du hanterar medlemskapet med ${esc(baseCountyText(mine))}.`
-        : "Inget medlemskap ligger på ditt konto just nu."
+        ? `Du hanterar platsen i ${esc(baseCountyText(mine))}.`
+        : "Ingen plats ligger på ditt konto just nu."
     }</p>
   </div>`;
 }
@@ -500,7 +500,7 @@ function inviteAccountsCard(rows, canAssign) {
       När hen loggar in i appen med e-post och lösenord är platsen hens --
       inget eget företagskonto behövs.</p>
     <form id="membershipInviteForm">
-      <label for="membership-invite-for">Medlemskap</label>
+      <label for="membership-invite-for">Plats</label>
       <select id="membership-invite-for" name="licenseId" required>${options}</select>
       <label for="membership-invite-email">E-post</label>
       <input id="membership-invite-email" name="email" type="email" required
@@ -513,57 +513,38 @@ function inviteAccountsCard(rows, canAssign) {
 }
 
 /**
- * Länkontroller per medlemskap. Provet byter direkt och kostnadsfritt; en
- * betald plats byter via en beställning, så att fakturan stämmer.
+ * Länkontroller per plats. Alla platser, prov som betalda, byter län direkt
+ * och utan kostnad: högst två byten per månad. Fler län från äldre avtal
+ * visas bara, de går inte att köpa.
  */
 function membershipCountyControls(row, opts) {
-  const trial = row.status === "trial";
   const options = offerableCountyEntries()
     .map(([code, name]) => `<option value="${esc(code)}">${esc(name)}</option>`)
     .join("");
-  if (trial) {
-    return `<details class="advanced county-panel">
-      <summary>Län för det här medlemskapet</summary>
-      <p>Baslän: <b>${esc(baseCountyText(row))}</b></p>
-      ${countyChangesLeft(row)}
-      ${
-        opts.canCounties
-          ? `<div class="btn-row county-actions">
-               <label class="visually-hidden" for="county-${esc(row.licenseId)}">Län</label>
-               <select id="county-${esc(row.licenseId)}" data-county-for="${esc(row.licenseId)}">${options}</select>
-               <button class="btn btn-primary" data-action="change-base" data-license="${esc(row.licenseId)}" data-status="trial">Byt baslän</button>
-             </div>`
-          : '<p class="muted">Bara ägaren eller fordonsadministratören kan byta län.</p>'
-      }
-      <p class="muted">Provet byter län direkt och utan kostnad. Högst två byten per månad.</p>
-    </details>`;
-  }
+  const legacy = (row.extraCounties ?? []).map((c) => countyName(c));
+  const canChange = opts.canCounties || opts.canBuy;
+  const noneLeft = row.countyChanges && row.countyChanges.remaining <= 0;
   return `<details class="advanced county-panel">
-    <summary>Län för det här medlemskapet</summary>
-    <p>Baslän: <b>${esc(baseCountyText(row))}</b>${
+    <summary>Byt län</summary>
+    <p>Län: <b>${esc(baseCountyText(row))}</b>${
       row.scheduledBaseCounty
         ? ` <span class="pill pill-warn">Byts till ${esc(countyName(row.scheduledBaseCounty))}</span>`
         : ""
     }</p>
-    <p class="muted">Extra län: ${esc((row.extraCounties ?? []).map((c) => countyName(c)).join(", ") || "inga")}</p>
+    ${legacy.length ? `<p class="muted">Fler län (äldre avtal): ${esc(legacy.join(", "))}</p>` : ""}
     ${countyChangesLeft(row)}
     ${
-      opts.canBuy
-        ? `<div class="btn-row county-actions">
-             <label class="visually-hidden" for="county-${esc(row.licenseId)}">Län</label>
-             <select id="county-${esc(row.licenseId)}" data-county-for="${esc(row.licenseId)}">${options}</select>
-             <button class="btn btn-primary" data-action="add-county" data-license="${esc(row.licenseId)}">Köp extra län</button>
-             ${
-               row.countyChanges && row.countyChanges.remaining <= 0
-                 ? ""
-                 : `<button class="btn btn-quiet" data-action="change-base" data-license="${esc(row.licenseId)}" data-status="${esc(row.status)}">Byt baslän</button>`
-             }
-           </div>`
-        : '<p class="muted">Ägaren eller ekonomiansvarig köper extra län eller byter baslän.</p>'
+      canChange
+        ? noneLeft
+          ? ""
+          : `<div class="btn-row county-actions">
+               <label class="visually-hidden" for="county-${esc(row.licenseId)}">Län</label>
+               <select id="county-${esc(row.licenseId)}" data-county-for="${esc(row.licenseId)}">${options}</select>
+               <button class="btn btn-primary" data-action="change-base" data-license="${esc(row.licenseId)}">Byt län</button>
+             </div>`
+        : '<p class="muted">Bara ägaren eller fordonsadministratören kan byta län.</p>'
     }
-    <p class="muted">Extra län är för <b>samma konto</b> -- en person som vill ha
-      två län. Det börjar gälla när tilläggsbetalningen lyckats. Baslänsbyte
-      gäller vid nästa förnyelse. Högst två byten per månad.</p>
+    <p class="muted">Länbytet gäller direkt. Högst två byten per månad.</p>
   </details>`;
 }
 
@@ -584,14 +565,18 @@ function membershipSlotCard(row, opts, userId) {
     </div>
 
     <dl class="membership-facts">
-      <div><dt>Baslän</dt><dd>${esc(baseCountyText(row))}${
+      <div><dt>Län</dt><dd>${esc(baseCountyText(row))}${
         row.scheduledBaseCounty
           ? ` <span class="pill pill-warn">Byts till ${esc(countyName(row.scheduledBaseCounty))}</span>`
           : ""
       }</dd></div>
-      <div><dt>Extra län</dt><dd>${esc(
-        (row.extraCounties ?? []).map((c) => countyName(c)).join(", ") || "inga",
-      )}</dd></div>
+      ${
+        (row.extraCounties ?? []).length
+          ? `<div><dt>Fler län (äldre avtal)</dt><dd>${esc(
+              row.extraCounties.map((c) => countyName(c)).join(", "),
+            )}</dd></div>`
+          : ""
+      }
     </dl>
 
     ${
@@ -639,11 +624,11 @@ export function medlemskap(data, userId = null, notify = null) {
     ${
       rows.length
         ? rows.map((row) => membershipSlotCard(row, opts, userId)).join("")
-        : `<div class="card"><h2>Inga medlemskap än</h2>
-             <p class="muted">Köp dem under Abonnemang. Ett medlemskap är en plats
-             för ett konto -- den som håller platsen loggar in i appen.</p>
+        : `<div class="card"><h2>Inga platser än</h2>
+             <p class="muted">Köp dem under Abonnemang. En plats gäller ett konto
+             -- den som håller platsen loggar in i appen.</p>
              <div class="btn-row"><button type="button" class="btn btn-primary"
-               data-goto="abonnemang">Köp medlemskap</button></div>
+               data-goto="abonnemang">Köp platser</button></div>
            </div>`
     }
     ${
@@ -739,7 +724,7 @@ function featuresSection(data, stage) {
         <ul class="feature-list">${on.map((k) => featureItem(k, "on")).join("")}</ul>
       </div>
       <div class="feature-col feature-col-plus">
-        <h3>Låses upp med medlemskap</h3>
+        <h3>Låses upp med platser</h3>
         <ul class="feature-list">${locked.map((k) => featureItem(k, "locked")).join("")}</ul>
       </div>
     </div>`;
@@ -747,7 +732,7 @@ function featuresSection(data, stage) {
   const heading = {
     trial_committed: "Allt är upplåst redan nu",
     member: "Det här ingår",
-  }[stage] ?? "Det här ingår i medlemskapet";
+  }[stage] ?? "Det här ingår i platsen";
   return `<div class="member-features">
       <div class="feature-col feature-col-wide">
         <h3>${esc(heading)}</h3>
@@ -763,8 +748,8 @@ const findLine = (quote, prefix) =>
  * Vad det kostar, ur serverns offert (POST /api/fleet/quote, som inte ändrar
  * något). Portalen räknar inget själv: styckpriset, anteckningen och summan
  * är serverns rader. `pricing.quote` är fortsättningen med bolagets egna
- * medlemskap (eller nuläget), `pricing.probe` ett medlemskap med ett extra
- * län -- den enda vägen till länspriset utan en prislista i klienten.
+ * platser (eller nuläget), `pricing.probe` en enda plats -- styckpriset
+ * när bolaget inte har några platser än, utan en prislista i klienten.
  */
 function priceSection(stage, pricing) {
   if (!pricing || pricing.loading) {
@@ -777,12 +762,11 @@ function priceSection(stage, pricing) {
   const probe = pricing.probe?.nextPeriod ?? null;
   const ownLicenses = findLine(plan, "licenses_");
   const licenseLine = ownLicenses ?? findLine(probe, "licenses_");
-  const countyLine = findLine(plan, "extra_counties") ?? findLine(probe, "extra_counties");
   const discount = findLine(plan, "company_discount");
   const currency = plan?.currency ?? probe?.currency ?? "SEK";
   const vatBp = plan?.vatRateBp ?? probe?.vatRateBp;
 
-  if (!licenseLine && !countyLine) {
+  if (!licenseLine) {
     return `<div class="member-price">
       <h3>Vad det kostar</h3>
       <p class="muted">Du ser hela priset och godkänner det innan något köps.</p>
@@ -801,7 +785,7 @@ function priceSection(stage, pricing) {
   let total = "";
   if (ownLicenses && plan) {
     const n = ownLicenses.quantity;
-    const who = `${n} medlemskap`;
+    const who = `${n} ${n === 1 ? "plats" : "platser"}`;
     const label = stage === "member" ? `Nästa period (${who})` : `Efter provet (${who})`;
     total = `<div class="price-total">
         <span>${esc(label)}</span>
@@ -813,8 +797,7 @@ function priceSection(stage, pricing) {
   return `<div class="member-price">
       <h3>Vad det kostar</h3>
       <dl class="price-rows">
-        ${row("Per medlemskap och månad", licenseLine)}
-        ${row("Extra län, per medlemskap och månad", countyLine)}
+        ${row("Per plats och månad", licenseLine)}
         ${
           discount
             ? `<div class="price-row"><dt>${esc(discount.label)}</dt>
@@ -840,7 +823,7 @@ function joinSv(words) {
 function membershipAction(data, stage, plan) {
   const cs = continueState(data);
   const plates = cs ? cs.cars.map((c) => `<b>${esc(continueItem(c))}</b>`).join(", ") : "";
-  const theMemberships = cs?.cars.length === 1 ? "medlemskapet" : "medlemskapen";
+  const theMemberships = cs?.cars.length === 1 ? "platsen" : "platserna";
   const trial = data.trial;
   const unlocked = joinSv(plan.locked.map((k) => (CATEGORY_TEXT[k] ?? [k])[0].toLowerCase()));
   const unlockText = unlocked
@@ -851,13 +834,13 @@ function membershipAction(data, stage, plan) {
     case "commit":
       return `<div class="member-cta">
           <div class="member-cta-text">
-            <h3>Teckna medlemskap</h3>
+            <h3>Köp platser</h3>
             <p>Fortsätt med ${theMemberships} (${plates}). Du betalar första månaden direkt
-              hos Stripe, sedan en gång i månaden tills ni säger upp. Provet övergår då i
-              medlemskapet.${esc(unlockText)}</p>
+              hos Stripe, sedan en gång i månaden tills ni säger upp. Provet övergår då till
+              betalda platser.${esc(unlockText)}</p>
           </div>
           <div class="member-cta-act">
-            <button class="btn btn-primary btn-lg" data-action="continue-trial">Teckna medlemskap</button>
+            <button class="btn btn-primary btn-lg" data-action="continue-trial">Köp platser</button>
             <p class="member-fine">Du ser beloppet och godkänner det innan du betalar.</p>
           </div>
         </div>`;
@@ -877,7 +860,7 @@ function membershipAction(data, stage, plan) {
     case "card_on_file":
       return `<div class="member-cta is-done">
           <div class="member-cta-text">
-            <h3>Klart. Medlemskapet tar vid efter provet.</h3>
+            <h3>Klart. Platserna tar vid efter provet.</h3>
             <p>Kortet är sparat för ${plates}. Första dragningen sker
               ${esc(date(trial?.firstChargeAt || trial?.endsAt))}, sedan varje
               månad tills ni säger upp.</p>
@@ -905,8 +888,8 @@ function membershipAction(data, stage, plan) {
   if (stage === "trial" || stage === "trial_ended") {
     const canBuy = (data.permissions ?? []).includes("purchase");
     const text = !canBuy
-      ? "Ägaren eller ekonomiansvarig startar medlemskapet här."
-      : "Skaffa medlemskap och bjud in konton under <em>Medlemskap</em>. Sedan kan ni fortsätta efter provet här.";
+      ? "Ägaren eller ekonomiansvarig köper platserna här."
+      : "Skaffa platser och bjud in konton under <em>Platser</em>. Sedan kan ni fortsätta efter provet här.";
     return `<div class="member-cta is-quiet"><div class="member-cta-text"><p>${text}</p></div></div>`;
   }
   return "";
@@ -920,19 +903,19 @@ function membershipCard(data, pricing) {
 
   const head = {
     trial: [
-      "Ni provar Taxi Tips — fortsätt med medlemskap",
+      "Ni provar Taxi Tips — fortsätt efter provet",
       t?.endsAt
-        ? `Gratis till ${dateTime(t.endsAt)}. Teckna medlemskapet när du vill: du betalar första månaden direkt.`
-        : "Provet startar när den första telefonen ansluts. Därefter kan ni teckna medlemskap här.",
+        ? `Gratis till ${dateTime(t.endsAt)}. Köp platserna när du vill: du betalar första månaden direkt.`
+        : "Provet startar när den första telefonen ansluts. Därefter kan ni köpa platser här.",
       '<span class="pill pill-warn">Provperiod</span>',
     ],
     trial_committed: [
-      "Medlemskapet är klart",
-      `Kortet är sparat och allt är upplåst. Medlemskapet tar vid ${date(t?.firstChargeAt || t?.endsAt)}.`,
+      "Platserna är klara",
+      `Kortet är sparat och allt är upplåst. Platserna tar vid ${date(t?.firstChargeAt || t?.endsAt)}.`,
       '<span class="pill pill-ok">Kort sparat</span>',
     ],
     member: [
-      "Medlemskap",
+      "Platser",
       sub.cancelAtPeriodEnd
         ? `Uppsagt. Allt fungerar som vanligt till ${date(sub.accessUntil)}.`
         : "Allt ingår. Förnyas en gång i månaden tills ni säger upp.",
@@ -940,10 +923,10 @@ function membershipCard(data, pricing) {
     ],
     trial_ended: [
       "Provet är slut",
-      "Fortsätt med medlemskap, så öppnas appen igen för era medlemskap.",
+      "Köp platser, så öppnas appen igen för era konton.",
       '<span class="pill pill-danger">Provet slut</span>',
     ],
-    none: ["Medlemskap", "Skaffa ett medlemskap för att komma igång.", statusPill("none")],
+    none: ["Platser", "Skaffa en plats för att komma igång.", statusPill("none")],
   }[stage];
 
   const facts = {
@@ -962,8 +945,9 @@ function membershipCard(data, pricing) {
         ]
       : [],
     member: [
-      ["Medlemskap", String(data.licenseCount ?? 0)],
-      ["Extra län", String(data.extraCountyCount ?? 0)],
+      ["Platser", String(data.licenseCount ?? 0)],
+      ...((data.extraCountyCount ?? 0) > 0
+        ? [["Fler län (äldre avtal)", String(data.extraCountyCount)]] : []),
       sub.cancelAtPeriodEnd
         ? ["Gäller till", date(sub.accessUntil)]
         : ["Nästa betalning", date(sub.currentPeriodEnd)],
@@ -996,7 +980,7 @@ function membershipCard(data, pricing) {
         <div class="member-left">
           ${featuresSection(data, stage)}
           <ul class="member-terms">
-            <li>En licens per konto. Den som håller platsen loggar in i appen och byter telefon utan extra kostnad.</li>
+            <li>En plats per konto. Den som håller platsen loggar in i appen och byter telefon utan extra kostnad.</li>
             <li>Månadsvis. Säg upp när ni vill, allt fungerar perioden ut.</li>
           </ul>
         </div>
@@ -1034,8 +1018,8 @@ export function abonnemang(data, orders, pricing = null) {
           ? `<div class="btn-row">
                ${sub.status === "past_due"
                  ? `<button class="btn btn-primary btn-lg" data-action="billing-portal">Uppdatera betalmetod</button>
-                    <button class="btn btn-quiet" data-action="add-license">Lägg till medlemskap</button>`
-                 : `<button class="btn btn-primary" data-action="add-license">Lägg till medlemskap</button>
+                    <button class="btn btn-quiet" data-action="add-license">Lägg till plats</button>`
+                 : `<button class="btn btn-primary" data-action="add-license">Lägg till plats</button>
                     <button class="btn btn-quiet" data-action="billing-portal">Uppdatera kort / fakturor</button>`}
              </div>`
           : ""
@@ -1094,10 +1078,10 @@ function orderKind(kind) {
   return (
     {
       initial: "Första beställningen",
-      add_license: "Fler medlemskap",
-      add_county: "Extra län",
+      add_license: "Fler platser",
+      add_county: "Fler län (äldre avtal)",
       reduce: "Minskning",
-      change_base_county: "Byte av baslän",
+      change_base_county: "Byte av län",
       renewal: "Förnyelse",
     }[kind] ?? kind
   );
@@ -1127,7 +1111,7 @@ function orderStatus(status) {
 function membersCard(m) {
   if (!m) return "";
   const roleText = {
-    fleet_admin: "Fordonsadministratör – medlemskap, län och konton",
+    fleet_admin: "Fordonsadministratör – platser, län och konton",
     finance: "Ekonomiansvarig – betalning och fakturor",
   };
   return `

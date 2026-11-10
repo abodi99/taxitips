@@ -29,7 +29,7 @@ from django.views.decorators.http import require_GET, require_POST
 
 from core import areas
 from core.api import _json
-from fleet import audit, commerce, discounts, orders, pricing, sales, stripe_sync, trials
+from fleet import audit, commerce, company_details, discounts, orders, pricing, sales, stripe_sync, trials
 from fleet.admin_api import _body, _company_or_404, _iso, _staff, handle
 from fleet.models import CompanyDiscount, Coupon, CouponRedemption, Order, RiskConfig
 from fleet.roles import Perm
@@ -171,7 +171,13 @@ def refresh_registry(request, company_id):
 @require_POST
 @handle
 def create_company(request):
-    """POST /api/admin/companies/new"""
+    """
+    POST /api/admin/companies/new
+
+    Bara namn, kontakt, e-post och telefon behövs; `orgNumber` och
+    `verificationNote` är valfria (note krävs när nummer anges). Platserna och
+    länet läggs sedan upp med `/trial` (platser utan regnr).
+    """
     principal = _staff(request, Perm.ADMIN_SELL)
     body = _body(request)
     company = sales.create_company(
@@ -189,6 +195,25 @@ def create_company(request):
         "ok": True, "companyId": str(company.id), "name": company.name,
         "joinCode": company.join_code,
     })
+
+
+@csrf_exempt
+@require_POST
+@handle
+def set_org_number(request, company_id):
+    """
+    POST /api/admin/companies/<id>/org-number {"orgNumber": "...", "legalName": ""?}
+
+    Sätter organisationsnumret på en kund som lagts upp utan (första gången
+    bara). Samma kontroller som när kunden gör det i portalen: giltigt nummer,
+    Bolagsverket, ingen dubblett.
+    """
+    principal = _staff(request, Perm.ADMIN_SELL)
+    company = _company_or_404(company_id)
+    result = company_details.add_org_number(
+        company.id, _body(request), actor_user_id=principal.user_id, actor_kind="sales",
+    )
+    return _json(request, {"ok": True, **result})
 
 
 @csrf_exempt
@@ -239,6 +264,10 @@ def create_order(request, company_id):
             "acceptance_required",
             "Bekräfta att kunden har godkänt antal, pris och betalningsdatum.",
         )
+    # Samma spärr som i kundportalen: en kund som lagts upp utan organisationsnummer
+    # får inte köpa (och faktureras inte) innan numret finns. Säljaren sätter det
+    # med `companies/<id>/org-number`.
+    company_details.require_company_details(company.id)
     plan = _plan(company.id, body)
     order, payment = commerce.place_order(
         company.id, plan, created_by=principal.user_id, actor_kind="sales",
