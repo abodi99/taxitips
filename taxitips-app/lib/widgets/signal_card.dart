@@ -40,10 +40,20 @@ class SignalCard extends StatelessWidget {
     required this.alert,
     this.onTap,
     this.onToggleFollow,
+    this.onDrive,
+    this.compact = false,
   });
 
   final Map<String, dynamic> alert;
   final VoidCallback? onTap;
+
+  /// "Kör dit" direkt från listan: ett tryck till navigeringen. Visas bara på
+  /// stora kort med koordinat som inte tagit slut. `null` = ingen knapp.
+  final VoidCallback? onDrive;
+
+  /// En rad i stället för ett kort: för svaga tips och "Övrigt". De ska
+  /// synas men inte ta plats från det som är värt att köra på.
+  final bool compact;
 
   /// `null` = ingen stjärna alls (backend kan inte spara), aldrig en knapp som
   /// tyst inte gör något. Stjärnan visas bara på redan sparade tips; att spara
@@ -114,6 +124,76 @@ class SignalCard extends StatelessWidget {
       );
     }
     final pays = active && alert['compensation_eligible'] == true;
+
+    if (compact) {
+      // En rad: prick i styrkans färg, plats, vad som hänt, avstånd.
+      final detail = [
+        headline,
+        if (active && decision.isNotEmpty) decision,
+        if (!active) 'Slut',
+      ].join(' · ');
+      return Material(
+        color: active ? TbColors.vit : TbColors.ljusgra,
+        borderRadius: BorderRadius.circular(12),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: onTap,
+          child: Container(
+            constraints: const BoxConstraints(minHeight: 52),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: TbColors.line),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                Icon(iconForAlert(alert), size: 22, color: edge),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text: place,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: TbColors.midnatt,
+                          ),
+                        ),
+                        TextSpan(
+                          text: '  $detail',
+                          style: const TextStyle(color: TbColors.skiffer),
+                        ),
+                      ],
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(fontSize: 15, height: 1.25),
+                  ),
+                ),
+                if (distance != null) ...[
+                  const SizedBox(width: 8),
+                  Text(
+                    distanceText(distance),
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: TbColors.skiffer,
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    final canDrive =
+        onDrive != null &&
+        active &&
+        alert['lat'] != null &&
+        alert['lon'] != null;
 
     return Material(
       color: active ? TbColors.vit : TbColors.ljusgra,
@@ -221,7 +301,27 @@ class SignalCard extends StatelessWidget {
                             ],
                           ),
                         ),
-                        if (followed && onToggleFollow != null)
+                        if (canDrive)
+                          // Ett tryck till navigeringen, utan att öppna tipset.
+                          Padding(
+                            padding: const EdgeInsets.only(left: 8, right: 6),
+                            child: Center(
+                              child: IconButton.filled(
+                                onPressed: onDrive,
+                                tooltip: 'Kör dit',
+                                style: IconButton.styleFrom(
+                                  backgroundColor: TbColors.taxi,
+                                  foregroundColor: TbColors.ink,
+                                  minimumSize: const Size(48, 48),
+                                ),
+                                icon: const Icon(
+                                  Icons.navigation_rounded,
+                                  semanticLabel: 'Kör dit',
+                                ),
+                              ),
+                            ),
+                          )
+                        else if (followed && onToggleFollow != null)
                           FollowButton(
                             followed: followed,
                             onChanged: onToggleFollow!,

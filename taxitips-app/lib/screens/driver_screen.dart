@@ -17,6 +17,7 @@ import '../config.dart';
 import '../county_selection.dart';
 import '../feed_cache.dart';
 import '../follow_up.dart';
+import '../navigation.dart';
 import '../widgets/follow_up_card.dart';
 import '../membership_copy.dart';
 import '../net_status.dart';
@@ -1832,6 +1833,31 @@ class _DriverScreenState extends State<DriverScreen>
 
   // "Bara hög prio" ersattes av poängslidaren — se `_inScoreRange`.
 
+  /// "Kör dit" från listan: öppnar navigeringen och noterar att föraren är
+  /// på väg (🚕 till backend och frågan "hur gick det?" en halvtimme senare),
+  /// precis som knappen i tipsbladet.
+  Future<void> _driveTo(Map<String, dynamic> a) async {
+    final lat = (a['lat'] as num?)?.toDouble();
+    final lon = (a['lon'] as num?)?.toDouble();
+    if (lat == null || lon == null) return;
+    final ok = await openNavigation(lat, lon);
+    if (!mounted) return;
+    if (!ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kunde inte öppna navigeringen.')),
+      );
+      return;
+    }
+    unawaited(FollowUps.remember(a));
+    unawaited(
+      widget.api.submitAlertFeedback(
+        a['id'].toString(),
+        false,
+        verdict: 'heading',
+      ),
+    );
+  }
+
   /// Kart + bottenlista: starkast först (samma färg som pinnarna).
   ///
   /// Tidigare sorterade listan på nyast — då hamnade ett svagt tips från
@@ -3450,14 +3476,29 @@ class _DriverScreenState extends State<DriverScreen>
     Widget tipCard(Map<String, dynamic> a) {
       final key = firstCard ? _tourKeys.firstCard : null;
       firstCard = false;
+      // Stora kort för det som är värt att köra på (Stark, Medel, sparat,
+      // väg); svaga tips och "Övrigt" blir en rad var. Allt syns, men det
+      // viktiga tar platsen.
+      final big =
+          a['is_favorite'] == true ||
+          categoryOfAlert(a) == SignalCategory.road ||
+          (a['minor'] != true &&
+              likelihoodForAlert(a) != CustomerLikelihood.low);
+      final canDrive =
+          big &&
+          categoryOfAlert(a) != SignalCategory.road &&
+          a['id'] != null &&
+          TaxiTipsConfig.usesDjangoApi;
       return pad(
         SignalCard(
           key: key,
           alert: a,
+          compact: !big,
           onTap: () {
             _focusOpportunity(a);
             _openAlertDetail(a);
           },
+          onDrive: canDrive ? () => _driveTo(a) : null,
           onToggleFollow: widget.api.supportsFavorites
               ? (v) => _toggleFavorite(a, v)
               : null,
@@ -3621,7 +3662,39 @@ class _DriverScreenState extends State<DriverScreen>
         );
       }
     }
-    out.addAll(feedTips.map(tipCard));
+    if (_sortMode == 'score') {
+      // Sorterat på styrka: en rubrik per styrka, så att föraren ser direkt
+      // var de starka slutar. Med annan sortering (närmast, nyast) är
+      // ordningen förarens val och listan hålls ihop.
+      final groups = <String, List<Map<String, dynamic>>>{
+        'Starka': [],
+        'Medel': [],
+        'Svaga': [],
+        'Övrigt': [],
+      };
+      for (final a in feedTips) {
+        final name = a['minor'] == true
+            ? 'Övrigt'
+            : switch (likelihoodForAlert(a)) {
+                CustomerLikelihood.high => 'Starka',
+                CustomerLikelihood.medium => 'Medel',
+                CustomerLikelihood.low => 'Svaga',
+              };
+        groups[name]!.add(a);
+      }
+      groups.forEach((name, items) {
+        if (items.isEmpty) return;
+        out.add(
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: _SectionTitle('$name · ${items.length}'),
+          ),
+        );
+        out.addAll(items.map(tipCard));
+      });
+    } else {
+      out.addAll(feedTips.map(tipCard));
+    }
     // Sist i listan, kort: det här är tips, inte beställda körningar.
     if (feedTips.isNotEmpty || saved.isNotEmpty) {
       out.add(pad(const TipsNotPromisesNote()));

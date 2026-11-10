@@ -113,4 +113,82 @@ void main() {
     await pump(tester, tip(pays: true));
     expect(tester.getSize(find.byType(SignalCard)).height, lessThan(100));
   });
+
+  group('rad och Kör dit', () {
+    Future<void> pumpCard(WidgetTester tester, Widget card) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(body: SizedBox(width: 360, child: card)),
+        ),
+      );
+    }
+
+    final tip = <String, dynamic>{
+      'id': '1',
+      'kind': 'transit',
+      'mode': 'bus',
+      'level': 'low',
+      'station': 'Centralen',
+      'headline': 'Buss 791 sen',
+      'decision': 'Upp till 10 min',
+      'decision_tone': 'wait',
+      'distance_km': 3.2,
+      'lat': 59.33,
+      'lon': 18.06,
+      'is_active': true,
+    };
+
+    testWidgets('ett svagt tips ryms på en rad med plats, vad och avstånd', (
+      tester,
+    ) async {
+      await pumpCard(tester, SignalCard(alert: tip, compact: true));
+      expect(
+        find.textContaining('Centralen', findRichText: true),
+        findsOneWidget,
+      );
+      expect(
+        find.textContaining(
+          'Buss 791 sen · Upp till 10 min',
+          findRichText: true,
+        ),
+        findsOneWidget,
+      );
+      expect(find.text('3,2 km'), findsOneWidget);
+      expect(tester.getSize(find.byType(SignalCard)).height, lessThan(70));
+      // Ingen navigeringsknapp på en rad: den hör till de stora korten.
+      expect(find.byTooltip('Kör dit'), findsNothing);
+    });
+
+    testWidgets('ett stort kort har Kör dit, och trycket öppnar inte tipset', (
+      tester,
+    ) async {
+      var drove = 0;
+      var opened = 0;
+      await pumpCard(
+        tester,
+        SignalCard(
+          alert: {...tip, 'level': 'high'},
+          onTap: () => opened++,
+          onDrive: () => drove++,
+        ),
+      );
+      await tester.tap(find.byTooltip('Kör dit'));
+      expect((drove, opened), (1, 0));
+    });
+
+    testWidgets('inget Kör dit utan koordinat eller när tipset är slut', (
+      tester,
+    ) async {
+      await pumpCard(
+        tester,
+        SignalCard(alert: {...tip, 'lat': null}, onDrive: () {}),
+      );
+      expect(find.byTooltip('Kör dit'), findsNothing);
+      await pumpCard(
+        tester,
+        SignalCard(alert: {...tip, 'is_active': false}, onDrive: () {}),
+      );
+      expect(find.byTooltip('Kör dit'), findsNothing);
+    });
+  });
 }
