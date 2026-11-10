@@ -533,3 +533,49 @@ def recover_with_bankid(*, ticket: str, new_password: str = "", new_email: str =
     if new_email and old_email and old_email != new_email:
         notifications.login_email_changed(company_id, old_email, new_email)
     return {"email": new_email or old_email}
+
+
+def login_with_bankid(*, ticket: str, now=None) -> dict:
+    """
+    Inloggning med bara BankID, för den som glömt både e-post och lösenord.
+
+    BankID visar vem personen är; kontot hittas på personnumrets nyckel och
+    servern lämnar ut en engångsbiljett som appen växlar till en session.
+    Inget lösenord ändras och ingen e-post behövs. Gäller konton som skapats
+    med BankID -- en förare som bjudits in med e-post har inget sådant.
+    """
+    from fleet import auth_admin, bankid
+    from fleet.models import BankIdIdentity
+
+    now = now or timezone.now()
+    with transaction.atomic():
+        identity = bankid.read_ticket(ticket, purpose="login", consume=True)
+        row = BankIdIdentity.objects.select_for_update().filter(pnr_key=identity.pnr_key).first()
+        if row is None:
+            raise sales.SalesError(
+                "no_bankid_account", "Ditt BankID har inget konto här.", status=404,
+            )
+        user_id = str(row.user_id)
+        member = CompanyMember.objects.filter(user_id=user_id, status="active").first()
+        company_id = member.company_id if member else None
+        email = _account_email(user_id, company_id)
+        if not email:
+            raise sales.SalesError(
+                "login_unavailable", "Det gick inte att logga in just nu. Försök igen om en stund.",
+                status=503,
+            )
+        accounts.assert_email_allowed(email)
+        try:
+            token_hash = auth_admin.login_token(email)
+        except auth_admin.AuthAdminError as exc:
+            raise sales.SalesError(
+                "login_unavailable", "Det gick inte att logga in just nu. Försök igen om en stund.",
+                status=503,
+            ) from exc
+        row.last_used_at = now
+        row.save(update_fields=["last_used_at"])
+        audit.record(
+            "bankid_login", company_id=company_id, actor_user_id=user_id,
+            actor_kind="customer", subject_type="account", subject_id=user_id, detail={},
+        )
+    return {"email": email, "tokenHash": token_hash}

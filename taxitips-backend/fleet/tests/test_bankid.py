@@ -314,6 +314,44 @@ class BankIdTests(FleetTestCase):
         self.assertEqual(res.json()["reason"], "no_bankid_account")
         self.update_user.assert_not_called()
 
+    # -- Inloggning med BankID ---------------------------------------------
+
+    def test_login_with_bankid_returns_a_one_time_token_for_the_own_account(self):
+        self.register()
+        with mock.patch("fleet.auth_admin.login_token", return_value="hash-123") as token:
+            res = self.post("/api/fleet/bankid/login", {"ticket": self.ticket("login")})
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertEqual(res.json()["tokenHash"], "hash-123")
+        self.assertEqual(res.json()["email"], "anna@exempeltaxi.se")
+        token.assert_called_once_with("anna@exempeltaxi.se")
+        self.assertTrue(AuditEvent.objects.filter(action="bankid_login").exists())
+
+    def test_login_ticket_works_once_and_other_tickets_do_not_log_in(self):
+        self.register()
+        ticket = self.ticket("login")
+        with mock.patch("fleet.auth_admin.login_token", return_value="h") as token:
+            self.assertEqual(self.post("/api/fleet/bankid/login", {"ticket": ticket}).status_code, 200)
+            self.assertEqual(self.post("/api/fleet/bankid/login", {"ticket": ticket}).status_code, 409)
+            # En biljett för registrering eller återställning loggar inte in.
+            for purpose in ("register", "recover"):
+                res = self.post("/api/fleet/bankid/login", {"ticket": self.ticket(purpose)})
+                self.assertEqual(res.status_code, 401, purpose)
+        self.assertEqual(token.call_count, 1)
+
+    def test_login_without_a_bankid_account(self):
+        with mock.patch("fleet.auth_admin.login_token") as token:
+            res = self.post("/api/fleet/bankid/login", {"ticket": self.ticket("login")})
+        self.assertEqual(res.status_code, 404)
+        self.assertEqual(res.json()["reason"], "no_bankid_account")
+        token.assert_not_called()
+
+    def test_another_persons_bankid_cannot_log_in_to_the_account(self):
+        self.register()
+        with mock.patch("fleet.auth_admin.login_token") as token:
+            res = self.post("/api/fleet/bankid/login", {"ticket": self.ticket("login", pnr="199002023456")})
+        self.assertEqual(res.status_code, 404)
+        token.assert_not_called()
+
     # -- Bli betalande -----------------------------------------------------
 
     def test_order_requires_org_number_then_it_can_be_added_once(self):

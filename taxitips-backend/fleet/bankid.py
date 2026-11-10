@@ -55,6 +55,7 @@ USER_VISIBLE_TEXT = {
         "Det binder dig inte till något och kostar inget."
     ),
     "recover": "Du legitimerar dig för att komma åt ditt TaxiTips-konto.",
+    "login": "Du loggar in i TaxiTips.",
 }
 PURPOSES = tuple(USER_VISIBLE_TEXT)
 

@@ -52,6 +52,14 @@ void main() {
     expect(find.textContaining('Skriv din e-post först'), findsNothing);
   });
 
+  testWidgets('den som glömt e-posten kan logga in med BankID', (tester) async {
+    await pump(tester);
+    // Ingen e-post behövs: knappen går att trycka med tomma fält.
+    final button = find.widgetWithText(OutlinedButton, 'Logga in med BankID');
+    expect(button, findsOneWidget);
+    expect(tester.widget<OutlinedButton>(button).onPressed, isNotNull);
+  });
+
   testWidgets('lösenordet kan visas och döljas', (tester) async {
     await pump(tester);
     TextField password() =>

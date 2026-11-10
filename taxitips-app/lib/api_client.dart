@@ -617,6 +617,38 @@ class ApiClient {
     await signIn(email: email, password: password);
   });
 
+  /// Inloggning med bara BankID, för den som glömt både e-post och lösenord.
+  /// Servern hittar kontot på BankID och lämnar ut en engångsbiljett, som
+  /// växlas till en vanlig session här. Bara konton som skapats med BankID.
+  Future<void> signInWithBankId(String ticket) =>
+      _reported('bankid_sign_in', () async {
+        await ensureInitialized();
+        final Map<String, dynamic> data;
+        try {
+          data = await _bankidBackend.bankid('login', {'ticket': ticket});
+        } catch (e) {
+          throw asApiIfNetwork(e);
+        }
+        final hash = data['tokenHash']?.toString() ?? '';
+        if (hash.isEmpty) {
+          throw ApiException(500, 'Det gick inte att logga in. Försök igen.');
+        }
+        final AuthResponse res;
+        try {
+          res = await _sb.auth.verifyOTP(
+            tokenHash: hash,
+            type: OtpType.magiclink,
+          );
+        } catch (e) {
+          throw asApiIfNetwork(e);
+        }
+        final token = res.session?.accessToken;
+        if (token == null || token.isEmpty) {
+          throw ApiException(401, 'Inloggningen gav ingen giltig session.');
+        }
+        await saveSession(token);
+      });
+
   /// Glömt lösenord eller bytt e-post: BankID räcker. Returnerar adressen att
   /// logga in med.
   Future<String> bankIdRecover({

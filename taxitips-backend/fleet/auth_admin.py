@@ -230,3 +230,31 @@ def update_user(user_id: str, *, password: str = "", email: str = "") -> None:
         raise EmailTaken("update_user: email_exists")
     if res.status_code >= 300:
         raise AuthAdminError(f"update_user: {res.status_code} {res.text[:200]}")
+
+
+def login_token(email: str) -> str:
+    """
+    En engångsbiljett som appen växlar till en inloggad session
+    (`verifyOTP(tokenHash, type: magiclink)`), för inloggning med BankID.
+
+    `generate_link` skickar inget mejl: den ger bara biljetten, och den lämnas
+    ut först när BankID har visat vem personen är (fleet/registration.py).
+    Biljetten gäller en gång och en kort stund (GoTrues OTP-tid).
+    """
+    if not configured():
+        raise AuthAdminError("SUPABASE_SERVICE_ROLE_KEY saknas")
+    try:
+        res = _post("/auth/v1/admin/generate_link", {"type": "magiclink", "email": email})
+    except requests.RequestException as exc:
+        raise AuthAdminError(f"login_token: {exc.__class__.__name__}") from exc
+    if res.status_code >= 300:
+        raise AuthAdminError(f"login_token: {res.status_code} {res.text[:200]}")
+    try:
+        body = res.json()
+    except ValueError as exc:
+        raise AuthAdminError("login_token: svar utan JSON") from exc
+    props = body.get("properties") if isinstance(body.get("properties"), dict) else body
+    token = props.get("hashed_token") or ""
+    if not token:
+        raise AuthAdminError("login_token: ingen hashed_token i svaret")
+    return str(token)

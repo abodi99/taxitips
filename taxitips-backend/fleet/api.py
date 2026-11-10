@@ -1788,6 +1788,24 @@ def bankid_register(request):
 @csrf_exempt
 @require_POST
 @handle
+def bankid_login(request):
+    """
+    POST /api/fleet/bankid/login {"ticket"} -> {"email", "tokenHash"}
+
+    Appen växlar `tokenHash` till en session hos Supabase Auth. Biljetten från
+    BankID gäller en gång.
+    """
+    from fleet import registration
+
+    ratelimit.enforce(ratelimit.BANKID_RECOVER, _bankid_ip(request))
+    body = _body(request)
+    result = registration.login_with_bankid(ticket=str(body.get("ticket") or ""))
+    return _json(request, {"ok": True, **result})
+
+
+@csrf_exempt
+@require_POST
+@handle
 def bankid_recover(request):
     """
     POST /api/fleet/bankid/recover {"ticket", "newPassword"?, "newEmail"?}

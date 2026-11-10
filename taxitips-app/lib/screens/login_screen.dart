@@ -108,6 +108,32 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  /// Logga in med bara BankID: för den som inte minns e-post eller lösenord.
+  /// Kontot hittas på BankID; ingen text att skriva.
+  Future<void> _loginWithBankId() async {
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _error = null;
+      _notice = null;
+    });
+    final identity = await runBankId(context, widget.api, purpose: 'login');
+    if (!mounted || identity == null) return;
+    setState(() => _busy = true);
+    try {
+      await widget.api.signInWithBankId(identity.ticket);
+      if (!mounted) return;
+      await widget.onOwner();
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.message);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _error = _friendly(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   /// Glömt lösenord: BankID, sedan nytt lösenord (och ny e-post om man vill).
   /// Den enda vägen sedan 2026-11; återställning via mejl finns inte längre.
   /// En förare utan BankID-konto ber företaget skicka inbjudan igen.
@@ -345,6 +371,23 @@ class _LoginScreenState extends State<LoginScreen> {
                             fontWeight: FontWeight.w800,
                           ),
                         ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  onPressed: _busy ? null : _loginWithBankId,
+                  icon: const Icon(Icons.fingerprint),
+                  label: const Text(
+                    'Logga in med BankID',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: TbColors.ink,
+                    minimumSize: const Size.fromHeight(56),
+                    side: const BorderSide(color: Colors.black26),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                  ),
                 ),
                 const SizedBox(height: 28),
                 _LinkRow(

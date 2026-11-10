@@ -60,6 +60,7 @@ urlpatterns = [
     path("bankid/cancel", api.bankid_cancel),
     path("bankid/register", api.bankid_register),
     path("bankid/recover", api.bankid_recover),
+    path("bankid/login", api.bankid_login),
     path("trial/vehicles", api.trial_vehicles),
     path("trial/vehicles/<uuid:license_id>/county", api.trial_vehicle_county),
     path("trial/vehicles/<uuid:license_id>/remove", api.trial_vehicle_remove),
