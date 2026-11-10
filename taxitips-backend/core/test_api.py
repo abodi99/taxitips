@@ -947,3 +947,16 @@ class OnePerMessageTests(SimpleTestCase):
             self.row(id="6", kind="road"), self.row(id="7", kind="road"),
         ]
         self.assertEqual([r["id"] for r in _one_per_message(rows)], ["1", "3", "4", "5", "6", "7"])
+
+    def test_cards_that_look_the_same_collapse(self):
+        from core.api import _one_per_message
+
+        rows = [
+            self.row(id="1", station="Gåshaga", title="Kris EM", headline="Tåg inställt", decision="Annan resa finns"),
+            self.row(id="2", station="Gåshaga", title="Kris FM", headline="Tåg inställt", decision="Annan resa finns"),
+            self.row(id="3", station="Gåshaga", title="Annat", headline="Tåg inställt", decision="Nästa tåg 23:48"),
+            # Utan station går korten inte att säga vara samma plats.
+            self.row(id="4", station="", title="A", headline="Buss sen", decision=""),
+            self.row(id="5", station="", title="B", headline="Buss sen", decision=""),
+        ]
+        self.assertEqual([r["id"] for r in _one_per_message(rows)], ["1", "3", "4", "5"])

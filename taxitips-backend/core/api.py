@@ -213,13 +213,16 @@ def _one_per_message(rows: list[dict]) -> list[dict]:
         if row.get("kind") == "road":
             out.append(row)
             continue
-        key = (
-            row.get("county"), (row.get("station") or "").lower(),
-            tip_text.text_key(row.get("title"), row.get("summary")),
-        )
-        if key in seen:
+        place = (row.get("county"), (row.get("station") or "").lower())
+        keys = [(*place, tip_text.text_key(row.get("title"), row.get("summary")))]
+        # Två kort som ser exakt likadana ut för föraren (samma plats, samma
+        # två rader) säger inget mer än ett -- t.ex. samma ersättningstrafik
+        # utlagd en gång för förmiddag och en gång för eftermiddag.
+        if row.get("station") and row.get("headline"):
+            keys.append((*place, "lines", row.get("headline"), row.get("decision") or ""))
+        if any(key in seen for key in keys):
             continue
-        seen.add(key)
+        seen.update(keys)
         out.append(row)
     return out
 

@@ -188,6 +188,10 @@ class TipLinesTests(SimpleTestCase):
             {"headline": "Linje 890 sen", "decision": "Cirka 10 min", "decision_tone": "wait"},
         )
 
+    def test_a_named_line_on_rails_is_not_neuter(self):
+        o = tip(rule_id="train.vehicle_cancelled.stated_alternative", line="Lidingöbanan")
+        self.assertEqual(tip_lines.lines_for(o, now=NOW)["headline"], "Lidingöbanan inställd")
+
     def test_long_or_replacement_lines_fall_back_to_the_mode(self):
         long_name = tip(rule_id="train.line_delayed", severity_tier="line_delayed", line="SJ Snabbtåg 451",
                         delay_minutes=51, departure_at=at(23, 26))

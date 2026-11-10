@@ -103,7 +103,8 @@ def _vehicle(o, mode: str) -> tuple[str, str, str]:
     if not line or len(words) > 2 or len(line) > 18 or words[0].lower().startswith("ersättning"):
         return noun, cancelled, late
     # Genus följer ordet: "…tåg" är neutrum, buss/linje/spårvagn är utrum.
-    neuter = words[0].lower().endswith("tåg") or (mode == "train" and words[0].lower() not in ("linje", "buss"))
+    # "Lidingöbanan inställd", "Roslagsbanan sen": banor är utrum fast de går på räls.
+    neuter = words[0].lower().endswith("tåg")
     return line, ("inställt" if neuter else "inställd"), ("sent" if neuter else "sen")
 
 
