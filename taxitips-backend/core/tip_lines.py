@@ -88,6 +88,37 @@ def _gap_minutes(o) -> int | None:
     return getattr(o, "next_departure_minutes", None)
 
 
+def _vehicle(o, mode: str) -> tuple[str, str, str]:
+    """
+    (benämning, "inställd/inställt", "sen/sent") för det drabbade fordonet.
+
+    Linjen när den är känd och kort ("Buss 190", "Pendeltåg 41"): fyra kort
+    som alla säger "Centralen · Buss sen" går inte att skilja åt (mätt i
+    Stockholm 2026-11-10). Längre benämningar ("SJ Snabbtåg 451") och
+    ersättningsbussar faller tillbaka på färdsättet -- raden ska rymmas.
+    """
+    noun, _definite, cancelled, late = _NOUNS.get(mode, _UNKNOWN_NOUN)
+    line = " ".join(str(getattr(o, "line", None) or "").split())
+    words = line.split()
+    if not line or len(words) > 2 or len(line) > 18 or words[0].lower().startswith("ersättning"):
+        return noun, cancelled, late
+    # Genus följer ordet: "…tåg" är neutrum, buss/linje/spårvagn är utrum.
+    neuter = words[0].lower().endswith("tåg") or (mode == "train" and words[0].lower() not in ("linje", "buss"))
+    return line, ("inställt" if neuter else "inställd"), ("sent" if neuter else "sen")
+
+
+def _text_delay(o) -> str:
+    """"Cirka 10 min" ur trafikbolagets egen text, när fältet saknas. "" annars."""
+    from core import tip_text
+
+    found = tip_text.delay(f"{getattr(o, 'title', None) or ''}. {getattr(o, 'summary', None) or ''}")
+    if not found:
+        return ""
+    minutes, qualifier = found
+    text = f"{qualifier} {human_minutes(minutes)}".strip()
+    return text[:1].upper() + text[1:]
+
+
 def _lines(headline: str = "", decision: str = "", tone: str = WAIT) -> dict:
     return {"headline": headline, "decision": decision, "decision_tone": tone}
 
@@ -127,16 +158,23 @@ def _road(o, rule_id: str) -> dict:
 
 
 def _delay(o, mode: str) -> dict:
-    noun, _definite, _cancelled, late = _NOUNS.get(mode, _UNKNOWN_NOUN)
+    noun, _cancelled, late = _vehicle(o, mode)
+    known_line = noun != _NOUNS.get(mode, _UNKNOWN_NOUN)[0]
     minutes = getattr(o, "delay_minutes", None)
-    if mode not in _NOUNS:
-        headline = f"Försening {minutes} min" if minutes else "Försening"
-    else:
-        headline = f"{noun} {minutes} min {late}" if minutes else f"{noun} {late}"
     departure = getattr(o, "departure_at", None)
+    if mode not in _NOUNS and not known_line:
+        headline = f"Försening {minutes} min" if minutes else "Försening"
+    elif minutes and not known_line:
+        headline = f"{noun} {minutes} min {late}"
+    else:
+        headline = f"{noun} {late}"
     if minutes and departure is not None:
         return _lines(headline, f"Kommer {_clock(departure + timedelta(minutes=minutes))}", WAIT)
-    return _lines(headline, "", WAIT)
+    if minutes and known_line:
+        return _lines(headline, human_minutes(minutes), WAIT)
+    # Hur länge står oftast i texten ("cirka 10 minuter"): det är det enda
+    # som skiljer en kort försening från en lång.
+    return _lines(headline, _text_delay(o), WAIT)
 
 
 def lines_for(o, now: datetime | None = None) -> dict:
@@ -164,7 +202,8 @@ def lines_for(o, now: datetime | None = None) -> dict:
     if mode == "road" or kind == "road" or rule_id.startswith("road."):
         return _road(o, rule_id)
 
-    noun, definite, cancelled, _late = _NOUNS.get(mode, _UNKNOWN_NOUN)
+    _plain, definite, _c, _late = _NOUNS.get(mode, _UNKNOWN_NOUN)
+    noun, cancelled, _late = _vehicle(o, mode)
     headline = f"{noun} {cancelled}"
     has_alternative = bool(getattr(o, "has_alternative", False))
     is_last = bool(getattr(o, "is_last_departure", False)) or condition == "last_departure"
@@ -184,7 +223,7 @@ def lines_for(o, now: datetime | None = None) -> dict:
         return _lines(headline, "Buss ersätter", NO)
 
     if is_last:
-        return _lines(f"Sista {definite} {cancelled}", "Inget mer i kväll", GO)
+        return _lines(f"Sista {definite} {_c}", "Inget mer i kväll", GO)
     if condition == "whole_line_stop":
         return _lines("Linjen står still", "Ingen trafik", GO)
 
@@ -194,7 +233,7 @@ def lines_for(o, now: datetime | None = None) -> dict:
     if departure_clock:
         headline = f"{noun} {departure_clock} {cancelled}"
     next_at = getattr(o, "next_departure_at", None)
-    next_noun = noun.lower() if mode in _NOUNS else "avgång"
+    next_noun = _plain.lower() if mode in _NOUNS else "avgång"
     minutes = _gap_minutes(o)
     if condition in ("alternative_soon", "known_gap", "long_gap"):
         if condition == "long_gap" or (minutes is not None and minutes > ALTERNATIVE_SOON_MIN):

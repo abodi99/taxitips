@@ -26,7 +26,7 @@ from datetime import datetime, timedelta
 
 from django.core.cache import cache
 from django.db import connection
-from django.test import Client, TestCase, override_settings
+from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.utils import timezone
 
 from billing.models import Company, CompanyMember, Device
@@ -925,3 +925,25 @@ class LineStationCompensationTests(ApiTestCase):
             "/api/alerts/history", {"counties": "12"}, headers={"x-device-token": DEVICE_TOKEN},
         ).json()
         self.assertEqual(body["alerts"][0]["factors"][0]["text"], "Avgång 16:58 från Tumba station")
+
+
+class OnePerMessageTests(SimpleTestCase):
+    """Samma meddelande publicerat flera gånger blir ett kort (core/api._one_per_message)."""
+
+    def row(self, **kw):
+        base = {"kind": "transit", "county": "01", "station": "Centralen",
+                "title": "Förseningar", "summary": "Förseningar upp till 10 minuter för buss linje 194."}
+        base.update(kw)
+        return base
+
+    def test_identical_messages_collapse_and_others_stay(self):
+        from core.api import _one_per_message
+
+        rows = [
+            self.row(id="1"), self.row(id="2"),
+            self.row(id="3", summary="Förseningar upp till 10 minuter för buss linje 791."),
+            self.row(id="4", station="Gullmarsplan"),
+            self.row(id="5", county="12"),
+            self.row(id="6", kind="road"), self.row(id="7", kind="road"),
+        ]
+        self.assertEqual([r["id"] for r in _one_per_message(rows)], ["1", "3", "4", "5", "6", "7"])

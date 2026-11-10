@@ -24,7 +24,7 @@ def tip(**kw):
         rule_id="", mode="train", kind="transit", severity_tier="line_paused",
         next_departure_at=None, next_departure_minutes=None, is_last_departure=False,
         has_alternative=False, delay_minutes=None, departure_at=None,
-        start_time=None, end_time=None, title="", summary="", places=[],
+        start_time=None, end_time=None, title="", summary="", places=[], line="",
     )
     base.update(kw)
     return SimpleNamespace(**base)
@@ -167,6 +167,33 @@ class TipLinesTests(SimpleTestCase):
             tip_lines.lines_for(o, now=NOW),
             {"headline": "Tåg 22:48 inställt", "decision": "Nästa tåg 23:48", "decision_tone": "go"},
         )
+
+    def test_the_line_names_the_vehicle_when_it_is_short(self):
+        """Fyra kort med "Centralen · Buss sen" gick inte att skilja åt."""
+        delayed = tip(rule_id="bus.vehicle_delayed.mediumish", mode="bus", severity_tier="vehicle_delayed",
+                      line="Buss 190", title="Förseningar",
+                      summary="Förseningar upp till 10 minuter för buss linje 190 från Farsta strand 02:14.")
+        self.assertEqual(
+            tip_lines.lines_for(delayed, now=NOW),
+            {"headline": "Buss 190 sen", "decision": "Upp till 10 min", "decision_tone": "wait"},
+        )
+        cancelled = tip(rule_id="train.line_paused.long_gap", line="Pendeltåg 41",
+                        departure_at=at(22, 48), next_departure_at=at(23, 48))
+        self.assertEqual(tip_lines.lines_for(cancelled, now=NOW)["headline"], "Pendeltåg 41 22:48 inställt")
+        unknown = tip(rule_id="unknown.vehicle_delayed.ai_facts.short_delay", mode="unknown",
+                      severity_tier="vehicle_delayed", line="Linje 890",
+                      summary="Linje 890 mot Centralen beräknas vara cirka 10 minuter försenad.")
+        self.assertEqual(
+            tip_lines.lines_for(unknown, now=NOW),
+            {"headline": "Linje 890 sen", "decision": "Cirka 10 min", "decision_tone": "wait"},
+        )
+
+    def test_long_or_replacement_lines_fall_back_to_the_mode(self):
+        long_name = tip(rule_id="train.line_delayed", severity_tier="line_delayed", line="SJ Snabbtåg 451",
+                        delay_minutes=51, departure_at=at(23, 26))
+        self.assertEqual(tip_lines.lines_for(long_name, now=NOW)["headline"], "Tåg 51 min sent")
+        replacement = tip(rule_id="train.vehicle_cancelled.stated_alternative", line="Ersättningsbuss 21B")
+        self.assertEqual(tip_lines.lines_for(replacement, now=NOW)["headline"], "Tåg inställt")
 
     def test_works_without_optional_fields(self):
         got = tip_lines.lines_for(SimpleNamespace(rule_id="train.line_paused.long_gap"), now=NOW)

@@ -196,6 +196,34 @@ def _one_per_road_situation(rows: list[dict]) -> list[dict]:
     ]
 
 
+def _one_per_message(rows: list[dict]) -> list[dict]:
+    """
+    Samma meddelande, ett kort. Trafikbolagen publicerar ofta samma text under
+    flera id (en per linjevariant, eller en gång som "Buss 890" och en gång
+    som "Linje 890"); mätt i Stockholm 2026-11-10 var 13 kort 7 meddelanden.
+    Samma län, samma station och ordagrant samma rubrik och text räknas som
+    samma. Listan är redan sorterad, så det starkaste kortet blir kvar.
+    Väghändelser har sin egen regel (_one_per_road_situation).
+    """
+    from core import tip_text
+
+    seen: set[tuple] = set()
+    out = []
+    for row in rows:
+        if row.get("kind") == "road":
+            out.append(row)
+            continue
+        key = (
+            row.get("county"), (row.get("station") or "").lower(),
+            tip_text.text_key(row.get("title"), row.get("summary")),
+        )
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(row)
+    return out
+
+
 def shared_feed(
     lat, lon, *, include_all: bool, regions: list[str], counties: list[str], municipalities: list[str] | None = None,
     road_all: bool = False,
@@ -660,6 +688,7 @@ def feed_for(
     # En Trafikverket-situation har ofta flera avvikelser med samma text --
     # "Olycka" och "Trafikmeddelande" om samma krock. Föraren ser en.
     out = _one_per_road_situation(out)
+    out = _one_per_message(out)
     for row in out:
         del row["_computed_at"]
         del row["_external_id"]

@@ -708,11 +708,49 @@ class ApiClient {
     Map<String, dynamic>? body,
   ]) async {
     await ensureInitialized();
-    final token = _accessToken;
-    if (token == null) throw ApiException(401, 'Logga in för att fortsätta.');
-    return body == null
+    Future<Map<String, dynamic>> call(String token) => body == null
         ? _fleet.ownerGet(path, accessToken: token)
         : _fleet.ownerPost(path, body, accessToken: token);
+
+    final token = await _freshAccessToken();
+    if (token == null) throw ApiException(401, 'Logga in för att fortsätta.');
+    try {
+      return await call(token);
+    } on ApiException catch (e) {
+      // Servern säger att token gått ut fast kontot är inloggat: förnya en
+      // gång och försök igen. Utan det visade appen "Logga in för att
+      // fortsätta" vid start efter en natt i fickan (2026-11-10).
+      if (e.status != 401) rethrow;
+      final renewed = await _freshAccessToken(force: true);
+      if (renewed == null || renewed == token) rethrow;
+      return call(renewed);
+    }
+  }
+
+  /// Inloggningens token, förnyad först om den gått ut. Supabase förnyar den
+  /// själv i bakgrunden, men vid kallstart hinner första anropet ofta före.
+  /// `null` = inte inloggad (eller förnyelsen gick inte: då gäller den gamla).
+  Future<String?> _freshAccessToken({bool force = false}) async {
+    Session? session;
+    try {
+      session = _sb.auth.currentSession;
+    } catch (_) {
+      return null;
+    }
+    if (session == null) return null;
+    if (force || session.isExpired) {
+      try {
+        final renewed = await _sb.auth.refreshSession();
+        final token = renewed.session?.accessToken;
+        if (token != null && token.isNotEmpty) {
+          await saveSession(token);
+          return token;
+        }
+      } catch (_) {
+        // Inget nät eller utloggad på servern: anropet får svara för sig.
+      }
+    }
+    return _accessToken;
   }
 
   /// Bilar, licenser, län, telefoner, prov och period -- och om företaget
