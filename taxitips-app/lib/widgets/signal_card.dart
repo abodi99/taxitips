@@ -125,64 +125,98 @@ class SignalCard extends StatelessWidget {
     }
     final pays = active && alert['compensation_eligible'] == true;
 
+    // Avståndet hjälper bara när det går att köra dit. Tittar föraren på ett
+    // annat län (48 mil bort) är talet brus.
+    final near = distance != null && distance < 150;
+
     if (compact) {
-      // En rad: prick i styrkans färg, plats, vad som hänt, avstånd.
-      final detail = [
-        headline,
-        if (active && decision.isNotEmpty) decision,
-        if (!active) 'Slut',
-      ].join(' · ');
+      // Två lugna rader: VAR (+ avstånd), sedan vad som hänt och det som
+      // avgör. Ingen ram -- raderna ska inte tävla med de stora korten.
       return Material(
-        color: active ? TbColors.vit : TbColors.ljusgra,
+        color: active ? TbColors.ljusgra : TbColors.vit,
         borderRadius: BorderRadius.circular(12),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
           onTap: onTap,
-          child: Container(
+          child: ConstrainedBox(
             constraints: const BoxConstraints(minHeight: 52),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: TbColors.line),
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            child: Row(
-              children: [
-                Icon(iconForAlert(alert), size: 22, color: edge),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text.rich(
-                    TextSpan(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              child: Row(
+                children: [
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: edge.withValues(alpha: 0.14),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(iconForAlert(alert), size: 20, color: edge),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        TextSpan(
-                          text: place,
+                        Text(
+                          place,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
+                            fontSize: 15,
                             fontWeight: FontWeight.w700,
+                            height: 1.25,
                             color: TbColors.midnatt,
                           ),
                         ),
-                        TextSpan(
-                          text: '  $detail',
-                          style: const TextStyle(color: TbColors.skiffer),
+                        Text.rich(
+                          TextSpan(
+                            children: [
+                              TextSpan(text: headline),
+                              if (!active)
+                                const TextSpan(text: ' · Slut')
+                              else if (decision.isNotEmpty) ...[
+                                const TextSpan(text: ' · '),
+                                TextSpan(
+                                  text: decision,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    color: decisionColor(alert),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            fontSize: 14,
+                            height: 1.25,
+                            color: TbColors.skiffer,
+                          ),
                         ),
                       ],
                     ),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(fontSize: 15, height: 1.25),
                   ),
-                ),
-                if (distance != null) ...[
-                  const SizedBox(width: 8),
-                  Text(
-                    distanceText(distance),
-                    style: const TextStyle(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: TbColors.skiffer,
+                  if (near) ...[
+                    const SizedBox(width: 8),
+                    Text(
+                      distanceText(distance),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: TbColors.skiffer,
+                      ),
                     ),
+                  ],
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    size: 20,
+                    color: TbColors.skiffer,
                   ),
                 ],
-              ],
+              ),
             ),
           ),
         ),
@@ -243,7 +277,7 @@ class SignalCard extends StatelessWidget {
                                       ),
                                     ),
                                   ),
-                                  if (distance != null) ...[
+                                  if (near) ...[
                                     const SizedBox(width: 8),
                                     Text(
                                       distanceText(distance),

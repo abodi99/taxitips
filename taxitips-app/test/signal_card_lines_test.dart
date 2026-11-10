@@ -159,6 +159,16 @@ void main() {
       expect(find.byTooltip('Kör dit'), findsNothing);
     });
 
+    testWidgets('avstånd långt bort (annat län) visas inte', (tester) async {
+      await pumpCard(
+        tester,
+        SignalCard(alert: {...tip, 'distance_km': 483}, compact: true),
+      );
+      expect(find.text('483 km'), findsNothing);
+      await pumpCard(tester, SignalCard(alert: {...tip, 'distance_km': 483}));
+      expect(find.text('483 km'), findsNothing);
+    });
+
     testWidgets('ett stort kort har Kör dit, och trycket öppnar inte tipset', (
       tester,
     ) async {

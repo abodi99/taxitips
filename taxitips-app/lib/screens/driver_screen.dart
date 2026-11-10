@@ -3191,10 +3191,10 @@ class _DriverScreenState extends State<DriverScreen>
                                       _sheetExtent < 0.5 ? 0.9 : 0.42,
                                     ),
                                     child: Container(
-                                      height: 48,
+                                      height: 30,
                                       alignment: Alignment.topCenter,
                                       child: Container(
-                                        margin: const EdgeInsets.only(top: 12),
+                                        margin: const EdgeInsets.only(top: 10),
                                         width: 64,
                                         height: 6,
                                         decoration: BoxDecoration(
@@ -3489,8 +3489,9 @@ class _DriverScreenState extends State<DriverScreen>
           categoryOfAlert(a) != SignalCategory.road &&
           a['id'] != null &&
           TaxiTipsConfig.usesDjangoApi;
-      return pad(
-        SignalCard(
+      return Padding(
+        padding: EdgeInsets.fromLTRB(16, 0, 16, big ? 10 : 6),
+        child: SignalCard(
           key: key,
           alert: a,
           compact: !big,
