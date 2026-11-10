@@ -360,11 +360,10 @@ class FullCustomerChainTests(ChainBase):
             self.assertNotIn(PORTAL_CONTINUE, row.body)
             # Platsen från appen har ingen bil, men mejlet har ändå ett pris
             # (förut: trial_offer None och mejl utan pris).
-            self.assertIn("i månaden exkl. moms", row.body)
-            self.assertIn("Skåne län", row.body)
+            self.assertIn("kr/mån (exkl. moms)", row.body)
             self.assertGreater(row.payload["offer"]["monthly_ore"], 0)
         last_day = next(r for r in reminders if r.payload["stage"] == "card_missing_1d")
-        self.assertIn("inom ett dygn", last_day.body)
+        self.assertIn("Provet slutar i morgon", last_day.body)
         self.assertNotEqual(last_day.subject, reminders[0].subject)
 
         # Klockan, inte cron-jobbet: slut i samma sekund som ends_at passerat.
@@ -394,7 +393,7 @@ class FullCustomerChainTests(ChainBase):
         self.assertEqual(ended[0].to_address, OWNER_EMAIL)
         self.assertIn(CONTINUE_LINK, ended[0].body)
         self.assertNotIn(PORTAL_CONTINUE, ended[0].body)
-        self.assertIn("i månaden exkl. moms", ended[0].body)
+        self.assertIn("kr/mån (exkl. moms)", ended[0].body)
 
         # ------------------------------------------------------------------
         # 6. Betalning i portalen: beställ, betala, allt öppnas
@@ -762,8 +761,8 @@ class ChainFocusedTests(ChainBase):
         three = notifications.trial_ending(company_id, OWNER_EMAIL, trial, stage="card_missing_3d")
         last = notifications.trial_ending(company_id, OWNER_EMAIL, trial, stage="card_missing_1d")
         self.assertNotEqual(three.subject, last.subject)
-        self.assertIn("Sista dygnet", last.subject)
-        self.assertIn("inom ett dygn", last.body)
+        self.assertIn("i morgon", last.subject)
+        self.assertIn("Provet slutar i morgon", last.body)
         for row in (three, last):
             self.assertIn(CONTINUE_LINK, row.body)
             self.assertNotIn(PORTAL_CONTINUE, row.body)
@@ -911,7 +910,8 @@ class TrialSeatContinuationTests(ChainBase):
             company_id, OWNER_EMAIL, Trial.objects.get(company_id=company_id), stage="3d",
         )
         self.assertEqual(mail.payload["offer"]["monthly_ore"], offer["monthlyOre"])
-        self.assertIn("er plats (Skåne län)", mail.body)
+        # Mejlet är kort: priset och länken. Platsen står på sidan länken leder till.
+        self.assertIn("kr/mån (exkl. moms)", mail.body)
 
     def test_commit_during_the_trial_keeps_the_same_seat_for_the_same_person(self):
         from fleet import orders

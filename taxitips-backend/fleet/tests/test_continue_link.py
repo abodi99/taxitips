@@ -300,7 +300,9 @@ class MailLinkTests(Fixture):
         trial.refresh_from_db()
         rows.append(notifications.trial_ended(company.id, "a@b.test", trial))
         for row in rows:
-            self.assertIn("Fortsätt här (ingen inloggning behövs): https://taxitips.se/fortsatt#t=", row.body)
+            self.assertIn("https://taxitips.se/fortsatt#t=", row.body)
+            # Kort mejl: några rader, inget om vad som ingår.
+            self.assertLessEqual(len(row.body.splitlines()), 12)
             self.assertNotIn("portal#fortsatt", row.body)
             token = row.body.split("#t=")[1].split()[0]
             self.assertEqual(continue_link.read(token), str(company.id))

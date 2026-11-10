@@ -123,9 +123,8 @@ class TrialMailTests(TrialFixture):
         row = notifications.trial_ending(company.id, "agare@provtaxi.test", trial)
         self.assertIn("https://taxitips.se/fortsatt#t=", row.body)
         self.assertNotIn("portal#fortsatt", row.body)
-        self.assertIn("ABC123, DEF456", row.body)
-        # Två bilar à 799 kr, exklusive moms -- samma motor som portalens offert.
-        self.assertIn("1\xa0598,00 kr i månaden exkl. moms", row.body)
+        # Två platser à 799 kr, exklusive moms -- samma motor som portalens offert.
+        self.assertIn("1 598 kr/mån (exkl. moms)", row.body)
         self.assertEqual(row.payload["offer"]["count"], 2)
 
     def test_three_days_before_and_the_last_day_are_two_mails(self):

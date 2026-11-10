@@ -240,6 +240,29 @@ _SIGNATURE = (
 )
 
 
+_SHORT_SIGNATURE = "\nFrågor? Svara på mejlet.\n\nTaxi Tips"
+
+_WEEKDAYS = ("måndag", "tisdag", "onsdag", "torsdag", "fredag", "lördag", "söndag")
+_MONTHS = (
+    "januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti",
+    "september", "oktober", "november", "december",
+)
+
+
+def _swedish_day(when) -> str:
+    """"fredag 14 november": en dag man känner igen, inte 2026-11-14."""
+    return f"{_WEEKDAYS[when.weekday()]} {when.day} {_MONTHS[when.month - 1]}"
+
+
+def _short_price(offer: dict | None) -> str:
+    """"399 kr/mån (exkl. moms)". Tom när priset inte gick att räkna: hellre inget pris än fel."""
+    if not offer or not offer.get("monthly_ore"):
+        return ""
+    ore = int(offer["monthly_ore"])
+    amount = f"{ore // 100:,}".replace(",", " ") if ore % 100 == 0 else _money(ore).removesuffix(" kr")
+    return f"{amount} kr/mån (exkl. moms)"
+
+
 def trial_started(company_id, to_address: str, trial) -> OutboxMessage | None:
     return queue(
         category="trial_started", company_id=company_id, to_address=to_address,
@@ -306,50 +329,30 @@ def trial_ending(company_id, to_address: str, trial, *, stage: str = "3d") -> Ou
     # Svensk tid: ett prov som slutar 00:30 svensk tid slutar inte "i går" i UTC.
     ends = timezone.localtime(trial.ends_at)
     last_day = stage.endswith("1d")
-    when = "i morgon" if last_day else f"{ends:%Y-%m-%d}"
+    # Så kort det går (ägarbeslut 2026-11-10): många läser inte mycket
+    # svenska, och en säljare ringer ändå upp. Ett mejl = när provet slutar,
+    # vad det kostar, en länk. Inget om vad som ingår -- det har de sett i appen.
+    day = "i morgon" if last_day else _swedish_day(ends)
+    price = _short_price(offer)
     if stage.startswith("card_missing"):
-        # Sista dygnet ska gå att skilja från påminnelsen tre dagar före. Förut
-        # fick kunden utan kort två likadana mejl, och inget av dem sa att
-        # tipsen försvinner inom ett dygn.
-        if last_day:
-            subject = "Sista dygnet med provet – spara kort för att behålla tipsen"
-            opening = f"Provperioden slutar inom ett dygn ({ends:%Y-%m-%d %H:%M}). "
-        else:
-            subject = "Spara kort så ni behåller tipsen efter provet"
-            opening = f"Provperioden gäller till {ends:%Y-%m-%d}. "
+        subject = f"Provet slutar {day}"
         body = (
             "Hej!\n\n"
-            + opening
-            + "Ni har ännu inte sparat kort för auto-förnyelse.\n\n"
-            + _TRIAL_SCOPE + "\n"
-            + _offer_lines(offer)
-            + f"\nFortsätt här (ingen inloggning behövs): {link}\n\n"
-            "Utan sparat kort stängs åtkomsten när provet tar slut -- utan debitering. "
-            "Med kort dras första månadsbeloppet automatiskt den dagen.\n"
-            + _SIGNATURE
-        )
-    elif stage == "1d" or stage.endswith("1d"):
-        subject = "Sista dagen med provet – spara kort för att fortsätta"
-        body = (
-            "Hej!\n\n"
-            f"Provperioden slutar {when}.\n\n"
-            + _offer_lines(offer)
-            + f"\nFortsätt här (ingen inloggning behövs): {link}\n\n"
-            "Har ni redan sparat kort dras första betalningen automatiskt i morgon. "
-            "Utan kort stängs åtkomsten utan debitering.\n"
-            + _SIGNATURE
+            f"Provet slutar {day}.\n\n"
+            + (f"Fortsätt för {price}:\n" if price else "Fortsätt här:\n")
+            + f"{link}\n\n"
+            "Gör du inget stängs tipsen. Inget dras.\n"
+            + _SHORT_SIGNATURE
         )
     else:
-        subject = "Provperioden slutar snart"
+        # Kortet är redan sparat: ingenting att göra, bara ett besked.
+        subject = f"Provet slutar {day} – du fortsätter automatiskt"
         body = (
             "Hej!\n\n"
-            f"Provperioden slutar {when}.\n\n"
-            + _TRIAL_SCOPE + "\n"
-            + _offer_lines(offer)
-            + f"\nFortsätt här (ingen inloggning behövs): {link}\n\n"
-            "Med sparat kort fortsätter abonnemanget automatiskt. "
-            "Utan kort stängs åtkomsten utan debitering.\n"
-            + _SIGNATURE
+            f"Provet slutar {day}. Du har sparat kort, så tipsen fortsätter.\n\n"
+            + (f"Vi drar {price} då.\n\n" if price else "")
+            + f"Vill du se eller ändra? {link}\n"
+            + _SHORT_SIGNATURE
         )
     # Mejlets dubblettnyckel är det hållbara skyddet mot dubbla SMS: cachen
     # kan vara processlokal, och fleet_tick körs varje timme.
@@ -374,12 +377,7 @@ def trial_ended(company_id, to_address: str, trial) -> OutboxMessage | None:
     """Provet löpte ut utan kort/commit. Dörren står öppen: samma länk, och priset."""
     offer = trial_offer(company_id, trial)
     link = continue_link.url(company_id)
-    price = (
-        f"Att fortsätta med {_offer_items(offer)} kostar {_money(offer['monthly_ore'])} "
-        f"i månaden exkl. moms ({_money(offer['monthly_total_ore'])} inkl. moms). "
-        "Ni ser beloppet igen innan ni godkänner.\n\n"
-        if offer else ""
-    )
+    price = _short_price(offer)
     fresh = not OutboxMessage.objects.filter(
         dedupe_key=dedupe_key("trial_ended", company_id, trial.id)
     ).exists()
@@ -387,16 +385,13 @@ def trial_ended(company_id, to_address: str, trial) -> OutboxMessage | None:
         _continue_sms(company_id, trial, "ended", "Taxi Tips: Provet är slut. Fortsätt här:", link)
     return queue(
         category="trial_ended", company_id=company_id, to_address=to_address,
-        subject="Provperioden är slut",
+        subject="Provet är slut",
         body=(
             "Hej!\n\n"
-            "Provperioden är slut och ingenting har debiterats. Förarna får inga fler "
-            "tips förrän ni har valt vilka platser som ska fortsätta och betalat i "
-            "kundportalen. Med abonnemang får förarna också flyg, färjor, evenemang "
-            "och trafikolyckor -- inte bara tåg och buss.\n\n"
-            + price
-            + f"Fortsätt här (ingen inloggning behövs): {link}\n"
-            + _SIGNATURE
+            "Provet är slut. Inget har dragits.\n\n"
+            + (f"Fortsätt för {price}:\n" if price else "Fortsätt här:\n")
+            + f"{link}\n"
+            + _SHORT_SIGNATURE
         ),
         payload={"offer": offer or {}},
         key_parts=(company_id, trial.id),
