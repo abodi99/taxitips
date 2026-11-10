@@ -51,6 +51,10 @@ urlpatterns = [
     path("register", api.register),
     path("register/check", api.register_check),
     # BankID: registrering utan organisationsnummer och återställning.
+    # "Fortsätt här"-länken i provslutsmejlet: ingen inloggning, signerad biljett.
+    path("continue/offer", api.continue_offer),
+    path("continue/org-number", api.continue_org_number),
+    path("continue/checkout", api.continue_checkout),
     path("bankid/start", api.bankid_start),
     path("bankid/collect", api.bankid_collect),
     path("bankid/cancel", api.bankid_cancel),

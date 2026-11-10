@@ -513,6 +513,11 @@ TWENTY_API_KEY = os.environ.get("TWENTY_API_KEY", "")
 TWENTY_BASE_URL = os.environ.get("TWENTY_BASE_URL", "https://taxitips.tw.a2m-tech.com")
 FLEET_MAIL_FROM = os.environ.get("FLEET_MAIL_FROM", "")
 FLEET_MAIL_REPLY_TO = os.environ.get("FLEET_MAIL_REPLY_TO", "hej@taxitips.se")
+# SMS via 46elks (fleet/sms.py), bara för "Fortsätt här"-länken kring provslutet.
+# Tomt användarnamn/lösenord = inga SMS skickas.
+FORTYSIXELKS_USERNAME = os.environ.get("FORTYSIXELKS_USERNAME", "")
+FORTYSIXELKS_PASSWORD = os.environ.get("FORTYSIXELKS_PASSWORD", "")
+FLEET_SMS_SENDER = os.environ.get("FLEET_SMS_SENDER", "TaxiTips")
 # Driftlarm (core/ops_alerts.py). Tom = inga mejl. Sätt i Coolify, inte i git.
 OPS_ALERT_EMAIL = os.environ.get("OPS_ALERT_EMAIL", "")
 # Kundportalen, som mejlen länkar till. Betalning sker där, aldrig i appen (§9c).

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Fortsätt med Taxi Tips</title>
+  <meta name="robots" content="noindex" />
+  <!-- Länken i mejlet bär en biljett i adressens fragment (#t=...). Den får inte
+       skickas vidare till andra sidor i en Referer-header. -->
+  <meta name="referrer" content="no-referrer" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/brand.css" />
+  <link rel="stylesheet" href="/src/portal.css" />
+  <link rel="stylesheet" href="/src/continue/continue.css" />
+</head>
+<body class="portal">
+  <header class="portal-nav">
+    <a class="brand-logo" href="/"><img src="/brand/logo-on-dark.svg" alt="Taxi Tips" height="26" /></a>
+  </header>
+
+  <!--
+    "Fortsätt här": betalning i två tryck från mejlet eller SMS:et när provet
+    tar slut. Ingen inloggning. Allt innehåll ritas av src/continue/main.js.
+    Appen länkar inte hit (App Store- och Play-reglerna): länken finns bara i
+    mejlet och SMS:et.
+  -->
+  <main class="portal-main continue" id="app" aria-live="polite">
+    <p class="muted center">Laddar …</p>
+  </main>
+
+  <script type="module" src="/src/continue/main.js"></script>
+</body>
+</html>

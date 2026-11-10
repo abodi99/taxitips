@@ -72,6 +72,7 @@ STRIPE_SUB = "sub_kedjetest"
 ORG = "5560360793"
 OWNER_EMAIL = "agare@kedjetaxi.test"
 PORTAL_CONTINUE = "https://taxitips.se/portal#fortsatt"
+CONTINUE_LINK = "https://taxitips.se/fortsatt#t="
 DRIVER_PAGE = "https://taxitips.se/forare"
 
 
@@ -355,7 +356,8 @@ class FullCustomerChainTests(ChainBase):
         )
         for row in reminders:
             self.assertEqual(row.to_address, OWNER_EMAIL)
-            self.assertIn(PORTAL_CONTINUE, row.body)
+            self.assertIn(CONTINUE_LINK, row.body)
+            self.assertNotIn(PORTAL_CONTINUE, row.body)
             # Platsen från appen har ingen bil, men mejlet har ändå ett pris
             # (förut: trial_offer None och mejl utan pris).
             self.assertIn("i månaden exkl. moms", row.body)
@@ -390,7 +392,8 @@ class FullCustomerChainTests(ChainBase):
         ended = self.outbox("trial_ended")
         self.assertEqual(len(ended), 1)
         self.assertEqual(ended[0].to_address, OWNER_EMAIL)
-        self.assertIn(PORTAL_CONTINUE, ended[0].body)
+        self.assertIn(CONTINUE_LINK, ended[0].body)
+        self.assertNotIn(PORTAL_CONTINUE, ended[0].body)
         self.assertIn("i månaden exkl. moms", ended[0].body)
 
         # ------------------------------------------------------------------
@@ -762,7 +765,8 @@ class ChainFocusedTests(ChainBase):
         self.assertIn("Sista dygnet", last.subject)
         self.assertIn("inom ett dygn", last.body)
         for row in (three, last):
-            self.assertIn(PORTAL_CONTINUE, row.body)
+            self.assertIn(CONTINUE_LINK, row.body)
+            self.assertNotIn(PORTAL_CONTINUE, row.body)
 
     def test_a_trial_seat_cannot_add_counties_or_skip_the_monthly_limit(self):
         """§7 och §8: självregistrerat prov = ett län; två byten per månad, även i appen."""

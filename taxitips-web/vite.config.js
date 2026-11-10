@@ -33,6 +33,7 @@ export default defineConfig({
         admin: resolve(__dirname, "admin.html"),
         bekraftad: resolve(__dirname, "bekraftad.html"),
         forare: resolve(__dirname, "forare.html"),
+        fortsatt: resolve(__dirname, "fortsatt.html"),
         registrera: resolve(__dirname, "registrera.html"),
         demo: resolve(__dirname, "demo.html"),
         privacy: resolve(__dirname, "privacy.html"),
