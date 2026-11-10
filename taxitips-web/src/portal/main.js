@@ -256,10 +256,10 @@ function continueChange() {
 }
 
 /**
- * Priset i medlemskapsvyn. Två offerter från servern, som inte ändrar något
- * (POST /api/fleet/quote): fortsättningen med bolagets egna medlemskap -- eller
- * nuläget, för den som redan betalar -- och ett medlemskap med ett extra län,
- * för länspriset. Portalen räknar inga belopp själv (fleet/pricing.py).
+ * Priset i platsvyn. Två offerter från servern, som inte ändrar något
+ * (POST /api/fleet/quote): fortsättningen med bolagets egna platser -- eller
+ * nuläget, för den som redan betalar -- och en enda plats, för styckpriset.
+ * Portalen räknar inga belopp själv (fleet/pricing.py).
  *
  * Ett fel här är inget fel för kunden: vyn säger då bara att priset visas
  * innan något godkänns. En ekonomiroll utan rätt att se priser får samma text.
@@ -272,11 +272,10 @@ async function loadPricing() {
   state.pricing = { loading: true };
   const cars = data.continueVehicles ?? [];
   const base = String(cars[0]?.baseCounty ?? data.licenses?.[0]?.baseCounty ?? "12");
-  const extra = offerableCountyEntries().map(([code]) => code).find((code) => code !== base);
   const [own, probe] = await Promise.allSettled([
     api.quote(continueChange() ?? {}),
     api.quote({
-      addVehicles: [{ plate: "", baseCounty: base, label: "", extraCounties: [extra] }],
+      addVehicles: [{ plate: "", baseCounty: base, label: "", extraCounties: [] }],
     }),
   ]);
   if (run !== pricingRun) return; // en senare hämtning har redan tagit över
@@ -556,7 +555,7 @@ async function saveNotify(form, submitter) {
       showNotice(
         result.phonesChanged
           ? `Standarden är sparad och gäller nu ${result.phonesChanged} telefon(er).`
-          : "Standarden är sparad. Nya telefoner får den när de kopplas till en bil.",
+          : "Standarden är sparad. Nya telefoner får den när de kopplas till en plats.",
       );
     } else {
       await api.setDeviceNotify(form.dataset.device, body);
@@ -588,7 +587,7 @@ async function inviteAccount(form) {
     return;
   }
   if (!licenseId) {
-    showError(new ApiError(400, "Välj vilket medlemskap kontot ska få.", "license_required"));
+    showError(new ApiError(400, "Välj vilken plats kontot ska få.", "license_required"));
     return;
   }
   button.disabled = true;
@@ -693,12 +692,6 @@ async function handle(action, ctx) {
       showNotice(`${ctx.email || "Personen"} är borttagen.`);
       return;
     }
-    case "add-county": {
-      const select = document.querySelector(`[data-county-for="${ctx.license}"]`);
-      const county = select?.value;
-      if (!county) return;
-      return buy({ addCounties: [{ licenseId: ctx.license, county }] });
-    }
     case "assign-membership-self": {
       await api.assignMembership(ctx.license, { mode: "self" });
       await refresh();
@@ -725,31 +718,13 @@ async function handle(action, ctx) {
       const select = document.querySelector(`[data-county-for="${ctx.license}"]`);
       const county = select?.value;
       if (!county) return;
-      if (ctx.status === "trial") {
-        // Provplatsen byter direkt och utan kostnad -- ingen beställning, men
-        // bytet räknas mot medlemskapets två i månaden.
-        if (
-          !confirm(
-            `Byta baslän till ${countyName(county)}? Det gäller direkt. ` +
-              "Varje medlemskap kan byta län två gånger per månad.",
-          )
-        )
-          return;
-        await api.setMembershipCounty(ctx.license, county);
-        await refresh();
-        showNotice(`Baslänet är nu ${countyName(county)}.`);
-        return;
-      }
-      const now = confirm(
-        "Behöver du det nya länet direkt?\n\n" +
-          "OK: vi köper länet som tillägg nu (proportionellt för resten av " +
-          "perioden) och byter baslän vid nästa förnyelse. Tillägget tas bort " +
-          "automatiskt vid bytet.\n\n" +
-          "Avbryt: bytet sker vid nästa förnyelse och kostar inget nu.",
-      );
-      return buy({
-        baseCountyChanges: [{ licenseId: ctx.license, county, immediate: now }],
-      });
+      // Direkt för alla platser, prov som betalda: ingen beställning. Bytet
+      // räknas mot platsens två i månaden; överskrids gränsen svarar servern.
+      if (!confirm(`Byta län till ${countyName(county)}? Gäller direkt. Högst 2 byten per månad.`)) return;
+      await api.setMembershipCounty(ctx.license, county);
+      await refresh();
+      showNotice(`Länet är nu ${countyName(county)}.`);
+      return;
     }
     case "continue-trial": {
       const change = continueChange();
@@ -823,7 +798,7 @@ async function handle(action, ctx) {
 
 /**
  * Under pågående prov: offert → betalning direkt i Stripe-kassan. Provet
- * övergår i medlemskapet när betalningen gått igenom (ingen Stripe-provperiod,
+ * övergår i betalda platser när betalningen gått igenom (ingen Stripe-provperiod,
  * ägarens beslut 2026-10-11).
  *
  * Ett enda godkännande räcker: beloppet, moms, totalsumma och datum visas i
@@ -841,7 +816,7 @@ async function commitTrial(change) {
   const accepted = confirm(
     `${summary.textContent}\n\n` +
       "Godkänner du? Du betalar första månaden nu hos Stripe, och provet " +
-      "övergår i medlemskapet.",
+      "övergår till betalda platser.",
   );
   if (!accepted) return;
 
@@ -966,7 +941,7 @@ function ensureCompanyDetails() {
   });
 }
 
-/** Rutan för "Lägg till medlemskap": ett län och vem som håller platsen. */
+/** Rutan för "Lägg till plats": ett län och vem som håller platsen. */
 async function openAddMembership() {
   if (!(await ensureCompanyDetails())) return;
   if (el.addCounty && !el.addCounty.options.length) {
@@ -986,7 +961,7 @@ async function openAddMembership() {
   el.addDialog?.showModal?.();
 }
 
-/** Ändringen att köpa: ett medlemskap i ett län, kopplat till ett konto. */
+/** Ändringen att köpa: en plats i ett län, kopplad till ett konto. */
 function addMembershipChange() {
   const byEmail = el.addForm.elements.holder.value === "email";
   const email = el.addEmail.value.trim();
@@ -1012,7 +987,7 @@ async function finishOrder(order, container) {
   if (order.status === "pending_payment" && order.paymentUrl) {
     container.hidden = false;
     container.innerHTML =
-      "<p>Beställningen väntar på betalning. Länen aktiveras när betalningen " +
+      "<p>Beställningen väntar på betalning. Platsen aktiveras när betalningen " +
       "har gått igenom. Du skickas vidare till betalsidan — öppnas den inte, " +
       "använd knappen.</p>" +
       `<a class="btn btn-primary btn-block" href="${escAttr(order.paymentUrl)}">` +
@@ -1032,7 +1007,7 @@ async function finishOrder(order, container) {
   } else if (order.status === "scheduled") {
     showNotice("Ändringen är schemalagd till nästa förnyelse.");
   } else {
-    showNotice("Medlemskapet är beställt.");
+    showNotice("Platsen är beställd.");
   }
   await refresh();
 }

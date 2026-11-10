@@ -119,11 +119,11 @@ class TrialEndedTests(_TrialCompany):
     def test_the_server_text_points_to_the_web_without_a_link(self):
         for reason in ("trial_ended", "company_paused", "account_paused"):
             text = access._window_message(reason)
-            self.assertIn("administratör hanterar medlemskapet på webben", text, reason)
+            self.assertIn("administratör hanterar abonnemanget på webben", text, reason)
             for banned in ("http", "www", ".se", "kr", "betala", "köp", "pris"):
                 self.assertNotIn(banned, text.lower(), (reason, banned))
         self.assertTrue(access._window_message("trial_ended").startswith("Provperioden är slut."))
-        self.assertTrue(access._window_message("company_paused").startswith("Medlemskapet är pausat."))
+        self.assertTrue(access._window_message("company_paused").startswith("Abonnemanget är pausat."))
 
 
 class AdminEndTrialTests(_TrialCompany):

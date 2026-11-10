@@ -59,7 +59,7 @@ PRESETS: list[dict] = [
         "id": "everything",
         "label": "Allt i mina län",
         "help": (
-            "Starka och svaga tips i bilens alla län. "
+            "Starka och svaga tips i platsens alla län. "
             f"Högst {thresholds.NOTIFY_WEAK_MAX_PER_HOUR} svaga i timmen."
         ),
     },

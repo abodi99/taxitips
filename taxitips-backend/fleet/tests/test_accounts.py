@@ -503,11 +503,14 @@ class AdminVehicleTests(_Base):
         lic.refresh_from_db()
         self.assertEqual(lic.status, License.Status.CANCELED)
 
-    def test_a_paid_car_is_changed_through_the_order_not_directly(self):
+    def test_a_paid_seat_changes_county_directly_but_extras_are_not_sold(self):
         data = self.full_setup()
         lic = data["license"]
         r = self.call("post", f"/api/admin/licenses/{lic.id}/counties", self.admin_id, {"base": "01"})
-        self.assertEqual(r.json()["reason"], "paid_license")
+        self.assertEqual(r.json(), {"ok": True, "base": "01", "extras": []})
+        r = self.call("post", f"/api/admin/licenses/{lic.id}/counties", self.admin_id,
+                      {"base": "01", "extras": ["12"]})
+        self.assertEqual(r.json()["reason"], "extra_counties_not_sold")
         sales_id = str(uuid.uuid4())
         StaffRole.objects.create(user_id=sales_id, role=StaffRole.Role.SALES)
         r = self.call("post", f"/api/admin/licenses/{lic.id}/remove", sales_id, {"reason": "x"})

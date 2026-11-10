@@ -301,11 +301,11 @@ def set_vehicle_limit(
     try:
         limit = int(limit)
     except (TypeError, ValueError):
-        raise TrialError("invalid_vehicle_limit", "Antal bilar ska vara ett heltal.")
+        raise TrialError("invalid_vehicle_limit", "Antal platser ska vara ett heltal.")
     if not 1 <= limit <= TRIAL_MANUAL_MAX_VEHICLES:
-        raise TrialError("invalid_vehicle_limit", f"Bilar i provet: 1–{TRIAL_MANUAL_MAX_VEHICLES}.")
+        raise TrialError("invalid_vehicle_limit", f"Platser i provet: 1–{TRIAL_MANUAL_MAX_VEHICLES}.")
     if not (reason or "").strip():
-        raise TrialError("reason_required", "Skriv varför provet får fler eller färre bilar.")
+        raise TrialError("reason_required", "Skriv varför provet får fler eller färre platser.")
 
     trial = active_trial(company_id)
     if trial is None:
@@ -314,7 +314,7 @@ def set_vehicle_limit(
     if limit < current:
         raise TrialError(
             "below_current",
-            f"Provet har redan {current} bilar. Ta bort bilar först om gränsen ska sänkas.",
+            f"Provet har redan {current} platser. Ta bort platser först om gränsen ska sänkas.",
         )
     before = trial.vehicle_limit
     Trial.objects.filter(id=trial.id).update(vehicle_limit=limit)
@@ -349,7 +349,7 @@ def assert_can_add_trial_vehicle(trial: Trial) -> None:
     if trial_vehicle_count(trial) >= trial.vehicle_limit:
         raise TrialError(
             "trial_vehicle_limit",
-            f"Provperioden omfattar högst {trial.vehicle_limit} bilar.",
+            f"Provperioden omfattar högst {trial.vehicle_limit} platser.",
         )
 
 

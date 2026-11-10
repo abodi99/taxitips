@@ -33,9 +33,9 @@ const ORDER_STATUS = {
 
 const ORDER_KIND = {
   initial: "Första beställning",
-  add_license: "Nya medlemskap",
-  add_county: "Extra län",
-  change_base_county: "Byte av baslän",
+  add_license: "Nya platser",
+  add_county: "Fler län (äldre avtal)",
+  change_base_county: "Byte av län",
   reduce: "Minskning",
 };
 
@@ -101,74 +101,99 @@ export function registryBlock(r, { checkedAt = "" } = {}) {
 
 /* --- Ny kund ---------------------------------------------------------- */
 
+/**
+ * Resultatet av ett org.nr-uppslag: finns bolaget redan, vad säger registret,
+ * får det prov. Ritas i #orgLookupResult utan att resten av formuläret rörs.
+ */
+export function lookupResult(lookup) {
+  if (!lookup) return "";
+  const found = lookup.existingCompany;
+  const trial = lookup.trial;
+  if (!lookup.valid) return '<p class="error">Organisationsnumret går inte att tolka. Kontrollera siffrorna.</p>';
+  if (found) {
+    return `<div class="notice"><b>${esc(found.name)}</b> finns redan.
+      <button class="btn btn-quiet" type="button" data-action="open-company" data-id="${esc(found.id)}">Öppna bolaget</button></div>`;
+  }
+  return `
+    <p class="ok">${esc(lookup.orgNumber)} är giltigt och finns inte hos oss.</p>
+    ${lookup.registry ? registryBlock(lookup.registry) : ""}
+    ${lookup.registryError ? `<p class="muted">${esc(lookup.registryError)}</p>` : ""}
+    ${lookup.registry?.status === "deregistered"
+      ? '<p class="error">Bolaget är avregistrerat. Lägg bara upp det om du vet varför.</p>' : ""}
+    <p>${trial?.eligible
+      ? '<span class="pill pill-ok">Får provperiod</span>'
+      : `<span class="pill pill-warn">Ingen provperiod</span> <span class="muted">${esc(trial?.message ?? "")}</span>`}</p>`;
+}
+
+/** Är en text i resultatet ett uppslag som kan fylla i formuläret? */
+export function prefillFromLookup(form, lookup) {
+  const reg = lookup?.registry?.found ? lookup.registry : null;
+  if (!reg || !form) return;
+  const set = (name, value) => {
+    const input = form.elements[name];
+    if (input && value && !input.value) input.value = value;
+  };
+  set("name", reg.name);
+  set("legalName", reg.name);
+  set("line1", reg.address?.line1);
+  set("postalCode", reg.address?.postal_code);
+  set("city", reg.address?.city);
+}
+
 export function nyKund(config, lookup = null, orgValue = "", pipelineLead = null) {
   if (!config?.canSell) {
     return `<div class="card"><h2>Ny kund</h2>
       <p class="muted">Din roll kan läsa men inte lägga upp kunder.</p></div>`;
   }
-  const found = lookup?.existingCompany;
-  const trial = lookup?.trial;
-  const reg = lookup?.registry?.found ? lookup.registry : null;
+  const counties = config.counties ?? [];
+  const trialSeats = Number(config.trial?.vehicleLimit ?? 3);
   return `
-    <div class="card">
-      <h2>Ny kund</h2>
-      <p class="muted">Organisationsnummer först. Finns bolaget öppnar du det.
-        Därefter lägger du medlemskap och tar betalt på kundsidan — samma platser som i appen och portalen.</p>
-      <form id="lookupForm" class="toolbar">
-        <label class="visually-hidden" for="orgLookup">Organisationsnummer</label>
-        <input id="orgLookup" name="orgNumber" value="${esc(orgValue)}" placeholder="556677-8899" inputmode="numeric" required />
-        <button class="btn btn-primary" type="submit">Kontrollera</button>
-      </form>
-      ${lookup ? `
-        ${!lookup.valid ? '<p class="error">Organisationsnumret går inte att tolka. Kontrollera siffrorna.</p>' : ""}
-        ${found ? `<div class="notice">
-            <b>${esc(found.name)}</b> finns redan.
-            <button class="btn btn-quiet" data-action="open-company" data-id="${esc(found.id)}">Öppna bolaget</button>
-          </div>` : ""}
-        ${lookup.valid && !found ? `
-          <p class="ok">${esc(lookup.orgNumber)} är giltigt och finns inte hos oss.</p>
-          ${lookup.registry ? registryBlock(lookup.registry) : ""}
-          ${lookup.registryError ? `<p class="muted">${esc(lookup.registryError)}</p>` : ""}
-          ${lookup.registry?.status === "deregistered"
-            ? '<p class="error">Bolaget är avregistrerat. Lägg bara upp det om du vet varför.</p>' : ""}
-          <p>${trial?.eligible
-            ? '<span class="pill pill-ok">Får provperiod</span>'
-            : `<span class="pill pill-warn">Ingen provperiod</span> <span class="muted">${esc(trial?.message ?? "")}</span>`}</p>` : ""}
-      ` : ""}
-    </div>
-
-    ${lookup?.valid && !found ? `
     <form id="companyForm" class="card form-grid">
-      <h2 class="span-2">Företaget</h2>
-      <input type="hidden" name="orgNumber" value="${esc(lookup.normalized)}" />
-      <label>Företagsnamn (som kunden kallar det)<input name="name" required value="${esc(reg?.name ?? pipelineLead?.companyName ?? "")}" /></label>
-      <label>Juridiskt namn <span class="muted">${reg?.found ? "(från Bolagsverket)" : "(om annat)"}</span>
-        <input name="legalName" value="${esc(reg?.name ?? "")}" /></label>
+      <h2 class="span-2">Ny kund</h2>
+      <label class="span-2">Företagsnamn<input name="name" required autocomplete="off"
+        value="${esc(pipelineLead?.companyName ?? "")}" /></label>
+      <label>Kontaktperson<input name="contactName" required autocomplete="off"
+        value="${esc(pipelineLead?.contactName ?? "")}" /></label>
+      <label>E-post<input name="contactEmail" type="email" required
+        value="${esc(pipelineLead?.contactEmail ?? "")}" /></label>
+      <label>Mobil<input name="contactPhone" type="tel" /></label>
+      <label>Antal platser<input name="seats" type="number" min="1" max="50" value="1" required /></label>
+      <label class="span-2">Län<select name="county" required>
+        <option value="">Välj län …</option>
+        ${countyOptions(counties, "")}
+      </select></label>
 
-      <h3 class="span-2">Kontaktperson</h3>
-      <label>Namn<input name="contactName" required autocomplete="off" value="${esc(pipelineLead?.contactName ?? "")}" /></label>
-      <label>Roll<input name="contactRole" placeholder="t.ex. VD, trafikledare" /></label>
-      <label>E-post<input name="contactEmail" type="email" required value="${esc(pipelineLead?.contactEmail ?? "")}" /></label>
-      <label>Telefon<input name="contactPhone" type="tel" /></label>
+      <div class="span-2 org-field">
+        <label>Organisationsnummer <span class="muted">(valfritt – krävs först när kunden köper)</span>
+          <input id="orgLookup" name="orgNumber" value="${esc(orgValue)}" placeholder="556677-8899" inputmode="numeric" /></label>
+        <button class="btn btn-quiet" type="button" data-action="org-lookup">Slå upp</button>
+      </div>
+      <div id="orgLookupResult" class="span-2">${lookupResult(lookup)}</div>
 
-      <h3 class="span-2">Fakturering</h3>
-      <label>Fakturamejl <span class="muted">(tomt = kontaktpersonens)</span><input name="billingEmail" type="email" /></label>
-      <label>Er referens<input name="billingReference" /></label>
-      <label>Gatuadress<input name="line1" autocomplete="off" value="${esc(reg?.address?.line1 ?? "")}" /></label>
-      <label>Postnummer<input name="postalCode" inputmode="numeric" value="${esc(reg?.address?.postal_code ?? "")}" /></label>
-      <label>Ort<input name="city" value="${esc(reg?.address?.city ?? "")}" /></label>
-      ${reg?.found ? '<p class="muted span-2">Namn och adress är ifyllda från Bolagsverket. Ändra om kunden vill ha fakturan någon annanstans.</p>' : ""}
+      <details class="span-2 pkg-extras">
+        <summary>Fler uppgifter (valfritt)</summary>
+        <div class="form-grid">
+          <label>Juridiskt namn <span class="muted">(om annat)</span><input name="legalName" /></label>
+          <label>Roll<input name="contactRole" placeholder="t.ex. VD, trafikledare" /></label>
+          <label>Fakturamejl <span class="muted">(tomt = kontaktpersonens)</span><input name="billingEmail" type="email" /></label>
+          <label>Er referens<input name="billingReference" /></label>
+          <label>Gatuadress<input name="line1" autocomplete="off" /></label>
+          <label>Postnummer<input name="postalCode" inputmode="numeric" /></label>
+          <label>Ort<input name="city" /></label>
+          <label class="span-2">Hur kontrollerade du att personen får företräda bolaget?
+            <textarea name="verificationNote" rows="2"
+              placeholder="t.ex. Ringde numret i Bolagsverket, kopplades till VD Anna Andersson."></textarea></label>
+        </div>
+      </details>
 
-      <label class="span-2">Hur kontrollerade du att personen får företräda bolaget?
-        <textarea name="verificationNote" rows="2" required
-          placeholder="t.ex. Ringde numret i Bolagsverket, kopplades till VD Anna Andersson."></textarea></label>
-      <p class="muted span-2">Obligatoriskt. Det är det enda spåret när någon senare frågar
-        varför bolaget fick ett avtal eller en provperiod.</p>
-      <div class="btn-row span-2"><button class="btn btn-primary" type="submit">Lägg upp företaget</button></div>
-    </form>` : ""}
+      <p class="muted span-2">Kunden får ${esc(config.trial?.days ?? 7)} dagars gratis prov på platserna du anger.
+        Provet startar när första kontot loggar in i appen.</p>
+      <div class="btn-row span-2"><button class="btn btn-primary" type="submit">Lägg upp kunden</button></div>
+    </form>
   `;
 }
 
+/** Svaret som backenden får (POST /api/admin/companies/new). */
 export function companyBody(form) {
   const data = new FormData(form);
   const get = (k) => String(data.get(k) ?? "").trim();
@@ -183,7 +208,19 @@ export function companyBody(form) {
     billingEmail: get("billingEmail"),
     billingReference: get("billingReference"),
     billingAddress: { line1: get("line1"), postalCode: get("postalCode"), city: get("city") },
-    verificationNote: get("verificationNote"),
+    // Backenden kräver en anteckning (fleet/sales.create_company). Formuläret
+    // gör den valfri; utan text skickas en ärlig standard i stället.
+    verificationNote: get("verificationNote")
+      || "Upplagd av personal i admin. Behörigheten är inte kontrollerad.",
+  };
+}
+
+/** Platserna som formuläret ber om: startas som prov direkt efter upplägget. */
+export function companySeats(form) {
+  const data = new FormData(form);
+  return {
+    seats: Math.max(1, Number(data.get("seats") || 1)),
+    county: String(data.get("county") ?? ""),
   };
 }
 
@@ -192,37 +229,6 @@ export function companyBody(form) {
 function isPaying(d) {
   const s = d.subscription;
   return s && ["active", "trialing", "past_due"].includes(s.status) && !!s.periodEnd;
-}
-
-export function vehicleRow(counties, index = 0) {
-  return `
-    <div class="pkg-row" data-row="${index}">
-      <label>Regnr<input name="plate" placeholder="ABC123" autocomplete="off" /></label>
-      <label>Etikett <span class="muted">(valfri)</span><input name="label" placeholder="Bil 12" /></label>
-      <label>Baslän <span class="muted">(ingår)</span><select name="baseCounty">${countyOptions(counties, "14")}</select></label>
-      <button class="btn btn-quiet" type="button" data-action="pkg-remove-row" data-row="${index}" title="Ta bort raden">✕</button>
-      <details class="pkg-extras">
-        <summary>+ Extra län <span class="muted">(valfritt)</span></summary>
-        <div class="county-grid">${counties.map((c) => `
-          <label class="check"><input type="checkbox" name="extraCounties" value="${esc(c.code)}" /> ${esc(c.name)}</label>`).join("")}</div>
-      </details>
-    </div>`;
-}
-
-export function readVehicles(root) {
-  return [...root.querySelectorAll(".pkg-row")]
-    .map((row) => {
-      const base = row.querySelector('[name="baseCounty"]').value;
-      return {
-        plate: row.querySelector('[name="plate"]').value.trim(),
-        label: row.querySelector('[name="label"]').value.trim(),
-        baseCounty: base,
-        extraCounties: [...row.querySelectorAll('[name="extraCounties"]:checked')]
-          .map((o) => o.value)
-          .filter((c) => c !== base),
-      };
-    })
-    .filter((v) => v.plate);
 }
 
 export function quoteBox(q) {
@@ -247,9 +253,9 @@ export function quoteBox(q) {
  */
 
 /**
- * Säljsteget på kundsidan: lägg till platser (samma sak som portalen kallar
- * medlemskap), räkna pris och ta betalt. Inga regnr -- platsen hör till ett
- * konto, precis som i appen.
+ * Säljsteget på kundsidan: lägg till platser, räkna pris och ta betalt. Inga
+ * regnr -- platsen hör till ett konto, precis som i appen. Ett län per plats;
+ * extra län säljs inte längre. Priset kommer från servern (config.price).
  */
 export function addCarsBlock(d, config) {
   if (!config?.canSell) return "";
@@ -262,22 +268,15 @@ export function addCarsBlock(d, config) {
   const maxTrial = Number(config.trial?.vehicleLimit ?? 3);
   return `
     <div class="card" id="salesPanel">
-      <h2>Lägg till medlemskap</h2>
-      <p class="muted">${esc(money(config.price?.baseOre))} per plats och månad exkl. moms
-        (${esc(money(config.price?.volumeOre))} från ${esc(config.price?.volumeThreshold)} platser).
-        Extra län ${esc(money(config.price?.extraCountyOre))}.</p>
+      <h2>Lägg till plats</h2>
+      ${config.price?.baseOre != null ? `<p class="muted">${esc(money(config.price.baseOre))} per plats och månad exkl. moms.</p>` : ""}
       <div class="pack-seats">
         <label>Antal<input id="pkgCount" type="number" min="1" max="50" value="1" /></label>
-        <label>Baslän<select id="pkgCounty">
+        <label>Län<select id="pkgCounty">
           <option value="">Välj län …</option>
           ${countyOptions(counties, "")}
         </select></label>
       </div>
-      <details class="pack-extras">
-        <summary>Extra län på de här platserna</summary>
-        <div class="county-grid">${counties.map((c) => `
-          <label class="check"><input type="checkbox" name="pkgExtra" value="${esc(c.code)}" /> ${esc(c.name)}</label>`).join("")}</div>
-      </details>
 
       ${!paying ? `
       <div class="pack-path">
@@ -326,7 +325,7 @@ export function ownerBlock(d) {
   const profile = d.profile ?? {};
   const members = (d.members ?? []).some((m) => m.status === "active");
   return `
-    <div class="card">
+    <div class="card" id="ownerCard">
       <h2>Bjud in en inloggning</h2>
       <p class="muted">Personen får ett mejl från Taxi Tips med en inloggningslänk och kopplas till företaget
         när hen loggar in. Gäller i 14 dagar.</p>
@@ -383,8 +382,9 @@ export function profileBlock(d) {
       <label>Gatuadress<input name="line1" value="${esc(address.line1 ?? "")}" /></label>
       <label>Postnummer<input name="postalCode" value="${esc(address.postal_code ?? "")}" /></label>
       <label>Ort<input name="city" value="${esc(address.city ?? "")}" /></label>
-      <p class="muted span-2">Orgnr ${esc(profile.orgNumber ?? d.company.orgNumber ?? "")} ändras inte här:
-        ett nytt orgnr är en ny avtalspart.</p>
+      <p class="muted span-2">${(profile.orgNumber || d.company.orgNumber)
+        ? `Org.nr ${esc(profile.orgNumber || d.company.orgNumber)} ändras inte här: ett nytt org.nr är en ny avtalspart.`
+        : "Org.nr saknas – behövs vid köp. Kunden anger det i portalen när hen beställer."}</p>
       <div class="btn-row span-2"><button class="btn btn-primary" type="submit">Spara</button></div>
     </form>`;
 }
@@ -467,7 +467,7 @@ export function trialExtendBlock(d, config) {
           value="${esc(t.vehicleLimit ?? 1)}" />
         <button class="btn btn-quiet" type="button" data-action="trial-vehicles">Ändra antal platser</button>
       </div>
-      <p class="muted">Skälet sparas i händelseloggen. Extra län på en provplats lägger du till under Medlemskap.</p>
+      <p class="muted">Skälet sparas i händelseloggen. Bjud in kontona under Platser.</p>
       <h3>Avsluta provet</h3>
       <p class="muted">Provet slutar nu: inga tips och inga notiser. Kunden får samma mejl som när provet
         löper ut. Ett betalt abonnemang påverkas inte.</p>
@@ -475,23 +475,23 @@ export function trialExtendBlock(d, config) {
     </div>`;
 }
 
-/** Steg Betalning: månadsrabatt på medlemskap (plattformsadmin). */
+/** Steg Betalning: månadsrabatt på platser (plattformsadmin). */
 export function discountBlock(d, config) {
   if (!config?.canManage) return "";
   const active = d.discount;
   const label = active
     ? (active.kind === "percent_bp"
-      ? `${(active.value / 100).toFixed(2)} % på medlemskap`
+      ? `${(active.value / 100).toFixed(2)} % på platserna`
       : `${money(active.value)} / mån exkl. moms`)
     : null;
   return `
-    <details class="card"${active ? " open" : ""}>
+    <details class="card" id="discountCard"${active ? " open" : ""}>
       <summary>Prisrabatt${active ? ` · ${esc(label)}` : ""}</summary>
       ${active ? `<p><span class="pill pill-ok">Aktiv</span> ${esc(label)}
         ${active.validUntil ? `<span class="muted"> till ${esc(date(active.validUntil))}</span>` : ""}
         ${active.description ? `<span class="muted"> — ${esc(active.description)}</span>` : ""}</p>
         <button class="btn btn-danger" type="button" data-action="discount-clear">Ta bort rabatt</button>` : `
-      <p class="muted">Procent eller fast belopp dras av medlemskapen i prismotorn (inte extra län).
+      <p class="muted">Procent eller fast belopp dras av platserna i prismotorn.
         Syns i offerter och MRR.</p>
       <form id="discountForm" class="form-grid">
         <label>Typ<select name="kind">
@@ -547,7 +547,7 @@ export function kuponger(list, config) {
       <label>Kod <span class="muted">(tom = slumpas)</span><input name="code" placeholder="SOMMAR30" autocomplete="off" /></label>
       <label>Beskrivning<input name="description" placeholder="Mässan i Göteborg" /></label>
       <label>Gratisdagar<input name="days" type="number" min="1" max="365" value="30" required /></label>
-      <label>Högst antal bilar <span class="muted">(tillfällig åtkomst)</span><input name="vehicleLimit" type="number" min="1" max="50" value="3" /></label>
+      <label>Högst antal platser <span class="muted">(tillfällig åtkomst)</span><input name="vehicleLimit" type="number" min="1" max="50" value="3" /></label>
       <label>Högst antal inlösen <span class="muted">(tom = obegränsat)</span><input name="maxRedemptions" type="number" min="1" /></label>
       <label>Giltig till och med<input name="validUntil" type="date" /></label>
       <p class="muted span-2">Utan betalande abonnemang ger kupongen tillfällig åtkomst som slutar utan
@@ -556,11 +556,11 @@ export function kuponger(list, config) {
       <div class="btn-row span-2"><button class="btn btn-primary" type="submit">Skapa kupong</button></div>
     </form>` : '<p class="muted">Kuponger skapas av en plattformsadministratör. Säljare löser in dem på kundens sida.</p>'}
     <div class="card"><table>
-      <thead><tr><th>Kod</th><th>Dagar</th><th>Bilar</th><th>Inlösta</th><th>Giltig till</th><th>Status</th><th></th></tr></thead>
+      <thead><tr><th>Kod</th><th>Dagar</th><th>Platser</th><th>Inlösta</th><th>Giltig till</th><th>Status</th><th></th></tr></thead>
       <tbody>${rows.map((c) => `
         <tr><td data-label="Kod"><b class="mono">${esc(c.code)}</b><div class="muted">${esc(c.description)}</div></td>
           <td data-label="Dagar">${esc(c.days)}</td>
-          <td data-label="Bilar">${esc(c.vehicleLimit)}</td>
+          <td data-label="Platser">${esc(c.vehicleLimit)}</td>
           <td data-label="Inlösta">${esc(c.redemptions)}${c.maxRedemptions ? ` / ${esc(c.maxRedemptions)}` : ""}</td>
           <td data-label="Giltig till">${esc(c.validUntil ? date(c.validUntil) : "—")}</td>
           <td data-label="Status">${c.active ? '<span class="pill pill-ok">Aktiv</span>' : '<span class="pill">Avstängd</span>'}</td>

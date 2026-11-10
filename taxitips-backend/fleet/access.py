@@ -722,7 +722,7 @@ def _driver_access(token: str, now) -> Access:
         return Access(
             False, "device_not_approved",
             company_id=str(device.company_id), device_id=str(device.id),
-            message="Telefonen är inte godkänd för någon bil. Be din administratör om en kod.",
+            message="Telefonen är inte godkänd för någon plats. Be din administratör om en kod.",
         )
 
     if not window.ok:
@@ -792,7 +792,7 @@ def _driver_access(token: str, now) -> Access:
         return Access(
             False, "license_inactive", kind="driver",
             company_id=str(device.company_id), device_id=str(device.id),
-            message="Billicensen är avslutad.",
+            message="Platsen är avslutad.",
         )
 
     if credential is not None:
@@ -868,7 +868,7 @@ def _legacy_access(device: Device, window: Window, now) -> Access | None:
             profile.legacy_access_until,
             window.valid_until or profile.legacy_access_until,
         ),
-        message="Övergångsåtkomst. Be din administratör parkoppla telefonen mot en bil.",
+        message="Övergångsåtkomst. Be din administratör parkoppla telefonen mot en plats.",
     )
 
 
@@ -948,23 +948,23 @@ def _window_message(reason: str) -> str:
     return {
         # Texterna visas i appen: inga betalinstruktioner, inga länkar till köp
         # (App Store 3.1.1, Google Play Payments) och inga koder att läsa upp.
-        "trial_ended": "Provperioden är slut. Ditt företags administratör hanterar medlemskapet på webben.",
+        "trial_ended": "Provperioden är slut. Ditt företags administratör hanterar abonnemanget på webben.",
         "trial_not_started": (
-            "Provperioden startar när den första telefonen kopplas. Lägg till en bil och "
+            "Provperioden startar när den första telefonen kopplas. Lägg till en plats och "
             "bjud in en förare med e-post, eller kör själv med den här telefonen."
         ),
-        "period_expired": "Medlemskapet har gått ut. Ditt företags administratör hanterar det på webben.",
-        "past_due": "Medlemskapet är inte betalt. Ditt företags administratör hanterar det på webben.",
-        "canceled": "Medlemskapet är avslutat.",
-        "no_subscription": "Företaget har inget medlemskap.",
+        "period_expired": "Abonnemanget har gått ut. Ditt företags administratör hanterar det på webben.",
+        "past_due": "Abonnemanget är inte betalt. Ditt företags administratör hanterar det på webben.",
+        "canceled": "Abonnemanget är avslutat.",
+        "no_subscription": "Företaget har inget abonnemang.",
         # free_grant behöver ingen egen text: fönstret är öppet, så ingen
         # nekad vy visar skälet. Texten finns bara för fullständighetens skull
         # om en vy ändå råkar fråga efter ett nekat skäl.
         "unknown_company": "Företaget finns inte.",
         "company_suspended": "Företagets konto är avstängt. Kontakta TaxiTips support.",
         # Pausat medlemskap: neutralt, inget om betalning, ingen länk.
-        "company_paused": "Medlemskapet är pausat. Ditt företags administratör hanterar medlemskapet på webben.",
-        "account_paused": "Ditt medlemskap är pausat. Ditt företags administratör hanterar medlemskapet på webben.",
+        "company_paused": "Abonnemanget är pausat. Ditt företags administratör hanterar abonnemanget på webben.",
+        "account_paused": "Din plats är pausad. Ditt företags administratör hanterar abonnemanget på webben.",
         "account_blocked": "Kontot är spärrat. Kontakta TaxiTips support.",
         "account_moved": (
             "Ditt konto används nu på en annan telefon. Logga in här igen om du vill "

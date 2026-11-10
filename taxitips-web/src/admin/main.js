@@ -74,9 +74,11 @@ const el = {
 
 /** Vyer som ligger under Mer — sidomenyn öppnas så aktiv flik syns. */
 const MORE_VIEWS = new Set([
-  "dashboard", "webbstatistik", "tipprapporter", "granskning", "evenemang",
-  "kuponger", "notiser", "konton", "aktivitet", "personal",
+  "pipeline", "uppfoljning", "dashboard", "webbstatistik", "granskning", "evenemang",
+  "kuponger", "konton", "personal",
 ]);
+/** Vyer som ligger under Drift. */
+const DRIFT_VIEWS = new Set(["status", "aktivitet", "notiser", "tipprapporter"]);
 
 const state = {
   // Hem först: det som kräver åtgärd, inte dashboardens siffror.
@@ -94,6 +96,9 @@ const state = {
   accountRecovery: null,
   // Kundens cykel: vilket steg som är öppet, och listans filter.
   companyTab: "",
+  // Kundsidans hopfällda delar: { platser: true, ... }, och för vilken kund.
+  secOpen: {},
+  secOpenFor: null,
   kundFilter: "alla",
   fuFilter: "ring",
   // En betald bils ändring som väntar på kundens godkännande: offerten visas
@@ -146,15 +151,13 @@ function setTab(view) {
     if (tab.dataset.view === highlight) tab.setAttribute("aria-current", "page");
     else tab.removeAttribute("aria-current");
   }
-  const more = document.getElementById("adminMore");
-  if (more) {
-    // Öppna Mer när aktiv vy ligger där. På mobil stängs dropdownen annars.
-    if (MORE_VIEWS.has(view)) more.open = true;
-    else if (window.matchMedia("(max-width: 900px)").matches) more.open = false;
-  }
-  const toggle = more?.querySelector(".side-more-toggle");
-  if (toggle) {
-    toggle.classList.toggle("is-active", MORE_VIEWS.has(view));
+  for (const [id, views] of [["adminMore", MORE_VIEWS], ["adminDrift", DRIFT_VIEWS]]) {
+    const group = document.getElementById(id);
+    if (!group) continue;
+    // Öppna gruppen när aktiv vy ligger där. På mobil stängs dropdownen annars.
+    if (views.has(view)) group.open = true;
+    else if (window.matchMedia("(max-width: 900px)").matches) group.open = false;
+    group.querySelector(".side-more-toggle")?.classList.toggle("is-active", views.has(view));
   }
 }
 
@@ -196,12 +199,20 @@ async function renderView(seq) {
         admin.companyCrm(state.companyId).catch(() => null),
       ]);
       state.companyCrm = crm;
+      // Delarnas öppet/stängt hör till kunden: byter man kund börjar det om.
+      if (state.secOpenFor !== state.companyId) {
+        state.secOpen = {};
+        state.secOpenFor = state.companyId;
+      }
       paint(views.kund(
         detail, state.config, state.companyTab, state.pending, crm, state.companyLoginLink,
+        state.secOpen,
       ));
       // Under Historik: företagets appar och fel (activity.js), hämtas när rutan öppnas.
-      if (views.kundTab(state.companyTab) === "historik") {
-        activity.companyPanel(el.view, state.companyId, { isCurrent: current });
+      if (current()) {
+        activity.companyPanel(
+          el.view.querySelector('[data-sec-mount="activity"]'), state.companyId, { isCurrent: current },
+        );
       }
       return;
     }
@@ -451,7 +462,7 @@ function setTipReportCount(n) {
     badge.textContent = String(n);
     badge.hidden = !n;
   }
-  // Tipprapporter/granskningar ligger under Mer — badge på Mer-knappen.
+  // Tipprapporter ligger under Drift, granskningar under Mer.
   refreshMoreBadge();
 }
 
@@ -465,15 +476,16 @@ function setReviewsCount(n) {
 }
 
 function refreshMoreBadge() {
-  const tip = document.getElementById("tipReportCount");
-  const rev = document.getElementById("granskningCount");
-  const tipN = tip && !tip.hidden ? Number(tip.textContent) || 0 : 0;
-  const revN = rev && !rev.hidden ? Number(rev.textContent) || 0 : 0;
-  const n = tipN + revN;
-  const moreBadge = document.getElementById("moreBadge");
-  if (moreBadge) {
-    moreBadge.textContent = String(n);
-    moreBadge.hidden = !n;
+  const count = (id) => {
+    const node = document.getElementById(id);
+    return node && !node.hidden ? Number(node.textContent) || 0 : 0;
+  };
+  for (const [id, n] of [["moreBadge", count("granskningCount")], ["driftBadge", count("tipReportCount")]]) {
+    const badge = document.getElementById(id);
+    if (badge) {
+      badge.textContent = String(n);
+      badge.hidden = !n;
+    }
   }
 }
 
@@ -507,6 +519,13 @@ function setStatus(report) {
   dot.className = `st-dot st-nav st-${report.overall}`;
   dot.setAttribute("aria-label", LEVEL[report.overall]?.[0] ?? "");
   dot.hidden = false;
+  // Samma prick på Drift, så att den syns även när gruppen är hopfälld.
+  const driftDot = document.getElementById("driftDot");
+  if (driftDot) {
+    driftDot.className = `st-dot st-nav st-${report.overall}`;
+    driftDot.setAttribute("aria-label", LEVEL[report.overall]?.[0] ?? "");
+    driftDot.hidden = false;
+  }
 }
 
 async function refreshStatus() {
@@ -738,6 +757,14 @@ for (const tab of el.tabs) {
 bindAppVersionForm(el.view);
 bindTooltips(el.view);
 
+// "toggle" bubblar inte: fånga det på vägen ner för att minnas vilka delar av
+// kundsidan som är öppna när sidan ritas om efter en åtgärd.
+el.view.addEventListener("toggle", (event) => {
+  const node = event.target;
+  const sec = node instanceof HTMLDetailsElement ? node.dataset.sec : "";
+  if (sec && state.companyId) state.secOpen[sec] = node.open;
+}, true);
+
 el.view.addEventListener("submit", async (event) => {
   event.preventDefault();
   const form = event.target;
@@ -840,12 +867,9 @@ el.view.addEventListener("submit", async (event) => {
         flash("Rollen är sparad. Den gäller från personens nästa sidladdning.");
         break;
       }
-      case "lookupForm":
-        state.lookupOrg = new FormData(form).get("orgNumber")?.toString().trim() ?? "";
-        state.lookup = await admin.lookup(state.lookupOrg);
-        break;
       case "companyForm": {
         const created = await admin.createCompany(sales.companyBody(form));
+        const { seats, county } = sales.companySeats(form);
         const lead = state.pipelineLead;
         if (lead?.leadId) {
           await admin.crmLinkLeadCompany(lead.leadId, {
@@ -861,7 +885,20 @@ el.view.addEventListener("submit", async (event) => {
         state.companyTab = "betalning";
         state.view = "kunder";
         setTab("kunder");
-        flash("Företaget är upplagt. Lägg till medlemskap och ta betalt, eller starta prov.");
+        // Platserna startas som prov direkt. Går det inte (för många platser,
+        // eller bolaget har haft prov) hamnar säljaren på Betalning med skälet.
+        try {
+          const vehicles = Array.from({ length: seats }, () => ({
+            plate: "", label: "", baseCounty: county, extraCounties: [],
+          }));
+          await admin.startTrial(created.companyId, vehicles);
+          state.companyTab = "";
+          flash(`Kunden är upplagd med ${seats === 1 ? "1 plats" : `${seats} platser`} i prov. `
+            + "Provet startar när första kontot loggar in. Bjud in kontona under Platser.");
+        } catch (error) {
+          flash(`Kunden är upplagd. Provet kunde inte startas: ${error?.message ?? "okänt fel"} `
+            + "Lägg till plats eller skicka betallänk under Betalning.");
+        }
         break;
       }
       case "crmNoteForm": {
@@ -1072,6 +1109,20 @@ async function act(action, ds) {
       state.companyLoginLink = null;
       return render();
 
+    case "sec-open": {
+      // Öppna en del av kundsidan (och dem den ligger i) och rulla dit.
+      const sec = el.view.querySelector(`details[data-sec="${ds.sec}"]`);
+      if (!sec) return;
+      sec.open = true;
+      const target = (ds.target && document.getElementById(ds.target)) || sec;
+      for (let node = target.parentElement?.closest("details"); node; node = node.parentElement?.closest("details")) {
+        node.open = true;
+      }
+      if (target instanceof HTMLDetailsElement) target.open = true;
+      target.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+
     case "kund-tab":
       state.companyTab = ds.tab;
       state.pending = null;
@@ -1151,7 +1202,7 @@ async function act(action, ds) {
       return render();
     }
 
-    /* --- Personbaserat medlemskap: ny plats utan bil, och beviljanden --- */
+    /* --- Plats utan bil, och beviljanden --- */
 
     case "membership-invite-free": {
       const licenseId = document.getElementById("inviteLicense")?.value;
@@ -1190,7 +1241,7 @@ async function act(action, ds) {
         return;
       }
       if (!reason) {
-        flash("Skriv varför medlemskapet beviljas utan kostnad -- skälet loggas.");
+        flash("Skriv varför platsen beviljas utan kostnad -- skälet loggas.");
         return;
       }
       const choice = readGrantChoice("grantCategory", "grantCounty");
@@ -1200,7 +1251,7 @@ async function act(action, ds) {
       }
       if (
         !confirm(
-          `Tilldela ${email} medlemskap utan kostnad?\n\n` +
+          `Tilldela ${email} plats utan kostnad?\n\n` +
             `Kategorier: ${choice.categoryText}.\nLän: ${choice.countyText}.\n` +
             (endsAt ? `Gäller till ${endsAt}. ` : "Gäller tills vidare. ") +
             "Ingen order eller faktura skapas, och platsen räknas inte mot nästa betalning.",
@@ -1213,7 +1264,7 @@ async function act(action, ds) {
         ...(endsAt ? { endsAt } : {}),
         ...choice.body,
       });
-      flash(`${email} har fått medlemskap utan kostnad (${choice.categoryText}).`);
+      flash(`${email} har fått en plats utan kostnad (${choice.categoryText}).`);
       return render();
     }
 
@@ -1293,7 +1344,7 @@ async function act(action, ds) {
     case "member-role": {
       const what = {
         company_owner: "ägare. Ägaren kan beställa, säga upp och hantera inloggningar",
-        fleet_admin: "Bilar och förare. Hen sköter medlemskap, län och konton men inte betalning",
+        fleet_admin: "Bilar och förare. Hen sköter platser, län och konton men inte betalning",
         finance: "Ekonomi. Hen ser och betalar fakturor men ändrar inte bilar eller förare",
       }[ds.role];
       if (!confirm(`Ändra rollen till ${what}?`)) return;
@@ -1529,7 +1580,7 @@ async function act(action, ds) {
     case "account-delete": {
       const email = ds.email || "";
       const typed = prompt(
-        `Radera kontot ${email}?\n\nTar bort inloggningen och medlemskapen. Supporttrådar och felrader behålls.\n\nSkriv e-postadressen för att bekräfta:`,
+        `Radera kontot ${email}?\n\nTar bort inloggningen och platserna. Supporttrådar och felrader behålls.\n\nSkriv e-postadressen för att bekräfta:`,
       );
       if (typed === null) return;
       await admin.deleteAccount(ds.user, typed.trim());
@@ -1790,19 +1841,17 @@ function packageChange() {
   const count = Math.max(0, Number(document.getElementById("pkgCount")?.value || 0));
   const county = document.getElementById("pkgCounty")?.value || "";
   if (count < 1) {
-    throw new ApiError(400, "Ange hur många medlemskap.", "vehicles_required");
+    throw new ApiError(400, "Ange hur många platser.", "vehicles_required");
   }
   if (!county) {
-    throw new ApiError(400, "Välj baslän.", "county_required");
+    throw new ApiError(400, "Välj län.", "county_required");
   }
-  const extras = [...document.querySelectorAll("#salesPanel [name='pkgExtra']:checked")]
-    .map((el) => el.value)
-    .filter((code) => code && code !== county);
+  // Ett län per plats; extra län säljs inte längre.
   const vehicles = Array.from({ length: count }, () => ({
     plate: "",
     label: "",
     baseCounty: county,
-    extraCounties: extras,
+    extraCounties: [],
   }));
   return { vehicles, change: { addVehicles: vehicles } };
 }
@@ -1817,8 +1866,6 @@ function stripeWarning(result) {
   return stripe && stripe.synced === false ? `\n\nOBS: ${stripe.message}` : "";
 }
 
-let rowCounter = 0;
-
 async function salesAction(action, ds) {
   const companyId = state.companyId;
   switch (action) {
@@ -1830,16 +1877,15 @@ async function salesAction(action, ds) {
       setTab("kunder");
       return render();
 
-    case "pkg-add-row": {
-      const rows = document.getElementById("pkgRows");
-      rowCounter += 1;
-      rows.insertAdjacentHTML("beforeend", sales.vehicleRow(state.config.counties, rowCounter));
-      return;
-    }
-
-    case "pkg-remove-row": {
-      const rows = document.getElementById("pkgRows");
-      if (rows.children.length > 1) rows.querySelector(`.pkg-row[data-row="${ds.row}"]`)?.remove();
+    case "org-lookup": {
+      const form = document.getElementById("companyForm");
+      const org = document.getElementById("orgLookup")?.value.trim();
+      if (!org) throw new ApiError(400, "Skriv ett organisationsnummer att slå upp.", "org_required");
+      state.lookupOrg = org;
+      state.lookup = await admin.lookup(org);
+      const box = document.getElementById("orgLookupResult");
+      if (box) box.innerHTML = sales.lookupResult(state.lookup);
+      sales.prefillFromLookup(form, state.lookup);
       return;
     }
 
@@ -1860,7 +1906,7 @@ async function salesAction(action, ds) {
           (result.plannedDays ? ` (${result.plannedDays} dagar)` : "") +
           ". " +
           (result.endsAt ? "" : "Det startar när första kontot loggar in i appen. ") +
-          "Bjud in kontona under Medlemskap.",
+          "Bjud in kontona under Platser.",
       );
       return render();
     }
@@ -1875,7 +1921,7 @@ async function salesAction(action, ds) {
     }
 
     case "trial-extend": {
-      const days = Number(document.getElementById("trialExtendDays")?.value || 0);
+      const days = Number(ds.days || document.getElementById("trialExtendDays")?.value || 0);
       const reason = prompt(`Förläng provet med ${days} dagar.\n\nSkriv varför (sparas i loggen):`);
       if (reason === null || !reason.trim()) return;
       await admin.extendTrial(state.companyId, days, reason.trim());
@@ -1984,75 +2030,16 @@ async function salesAction(action, ds) {
       return orderResult(result);
     }
 
-    case "lic-add-county": {
-      const county = document.querySelector(`[data-county-for="${ds.license}"]`)?.value;
-      if (!county) return;
-      return quotedOrder({ addCounties: [{ licenseId: ds.license, county }] });
-    }
-
-    /* --- Medlemskapets län och borttagning (Medlemskap-steget) --- */
-
-    case "county-add": {
-      const county = document.querySelector(`[data-add-county="${ds.license}"]`)?.value;
-      if (!county) throw new ApiError(400, "Välj ett län i listan först.", "county_required");
-      if (ds.trial) {
-        const extras = [...splitList(ds.extras), county];
-        await admin.setTrialCounties(ds.license, ds.base, extras);
-        flash(`${countyLabel(county)} är tillagt på ${memberLabel(ds)}. Gratis under provet.`);
-        return render();
-      }
-      return prepareChange(ds.license, { addCounties: [{ licenseId: ds.license, county }] },
-        `Lägg till ${countyLabel(county)} på ${memberLabel(ds)}`);
-    }
-
-    case "county-remove": {
-      if (ds.trial) {
-        if (!confirm(`Ta bort ${countyLabel(ds.county)} från ${memberLabel(ds)}?`)) return;
-        const extras = splitList(ds.extras).filter((c) => c !== ds.county);
-        await admin.setTrialCounties(ds.license, ds.base, extras);
-        flash(`${countyLabel(ds.county)} är borttaget från ${memberLabel(ds)}.`);
-        return render();
-      }
-      return prepareChange(ds.license, { removeCounties: [{ licenseId: ds.license, county: ds.county }] },
-        `Ta bort ${countyLabel(ds.county)} från ${memberLabel(ds)} vid nästa förnyelse`);
-    }
+    /* --- Platsens län (direkt, högst 2 byten per månad) --- */
 
     case "base-change": {
       const county = document.querySelector(`[data-base-for="${ds.license}"]`)?.value;
-      if (!county) throw new ApiError(400, "Välj det nya baslänet i listan först.", "county_required");
-      if (ds.trial) {
-        const extras = splitList(ds.extras).filter((c) => c !== county);
-        await admin.setTrialCounties(ds.license, county, extras);
-        flash(`${memberLabel(ds)} har nu ${countyLabel(county)} som baslän.`);
-        return render();
-      }
-      return prepareChange(ds.license, { baseCountyChanges: [{ licenseId: ds.license, county }] },
-        `Byt baslän på ${memberLabel(ds)} till ${countyLabel(county)} vid nästa förnyelse`);
-    }
-
-    case "base-change-now": {
-      const county = document.querySelector(`[data-base-for="${ds.license}"]`)?.value;
-      if (!county) throw new ApiError(400, "Välj det nya baslänet i listan först.", "county_required");
-      const reason = prompt(
-        `Byt baslän på ${memberLabel(ds)} till ${countyLabel(county)} DIREKT, i stället för vid förnyelsen.\n\n` +
-          "Påverkar inte priset. Ange ett skäl (sparas i loggen):",
-      );
-      if (!reason) return;
-      await admin.setBaseCountyNow(ds.license, county, reason);
-      flash(`${memberLabel(ds)} har nu ${countyLabel(county)} som baslän.`);
-      return render();
-    }
-
-    case "company-base-now": {
-      const county = document.getElementById("companyBase")?.value;
-      if (!county) throw new ApiError(400, "Välj det nya baslänet i listan först.", "county_required");
-      const reason = prompt(
-        `Byt baslän till ${countyLabel(county)} på ALLA företagets medlemskap, direkt.\n\n` +
-          "Påverkar inte priset. Ange ett skäl (sparas i loggen):",
-      );
-      if (!reason) return;
-      const result = await admin.setCompanyBaseCounty(state.companyId, county, reason);
-      flash(`${result.changed} medlemskap har nu ${countyLabel(county)} som baslän.`);
+      if (!county) throw new ApiError(400, "Välj det nya länet i listan först.", "county_required");
+      if (!confirm(`Byta län till ${countyLabel(county)}? Gäller direkt. Högst 2 byten per månad.`)) return;
+      // Fler län från äldre avtal behålls; själva länet byts direkt för alla platser.
+      const extras = splitList(ds.extras).filter((c) => c !== county);
+      await admin.setTrialCounties(ds.license, county, extras);
+      flash(`${memberLabel(ds)} har nu ${countyLabel(county)} som län.`);
       return render();
     }
 
@@ -2074,14 +2061,14 @@ async function salesAction(action, ds) {
 
     case "car-remove": {
       if (ds.trial) {
-        const reason = prompt(`Ta bort provmedlemskapet ${memberLabel(ds)}? Kontot förlorar åtkomsten direkt.\n\nSkäl:`);
+        const reason = prompt(`Ta bort provplatsen ${memberLabel(ds)}? Kontot förlorar åtkomsten direkt.\n\nSkäl:`);
         if (!reason) return;
         await admin.removeLicense(ds.license, reason);
         flash(`${memberLabel(ds)} är borttagen.`);
         return render();
       }
       return prepareChange(ds.license, { cancelLicenseIds: [ds.license] },
-        `Avsluta ${memberLabel(ds)} vid nästa förnyelse – ingen mer debitering för medlemskapet`, { allowNow: true });
+        `Avsluta ${memberLabel(ds)} vid nästa förnyelse – ingen mer debitering för platsen`, { allowNow: true });
     }
 
     case "car-remove-now": {
@@ -2112,18 +2099,6 @@ async function salesAction(action, ds) {
       state.pending = null;
       return render();
 
-    case "lic-remove-county": {
-      const county = document.querySelector(`[data-remove-county-for="${ds.license}"]`)?.value;
-      if (!county) return;
-      return quotedOrder({ removeCounties: [{ licenseId: ds.license, county }] });
-    }
-
-    case "lic-base": {
-      const county = document.querySelector(`[data-base-for="${ds.license}"]`)?.value;
-      if (!county) return;
-      return quotedOrder({ baseCountyChanges: [{ licenseId: ds.license, county }] });
-    }
-
     case "car-plate": {
       const plate = document.getElementById(`plate-${ds.license}`)?.value.trim();
       if (!plate) throw new ApiError(400, "Skriv det nya registreringsnumret.", "plate_required");
@@ -2141,16 +2116,8 @@ async function salesAction(action, ds) {
       flash("Tillbaka till den ordinarie bilen.");
       return render();
 
-    case "car-trial-counties": {
-      const base = document.getElementById(`base-${ds.license}`)?.value;
-      const extras = [...(document.getElementById(`extras-${ds.license}`)?.selectedOptions ?? [])].map((o) => o.value);
-      await admin.setTrialCounties(ds.license, base, extras);
-      flash("Länen är sparade.");
-      return render();
-    }
-
     case "lic-cancel": {
-      if (!confirm(`Avsluta licensen för ${ds.plate} vid nästa förnyelse? Bilen fungerar perioden ut.`)) return;
+      if (!confirm(`Avsluta platsen ${ds.plate} vid nästa förnyelse? Bilen fungerar perioden ut.`)) return;
       return quotedOrder({ cancelLicenseIds: [ds.license] });
     }
 
@@ -2195,7 +2162,7 @@ async function salesAction(action, ds) {
 
     case "terminate-now": {
       const reason = prompt(
-        "AVSLUTA DIREKT: åtkomsten upphör nu. Platser, förarpass, prov och beviljade medlemskap " +
+        "AVSLUTA DIREKT: åtkomsten upphör nu. Platser, förarpass, prov och beviljade platser " +
           "avslutas och Stripe slutar debitera. Ingen återbetalning görs automatiskt.\n\nSkäl (obligatoriskt):",
       );
       if (!reason) return;
@@ -2317,9 +2284,9 @@ function readGrantChoice(categoryField, countyField) {
   };
 }
 
-/** Kortets rubrik i bekräftelser: regnr när det finns, annars "medlemskapet". */
+/** Kortets rubrik i bekräftelser: regnr när det finns, annars "platsen". */
 function memberLabel(ds) {
-  return ds.plate || "medlemskapet";
+  return ds.plate || "platsen";
 }
 
 /**
@@ -2332,7 +2299,7 @@ async function prepareChange(licenseId, change, label, { allowNow = false } = {}
   return render();
 }
 
-/** Ändring på en befintlig licens: offert, bekräftelse, beställning. */
+/** Ändring på en befintlig plats: offert, bekräftelse, beställning. */
 async function quotedOrder(change) {
   const quote = await admin.quote(state.companyId, change);
   const box = document.createElement("div");

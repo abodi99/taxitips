@@ -20,7 +20,7 @@ from django.views.decorators.http import require_POST
 from core.api import _json
 from fleet import county_changes, licensing, sessions
 from fleet.admin_api import _body, _record, _staff, handle
-from fleet.models import License, Subscription, VehicleSession
+from fleet.models import License, LicenseCounty, Subscription, VehicleSession
 from fleet.roles import Perm
 
 _OPEN = (License.Status.ACTIVE, License.Status.TRIAL, License.Status.PENDING_CANCEL)
@@ -29,9 +29,9 @@ _OPEN = (License.Status.ACTIVE, License.Status.TRIAL, License.Status.PENDING_CAN
 def _license_or_404(license_id) -> License:
     license = License.objects.filter(id=license_id).first()
     if license is None:
-        raise licensing.LicensingError("unknown_license", "Bilen finns inte.", status=404)
+        raise licensing.LicensingError("unknown_license", "Platsen finns inte.", status=404)
     if license.status not in _OPEN:
-        raise licensing.LicensingError("license_closed", "Bilen är redan borttagen.")
+        raise licensing.LicensingError("license_closed", "Platsen är redan borttagen.")
     return license
 
 
@@ -81,13 +81,34 @@ def set_trial_counties(request, license_id):
     """
     POST /api/admin/licenses/<id>/counties {"base": "12", "extras": ["13", "14"]}
 
-    Bara för provbilar: länen kostar inget under provet och ändras direkt. En
-    betald bil ändrar län via offerten (tillägg kostar, borttag gäller vid
-    förnyelse).
+    Provplats: länen ändras direkt (inkl. extra län, personalens val). Betald
+    plats: sedan 2026-11-10 byts baslänet direkt här också, prisneutralt och
+    med samma behörighet som `base-county` (plattformsadministratör); extra län
+    säljs inte och kan inte ändras via den här vägen. Personalens ändringar
+    räknas inte mot kundens månadsgräns.
     """
     principal = _staff(request, Perm.ADMIN_SELL)
     license = _license_or_404(license_id)
     body = _body(request)
+    if license.status != License.Status.TRIAL:
+        _base_county_permission(principal, [license])
+        current_extras = sorted(
+            LicenseCounty.objects.filter(
+                license=license, kind=LicenseCounty.Kind.EXTRA, active_to__isnull=True,
+            ).values_list("county_code", flat=True)
+        )
+        if sorted(str(c) for c in (body.get("extras") or current_extras)) != current_extras:
+            raise licensing.LicensingError(
+                "extra_counties_not_sold", "Extra län säljs inte längre. Byt platsens län i stället.",
+            )
+        result = licensing.change_base_county_now(
+            license=license, county=str(body.get("base") or license.base_county),
+        )
+        _record(
+            principal, "admin_base_county_set", company_id=license.company_id,
+            subject_type="license", subject_id=license.id, detail=result,
+        )
+        return _json(request, {"ok": True, "base": result["to"], "extras": current_extras})
     base, extras = licensing.set_trial_counties(
         license, base=body.get("base") or license.base_county, extras=body.get("extras") or [],
     )
@@ -115,11 +136,11 @@ def remove_license(request, license_id):
     license = _license_or_404(license_id)
     reason = str(_body(request).get("reason") or "").strip()[:300]
     if not reason:
-        raise licensing.LicensingError("reason_required", "Skriv varför bilen tas bort.")
+        raise licensing.LicensingError("reason_required", "Skriv varför platsen tas bort.")
     if license.status != License.Status.TRIAL:
         if not principal.can(Perm.ADMIN_MANAGE):
             raise licensing.LicensingError(
-                "admin_only", "Bara en plattformsadministratör tar bort en betald bil direkt.",
+                "admin_only", "Bara en plattformsadministratör tar bort en betald plats direkt.",
                 status=403,
             )
         subscription = Subscription.objects.filter(company_id=license.company_id).first()
@@ -182,7 +203,7 @@ def _base_county_permission(principal, licenses) -> None:
     """Provbilar: säljare. Betalda bilar: bara plattformsadministratören."""
     if any(lic.status != License.Status.TRIAL for lic in licenses) and not principal.can(Perm.ADMIN_MANAGE):
         raise licensing.LicensingError(
-            "admin_only", "Bara en plattformsadministratör byter baslän direkt på en betald bil.",
+            "admin_only", "Bara en plattformsadministratör byter län direkt på en betald plats.",
             status=403,
         )
 
@@ -225,7 +246,7 @@ def set_company_base_county(request, company_id):
     principal = _staff(request, Perm.ADMIN_SELL)
     licenses = list(License.objects.filter(company_id=company_id, status__in=_OPEN).order_by("created_at"))
     if not licenses:
-        raise licensing.LicensingError("no_licenses", "Företaget har inga bilar att byta baslän på.")
+        raise licensing.LicensingError("no_licenses", "Företaget har inga platser att byta län på.")
     _base_county_permission(principal, licenses)
     reason = _reason(request)
     county = str(_body(request).get("county") or "")

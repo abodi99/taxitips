@@ -20,7 +20,7 @@ companies (Supabase)            avtalspart, land + normaliserat orgnr
   └─ fleet_trial                provhistorik, nyckelad på organisationsnumret
   └─ fleet_vehicle              registrerade bilar
   └─ fleet_license              BILLICENSEN — det som faktiskt köps
-       ├─ fleet_license_county      baslän + extra län, med giltighetstid
+       ├─ fleet_license_county      platsens län (ett) + äldre extra län, med giltighetstid
        ├─ fleet_vehicle_assignment  vilken bil licensen betjänar, över tid
        ├─ fleet_device_approval     godkända telefoner för bilen
        └─ fleet_vehicle_session     den EN aktiva telefonen just nu
@@ -179,14 +179,41 @@ håller dem i stället.
 
 ## 6. Priser
 
-Prisversion `2026-09-v1`, alla belopp **exklusive moms**, i ören:
+Det finns två prislistor, alla belopp **exklusive moms**, i ören. Priset räknas
+bara av servern (`fleet/pricing.py`); klienter visar det de fått.
+
+**`2026-11-v1` ("Prislista 2026-11") — förvald sedan 2026-11-10.**
+
+| Post | Pris |
+|---|---|
+| Plats (en förare, ett län) | 399 kr per plats och månad, **samma pris oavsett antal** (inget volymsteg) |
+| Extra län | **säljs inte längre.** Befintliga extra län behåller sitt pris (199 kr) tills de sägs upp |
+| Introduktion | av |
+
+Nya abonnemang, och abonnemang som aldrig betalats (status `none`, t.ex. ett
+pågående prov), följer alltid den förvalda listan — provets erbjudande och
+mejlen visar därför 399 kr. Ett nytt extra län nekas med `extra_counties_not_sold`
+("Fler län säljs inte längre. Varje plats gäller ett län."). Vilka listor som
+säljer extra län styrs av `PRICE_VERSIONS_SELLING_EXTRA_COUNTIES` i `fleet/pricing.py`.
+
+**`2026-09-v1` ("Grundprislista 2026") — ligger kvar för historiken** och för
+betalande abonnemang tills de uttryckligen flyttas (`manage.py move_price_version`,
+torrkörning som standard):
 
 | Post | Pris |
 |---|---|
 | 1–9 köpta billicenser | 799 kr per bil och månad |
 | Minst 10 köpta billicenser | 749 kr per bil och månad, för **samtliga** licenser |
-| Extra län | 199 kr per bil, extra län och månad |
-| Introduktion | 699 kr per bil och månad, företagets första tre sammanhängande betalmånader |
+| Extra län | 199 kr per bil, extra län och månad (säljs bara på den här listan) |
+| Introduktion | 699 kr per bil och månad, första tre betalmånaderna (avstängd) |
+
+Skapa/uppdatera listan och byt förvald i ett idempotent steg (kronor, `--dry-run`
+först):
+
+```bash
+manage.py seed_pricing --id 2026-11-v1 --label "Prislista 2026-11" \
+  --base 399 --volume 399 --terms-version 2026-11 --disable-intro --default --dry-run
+```
 
 Moms: 25 % (`vat_rate_bp = 2500`), ett fält på prisversionen. Det fanns ingen
 momshantering att återanvända i kodbasen — bara strängen "exkl. moms" i en
@@ -223,9 +250,10 @@ Kommandot vägrar `--enable-intro` utan `--launch-date`.
 
 ### Villkorsversion
 
-`terms_version` är **tom**. Fyll den innan riktiga beställningar läggs — en
-order utan villkorsversion går inte att knyta till ett avtal i efterhand.
-`seed_pricing` varnar om den saknas.
+`terms_version` kopieras till varje order (`Order.terms_version`) och är en fri
+sträng (högst 32 tecken, ingen validering). `2026-09-v1` har den **tom**; `2026-11-v1`
+sätts till `2026-11`. En order utan villkorsversion går inte att knyta till ett
+avtal i efterhand, och `seed_pricing` varnar om den saknas.
 
 ---
 
@@ -284,8 +312,8 @@ order utan villkorsversion går inte att knyta till ett avtal i efterhand.
 | Uppgradering | Betalas proportionellt nu. Rättigheter **först när betalningen lyckats**. |
 | Väntande betalning | Ger ingen åtkomst och förstör ingen befintlig. |
 | Minskning | Nästa förnyelse. Kunden väljer vilka bilar/län och ser kommande totalpris. |
-| Baslänsbyte | Nästa förnyelse. Behövs länet nu: köp som tillägg, tillägget tas bort automatiskt vid bytet. |
-| Länbyte, gräns | **Två per bil och kalendermånad** (Europe/Stockholm), även under provet -- annars får en bil som hoppar mellan län alla län till priset av ett. Räknas när kunden beställer bytet (betald bil) eller byter direkt (provbil, även byte av ett extra län mot ett annat). Köp av extra län räknas inte, och inte heller personalens ändringar. Därefter `county_change_limit`; support ger ett extra byte för månaden (`POST /api/admin/licenses/<id>/allow-county-change`). Läget per bil: `countyChanges` i `/api/fleet/company` och adminens kundsida. `fleet/county_changes.py`. |
+| Länbyte | **Direkt, för alla platser** (prov och betalda), sedan 2026-11-10: platsen har ETT län och priset är detsamma oavsett län, så ingen beställning och inget Stripe-anrop behövs. Kunden eller föraren byter själv (`POST /api/fleet/memberships/<id>/county`); admin via `base-county`. Ett schemalagt länbyte från den äldre beställningsvägen (`baseCountyChanges`, kvar för äldre portalversioner) ersätts av ett direkt byte. Extra län säljs inte; platser som redan har dem behåller dem tills de sägs upp, och ett extra län kan inte också bli platsens län. `fleet/county_changes.py:change_counties`. |
+| Länbyte, gräns | **Två per plats och kalendermånad** (Europe/Stockholm), för prov och betalt -- annars får en plats som hoppar mellan län alla län till priset av ett. Räknas vid varje direkt byte (`via` = `direct`, för provplats `trial`, även byte av ett extra län mot ett annat) och när en äldre beställning schemalägger ett byte. Samma län igen är inget byte. Köp av extra län räknas inte, och inte heller personalens ändringar. Därefter `county_change_limit`; support ger ett extra byte för månaden (`POST /api/admin/licenses/<id>/allow-county-change`). Läget per bil: `countyChanges` i `/api/fleet/company` och adminens kundsida. `fleet/county_changes.py`. |
 | Uppsägning | Stoppar nästa period. Åtkomst den betalda perioden ut. Ingen extra frist, inget supportsamtal. |
 | Ångra uppsägning | Går fram till slutdatumet. Introduktions- och provhistorik behålls. |
 | Misslyckad förnyelse | Högst **7 dagars** frist, räknad från **ursprunglig** förfallotid. Bara för den som betalat förut. |
@@ -372,8 +400,8 @@ i `taxitips-web/src/admin/sales.js`. Testat i `fleet/tests/test_sales.py`.
 
 | Steg | Vem | Regel |
 |---|---|---|
-| Lägga upp företag | säljare | Giltigt orgnr (Luhn), en gång per orgnr, dokumenterad kontroll av kontaktpersonen (`verification_note`). `companies.status = inactive` — den nya modellen styr. |
-| Prov | säljare | 7 dagar, högst 3 bilar (självregistrering: 1), ett per orgnr och 24 månader, startar vid första telefonen. Säljarens provbilar får prova extra län gratis. Bara tåg och buss syns (§7). |
+| Lägga upp företag | säljare | Namn, kontakt, e-post och telefon räcker; **orgnr är valfritt** (2026-11-10). Med orgnr: Luhn, Bolagsverket, en gång per orgnr och dokumenterad kontroll av kontaktpersonen (`verification_note`). Utan: orgnr krävs före första beställningen (`company_details.require_company_details`, även i admin) och sätts med `POST /api/admin/companies/<id>/org-number`. `companies.status = inactive` — den nya modellen styr. |
+| Prov | säljare | 7 dagar, antal platser väljs av säljaren (utan regnr går bra), ett per orgnr och 24 månader (utan orgnr: ett per kontaktens e-post, plus mobilnumret mot andra bolags prov), startar vid första telefonen. Extra län ingår inte. Bara tåg och buss syns (§7). |
 | Kupong | admin skapar, säljare löser in | Utan betalande abonnemang: tillfällig åtkomst (`Trial.source = coupon`, startar direkt). Med abonnemang i Stripe: nästa debitering flyttas (`trial_end`). Betalt utanför Stripe: perioden förlängs. En gång per bolag och kupong. |
 | Beställning | säljare | Offert först, kundens godkännande intygat. Betalning **bara via Stripe**: kort (betallänk) eller Stripe-faktura. Utan Stripe i miljön vägras beställningen innan något sparas. |
 | ~~Markera betald utanför Stripe~~ | -- | **Borttaget 2026-09-26.** All betalning går genom Stripe, så att varje betalning som gett åtkomst har en faktura att stämma av mot. |
@@ -598,8 +626,9 @@ som håller platsen: i stället för en registrerad bil tilldelas medlemskapet e
   claim_for_email`, adressen ur den VERIFIERADE token).
 * Ägaren registrerar medlemskapet på sig själv eller tilldelar det till någon
   annan: `POST /api/fleet/memberships/<id>/assign {"mode": "self"|"email"}`.
-* Länen väljs per medlemskap: `POST /api/fleet/memberships/<id>/county`. Provet
-  byter direkt; en betald licens byter via en beställning (som förut).
+* Länet väljs per plats: `POST /api/fleet/memberships/<id>/county`. Både prov
+  och betald plats byter direkt, högst två gånger per kalendermånad (§8).
+  Extra län säljs inte.
 
 **En app-session per konto.** Att "ta" medlemskapet i appen är en rad i
 `fleet_membership_session` -- ett konto, en öppen rad (partiellt unikt index).

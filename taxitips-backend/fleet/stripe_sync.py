@@ -271,7 +271,7 @@ def package_summary(
     }
     codes = sorted(set(codes) | pending_codes)
     counties = ", ".join(areas.COUNTY_NAMES.get(c, c) for c in codes)
-    cars = f"{count} {'bil' if count == 1 else 'bilar'}"
+    cars = f"{count} {'plats' if count == 1 else 'platser'}"
     if plates:
         cars += f" ({', '.join(sorted(plates))})"
     text = f"{cars} · {counties}" if counties else cars
@@ -484,7 +484,7 @@ def _checkout_line_items(lines: list[dict], *, currency: str, amount_ore: int) -
     if product:
         price_data["product"] = product
     else:
-        price_data["product_data"] = {"name": "TaxiTips billicenser"}
+        price_data["product_data"] = {"name": "TaxiTips platser"}
     item = {"price_data": price_data, "quantity": 1}
     rates = _vat_tax_rates()
     if rates:
@@ -834,7 +834,7 @@ def _items_from_lines(lines: list[dict], *, currency: str, amount_ore: int) -> l
         return items
     return [_recurring_item(
         currency=currency, unit_amount=int(amount_ore), quantity=1,
-        product=_product_for("licenses"), name="TaxiTips billicenser",
+        product=_product_for("licenses"), name="TaxiTips platser",
     )]
 
 
@@ -1134,7 +1134,7 @@ def check_billing_config() -> list[str]:
         )
     if not getattr(settings, "STRIPE_PRODUCT_ID", ""):
         problems.append(
-            "STRIPE_PRODUCT_ID saknas -- billicenserna får ingen produkt i Stripe."
+            "STRIPE_PRODUCT_ID saknas -- platserna får ingen produkt i Stripe."
         )
     if not getattr(settings, "STRIPE_EXTRA_COUNTY_PRODUCT_ID", ""):
         problems.append(

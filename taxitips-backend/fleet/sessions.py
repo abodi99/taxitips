@@ -359,15 +359,15 @@ def start_membership_session(*, user_id, license_id, device_id, force: bool = Fa
     """
     now = now or timezone.now()
     if not user_id:
-        raise SessionError("login_required", "Logga in för att ta medlemskapet.", status=401)
+        raise SessionError("login_required", "Logga in för att ta platsen.", status=401)
 
     license = License.objects.select_for_update().filter(id=license_id).order_by("id").first()
     if license is None:
-        raise SessionError("unknown_license", "Medlemskapet finns inte.", status=404)
+        raise SessionError("unknown_license", "Platsen finns inte.", status=404)
     if not license.is_assigned_to(user_id):
-        raise SessionError("not_assigned", "Medlemskapet är inte tilldelat ditt konto.", status=403)
+        raise SessionError("not_assigned", "Platsen är inte tilldelad ditt konto.", status=403)
     if license.status not in (License.Status.ACTIVE, License.Status.TRIAL, License.Status.PENDING_CANCEL):
-        raise SessionError("license_inactive", "Medlemskapet är inte aktivt.", status=403)
+        raise SessionError("license_inactive", "Platsen är inte aktiv.", status=403)
 
     existing = active_membership_session_for_license(license.id)
     if (
@@ -384,7 +384,7 @@ def start_membership_session(*, user_id, license_id, device_id, force: bool = Fa
         if not force:
             raise SessionError(
                 "takeover_required",
-                f"{membership_holder_label(existing)} använder medlemskapet. Vill du ta över?",
+                f"{membership_holder_label(existing)} använder platsen. Vill du ta över?",
                 status=409,
                 detail={
                     "currentDeviceLabel": membership_holder_label(existing),

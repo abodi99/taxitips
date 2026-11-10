@@ -187,17 +187,28 @@ def require_company_details(company_id) -> None:
 
 
 def set_org_number(principal: roles.Principal, body: dict) -> dict:
+    roles.require(principal, Perm.PURCHASE)
+    return add_org_number(
+        principal.company_id, body, actor_user_id=principal.user_id, actor_kind="customer",
+    )
+
+
+def add_org_number(company_id, body: dict, *, actor_user_id, actor_kind: str = "customer") -> dict:
+    """
+    Sätter organisationsnumret första gången, med alla kontroller (Bolagsverket,
+    dubblett). Delas av kunden i portalen och av säljaren i admin: en kund som
+    lagts upp utan nummer måste kunna få det på plats innan första beställningen.
+    """
     from django.db import transaction
     from django.utils import timezone
 
     from billing.models import Company
     from fleet import orgnr, registration, sales
 
-    roles.require(principal, Perm.PURCHASE)
     country = "SE"
     raw = str(body.get("orgNumber") or "")
     with transaction.atomic():
-        profile = CompanyProfile.objects.select_for_update().filter(company_id=principal.company_id).first()
+        profile = CompanyProfile.objects.select_for_update().filter(company_id=company_id).first()
         if profile is None:
             raise _error("orgNumber", "no_profile", "Företaget saknar uppgifter. Kontakta TaxiTips.")
         if profile.org_number:
@@ -209,7 +220,7 @@ def set_org_number(principal: roles.Principal, body: dict) -> dict:
             raise _error("orgNumber", "invalid_org_number", "Organisationsnumret går inte att tolka.")
         normalized = orgnr.normalize(raw, country)
         other = sales.existing_company_for(normalized, country)
-        if other is not None and str(other.id) != str(principal.company_id):
+        if other is not None and str(other.id) != str(company_id):
             raise SalesError(
                 "company_exists", registration.COMPANY_EXISTS_MESSAGE, status=409,
                 detail={"field": "orgNumber"},
@@ -239,10 +250,10 @@ def set_org_number(principal: roles.Principal, body: dict) -> dict:
         profile.save(update_fields=["org_number", "legal_name"])
         if registry is not None:
             bolagsverket.apply_to_profile(profile, registry)
-        Company.objects.filter(id=principal.company_id).update(org_number=normalized)
+        Company.objects.filter(id=company_id).update(org_number=normalized)
         audit.record(
-            "org_number_added", company_id=principal.company_id, actor_user_id=principal.user_id,
-            actor_kind="customer", subject_type="company", subject_id=principal.company_id,
+            "org_number_added", company_id=company_id, actor_user_id=actor_user_id,
+            actor_kind=actor_kind, subject_type="company", subject_id=company_id,
             detail={"org_number": normalized, "kind": kind,
                     "registry": (registry.status if registry else "unavailable")},
         )

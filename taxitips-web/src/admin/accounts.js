@@ -53,7 +53,7 @@ export function konton(found, blocks, q = "", config = null) {
   return `
     <div class="page-head">
       <div><h1>Konton</h1>
-        <p class="muted">Användarnivå: öppna ett konto för medlemskap, loggar, lösenordslänk, spärr och radering.
+        <p class="muted">Användarnivå: öppna ett konto för platser, loggar, lösenordslänk, spärr och radering.
           Spärrade konton och adresser får ingen data och kan inte registrera nya företag.</p></div>
     </div>
 
@@ -298,7 +298,7 @@ function auditRows(audit) {
   </table>`;
 }
 
-/** En användares sida: medlemskap, Firebase, notiser, loggar, åtgärder. */
+/** En användares sida: platser, Firebase, notiser, loggar, åtgärder. */
 export function konto(account, config = null, recovery = null, logs = null) {
   const manage = !!config?.canManage;
   const a = account || {};
