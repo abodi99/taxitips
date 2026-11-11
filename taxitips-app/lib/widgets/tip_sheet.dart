@@ -1130,7 +1130,12 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
     final trainLabel = line.isNotEmpty
         ? line
         : (trainNumber == null ? null : '${_modeLabel(alert)} $trainNumber');
-    final parts = <String>[?operator, ?trainLabel];
+    // "SJ Snabbtåg 541" bär redan bolaget: skriv det inte en gång till.
+    final labelHasOperator =
+        operator != null &&
+        trainLabel != null &&
+        trainLabel.toLowerCase().contains(operator.toLowerCase());
+    final parts = <String>[if (!labelHasOperator) ?operator, ?trainLabel];
     final badgeText = parts.isEmpty ? _modeLabel(alert) : parts.join(' · ');
     return _TrainDetails(
       badgeText: badgeText,
