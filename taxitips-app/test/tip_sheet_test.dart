@@ -257,6 +257,32 @@ void main() {
       expect(find.text('Tumba station'), findsOneWidget);
     });
 
+    testWidgets('en nästa avgång som redan gått visas inte', (tester) async {
+      // Serverns rader överst, som i produktion: då är kortets bricka den
+      // enda platsen där nästa avgång står.
+      Map<String, dynamic> tip(DateTime next, String summary) => strongTip()
+        ..['headline'] = 'Tåg 45 min sent'
+        ..['decision'] = 'Kommer 21:26'
+        ..['travel_options'] = {
+          'summary': summary,
+          'next_departure_at': iso(next),
+        };
+      await pumpSheet(
+        tester,
+        tip(now.add(const Duration(minutes: 10)), 'Nästa avgång 20:52'),
+      );
+      expect(find.textContaining('Nästa avgång 20:52'), findsOneWidget);
+
+      await pumpSheet(
+        tester,
+        tip(
+          now.subtract(const Duration(minutes: 3)),
+          'Nästa avgång gick 20:52',
+        ),
+      );
+      expect(find.textContaining('Nästa avgång'), findsNothing);
+    });
+
     testWidgets('utan linje från backend: numret ur texten', (tester) async {
       await pumpSheet(tester, strongTip());
       expect(

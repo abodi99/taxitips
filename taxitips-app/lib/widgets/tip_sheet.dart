@@ -1244,7 +1244,13 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
             (dep?.newClock != null && dep!.newClock!.isNotEmpty) ||
             (dep != null && dep.at.isBefore(now)));
 
-    final nextText = travel?.waitText ?? route.nextHint;
+    // En nästa avgång som redan gått hjälper ingen: då visas ingen rad.
+    final nextAt = travel?.nextDepartureAt;
+    final nextGone =
+        travel?.isLastDeparture != true &&
+        ((nextAt != null && !nextAt.isAfter(now)) ||
+            (route.nextHint ?? '').startsWith('Nästa avgång gick'));
+    final nextText = travel?.waitText ?? (nextGone ? null : route.nextHint);
     final showStarted = !ended && start != null;
     final summary = alert['summary']?.toString().trim() ?? '';
     final brief = ended ? null : tipBrief(alert);
@@ -1436,6 +1442,7 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
           if (!ended &&
               travel != null &&
               travel!.departure == null &&
+              !nextGone &&
               nextText == null) ...[
             const SizedBox(height: 10),
             NextDepartureBox(travel: travel!),
