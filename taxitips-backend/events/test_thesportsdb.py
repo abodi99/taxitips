@@ -185,6 +185,24 @@ class FetchTests(SimpleTestCase):
         self.assertNotIn("4347", lookups)
         self.assertEqual(seasons["4419"], "2026-2027")  # nya säsonger läggs till
 
+    def test_a_playoff_as_next_game_does_not_hide_the_numbered_rounds(self):
+        """Källans nästa match var en kvalmatch i omgång 0: omgång 23 ska hämtas ändå."""
+        class Playoff(FakeSession):
+            def get(self, url, params=None, timeout=None):
+                if url.endswith("eventsnextleague.php") and (params or {}).get("id") == "4347":
+                    self.calls.append(("eventsnextleague.php", dict(params)))
+                    return FakeResponse({"events": [{"intRound": "0"}]})
+                return super().get(url, params, timeout)
+
+        allsvenskan = next(league for league in thesportsdb.LEAGUES if league["id"] == "4347")
+        with mock.patch.object(thesportsdb, "LEAGUES", (allsvenskan,)):
+            without, _ = thesportsdb.fetch_events(client(Playoff()), START, END)
+            session = Playoff()
+            with_hint, _ = thesportsdb.fetch_events(client(session), START, END, round_hints={"4347": 23})
+        self.assertEqual(without, [])
+        self.assertEqual([e["idEvent"] for e in with_hint], ["2"])
+        self.assertEqual([p["r"] for path, p in session.calls if path == "eventsround.php"][:2], [0, 23])
+
     def test_a_failing_league_is_reported_and_the_fetch_is_incomplete(self):
         _, stats = thesportsdb.fetch_events(client(FakeSession(fail={"4419"})), START, END)
         self.assertFalse(stats["complete"])

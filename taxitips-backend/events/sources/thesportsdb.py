@@ -188,7 +188,7 @@ def _home_venue_id(client: Client, team_id, cache: dict) -> str:
 
 def fetch_events(
     client: Client, start: dt.datetime, end: dt.datetime, venues: dict | None = None, *,
-    first_league: str | None = None, seasons: dict | None = None,
+    first_league: str | None = None, seasons: dict | None = None, round_hints: dict | None = None,
 ) -> tuple[list[dict], dict]:
     """
     Matcherna i LEAGUES mellan start och slut, och vad varje liga gav.
@@ -196,6 +196,9 @@ def fetch_events(
     `first_league` är ligan att börja med (id). En körning som inte hinner alla ligor lämnar
     `stats["resumeAt"]`, och nästa körning börjar där -- annars fick de sista ligorna aldrig sin tur.
     `seasons` är kända säsonger per liga (sparar ett anrop per liga); nya läggs till i den.
+    `round_hints` är lägsta kommande omgång vi redan känner per liga. Den behövs när källans
+    "nästa match" saknar omgång (intRound 0): 2026-11-11 var Allsvenskans nästa match en
+    kvalmatch i omgång 0, och omgång 29 och 30 hämtades inte alls.
     """
     venues = {} if venues is None else venues
     seasons = {} if seasons is None else seasons
@@ -226,11 +229,18 @@ def fetch_events(
                 continue
             first_round = _round(upcoming[0].get("intRound"))
             depth = league.get("rounds") or MAX_ROUNDS
-            rounds = [0] if not first_round else range(first_round, first_round + depth)
+            hint = _round((round_hints or {}).get(league["id"]))
+            if first_round:
+                rounds = list(range(first_round, first_round + depth))
+            else:
+                # Omgång 0 (kval, eller en liga utan omgångar) och sedan de numrerade vi känner.
+                rounds = [0, *(range(hint, hint + depth) if hint else ())]
             for number in rounds:
                 games = client.get("eventsround.php", id=league["id"], r=number, s=season).get("events") or []
                 report["rounds"].append({"round": number, "games": len(games)})
                 if not games:
+                    if number == 0:
+                        continue
                     break
                 times = [t for t in (_utc(g) for g in games) if t]
                 for game in games:
@@ -246,7 +256,7 @@ def fetch_events(
                             "venue": _venue(client, venue_id, venues)}
                     events[str(game["idEvent"])] = game
                     report["games"] += 1
-                if times and min(times) > end:
+                if number and times and min(times) > end:
                     break
             stats["done"].append(league["id"])
         except BudgetExceeded:

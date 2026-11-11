@@ -211,6 +211,23 @@ class Command(BaseCommand):
     THESPORTSDB_BUDGET_S = 600
     THESPORTSDB_STATE = "thesportsdb"
 
+    @staticmethod
+    def _known_rounds(now) -> dict:
+        """Lägsta kommande omgång per liga bland matcherna vi redan har sparat."""
+        from events.models import Event
+
+        by_label = {league["label"]: league["id"] for league in thesportsdb.LEAGUES}
+        rounds: dict[str, int] = {}
+        for raw in Event.objects.filter(source=ingest.THESPORTSDB, start_at__gte=now).values_list("raw", flat=True):
+            league_id = by_label.get((raw or {}).get("league"))
+            try:
+                number = int((raw or {}).get("round"))
+            except (TypeError, ValueError):
+                continue
+            if league_id and number > 0:
+                rounds[league_id] = min(number, rounds.get(league_id, number))
+        return rounds
+
     def _poll_thesportsdb(self, options, status):
         rights = rights_for(ingest.THESPORTSDB)
         if not rights.may_store():
@@ -245,6 +262,7 @@ class Command(BaseCommand):
             # två minuter (uppmätt 2026-11-11), så alla tio ligor ryms inte i en körning.
             raw_events, stats = thesportsdb.fetch_events(
                 client, now, end, venues, first_league=resume_at, seasons=seasons,
+                round_hints=self._known_rounds(now),
             )
             resume_at = stats.get("resumeAt")
         finally:
@@ -271,11 +289,12 @@ class Command(BaseCommand):
             self._report(rows, detail, wrote=False)
             return
 
-        # Borta-markeringen bara efter en komplett hämtning: en liga som felade får inte
-        # radera sina matcher.
+        # Ingen match markeras som borta. Vilka omgångar som hämtas bygger på källans "nästa
+        # match", och när den pekade fel (2026-11-11) markerades 16 riktiga matcher som borta.
+        # En flyttad match behåller sitt id och uppdateras; spelade matcher rensas på tid.
         saved = ingest.save(
             rows, source=ingest.THESPORTSDB, now=now, fetched_until=end.astimezone(timing.STOCKHOLM).date(),
-            complete=stats["complete"],
+            complete=False,
         )
         purged = ingest.purge(now)
         status.written = len(rows)
