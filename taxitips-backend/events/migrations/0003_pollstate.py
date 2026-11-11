@@ -3,6 +3,23 @@
 from django.db import migrations, models
 
 
+# Tabellen hör bara till hämtningen. Den får aldrig gå att läsa genom PostgREST, oavsett
+# vilka standardrättigheter Supabase har satt i miljön (samma mönster som fleet 0006).
+REVOKE = """
+do $$
+declare
+  r text;
+begin
+  foreach r in array array['anon', 'authenticated'] loop
+    if exists (select 1 from pg_roles where rolname = r) then
+      execute format('revoke all on table public.event_poll_state from %I', r);
+    end if;
+  end loop;
+end $$;
+alter table public.event_poll_state enable row level security;
+"""
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -21,4 +38,5 @@ class Migration(migrations.Migration):
                 'db_table': 'event_poll_state',
             },
         ),
+        migrations.RunSQL(sql=REVOKE, reverse_sql=migrations.RunSQL.noop),
     ]
