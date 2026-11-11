@@ -967,6 +967,30 @@ el.view.addEventListener("change", (event) => {
     render();
     return;
   }
+  if (event.target.matches?.("[data-seat-county]")) {
+    // Länet byts direkt i platsens rad. Avbryter man ställs listan tillbaka.
+    const select = event.target;
+    const ds = select.dataset;
+    const county = select.value;
+    if (!county || county === ds.base) return;
+    if (!confirm(`Byta län på ${ds.plate} till ${countyLabel(county)}? Gäller direkt.`)) {
+      select.value = ds.base;
+      return;
+    }
+    const extras = splitList(ds.extras).filter((c) => c !== county);
+    select.disabled = true;
+    admin.setTrialCounties(ds.license, county, extras)
+      .then(() => {
+        flash(`${ds.plate} har nu ${countyLabel(county)}.`);
+        return render();
+      })
+      .catch((error) => {
+        select.disabled = false;
+        select.value = ds.base;
+        showError(error);
+      });
+    return;
+  }
   const taskId = event.target.dataset?.taskStatus;
   if (taskId) {
     admin.crmTaskUpdate(taskId, { status: event.target.value })
@@ -1176,6 +1200,17 @@ async function act(action, ds) {
       if (reason === null) return;
       const result = await admin.releaseCar(ds.license, reason.trim());
       flash(result.released ? `${ds.plate} är frigjord.` : `Ingen körde ${ds.plate}.`);
+      return render();
+    }
+
+    case "seat-assign": {
+      const input = el.view.querySelector(`[data-seat-email="${ds.license}"]`);
+      const email = input?.value.trim() ?? "";
+      if (!email || !input.checkValidity()) {
+        throw new ApiError(400, "Skriv förarens e-post först.", "email_required");
+      }
+      await admin.assignMembership(ds.license, { email });
+      flash(`${ds.plate} är tilldelad ${email}.`);
       return render();
     }
 

@@ -619,7 +619,7 @@ export function kund(d, config = null, tab = "", pending = null, crm = null, log
     ${timeline(d)}
     ${nextStep(d, config)}
 
-    ${section("platser", "Platser", open.length, tabPlatser(d, config, pending), isOpen("platser"),
+    ${section("platser", "Platser", open.length, tabPlatser(d, config, pending), secOpen.platser ?? true,
       flagged.has("platser"))}
     ${section("betalning", "Betalning", unpaid || "", tabBetalning(d, config), isOpen("betalning"), flagged.has("betalning"))}
     ${section("uppgifter", "Uppgifter", members ? `${members} inloggning${members === 1 ? "" : "ar"}` : "", tabUppgifter(d, config, loginLink), isOpen("uppgifter"), flagged.has("uppgifter"))}
@@ -670,7 +670,7 @@ function addMembershipBlock(d, config) {
   const counties = config?.counties ?? [];
   return `
     <details class="card">
-      <summary>Manuellt: skapa plats utan beställning</summary>
+      <summary>+ Lägg till plats utan betalning</summary>
       <p class="muted">Bara när Stripe inte ska in. Platsen räknas mot nästa faktura om den inte
         beviljas utan kostnad nedan. Vanliga sälj skapar platser under Betalning.</p>
       <div class="county-add">
@@ -812,7 +812,6 @@ function tabPlatser(d, config, pending) {
     title: "Notiser per telefon",
   }) : "";
   return `
-    ${inviteUnassignedBlock(d, config)}
     ${membershipsCard(d, config, pending)}
     ${addMembershipBlock(d, config)}
     ${companyChangesCard(d, config)}
@@ -1234,44 +1233,58 @@ function membershipsCard(d, config, pending = null) {
   const counties = config?.counties ?? [];
   const name = (code) => countyName(code);
   return `
-    <div class="card">
-      <h2>Platser <span class="muted">(${esc(open.length)})</span></h2>
-      <p class="muted">En plats gäller ett konto i ett län, samma som i appen och portalen.
-        Bjud in med e-post — personen loggar in i appen och tar platsen där.</p>
-      ${open.length ? open.map((l) => {
+    <div class="seats" id="inviteCard">
+      ${open.length ? open.map((l, i) => {
         const trial = l.status === "trial";
         const extras = l.extraCounties ?? [];
         const mine = pending?.licenseId === l.id ? pending : null;
-        const data = `data-license="${esc(l.id)}" data-base="${esc(l.baseCounty)}" data-extras="${esc(extras.join(","))}" data-plate="${esc(l.vehicle)}" data-trial="${trial ? "1" : ""}"`;
-        const title = membershipLabel(l);
+        const title = l.vehicle || `Plats ${i + 1}`;
+        const data = `data-license="${esc(l.id)}" data-base="${esc(l.baseCounty)}" data-extras="${esc(extras.join(","))}" data-plate="${esc(title)}" data-trial="${trial ? "1" : ""}"`;
+        const email = l.assigneeEmail || l.assigneeResolvedEmail || "";
+        const who = l.assigneeEmail
+          ? "Väntar på att föraren loggar in i appen"
+          : l.assigned
+            ? `Inloggad${l.activePhone ? ` · ${l.activePhone.label || "telefon ansluten"}` : ""}`
+            : "Ingen förare än";
+        const c = l.countyChanges;
+        const editable = sell && l.status !== "pending_cancel";
         return `
-        <div class="car ${mine ? "car-pending" : ""}">
-          <div class="car-head">
-            <b class="${l.vehicle ? "plate" : "seat-title"}">${esc(title)}</b> ${pill(l.status)}
+        <div class="seat ${mine ? "car-pending" : ""}">
+          <div class="seat-head">
+            <b class="seat-title">${esc(title)}</b> ${pill(l.status)}
             ${l.assignmentKind === "temporary" && l.vehicle ? '<span class="pill pill-warn">Ersättningsbil</span>' : ""}
           </div>
-          <div class="county-chips" aria-label="Län">
-            <span class="county-chip base">Län: ${esc(name(l.baseCounty))}</span>
-            ${l.scheduledBaseCounty ? `<span class="muted">byts till ${esc(name(l.scheduledBaseCounty))} vid förnyelse</span>` : ""}
+          <div class="seat-fields">
+            <label class="seat-field">Län
+              ${editable ? `
+              <select data-seat-county ${data}>
+                ${counties.some((x) => x.code === l.baseCounty) ? "" : `<option value="${esc(l.baseCounty)}" selected>${esc(name(l.baseCounty) || "Välj län")}</option>`}
+                ${counties.map((x) => `<option value="${esc(x.code)}" ${x.code === l.baseCounty ? "selected" : ""}>${esc(x.name)}</option>`).join("")}
+              </select>` : `<span class="seat-value">${esc(name(l.baseCounty))}</span>`}
+            </label>
+            <label class="seat-field">Förare
+              ${editable ? `
+              <span class="seat-inline">
+                <input type="email" data-seat-email="${esc(l.id)}" value="${esc(email)}"
+                  placeholder="förarens e-post" autocomplete="off" inputmode="email" />
+                <button class="btn btn-primary btn-small" type="button" data-action="seat-assign" ${data}>Spara</button>
+              </span>` : `<span class="seat-value">${esc(email || "—")}</span>`}
+            </label>
           </div>
+          <p class="seat-note ${l.assigned && !l.assigneeEmail ? "ok" : "muted"}">${esc(who)}</p>
           ${extras.length ? `<p class="muted small">Fler län (äldre avtal): ${esc(extras.map(name).join(", "))}</p>` : ""}
-          ${l.activePhone ? `<p class="muted small">Telefon: ${esc(l.activePhone.label || "ansluten")}</p>` : ""}
-          ${countyChangesRow(l, sell)}
-          ${membershipRow(l, sell)}
-          ${l.status === "pending_cancel" ? `<p class="muted">Platsen avslutas vid nästa förnyelse${l.endsAt ? ` (${esc(date(l.endsAt))})` : ""}.</p>` : ""}
-
-          ${sell && l.status !== "pending_cancel" ? `
-          <div class="car-actions">
-            <div class="county-add">
-              <select data-base-for="${esc(l.id)}" aria-label="Byt län">
-                <option value="">Byt län …</option>
-                ${counties.filter((c) => c.code !== l.baseCounty).map((c) => `<option value="${esc(c.code)}">${esc(c.name)}</option>`).join("")}
-              </select>
-              <button class="btn btn-quiet btn-small" data-action="base-change" ${data}
-                title="Gäller direkt. Högst 2 byten per månad.">Byt län</button>
-              <button class="btn btn-danger btn-small" data-action="car-remove" ${data}>Ta bort platsen</button>
+          ${l.scheduledBaseCounty ? `<p class="muted small">Byts till ${esc(name(l.scheduledBaseCounty))} vid förnyelse.</p>` : ""}
+          ${l.status === "pending_cancel" ? `<p class="muted small">Platsen avslutas vid nästa förnyelse${l.endsAt ? ` (${esc(date(l.endsAt))})` : ""}.</p>` : ""}
+          ${editable ? `
+          <details class="seat-more">
+            <summary>Mer</summary>
+            <div class="seat-more-body">
+              ${c ? `<span class="muted">Förarens egna länbyten kvar i månaden: <b>${esc(c.remaining)} av ${esc((c.limit ?? 2) + (c.extra ?? 0))}</b></span>
+                <button class="btn btn-quiet btn-small" type="button" data-action="county-change-allow" ${data}>Ge ett extra byte</button>` : ""}
+              ${l.assigned ? `<button class="btn btn-quiet btn-small" type="button" data-action="membership-unassign" ${data}>Ta bort föraren</button>` : ""}
+              <button class="btn btn-danger btn-small" type="button" data-action="car-remove" ${data}>Ta bort platsen</button>
             </div>
-          </div>` : ""}
+          </details>` : ""}
 
           ${mine ? `
           <div class="pending-change" role="region" aria-label="Offert">
@@ -1287,7 +1300,7 @@ function membershipsCard(d, config, pending = null) {
           </div>` : ""}
         </div>`;
       }).join("") : '<p class="muted">Inga platser än. Lägg till under Betalning.</p>'}
-      ${closed ? `<p class="muted">${esc(plural(closed, "avslutad plats visas", "avslutade platser visas"))} inte.</p>` : ""}
+      ${closed ? `<p class="muted small">${esc(plural(closed, "avslutad plats visas", "avslutade platser visas"))} inte.</p>` : ""}
     </div>`;
 }
 
