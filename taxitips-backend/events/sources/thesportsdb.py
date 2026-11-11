@@ -35,6 +35,7 @@ MAX_ATTEMPTS = 3
 # 30 anrop per minut på gratisnyckeln: 2,5 s ger högst 24.
 MIN_INTERVAL_S = 2.5
 RATE_PAUSE_S = 61
+MAX_RATE_PAUSE_S = 180
 # Omgångar framåt per liga och körning; fönstret (horisonten) stoppar tidigare.
 MAX_ROUNDS = 8
 
@@ -84,6 +85,7 @@ class Client:
         self.sleep = sleep
         self.clock = clock
         self.call_count = 0
+        self.throttled = 0
         self._last_call = float("-inf")
         # Sista stund för ett nytt anrop. Utan budget (tester, manuell körning) ingen gräns.
         # Fram till 2026-11-11 fanns ingen: när arenacachen tappades tog körningen över 15
@@ -106,9 +108,12 @@ class Client:
             self.call_count += 1
             status = response.status_code
             if status == 429:
-                # En minuts paus får inte äta upp budgeten: då hellre avbryta och spara.
-                self._check_budget(RATE_PAUSE_S)
-                self.sleep(RATE_PAUSE_S)
+                # Källan säger själv hur länge (Retry-After, uppmätt ~120 s 2026-11-11). Pausen
+                # får inte äta upp budgeten: då hellre avbryta och spara det som finns.
+                pause = _retry_after(response)
+                self.throttled += 1
+                self._check_budget(pause)
+                self.sleep(pause)
                 continue
             if status >= 500:
                 self.sleep(2 ** attempt)
@@ -120,6 +125,15 @@ class Client:
             except ValueError as exc:
                 raise TheSportsDbError(f"TheSportsDB gav inget JSON på {path}") from exc
         raise TheSportsDbError(f"TheSportsDB svarade inte efter {MAX_ATTEMPTS} försök (senast {status})")
+
+
+def _retry_after(response) -> float:
+    """Sekunder att vänta efter 429: källans Retry-After, annars en minut. Högst tre minuter."""
+    raw = (getattr(response, "headers", None) or {}).get("Retry-After")
+    try:
+        return min(max(float(raw), 1.0), MAX_RATE_PAUSE_S) + 1
+    except (TypeError, ValueError):
+        return RATE_PAUSE_S
 
 
 def _utc(event: dict) -> dt.datetime | None:
@@ -172,13 +186,25 @@ def _home_venue_id(client: Client, team_id, cache: dict) -> str:
     return cache[key]
 
 
-def fetch_events(client: Client, start: dt.datetime, end: dt.datetime, venues: dict | None = None) -> tuple[list[dict], dict]:
-    """Matcherna i LEAGUES mellan start och slut, och vad varje liga gav."""
+def fetch_events(
+    client: Client, start: dt.datetime, end: dt.datetime, venues: dict | None = None, *,
+    first_league: str | None = None, seasons: dict | None = None,
+) -> tuple[list[dict], dict]:
+    """
+    Matcherna i LEAGUES mellan start och slut, och vad varje liga gav.
+
+    `first_league` är ligan att börja med (id). En körning som inte hinner alla ligor lämnar
+    `stats["resumeAt"]`, och nästa körning börjar där -- annars fick de sista ligorna aldrig sin tur.
+    `seasons` är kända säsonger per liga (sparar ett anrop per liga); nya läggs till i den.
+    """
     venues = {} if venues is None else venues
+    seasons = {} if seasons is None else seasons
     events: dict[str, dict] = {}
-    stats: dict = {"leagues": {}, "errors": [], "skipped": []}
+    stats: dict = {"leagues": {}, "errors": [], "skipped": [], "resumeAt": None, "done": []}
     out_of_time = False
-    for league in LEAGUES:
+    ids = [league["id"] for league in LEAGUES]
+    offset = ids.index(first_league) if first_league in ids else 0
+    for league in (*LEAGUES[offset:], *LEAGUES[:offset]):
         report = {"label": league["label"], "sport": league["sport"], "season": None, "rounds": [], "games": 0}
         stats["leagues"][league["id"]] = report
         if out_of_time:
@@ -186,12 +212,17 @@ def fetch_events(client: Client, start: dt.datetime, end: dt.datetime, venues: d
             stats["skipped"].append(league["label"])
             continue
         try:
-            info = (client.get("lookupleague.php", id=league["id"]).get("leagues") or [{}])[0]
-            season = info.get("strCurrentSeason")
+            season = seasons.get(league["id"])
+            if not season:
+                info = (client.get("lookupleague.php", id=league["id"]).get("leagues") or [{}])[0]
+                season = info.get("strCurrentSeason")
+                if season:
+                    seasons[league["id"]] = season
             report["season"] = season
             upcoming = client.get("eventsnextleague.php", id=league["id"]).get("events") or []
             if not season or not upcoming:
                 report["note"] = "inga kommande matcher hos källan (säsongen kan saknas)"
+                stats["done"].append(league["id"])
                 continue
             first_round = _round(upcoming[0].get("intRound"))
             depth = league.get("rounds") or MAX_ROUNDS
@@ -217,15 +248,18 @@ def fetch_events(client: Client, start: dt.datetime, end: dt.datetime, venues: d
                     report["games"] += 1
                 if times and min(times) > end:
                     break
+            stats["done"].append(league["id"])
         except BudgetExceeded:
             # Matcherna som redan hämtats för ligan behålls; resten tas nästa körning.
             out_of_time = True
             report["note"] = "avbruten (tidsbudget)"
             stats["skipped"].append(league["label"])
+            stats["resumeAt"] = league["id"]
         except TheSportsDbError as exc:
             stats["errors"].append(f"{league['label']}: {exc}")
             report["error"] = str(exc)
     stats["calls"] = client.call_count
+    stats["throttled"] = getattr(client, "throttled", 0)
     stats["budgetExceeded"] = out_of_time
     stats["complete"] = not stats["errors"] and not out_of_time
     return list(events.values()), stats

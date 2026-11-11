@@ -209,6 +209,8 @@ class Command(BaseCommand):
     THESPORTSDB_BUDGET_S = 600
     VENUE_CACHE_KEY = "events:thesportsdb:venues:v1"
     VENUE_CACHE_TTL_S = 30 * 24 * 3600
+    SEASON_CACHE_KEY = "events:thesportsdb:seasons:v1"
+    RESUME_CACHE_KEY = "events:thesportsdb:resume-at"
 
     def _poll_thesportsdb(self, options, status):
         rights = rights_for(ingest.THESPORTSDB)
@@ -232,12 +234,23 @@ class Command(BaseCommand):
         from django.core.cache import cache
 
         venues = dict(cache.get(self.VENUE_CACHE_KEY) or {})
+        # Säsongen per liga byts en gång om året: en vecka i cachen sparar ett anrop per liga.
+        seasons = dict(cache.get(self.SEASON_CACHE_KEY) or {})
         client = thesportsdb.Client(key, budget_s=self.THESPORTSDB_BUDGET_S)
         try:
-            raw_events, stats = thesportsdb.fetch_events(client, now, end, venues)
+            # Börja där förra körningen slutade: källan släpper igenom ungefär 17 anrop per
+            # två minuter (uppmätt 2026-11-11), så alla tio ligor ryms inte i en körning.
+            raw_events, stats = thesportsdb.fetch_events(
+                client, now, end, venues, first_league=cache.get(self.RESUME_CACHE_KEY), seasons=seasons,
+            )
         finally:
             # Också när körningen avbryts: uppslagen som hanns med ska inte göras om.
             cache.set(self.VENUE_CACHE_KEY, venues, self.VENUE_CACHE_TTL_S)
+            cache.set(self.SEASON_CACHE_KEY, seasons, 7 * 24 * 3600)
+        if stats.get("resumeAt"):
+            cache.set(self.RESUME_CACHE_KEY, stats["resumeAt"], 7 * 24 * 3600)
+        else:
+            cache.delete(self.RESUME_CACHE_KEY)
         if stats["errors"] and len(stats["errors"]) == len(stats["leagues"]):
             # Ingen liga svarade: ett fel i källstatusen, inte en tom "lyckad" hämtning.
             raise thesportsdb.TheSportsDbError(" | ".join(stats["errors"]))

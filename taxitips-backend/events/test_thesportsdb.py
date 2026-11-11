@@ -147,6 +147,44 @@ class FetchTests(SimpleTestCase):
         self.assertTrue(stats["budgetExceeded"])
         self.assertNotIn(thesportsdb.RATE_PAUSE_S, slept)
 
+    def test_the_sources_own_retry_after_is_followed(self):
+        class Once(FakeSession):
+            def get(self, url, params=None, timeout=None):
+                if not self.calls:
+                    self.calls.append(("429", {}))
+                    response = FakeResponse({}, status=429)
+                    response.headers = {"Retry-After": "120"}
+                    return response
+                return super().get(url, params, timeout)
+
+        slept = []
+        _, stats = thesportsdb.fetch_events(client(Once(), slept), START, END)
+        self.assertIn(121.0, slept)
+        self.assertEqual(stats["throttled"], 1)
+        self.assertTrue(stats["complete"])
+
+    def test_the_next_run_starts_where_the_last_one_stopped(self):
+        ticks = iter(range(0, 100000, 100))
+        slow = thesportsdb.Client("123", session=FakeSession(), sleep=lambda s: None,
+                                  clock=lambda: float(next(ticks)), budget_s=250)
+        _, stats = thesportsdb.fetch_events(slow, START, END)
+        self.assertEqual(stats["resumeAt"], "4347")  # Allsvenskan hanns inte klart
+
+        session = FakeSession()
+        events, stats = thesportsdb.fetch_events(client(session), START, END, first_league="4419")
+        first_calls = [p.get("id") for _, p in session.calls[:2]]
+        self.assertEqual(first_calls, ["4419", "4419"])  # SHL först
+        self.assertIsNone(stats["resumeAt"])
+        self.assertEqual(sorted(e["idEvent"] for e in events), ["1", "2", "4", "5"])  # alla ligor ändå
+
+    def test_a_known_season_saves_the_league_lookup(self):
+        session = FakeSession()
+        seasons = {"4347": "2026"}
+        thesportsdb.fetch_events(client(session), START, END, seasons=seasons)
+        lookups = [p["id"] for path, p in session.calls if path == "lookupleague.php"]
+        self.assertNotIn("4347", lookups)
+        self.assertEqual(seasons["4419"], "2026-2027")  # nya säsonger läggs till
+
     def test_a_failing_league_is_reported_and_the_fetch_is_incomplete(self):
         _, stats = thesportsdb.fetch_events(client(FakeSession(fail={"4419"})), START, END)
         self.assertFalse(stats["complete"])
