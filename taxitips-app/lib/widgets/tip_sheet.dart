@@ -180,77 +180,47 @@ class _TipSheetBodyState extends State<TipSheetBody> {
         color: TbColors.foam,
         borderRadius: BorderRadius.vertical(top: Radius.circular(18)),
       ),
-      child: Column(
-        children: [
-          Expanded(
-            child: SingleChildScrollView(
-              controller: widget.scrollController,
-              padding: EdgeInsets.fromLTRB(18, 10, 18, 18 + inset),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Container(
-                      width: 40,
-                      height: 4,
-                      margin: const EdgeInsets.only(bottom: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade400,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                  ),
-                  // Beslutet först, utan scroll: plats, vad, vad som avgör, en stor
-                  // knapp, högst tre skäl och svarsknapparna. Detaljerna följer
-                  // direkt under, öppna.
-                  _TopActionBar(
-                    alert: a,
-                    api: widget.api,
-                    canDrive: canDrive,
-                    ended: ended,
-                    road: road,
-                    hasId: hasId,
-                    distanceKm: widget.distanceKm,
-                    onToggleFavorite: widget.onToggleFavorite,
-                    onOpenSourcePage: widget.onOpenSourcePage,
-                    onClose: closeSheet,
-                    onDriving: ended || !hasId || !TaxiTipsConfig.usesDjangoApi
-                        ? null
-                        : () => _drivingTo(a),
-                    travel: travel,
-                    more: [
-                      // Samlat huvudkort:
-                      //    Station A → Station B, status, nästa avgång,
-                      //    tågnummer/operatör och källans text.
-                      _UnifiedOverviewAndEventCard(
-                        alert: a,
-                        travel: travel,
-                        distanceKm: widget.distanceKm,
-                        start: start,
-                        end: end,
-                        now: now,
-                        ended: ended,
-                        minor: minor,
-                        road: road,
-                      ),
-                      // Ersättningsregler. Skälen står redan alla överst.
-                      if (a['compensation_eligible'] == true) ...[
-                        const SizedBox(height: 12),
-                        _WorthItAndCompensationCard(
-                          alert: a,
-                          travel: travel,
-                          showWorthIt: false,
-                          onOpenUrl: widget.onOpenUrl,
-                        ),
-                      ],
-                      const SizedBox(height: 10),
-                      const TipsNotPromisesNote(),
-                    ],
-                  ),
-                ],
-              ),
-            ),
+      // Innehållet först: vad som hänt och det som avgör, sedan fakta.
+      // Knapparna kommer efter -- föraren läser, sedan väljer.
+      child: _TopActionBar(
+        alert: a,
+        api: widget.api,
+        scrollController: widget.scrollController,
+        bottomInset: inset,
+        canDrive: canDrive,
+        ended: ended,
+        road: road,
+        hasId: hasId,
+        distanceKm: widget.distanceKm,
+        onToggleFavorite: widget.onToggleFavorite,
+        onOpenSourcePage: widget.onOpenSourcePage,
+        onClose: closeSheet,
+        onDriving: ended || !hasId || !TaxiTipsConfig.usesDjangoApi
+            ? null
+            : () => _drivingTo(a),
+        travel: travel,
+        more: [
+          _UnifiedOverviewAndEventCard(
+            alert: a,
+            travel: travel,
+            distanceKm: widget.distanceKm,
+            start: start,
+            end: end,
+            now: now,
+            ended: ended,
+            minor: minor,
+            road: road,
           ),
+          // Ersättningsregler. Skälen står redan alla överst.
+          if (a['compensation_eligible'] == true) ...[
+            const SizedBox(height: 12),
+            _WorthItAndCompensationCard(
+              alert: a,
+              travel: travel,
+              showWorthIt: false,
+              onOpenUrl: widget.onOpenUrl,
+            ),
+          ],
         ],
       ),
     );
@@ -542,6 +512,8 @@ class _TopActionBar extends StatefulWidget {
     required this.onClose,
     required this.travel,
     required this.more,
+    required this.bottomInset,
+    this.scrollController,
     this.onDriving,
     this.onOpenSourcePage,
   });
@@ -550,6 +522,10 @@ class _TopActionBar extends StatefulWidget {
 
   /// Detaljerna under beslutet: alltid öppna.
   final List<Widget> more;
+
+  /// Bladets rullning (från DraggableScrollableSheet) och gestfältets höjd.
+  final ScrollController? scrollController;
+  final double bottomInset;
 
   final Map<String, dynamic> alert;
   final ApiClient api;
@@ -788,55 +764,57 @@ class _TopActionBarState extends State<_TopActionBar> {
       ],
     );
 
-    return Column(
+    final driveButton = widget.ended
+        ? OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: TbColors.midnatt,
+              backgroundColor: TbColors.vit,
+              side: const BorderSide(color: TbColors.line),
+              minimumSize: const Size.fromHeight(56),
+            ),
+            icon: const Icon(Icons.navigation_outlined, size: 24),
+            label: const Text(
+              'Öppna navigering',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+            ),
+            onPressed: _drive,
+          )
+        : FilledButton.icon(
+            style: FilledButton.styleFrom(
+              foregroundColor: TbColors.midnatt,
+              backgroundColor: TbColors.taxi,
+              minimumSize: const Size.fromHeight(56),
+            ),
+            icon: const Icon(Icons.navigation_rounded, size: 24),
+            label: const Text(
+              'Kör dit',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            ),
+            onPressed: _drive,
+          );
+
+    final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        Center(
+          child: Container(
+            width: 40,
+            height: 4,
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade400,
+              borderRadius: BorderRadius.circular(4),
+            ),
+          ),
+        ),
+        // 1. Vad som hänt och det som avgör.
         _DecisionHeader(
           alert: a,
           travel: widget.travel,
           distanceKm: widget.distanceKm,
           trailing: trailing,
         ),
-        if (widget.canDrive) ...[
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: widget.ended
-                ? OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: TbColors.midnatt,
-                      backgroundColor: TbColors.vit,
-                      side: const BorderSide(color: TbColors.line),
-                      minimumSize: const Size.fromHeight(56),
-                    ),
-                    icon: const Icon(Icons.navigation_outlined, size: 24),
-                    label: const Text(
-                      'Öppna navigering',
-                      style: TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    onPressed: _drive,
-                  )
-                : FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      foregroundColor: TbColors.midnatt,
-                      backgroundColor: TbColors.taxi,
-                      minimumSize: const Size.fromHeight(56),
-                    ),
-                    icon: const Icon(Icons.navigation_rounded, size: 26),
-                    label: const Text(
-                      'Kör dit',
-                      style: TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    onPressed: _drive,
-                  ),
-          ),
-        ],
+        // 2. Skälen: varför det kan finnas kunder.
         if (factors.isNotEmpty || pays) ...[
           const SizedBox(height: 10),
           for (final f in factors)
@@ -855,8 +833,16 @@ class _TopActionBarState extends State<_TopActionBar> {
               semanticLabel: 'Taxi betalas',
             ),
         ],
+        // 3. Fakta: linje, tider och trafikbolagets text. Allt öppet.
+        const SizedBox(height: 16),
+        ...widget.more,
+        // 4. Knapparna efter innehållet: först läsa, sedan välja.
+        if (widget.canDrive) ...[
+          const SizedBox(height: 14),
+          SizedBox(width: double.infinity, child: driveButton),
+        ],
         if (_showFeedback) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: 14),
           Row(
             children: [
               _bigFeedback(
@@ -881,13 +867,17 @@ class _TopActionBarState extends State<_TopActionBar> {
             ],
           ),
         ],
-        // Allt står öppet: inget att trycka fram, inget att missa. Beslutet
-        // och knapparna ligger överst, detaljerna direkt under.
-        const SizedBox(height: 14),
-        ...widget.more,
-        const SizedBox(height: 4),
+        const SizedBox(height: 10),
         _extraActions(),
+        const SizedBox(height: 6),
+        const TipsNotPromisesNote(),
       ],
+    );
+
+    return SingleChildScrollView(
+      controller: widget.scrollController,
+      padding: EdgeInsets.fromLTRB(18, 10, 18, 18 + widget.bottomInset),
+      child: content,
     );
   }
 }
@@ -1005,6 +995,7 @@ class _DecisionHeader extends StatelessWidget {
                 strength: strength,
                 category: category,
                 muted: ended,
+                // Stor: den lilla klarar inte kontrastkravet mot bladets botten.
                 large: true,
               ),
               if (distance != null)
@@ -1164,15 +1155,17 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
         ? TbColors.skiffer
         : strengthColor(strengthOfAlert(alert), category: category);
     final route = parseAlertRoute(alert, travel);
-    final place = tipPlace(alert);
-    final county = alert['countyName']?.toString() ?? '';
-    final distance = distanceKm == null
-        ? ''
-        : '${distanceText(distanceKm)} från dig';
     final trainDetails = parseAlertTrainDetails(alert, travel);
-    // "Buss 725 · Tumba station" överst, när backend vet linjen. Utan linje
-    // står stationen redan stort nedanför -- då visas inget extra.
-    final lineStation = tipLine(alert).isEmpty ? null : tipLineStation(alert);
+    // "SJ Snabbtåg 541 → Malmö C": linjen och målet på en rad. Inget för väg
+    // och inget för ett meddelande utan linje.
+    final String? lineRow = road || (minor && tipLine(alert).isEmpty)
+        ? null
+        : (route.to != null
+              ? '${trainDetails.badgeText} → ${route.to}'
+              : trainDetails.badgeText);
+    // Serverns rubrik överst säger redan "Tåg 45 min sent": då behövs ingen
+    // statusbricka som säger samma sak.
+    final showStatus = serverHeadline(alert).isEmpty || minor || road;
 
     // Status & avgångstider
     final dep = travel?.departure;
@@ -1247,11 +1240,6 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
             (dep != null && dep.at.isBefore(now)));
 
     final nextText = travel?.waitText ?? route.nextHint;
-    final showTrain =
-        !road &&
-        (trainDetails.operator != null ||
-            trainDetails.trainNumber != null ||
-            category == SignalCategory.transit);
     final showStarted = !ended && start != null;
     final summary = alert['summary']?.toString().trim() ?? '';
     final brief = ended ? null : tipBrief(alert);
@@ -1267,211 +1255,22 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // --- DEL 1: KATEGORI, AVSTÅND & STRÄCKA (STATION A -> STATION B) ---
-          Row(
-            children: [
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: tileColor,
-                  borderRadius: BorderRadius.circular(
-                    category == SignalCategory.road ? 8 : 11,
-                  ),
-                ),
-                child: Icon(iconForAlert(alert), color: TbColors.vit, size: 22),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (lineStation != null) ...[
-                      Text(
-                        lineStation,
-                        key: const ValueKey('tip-line-station'),
-                        style: const TextStyle(
-                          fontFamily: kDisplayFont,
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          height: 1.2,
-                          color: TbColors.midnatt,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                    ],
-                    Row(
-                      children: [
-                        Text(
-                          category.label,
-                          style: const TextStyle(
-                            fontSize: 13.5,
-                            fontWeight: FontWeight.w700,
-                            color: TbColors.skiffer,
-                          ),
-                        ),
-                        if (county.isNotEmpty) ...[
-                          const Text(
-                            ' · ',
-                            style: TextStyle(
-                              fontSize: 13.5,
-                              fontWeight: FontWeight.w700,
-                              color: TbColors.skiffer,
-                            ),
-                          ),
-                          Flexible(
-                            child: Text(
-                              countyShort(county),
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w600,
-                                color: TbColors.skiffer,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                    if (distance.isNotEmpty) ...[
-                      const SizedBox(height: 2),
-                      Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.near_me_rounded,
-                            size: 16,
-                            color: TbColors.skiffer,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            distance,
-                            style: const TextStyle(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w700,
-                              color: TbColors.midnatt,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Etikett för Sträcka / Stationer
-          Row(
-            children: [
-              Icon(
-                route.to != null
-                    ? Icons.alt_route_rounded
-                    : Icons.place_rounded,
-                size: 15,
-                color: TbColors.skiffer,
-              ),
-              const SizedBox(width: 5),
-              Flexible(
-                child: Text(
-                  route.to != null ? 'STRÄCKA / STATIONER' : 'STATION / PLATS',
-                  style: const TextStyle(
-                    fontSize: 11.5,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 0.6,
-                    color: TbColors.skiffer,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 6),
-
-          // Station A -> Station B
-          if (minor && place == null)
-            Text(
-              route.from,
-              style: const TextStyle(
-                fontFamily: kDisplayFont,
-                fontSize: 18,
-                fontWeight: FontWeight.w700,
-                height: 1.2,
-                color: TbColors.skiffer,
-              ),
-            )
-          else if (route.to != null)
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Expanded(
-                  child: Text(
-                    route.from,
-                    style: const TextStyle(
-                      fontFamily: kDisplayFont,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      height: 1.2,
-                      color: TbColors.midnatt,
-                    ),
-                  ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 8),
-                  child: ExcludeSemantics(
-                    child: Icon(
-                      Icons.arrow_forward_rounded,
-                      size: 20,
-                      color: TbColors.skiffer,
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: Text(
-                    route.to!,
-                    style: const TextStyle(
-                      fontFamily: kDisplayFont,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
-                      height: 1.2,
-                      color: TbColors.midnatt,
-                    ),
-                  ),
-                ),
-              ],
-            )
-          else
-            Text(
-              place ?? route.from,
-              style: const TextStyle(
-                fontFamily: kDisplayFont,
-                fontSize: 20,
-                fontWeight: FontWeight.w700,
-                height: 1.2,
-                color: TbColors.midnatt,
-              ),
-            ),
-
-          // Om tipPlace är en specifik hållplats som inte är identisk med från/till
-          if (place != null &&
-              route.to != null &&
-              place.toLowerCase() != route.from.toLowerCase() &&
-              place.toLowerCase() != route.to!.toLowerCase()) ...[
-            const SizedBox(height: 6),
+          // --- DEL 1: LINJEN OCH VART DEN GÅR ---
+          // Platsen står redan stort överst; här står bara det nya.
+          if (lineRow != null) ...[
             Row(
               children: [
-                const Icon(
-                  Icons.place_rounded,
-                  size: 16,
-                  color: TbColors.skiffer,
-                ),
-                const SizedBox(width: 4),
-                Flexible(
+                Icon(iconForAlert(alert), size: 22, color: tileColor),
+                const SizedBox(width: 8),
+                Expanded(
                   child: Text(
-                    place,
+                    lineRow,
+                    key: const ValueKey('tip-line-station'),
                     style: const TextStyle(
-                      fontSize: 15,
+                      fontFamily: kDisplayFont,
+                      fontSize: 19,
                       fontWeight: FontWeight.w700,
+                      height: 1.2,
                       color: TbColors.midnatt,
                     ),
                   ),
@@ -1495,11 +1294,8 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
             ),
           ],
 
-          // --- SEKTIONSBRYTARE 1 ---
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 14),
-            child: Divider(height: 1, thickness: 1, color: TbColors.line),
-          ),
+          if (lineRow != null || (!ended && brief != null))
+            const SizedBox(height: 12),
 
           // --- DEL 2: STATUS (INSTÄLLD), STRÄCKAD TID, NÄSTA AVGÅNG & TÅGINFO ---
           if (ended) ...[
@@ -1513,34 +1309,35 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
             crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               // Status-etikett (t.ex. INSTÄLLD / FÖRSENAD 25 MIN)
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 5,
-                ),
-                decoration: BoxDecoration(
-                  color: statusBg,
-                  borderRadius: BorderRadius.circular(7),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(statusIcon, size: 15, color: statusFg),
-                    const SizedBox(width: 5),
-                    Flexible(
-                      child: Text(
-                        statusLabel,
-                        style: TextStyle(
-                          fontSize: 12.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
-                          color: statusFg,
+              if (showStatus)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: statusBg,
+                    borderRadius: BorderRadius.circular(7),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(statusIcon, size: 15, color: statusFg),
+                      const SizedBox(width: 5),
+                      Flexible(
+                        child: Text(
+                          statusLabel,
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                            color: statusFg,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-              ),
 
               // Överstruken inställd/passerad tid: större text, smal ruta & tunn linje
               if (showStrikeClock)
@@ -1641,17 +1438,12 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
 
           // Tåget (namn, nummer, operatör) och när det började, som brickor
           // i samma stil. Ingen sluttid: trafikbolagens prognos håller inte.
-          if (showTrain || showStarted) ...[
+          if (showStarted) ...[
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                if (showTrain)
-                  _MetaChip(
-                    icon: iconForAlert(alert),
-                    text: trainDetails.badgeText,
-                  ),
                 if (showStarted)
                   _MetaChip(
                     icon: start!.isAfter(now)
@@ -2072,12 +1864,11 @@ class _CompensationBoxState extends State<CompensationBox> {
                 decoration: BoxDecoration(
                   color: TbColors.vit,
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: TbColors.line),
                 ),
                 child: Text(
                   guide.operatorName,
                   style: const TextStyle(
-                    fontSize: 11.5,
+                    fontSize: 12.5,
                     fontWeight: FontWeight.w700,
                     color: TbColors.midnatt,
                   ),

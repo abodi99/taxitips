@@ -194,9 +194,7 @@ void main() {
   tearDown(() => AlertFeedbackBar.debugAlwaysShow = false);
 
   group('ordningen: snabbknappar överst, huvudkortet följer', () {
-    testWidgets('beslutet överst, resten under Mer i läsordning', (
-      tester,
-    ) async {
+    testWidgets('innehållet först, knapparna efter', (tester) async {
       await pumpSheet(tester, strongTip(), distanceKm: 3.2);
 
       final drive = find.widgetWithText(FilledButton, 'Kör dit');
@@ -206,21 +204,19 @@ void main() {
       expect(find.byTooltip('Spara tipset'), findsOneWidget);
       // Inget är hopfällt: huvudkortet syns utan ett tryck.
       expect(find.text('Mer'), findsNothing);
-      expect(find.text('INSTÄLLD'), findsOneWidget);
-      expect(top(tester, drive), lessThan(top(tester, fare)));
 
-      await openMore(tester);
-      final category = find.text('Tåg & buss');
-      final placeB = find.text('Alingsås');
+      final line = find.byKey(const ValueKey('tip-line-station'));
       final status = find.text('INSTÄLLD');
-      final train = find.text('Tåg 123');
       final section = find.text('Händelse & beskrivning');
-      for (final f in [category, placeB, status, train, section]) {
+      for (final f in [line, status, section]) {
         expect(f, findsOneWidget);
       }
-      expect(top(tester, fare), lessThan(top(tester, category)));
-      expect(top(tester, category), lessThan(top(tester, status)));
+      expect((tester.widget(line) as Text).data, 'Tåg 123 → Alingsås');
+      // Läsordningen: linje, status, källans text -- sedan knapparna.
+      expect(top(tester, line), lessThan(top(tester, status)));
       expect(top(tester, status), lessThan(top(tester, section)));
+      expect(top(tester, section), lessThan(top(tester, drive)));
+      expect(top(tester, drive), lessThan(top(tester, fare)));
     });
 
     testWidgets('ersättningen får en egen ruta och står inte två gånger', (
@@ -244,51 +240,31 @@ void main() {
   });
 
   group('linje och station', () {
-    testWidgets('överst i bladet: "Buss 725 · Tumba station"', (tester) async {
+    testWidgets('linjen och målet på en rad: "Buss 725 → Alingsås"', (
+      tester,
+    ) async {
       await pumpSheet(
         tester,
         strongTip()
           ..['line'] = 'Buss 725'
           ..['station'] = 'Tumba station',
       );
-      await openMore(tester);
-      final header = find.byKey(const ValueKey('tip-line-station'));
-      expect(header, findsOneWidget);
-      expect((tester.widget(header) as Text).data, 'Buss 725 · Tumba station');
-      // Överst i huvudkortet: ovanför kategorin och statusbrickan.
-      expect(
-        top(tester, header),
-        lessThan(top(tester, find.text('Tåg & buss'))),
-      );
-      expect(top(tester, header), lessThan(top(tester, find.text('INSTÄLLD'))));
-      // Linjen från backend ersätter numret ur texten i tågbrickan.
-      expect(find.text('Buss 725'), findsOneWidget);
-      expect(find.text('Tåg 123'), findsNothing);
-      // Beslutsraden högst upp visar bara platsen.
-      expect(find.text('Tumba station'), findsWidgets);
+      final row = find.byKey(const ValueKey('tip-line-station'));
+      expect(row, findsOneWidget);
+      // Linjen från backend går före numret ur texten.
+      expect((tester.widget(row) as Text).data, 'Buss 725 → Alingsås');
+      // Platsen står en gång: stort överst, inte en gång till i kortet.
+      expect(find.text('Tumba station'), findsOneWidget);
     });
 
-    testWidgets('utan station: första platsen', (tester) async {
-      await pumpSheet(
-        tester,
-        strongTip()
-          ..['line'] = 'Pågatåg 1612'
-          ..['station'] = '',
-      );
-      await openMore(tester);
+    testWidgets('utan linje från backend: numret ur texten', (tester) async {
+      await pumpSheet(tester, strongTip());
       expect(
         (tester.widget(find.byKey(const ValueKey('tip-line-station'))) as Text)
             .data,
-        'Pågatåg 1612 · Göteborg C',
+        'Tåg 123 → Alingsås',
       );
-    });
-
-    testWidgets('utan linje: inget extra, platsen står som förut', (
-      tester,
-    ) async {
-      await pumpSheet(tester, strongTip());
-      expect(find.byKey(const ValueKey('tip-line-station')), findsNothing);
-      expect(find.text('Göteborg C'), findsWidgets);
+      expect(find.text('Göteborg C'), findsOneWidget);
     });
 
     test('tolkas försiktigt: saknade fält är tomma', () {
@@ -705,23 +681,21 @@ void main() {
       ..['decision'] = 'Nästa tåg 23:48'
       ..['decision_tone'] = 'go';
 
-    testWidgets('beslut, Kör dit och båda svarsknapparna syns direkt', (
-      tester,
-    ) async {
+    testWidgets('beslutet och skälen syns direkt, utan scroll', (tester) async {
       await pumpSmall(tester, withLines());
       expect(tester.takeException(), isNull);
       for (final f in [
-        find.text('Ronneby').first,
+        find.text('Ronneby'),
         find.text('Tåg 22:48 inställt'),
         find.text('Nästa tåg 23:48'),
-        find.widgetWithText(FilledButton, 'Kör dit'),
-        find.text('Fick körning'),
-        find.text('Ingen kund'),
         find.text('Taxi betalas'),
+        find.byKey(const ValueKey('tip-line-station')),
       ]) {
         expect(f, findsOneWidget);
         expect(tester.getBottomLeft(f).dy, lessThan(640), reason: '$f');
       }
+      // Serverns rubrik säger redan vad som hänt: ingen statusbricka till.
+      expect(find.text('INSTÄLLD'), findsNothing);
       expect(
         tester.getSize(find.widgetWithText(FilledButton, 'Kör dit')).height,
         greaterThanOrEqualTo(56),
