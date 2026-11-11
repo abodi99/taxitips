@@ -9,6 +9,7 @@ import datetime as dt
 import io
 from unittest import mock
 
+from django.core.cache import cache
 from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase, override_settings
 
@@ -123,6 +124,29 @@ class FetchTests(SimpleTestCase):
         self.assertTrue(all(s >= thesportsdb.MIN_INTERVAL_S for s in slept[1:]))
         self.assertLessEqual(60 / thesportsdb.MIN_INTERVAL_S, 30)
 
+    def test_no_call_is_made_after_the_deadline(self):
+        ticks = iter(range(0, 100000, 100))
+        session = FakeSession()
+        slow = thesportsdb.Client("123", session=session, sleep=lambda s: None,
+                                  clock=lambda: float(next(ticks)), budget_s=250)
+        events, stats = thesportsdb.fetch_events(slow, START, END)
+        self.assertTrue(stats["budgetExceeded"])
+        self.assertFalse(stats["complete"])
+        self.assertIn("SHL", stats["skipped"])
+        self.assertLessEqual(len(session.calls), 3)
+
+    def test_a_rate_limit_pause_never_runs_past_the_deadline(self):
+        class Limited(FakeSession):
+            def get(self, url, params=None, timeout=None):
+                self.calls.append((url, params))
+                return FakeResponse({}, status=429)
+
+        slept = []
+        limited = thesportsdb.Client("123", session=Limited(), sleep=slept.append, clock=lambda: 0.0, budget_s=30)
+        _, stats = thesportsdb.fetch_events(limited, START, END)
+        self.assertTrue(stats["budgetExceeded"])
+        self.assertNotIn(thesportsdb.RATE_PAUSE_S, slept)
+
     def test_a_failing_league_is_reported_and_the_fetch_is_incomplete(self):
         _, stats = thesportsdb.fetch_events(client(FakeSession(fail={"4419"})), START, END)
         self.assertFalse(stats["complete"])
@@ -131,15 +155,61 @@ class FetchTests(SimpleTestCase):
 
 @override_settings(THESPORTSDB_API_KEY="123")
 class PollTests(TestCase):
+    def setUp(self):
+        cache.clear()
+
     def test_poll_stores_the_games_and_remembers_the_venues(self):
         fake = client(FakeSession())
-        with mock.patch.object(thesportsdb, "Client", lambda key: fake), \
+        with mock.patch.object(thesportsdb, "Client", lambda key, **kw: fake), \
                 mock.patch("django.utils.timezone.now", return_value=START):
             call_command("poll_events", "--source", "thesportsdb", "--days", "30", stdout=io.StringIO())
         self.assertEqual(Event.objects.filter(source="thesportsdb").count(), 4)
         status = SourceStatus.objects.get(source="thesportsdb")
         self.assertTrue(status.ok)
-        self.assertIn("15901", status.detail["venues"])
+        # Arenorna ligger i cachen, inte i källstatusen som töms vid fel.
+        self.assertIn("15901", cache.get("events:thesportsdb:venues:v1"))
+
+    def test_the_venues_survive_a_failed_run(self):
+        """Ett fel tömde förut arenorna, och nästa körning hann aldrig slå upp dem igen."""
+        ok = client(FakeSession())
+        with mock.patch.object(thesportsdb, "Client", lambda key, **kw: ok), \
+                mock.patch("django.utils.timezone.now", return_value=START):
+            call_command("poll_events", "--source", "thesportsdb", "--days", "30", stdout=io.StringIO())
+        broken = client(FakeSession(fail={league["id"] for league in thesportsdb.LEAGUES}))
+        with mock.patch.object(thesportsdb, "Client", lambda key, **kw: broken), \
+                mock.patch("django.utils.timezone.now", return_value=START):
+            with self.assertRaises(Exception):
+                call_command("poll_events", "--source", "thesportsdb", "--days", "30",
+                             stdout=io.StringIO(), stderr=io.StringIO())
+        self.assertFalse(SourceStatus.objects.get(source="thesportsdb").ok)
+        again = FakeSession()
+        third = client(again)
+        with mock.patch.object(thesportsdb, "Client", lambda key, **kw: third), \
+                mock.patch("django.utils.timezone.now", return_value=START):
+            call_command("poll_events", "--source", "thesportsdb", "--days", "30", stdout=io.StringIO())
+        self.assertEqual([path for path, _ in again.calls if path == "lookupvenue.php"], [])
+
+    def test_a_run_out_of_time_saves_what_it_has_and_marks_nothing_missing(self):
+        first = client(FakeSession())
+        with mock.patch.object(thesportsdb, "Client", lambda key, **kw: first), \
+                mock.patch("django.utils.timezone.now", return_value=START):
+            call_command("poll_events", "--source", "thesportsdb", "--days", "30", stdout=io.StringIO())
+        self.assertEqual(Event.objects.filter(source="thesportsdb").count(), 4)
+
+        # Klockan går 100 s per anrop: budgeten (250 s) räcker till Allsvenskans början.
+        ticks = iter(range(0, 100000, 100))
+        slow = thesportsdb.Client("123", session=FakeSession(), sleep=lambda s: None,
+                                  clock=lambda: float(next(ticks)), budget_s=250)
+        with mock.patch.object(thesportsdb, "Client", lambda key, **kw: slow), \
+                mock.patch("django.utils.timezone.now", return_value=START):
+            call_command("poll_events", "--source", "thesportsdb", "--days", "30", stdout=io.StringIO())
+        status = SourceStatus.objects.get(source="thesportsdb")
+        self.assertTrue(status.ok)
+        self.assertIn("Hann inte med", status.message)
+        self.assertTrue(status.detail["budgetExceeded"])
+        # Inget som inte hanns med får räknas som borta ur källan.
+        self.assertEqual(Event.objects.filter(source="thesportsdb").count(), 4)
+        self.assertEqual(status.detail.get("markedMissing"), 0)
 
     def test_a_game_without_venue_gets_the_home_teams_arena(self):
         events, _ = thesportsdb.fetch_events(client(FakeSession()), START, END)

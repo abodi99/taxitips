@@ -25,6 +25,8 @@ from core import thresholds
 
 log = logging.getLogger(__name__)
 
+INT32_MAX = 2_147_483_647
+
 
 class PollResult:
     """Muterbar räknare som poll-kommandot fyller i medan det jobbar."""
@@ -79,7 +81,9 @@ def record(source: str, *, ok: bool, message: str, result: PollResult, duration_
         "events": result.events,
         "written": result.written,
         "detail": result.detail,
-        "duration_ms": duration_ms,
+        # Kolumnen är ett 32-bitars heltal: ett större tal (en process som levt i 25 dygn)
+        # fick skrivningen att fela, och raden slutade uppdateras.
+        "duration_ms": min(max(int(duration_ms), 0), INT32_MAX),
         "checked_at": now,
     }
     if ok and result.fetched:

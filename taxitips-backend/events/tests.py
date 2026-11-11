@@ -521,6 +521,13 @@ class PredictHQClientTests(SimpleTestCase):
         self.assertEqual(client.get(predicthq.API_URL), {"results": []})
         self.assertEqual(client.call_count, 2)
 
+    def test_an_expired_subscription_is_its_own_error_and_is_not_retried(self):
+        client, _ = self.client_for(FakeResponse(402, {"error": "subscription expired"}))
+        with self.assertRaises(predicthq.SubscriptionExpired) as ctx:
+            client.get(predicthq.API_URL)
+        self.assertEqual(client.call_count, 1)
+        self.assertIn("Förnya", str(ctx.exception))
+
     def test_error_never_contains_the_token(self):
         client, _ = self.client_for(FakeResponse(401, {"error": "invalid_token"}))
         with self.assertRaises(predicthq.PredictHQError) as ctx:
@@ -932,6 +939,23 @@ class PollIsolationTests(TestCase):
         self.assertFalse(SourceStatus.objects.get(source="predicthq").ok)
         self.assertTrue(SourceStatus.objects.get(source="thesportsdb").ok)
         self.assertFalse(SourceStatus.objects.get(source="ticketmaster").ok)
+
+    @override_settings(EVENT_SOURCES=PRODUCTION_LIKE, PREDICTHQ_ACCESS_TOKEN="t")
+    def test_an_expired_predicthq_subscription_is_shown_once_a_day_without_failing_the_run(self):
+        from django.core.cache import cache
+
+        cache.clear()
+        self.addCleanup(cache.clear)
+        expired = predicthq.SubscriptionExpired(predicthq.EXPIRED_MESSAGE)
+        with mock.patch("events.sources.predicthq.fetch_events", side_effect=expired) as phq:
+            # Inget CommandError: läget är känt och bara ägaren kan lösa det.
+            call_command("poll_events", "--source", "predicthq", stdout=mock.MagicMock(), stderr=mock.MagicMock())
+            call_command("poll_events", "--source", "predicthq", stdout=mock.MagicMock(), stderr=mock.MagicMock())
+        # Andra körningen frågar inte PredictHQ igen (högst en gång per dygn).
+        phq.assert_called_once()
+        status = SourceStatus.objects.get(source="predicthq")
+        self.assertFalse(status.ok)
+        self.assertIn("Abonnemanget hos PredictHQ har gått ut", status.message)
 
 
 class CrowdFilterTests(SimpleTestCase):

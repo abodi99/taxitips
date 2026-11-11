@@ -592,6 +592,9 @@ SOURCE_MAX_AGE_MINUTES: dict[str, int] = {
     "aisstream": 5,
     # Var sjätte timme; en missad runda tolereras.
     "ticketmaster": 13 * 60,
+    # Samma kommando och kadens. Utan gräns bedömdes de bara på senaste försöket.
+    "thesportsdb": 13 * 60,
+    "predicthq": 13 * 60,
 }
 
 # Kärnkällorna: utan dem finns ingen produkt, och bara de gör /health/pipeline

@@ -60,6 +60,10 @@ class Command(BaseCommand):
                         self._poll_ticketmaster(options, status)
             except SoftTimeLimitExceeded:
                 raise
+            except predicthq.SubscriptionExpired as exc:
+                # Ett känt läge som bara ägaren kan lösa: står i källstatusen, men är inget
+                # fel i körningen och ska inte larma i Celery var sjätte timme.
+                self.stderr.write(f"{source}: {exc}")
             except Exception as exc:  # polling() har redan skrivit felet i källstatus
                 failed.append(f"{source}: {type(exc).__name__}: {exc}")
                 self.stderr.write(f"{source}: {type(exc).__name__}: {exc}")
@@ -106,6 +110,7 @@ class Command(BaseCommand):
     # 90 dagar framåt enligt avtalet 2026-10-09 (ägarens önskan: se kvällar och helger i god
     # tid). Hämtas var 6:e timme (beat poll-events) och sparas; appen läser databasen.
     PREDICTHQ_MAX_DAYS = 90
+    PREDICTHQ_EXPIRED_KEY = "events:predicthq:subscription-expired"
 
     def _poll_predicthq(self, options, status):
         rights = rights_for(ingest.PREDICTHQ)
@@ -123,11 +128,21 @@ class Command(BaseCommand):
             self.stderr.write(status.note)
             return
 
+        from django.core.cache import cache
+
+        if cache.get(self.PREDICTHQ_EXPIRED_KEY):
+            # Abonnemanget var slut vid förra kontrollen: fråga högst en gång per dygn.
+            raise predicthq.SubscriptionExpired(predicthq.EXPIRED_MESSAGE)
+
         now = timezone.now()
         days = min(options["days"], self.PREDICTHQ_MAX_DAYS)
         today = now.astimezone(timing.STOCKHOLM).date()
         until = today + dt.timedelta(days=days)
-        raw_events, stats = predicthq.fetch_events(predicthq.Client(token), today, until)
+        try:
+            raw_events, stats = predicthq.fetch_events(predicthq.Client(token), today, until)
+        except predicthq.SubscriptionExpired:
+            cache.set(self.PREDICTHQ_EXPIRED_KEY, True, 24 * 3600)
+            raise
         rows = [row for row in (ingest.build_row(e, ingest.PREDICTHQ) for e in raw_events) if row]
         status.events = len(raw_events)
         detail = {**stats, "horizonDays": days, "normalized": len(rows), "rightsReference": rights.store_reference}
@@ -189,6 +204,12 @@ class Command(BaseCommand):
         else:
             self.stdout.write("\n(dry-run: inget skrevs)")
 
+    # Hela kommandot får 900 s av Celery (core.tasks.EVENTS_LIMITS). TheSportsDB går sist och
+    # får högst tio minuter: en normal körning är ~100 anrop à 2,5 s, alltså drygt fyra.
+    THESPORTSDB_BUDGET_S = 600
+    VENUE_CACHE_KEY = "events:thesportsdb:venues:v1"
+    VENUE_CACHE_TTL_S = 30 * 24 * 3600
+
     def _poll_thesportsdb(self, options, status):
         rights = rights_for(ingest.THESPORTSDB)
         if not rights.may_store():
@@ -205,19 +226,28 @@ class Command(BaseCommand):
 
         now = timezone.now()
         end = now + dt.timedelta(days=options["days"])
-        # Arenorna ur förra körningen: en uppslagning per arena, inte per körning.
-        from core.models import SourceStatus
+        # Arenorna slås upp en gång och ligger sedan i cachen (Redis) i 30 dygn. De låg förut
+        # i källstatusens detail, som töms vid varje fel: ett enda fel tappade alla arenor,
+        # nästa körning behövde hundratals uppslag, hann inte klart och felade igen.
+        from django.core.cache import cache
 
-        previous = SourceStatus.objects.filter(source=ingest.THESPORTSDB).first()
-        venues = dict(((previous.detail or {}) if previous else {}).get("venues") or {})
-        raw_events, stats = thesportsdb.fetch_events(thesportsdb.Client(key), now, end, venues)
+        venues = dict(cache.get(self.VENUE_CACHE_KEY) or {})
+        client = thesportsdb.Client(key, budget_s=self.THESPORTSDB_BUDGET_S)
+        try:
+            raw_events, stats = thesportsdb.fetch_events(client, now, end, venues)
+        finally:
+            # Också när körningen avbryts: uppslagen som hanns med ska inte göras om.
+            cache.set(self.VENUE_CACHE_KEY, venues, self.VENUE_CACHE_TTL_S)
         if stats["errors"] and len(stats["errors"]) == len(stats["leagues"]):
             # Ingen liga svarade: ett fel i källstatusen, inte en tom "lyckad" hämtning.
             raise thesportsdb.TheSportsDbError(" | ".join(stats["errors"]))
         rows = [row for row in (ingest.build_row(e, ingest.THESPORTSDB) for e in raw_events) if row]
         status.events = len(raw_events)
-        status.note = " | ".join(stats["errors"])
-        detail = {**stats, "horizonDays": options["days"], "normalized": len(rows), "venues": venues}
+        notes = list(stats["errors"])
+        if stats.get("skipped"):
+            notes.append("Hann inte med: " + ", ".join(stats["skipped"]) + " (tas nästa körning)")
+        status.note = " | ".join(notes)
+        detail = {**stats, "horizonDays": options["days"], "normalized": len(rows), "venuesCached": len(venues)}
 
         if options["dry_run"]:
             status.detail = detail

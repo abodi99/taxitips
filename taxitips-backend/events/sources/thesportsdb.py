@@ -70,18 +70,34 @@ class TheSportsDbError(RuntimeError):
     pass
 
 
+class BudgetExceeded(TheSportsDbError):
+    """Tidsbudgeten är slut. Det som hunnit hämtas sparas; resten tas nästa körning."""
+
+
 class Client:
-    def __init__(self, api_key: str = "123", *, session=None, sleep=time.sleep, clock=time.monotonic) -> None:
+    def __init__(
+        self, api_key: str = "123", *, session=None, sleep=time.sleep, clock=time.monotonic,
+        budget_s: float | None = None,
+    ) -> None:
         self.api_key = api_key or "123"
         self.session = session or requests.Session()
         self.sleep = sleep
         self.clock = clock
         self.call_count = 0
         self._last_call = float("-inf")
+        # Sista stund för ett nytt anrop. Utan budget (tester, manuell körning) ingen gräns.
+        # Fram till 2026-11-11 fanns ingen: när arenacachen tappades tog körningen över 15
+        # minuter, dödades av Celery och sparade ingenting -- 105 gånger i rad.
+        self.deadline = None if budget_s is None else clock() + budget_s
+
+    def _check_budget(self, extra_s: float = 0.0) -> None:
+        if self.deadline is not None and self.clock() + extra_s > self.deadline:
+            raise BudgetExceeded("tidsbudgeten är slut")
 
     def get(self, path: str, **params) -> dict:
         status = None
         for attempt in range(MAX_ATTEMPTS):
+            self._check_budget()
             wait = MIN_INTERVAL_S - (self.clock() - self._last_call)
             if wait > 0:
                 self.sleep(wait)
@@ -90,6 +106,8 @@ class Client:
             self.call_count += 1
             status = response.status_code
             if status == 429:
+                # En minuts paus får inte äta upp budgeten: då hellre avbryta och spara.
+                self._check_budget(RATE_PAUSE_S)
                 self.sleep(RATE_PAUSE_S)
                 continue
             if status >= 500:
@@ -158,10 +176,15 @@ def fetch_events(client: Client, start: dt.datetime, end: dt.datetime, venues: d
     """Matcherna i LEAGUES mellan start och slut, och vad varje liga gav."""
     venues = {} if venues is None else venues
     events: dict[str, dict] = {}
-    stats: dict = {"leagues": {}, "errors": []}
+    stats: dict = {"leagues": {}, "errors": [], "skipped": []}
+    out_of_time = False
     for league in LEAGUES:
         report = {"label": league["label"], "sport": league["sport"], "season": None, "rounds": [], "games": 0}
         stats["leagues"][league["id"]] = report
+        if out_of_time:
+            report["note"] = "hanns inte med (tidsbudget)"
+            stats["skipped"].append(league["label"])
+            continue
         try:
             info = (client.get("lookupleague.php", id=league["id"]).get("leagues") or [{}])[0]
             season = info.get("strCurrentSeason")
@@ -194,11 +217,17 @@ def fetch_events(client: Client, start: dt.datetime, end: dt.datetime, venues: d
                     report["games"] += 1
                 if times and min(times) > end:
                     break
+        except BudgetExceeded:
+            # Matcherna som redan hämtats för ligan behålls; resten tas nästa körning.
+            out_of_time = True
+            report["note"] = "avbruten (tidsbudget)"
+            stats["skipped"].append(league["label"])
         except TheSportsDbError as exc:
             stats["errors"].append(f"{league['label']}: {exc}")
             report["error"] = str(exc)
     stats["calls"] = client.call_count
-    stats["complete"] = not stats["errors"]
+    stats["budgetExceeded"] = out_of_time
+    stats["complete"] = not stats["errors"] and not out_of_time
     return list(events.values()), stats
 
 

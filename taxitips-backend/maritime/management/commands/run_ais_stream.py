@@ -578,8 +578,12 @@ class AisListener:
                 # att räkna, och noll här är det som syns när den tystnat.
                 "events": self.window["position"] + self.window["static"],
                 "written": self.totals["tips_written"],
-                "duration_ms": int((time.monotonic() - self.started) * 1000),
+                # En ström har ingen körtid. Tiden sedan start växte förbi kolumnens
+                # 32 bitar efter 24,8 dygn (2026-11-10): skrivningen felade varje minut
+                # och källan såg död ut fast strömmen levde. Drifttiden står i detail.
+                "duration_ms": 0,
                 "detail": {
+                    "uptimeSeconds": int(time.monotonic() - self.started),
                     "connected": self.connected,
                     "connectedSince": self.connected_since.isoformat() if self.connected_since else None,
                     "reconnects": self.reconnects,

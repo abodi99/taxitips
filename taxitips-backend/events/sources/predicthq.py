@@ -46,6 +46,16 @@ class PredictHQError(RuntimeError):
     pass
 
 
+EXPIRED_MESSAGE = (
+    "Abonnemanget hos PredictHQ har gått ut (402). Förnya det hos PredictHQ, eller avsluta "
+    "källan med EVENTS_PREDICTHQ_RETIRED. Sparade evenemang ligger kvar."
+)
+
+
+class SubscriptionExpired(PredictHQError):
+    """402: inget kodfel och inget att försöka om -- ägaren måste förnya eller avsluta."""
+
+
 class Client:
     def __init__(self, token: str, *, session=None, sleep=time.sleep, clock=time.monotonic) -> None:
         self.token = token
@@ -88,6 +98,8 @@ class Client:
             if status >= 500:
                 self.sleep(2 ** attempt)
                 continue
+            if status == 402:
+                raise SubscriptionExpired(EXPIRED_MESSAGE)
             if status != 200:
                 raise PredictHQError(f"PredictHQ svarade {status}: {response.text[:200]}")
             return response.json()
