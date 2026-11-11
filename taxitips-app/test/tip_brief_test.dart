@@ -74,9 +74,6 @@ void main() {
           ),
         ),
       );
-      // Beskedet ligger under "Mer".
-      await tester.tap(find.text('Mer'));
-      await tester.pumpAndSettle();
       expect(find.byKey(const ValueKey('tip-brief')), findsOneWidget);
 
       await pump(

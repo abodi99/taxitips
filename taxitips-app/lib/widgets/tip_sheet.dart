@@ -168,7 +168,6 @@ class _TipSheetBodyState extends State<TipSheetBody> {
       a['start_time']?.toString() ?? '',
     )?.toLocal();
     final end = DateTime.tryParse(a['end_time']?.toString() ?? '')?.toLocal();
-    final showWorthIt = !ended && !minor && !road;
     final hasId = a['id'] != null;
     final lat = (a['lat'] as num?)?.toDouble();
     final lon = (a['lon'] as num?)?.toDouble();
@@ -202,8 +201,8 @@ class _TipSheetBodyState extends State<TipSheetBody> {
                     ),
                   ),
                   // Beslutet först, utan scroll: plats, vad, vad som avgör, en stor
-                  // knapp, högst tre skäl och svarsknapparna. Allt annat ligger
-                  // hopfällt under "Mer".
+                  // knapp, högst tre skäl och svarsknapparna. Detaljerna följer
+                  // direkt under, öppna.
                   _TopActionBar(
                     alert: a,
                     api: widget.api,
@@ -219,9 +218,6 @@ class _TipSheetBodyState extends State<TipSheetBody> {
                         ? null
                         : () => _drivingTo(a),
                     travel: travel,
-                    // "Övrigt" och väghinder saknar rubrik/beslut: de visar
-                    // titeln som förut och har "Mer" öppet från start.
-                    moreOpen: minor || road,
                     more: [
                       // Samlat huvudkort:
                       //    Station A → Station B, status, nästa avgång,
@@ -237,14 +233,13 @@ class _TipSheetBodyState extends State<TipSheetBody> {
                         minor: minor,
                         road: road,
                       ),
-                      // Ersättningsregler (och skäl utöver de tre i huvudvyn).
-                      if ((showWorthIt && tipFactors(a).length > 3) ||
-                          a['compensation_eligible'] == true) ...[
+                      // Ersättningsregler. Skälen står redan alla överst.
+                      if (a['compensation_eligible'] == true) ...[
                         const SizedBox(height: 12),
                         _WorthItAndCompensationCard(
                           alert: a,
                           travel: travel,
-                          showWorthIt: showWorthIt && tipFactors(a).length > 3,
+                          showWorthIt: false,
                           onOpenUrl: widget.onOpenUrl,
                         ),
                       ],
@@ -547,16 +542,14 @@ class _TopActionBar extends StatefulWidget {
     required this.onClose,
     required this.travel,
     required this.more,
-    required this.moreOpen,
     this.onDriving,
     this.onOpenSourcePage,
   });
 
   final TravelOptions? travel;
 
-  /// Det som ligger hopfällt under "Mer".
+  /// Detaljerna under beslutet: alltid öppna.
   final List<Widget> more;
-  final bool moreOpen;
 
   final Map<String, dynamic> alert;
   final ApiClient api;
@@ -712,7 +705,7 @@ class _TopActionBarState extends State<_TopActionBar> {
   }
 
   /// Knappar som inte hör till beslutet: rapportera och trafikbolagets sida.
-  /// De ligger under "Mer".
+  /// De ligger sist.
   Widget _extraActions() {
     final compactShape = RoundedRectangleBorder(
       borderRadius: BorderRadius.circular(9),
@@ -767,7 +760,7 @@ class _TopActionBarState extends State<_TopActionBar> {
     final isEmpty = _feedbackChoice == 'empty';
     final minor = isMinorTip(a);
     final factors = (!widget.ended && !minor && !widget.road)
-        ? tipFactors(a).take(3).toList()
+        ? tipFactors(a)
         : const <TipFactor>[];
     final pays = a['compensation_eligible'] == true && !widget.ended;
 
@@ -888,36 +881,12 @@ class _TopActionBarState extends State<_TopActionBar> {
             ],
           ),
         ],
-        const SizedBox(height: 6),
-        // Material: ListTile ritar sin tryckeffekt på närmaste Material, och
-        // bladets bakgrund är en DecoratedBox.
-        Material(
-          type: MaterialType.transparency,
-          child: Theme(
-            data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
-            child: ExpansionTile(
-              // Ny nyckel när vyn byter läge, så initiallyExpanded gäller.
-              key: PageStorageKey('tip-more-${widget.moreOpen}'),
-              initiallyExpanded: widget.moreOpen,
-              tilePadding: EdgeInsets.zero,
-              childrenPadding: const EdgeInsets.only(bottom: 8),
-              expandedCrossAxisAlignment: CrossAxisAlignment.start,
-              title: const Text(
-                'Mer',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w800,
-                  color: TbColors.midnatt,
-                ),
-              ),
-              children: [
-                _extraActions(),
-                const SizedBox(height: 10),
-                ...widget.more,
-              ],
-            ),
-          ),
-        ),
+        // Allt står öppet: inget att trycka fram, inget att missa. Beslutet
+        // och knapparna ligger överst, detaljerna direkt under.
+        const SizedBox(height: 14),
+        ...widget.more,
+        const SizedBox(height: 4),
+        _extraActions(),
       ],
     );
   }
