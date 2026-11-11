@@ -110,7 +110,7 @@ class Command(BaseCommand):
     # 90 dagar framåt enligt avtalet 2026-10-09 (ägarens önskan: se kvällar och helger i god
     # tid). Hämtas var 6:e timme (beat poll-events) och sparas; appen läser databasen.
     PREDICTHQ_MAX_DAYS = 90
-    PREDICTHQ_EXPIRED_KEY = "events:predicthq:subscription-expired"
+    PREDICTHQ_STATE = "predicthq"
 
     def _poll_predicthq(self, options, status):
         rights = rights_for(ingest.PREDICTHQ)
@@ -128,21 +128,23 @@ class Command(BaseCommand):
             self.stderr.write(status.note)
             return
 
-        from django.core.cache import cache
+        from events.models import PollState
 
-        if cache.get(self.PREDICTHQ_EXPIRED_KEY):
+        now = timezone.now()
+        checked = PollState.load(self.PREDICTHQ_STATE).get("expiredAt") or ""
+        if checked and checked > (now - dt.timedelta(hours=24)).isoformat():
             # Abonnemanget var slut vid förra kontrollen: fråga högst en gång per dygn.
             raise predicthq.SubscriptionExpired(predicthq.EXPIRED_MESSAGE)
 
-        now = timezone.now()
         days = min(options["days"], self.PREDICTHQ_MAX_DAYS)
         today = now.astimezone(timing.STOCKHOLM).date()
         until = today + dt.timedelta(days=days)
         try:
             raw_events, stats = predicthq.fetch_events(predicthq.Client(token), today, until)
         except predicthq.SubscriptionExpired:
-            cache.set(self.PREDICTHQ_EXPIRED_KEY, True, 24 * 3600)
+            PollState.store(self.PREDICTHQ_STATE, {"expiredAt": now.isoformat()})
             raise
+        PollState.store(self.PREDICTHQ_STATE, {})
         rows = [row for row in (ingest.build_row(e, ingest.PREDICTHQ) for e in raw_events) if row]
         status.events = len(raw_events)
         detail = {**stats, "horizonDays": days, "normalized": len(rows), "rightsReference": rights.store_reference}
@@ -207,10 +209,7 @@ class Command(BaseCommand):
     # Hela kommandot får 900 s av Celery (core.tasks.EVENTS_LIMITS). TheSportsDB går sist och
     # får högst tio minuter: en normal körning är ~100 anrop à 2,5 s, alltså drygt fyra.
     THESPORTSDB_BUDGET_S = 600
-    VENUE_CACHE_KEY = "events:thesportsdb:venues:v1"
-    VENUE_CACHE_TTL_S = 30 * 24 * 3600
-    SEASON_CACHE_KEY = "events:thesportsdb:seasons:v1"
-    RESUME_CACHE_KEY = "events:thesportsdb:resume-at"
+    THESPORTSDB_STATE = "thesportsdb"
 
     def _poll_thesportsdb(self, options, status):
         rights = rights_for(ingest.THESPORTSDB)
@@ -228,29 +227,34 @@ class Command(BaseCommand):
 
         now = timezone.now()
         end = now + dt.timedelta(days=options["days"])
-        # Arenorna slås upp en gång och ligger sedan i cachen (Redis) i 30 dygn. De låg förut
-        # i källstatusens detail, som töms vid varje fel: ett enda fel tappade alla arenor,
-        # nästa körning behövde hundratals uppslag, hann inte klart och felade igen.
-        from django.core.cache import cache
+        # Arenor, säsonger och var förra körningen slutade ligger i databasen (PollState).
+        # De låg förut i källstatusens detail, som töms vid varje fel: ett enda fel tappade
+        # alla arenor, nästa körning behövde hundratals uppslag, hann inte klart och felade igen.
+        from events.models import PollState
 
-        venues = dict(cache.get(self.VENUE_CACHE_KEY) or {})
-        # Säsongen per liga byts en gång om året: en vecka i cachen sparar ett anrop per liga.
-        seasons = dict(cache.get(self.SEASON_CACHE_KEY) or {})
+        state = PollState.load(self.THESPORTSDB_STATE)
+        venues = dict(state.get("venues") or {})
+        today = now.date().isoformat()
+        # Säsongen byts en gång om året: slå upp den högst en gång i veckan.
+        fresh = (state.get("seasonsAt") or "") >= (now - dt.timedelta(days=7)).date().isoformat()
+        seasons = dict(state.get("seasons") or {}) if fresh else {}
         client = thesportsdb.Client(key, budget_s=self.THESPORTSDB_BUDGET_S)
+        resume_at = state.get("resumeAt")
         try:
             # Börja där förra körningen slutade: källan släpper igenom ungefär 17 anrop per
             # två minuter (uppmätt 2026-11-11), så alla tio ligor ryms inte i en körning.
             raw_events, stats = thesportsdb.fetch_events(
-                client, now, end, venues, first_league=cache.get(self.RESUME_CACHE_KEY), seasons=seasons,
+                client, now, end, venues, first_league=resume_at, seasons=seasons,
             )
+            resume_at = stats.get("resumeAt")
         finally:
             # Också när körningen avbryts: uppslagen som hanns med ska inte göras om.
-            cache.set(self.VENUE_CACHE_KEY, venues, self.VENUE_CACHE_TTL_S)
-            cache.set(self.SEASON_CACHE_KEY, seasons, 7 * 24 * 3600)
-        if stats.get("resumeAt"):
-            cache.set(self.RESUME_CACHE_KEY, stats["resumeAt"], 7 * 24 * 3600)
-        else:
-            cache.delete(self.RESUME_CACHE_KEY)
+            if not options["dry_run"]:
+                PollState.store(self.THESPORTSDB_STATE, {
+                    "venues": venues, "seasons": seasons,
+                    "seasonsAt": state.get("seasonsAt") if fresh else today,
+                    "resumeAt": resume_at,
+                })
         if stats["errors"] and len(stats["errors"]) == len(stats["leagues"]):
             # Ingen liga svarade: ett fel i källstatusen, inte en tom "lyckad" hämtning.
             raise thesportsdb.TheSportsDbError(" | ".join(stats["errors"]))

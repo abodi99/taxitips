@@ -75,3 +75,31 @@ class Event(models.Model):
 
     def __str__(self) -> str:
         return f"{self.start_date} {self.name} ({self.venue_name or self.city})"
+
+
+class PollState(models.Model):
+    """
+    Det en hämtning behöver minnas till nästa körning: uppslagna arenor, säsonger och var
+    förra körningen slutade. Ligger i databasen och inte i cachen -- produktionen har ingen
+    delad cache, och källstatusens `detail` töms vid varje fel (2026-11-11: TheSportsDB tappade
+    alla arenor vid ett fel, hann sedan aldrig slå upp dem igen och felade 105 gånger i rad).
+    """
+
+    key = models.CharField(max_length=100, primary_key=True)
+    value = models.JSONField(default=dict)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "event_poll_state"
+
+    def __str__(self) -> str:
+        return self.key
+
+    @classmethod
+    def load(cls, key: str) -> dict:
+        row = cls.objects.filter(key=key).first()
+        return dict(row.value) if row and isinstance(row.value, dict) else {}
+
+    @classmethod
+    def store(cls, key: str, value: dict) -> None:
+        cls.objects.update_or_create(key=key, defaults={"value": value})

@@ -14,7 +14,7 @@ from django.core.management import call_command
 from django.test import SimpleTestCase, TestCase, override_settings
 
 from core.models import SourceStatus
-from events.models import Event
+from events.models import Event, PollState
 from events.sources import thesportsdb
 
 START = dt.datetime(2026, 9, 19, tzinfo=dt.timezone.utc)
@@ -204,8 +204,8 @@ class PollTests(TestCase):
         self.assertEqual(Event.objects.filter(source="thesportsdb").count(), 4)
         status = SourceStatus.objects.get(source="thesportsdb")
         self.assertTrue(status.ok)
-        # Arenorna ligger i cachen, inte i källstatusen som töms vid fel.
-        self.assertIn("15901", cache.get("events:thesportsdb:venues:v1"))
+        # Arenorna ligger i databasen, inte i källstatusen som töms vid fel.
+        self.assertIn("15901", PollState.load("thesportsdb")["venues"])
 
     def test_the_venues_survive_a_failed_run(self):
         """Ett fel tömde förut arenorna, och nästa körning hann aldrig slå upp dem igen."""
@@ -248,6 +248,16 @@ class PollTests(TestCase):
         # Inget som inte hanns med får räknas som borta ur källan.
         self.assertEqual(Event.objects.filter(source="thesportsdb").count(), 4)
         self.assertEqual(status.detail.get("markedMissing"), 0)
+        # Nästa körning börjar där den här slutade -- också i en annan process (ingen cache).
+        self.assertEqual(PollState.load("thesportsdb")["resumeAt"], "4347")
+        cache.clear()
+        session = FakeSession()
+        third = client(session)
+        with mock.patch.object(thesportsdb, "Client", lambda key, **kw: third), \
+                mock.patch("django.utils.timezone.now", return_value=START):
+            call_command("poll_events", "--source", "thesportsdb", "--days", "30", stdout=io.StringIO())
+        self.assertIsNone(PollState.load("thesportsdb")["resumeAt"])
+        self.assertEqual([path for path, _ in session.calls if path == "lookupvenue.php"], [])
 
     def test_a_game_without_venue_gets_the_home_teams_arena(self):
         events, _ = thesportsdb.fetch_events(client(FakeSession()), START, END)
