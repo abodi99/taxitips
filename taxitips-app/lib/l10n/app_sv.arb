@@ -1,0 +1,1695 @@
+{
+  "@@locale": "sv",
+  "alertFeedbackGotFare": "Fick körning",
+  "alertFeedbackNoCustomer": "Ingen kund",
+  "alertFeedbackQueued": "Sparat. Skickas när du har nät.",
+  "alertFeedbackSaveFailed": "Kunde inte spara svaret. Försök igen.",
+  "alertFeedbackThanks": "Tack!",
+  "alertFeedbackTitle": "Hur gick det?",
+  "categoryBarAll": "Alla",
+  "categoryBarSaved": "Sparat",
+  "companySettingsActiveTitle": "Aktivt",
+  "companySettingsAdd": "Lägg till",
+  "companySettingsAddCar": "Lägg till bil",
+  "companySettingsAlreadyConnected": "Redan kopplad",
+  "companySettingsBlock": "Spärra",
+  "companySettingsBlockBody": "Telefonen slutar visa tips direkt och lämnar bilen. Föraren behöver en ny inbjudan för att komma in igen.",
+  "companySettingsBlockPhone": "Spärra telefonen",
+  "companySettingsBlockTitle": "Spärra {label}?",
+  "@companySettingsBlockTitle": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsCancel": "Avbryt",
+  "companySettingsCar": "Bil",
+  "companySettingsCarAdded": "{plate} är tillagd",
+  "@companySettingsCarAdded": {
+    "placeholders": {
+      "plate": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsCarMissingOnLicense": "Bilen saknas på licensen. Kontakta support.",
+  "companySettingsCarRemoved": "{plate} är borttagen",
+  "@companySettingsCarRemoved": {
+    "placeholders": {
+      "plate": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsCars": "{used} av {limit, plural, =1{bil} other{bilar}}",
+  "@companySettingsCars": {
+    "placeholders": {
+      "used": {
+        "type": "int"
+      },
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "companySettingsCarsLabel": "Bilar",
+  "companySettingsChangeAgainNextMonth": "{label}\nDu kan byta län igen nästa månad.",
+  "@companySettingsChangeAgainNextMonth": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsChangeUsesOne": "{label}. Ett byte använder ett av dem.",
+  "@companySettingsChangeUsesOne": {
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsCouldNotReadCompany": "Kunde inte läsa företaget.",
+  "companySettingsCountyChangesLeft": "Länbyten kvar den här månaden: {remaining} av {total}",
+  "@companySettingsCountyChangesLeft": {
+    "placeholders": {
+      "remaining": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "companySettingsCountyNotChangeable": "Länet kan inte bytas i appen.",
+  "companySettingsCountyWhereCarDrives": "Län där bilen kör",
+  "companySettingsDaysLeft": "{days} dagar kvar",
+  "@companySettingsDaysLeft": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "companySettingsDriveMyself": "Kör själv med den här telefonen",
+  "companySettingsDriver": "Förare",
+  "companySettingsDriverEmail": "Förarens e-post",
+  "companySettingsDriverEmailError": "Skriv förarens e-post, t.ex. namn@exempel.se",
+  "companySettingsDriverName": "Förarens namn",
+  "companySettingsDriverNameOptional": "Förarens namn (frivilligt)",
+  "companySettingsDrivers": "Förare",
+  "companySettingsDriversCount": "{count} förare",
+  "@companySettingsDriversCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "companySettingsDrivingBy": "Kör: {name}",
+  "@companySettingsDrivingBy": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsDrivingNow": "Kör nu",
+  "companySettingsGraceLine": "Tipsen fungerar till {date}.",
+  "@companySettingsGraceLine": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsGraceTitle": "Medlemskap pausas snart",
+  "companySettingsInviteByEmail": "Bjud in förare med e-post",
+  "companySettingsInviteDriverBody": "Föraren får ett mejl, väljer lösenord och loggar in i appen. Då kopplas telefonen till bilen.",
+  "companySettingsInviteDriverTitle": "Bjud in förare till {plate}",
+  "@companySettingsInviteDriverTitle": {
+    "placeholders": {
+      "plate": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsInviteExpired": "Inbjudan har gått ut",
+  "companySettingsInviteRemoved": "Inbjudan är borttagen",
+  "companySettingsInviteResent": "Inbjudan skickad igen till {email}",
+  "@companySettingsInviteResent": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsInviteSent": "Inbjudan skickad till {email}",
+  "@companySettingsInviteSent": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsInvitedCount": "{count} inbjuden",
+  "@companySettingsInvitedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "companySettingsInvitedNotLoggedIn": "Inbjuden · har inte loggat in än",
+  "companySettingsLastDay": "Sista dagen",
+  "companySettingsLoadFailedPull": "Kunde inte läsa företaget just nu. Dra ner för att försöka igen.",
+  "companySettingsMonthsShort": "jan,feb,mar,apr,maj,jun,jul,aug,sep,okt,nov,dec",
+  "@companySettingsMonthsShort": {
+    "description": "Tolv förkortade månadsnamn, kommaseparerade, januari först. Används i datum som 5 jan 2027."
+  },
+  "companySettingsMore": "Mer",
+  "companySettingsNameHint": "t.ex. Anna",
+  "companySettingsNoCars": "Inga bilar",
+  "companySettingsNoChangesLeft": "Inga länbyten kvar den här månaden.",
+  "companySettingsNoCounty": "Inget län",
+  "companySettingsNoDriver": "Ingen förare",
+  "companySettingsNoDriverConnected": "Ingen förare kopplad",
+  "companySettingsNowDrives": "Den här telefonen kör nu {plate}",
+  "@companySettingsNowDrives": {
+    "placeholders": {
+      "plate": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsNowDrivesIn": "{plate} kör nu i {county}",
+  "@companySettingsNowDrivesIn": {
+    "placeholders": {
+      "plate": {
+        "type": "String"
+      },
+      "county": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsOnlyAdminChanges": "Bara en administratör kan byta län.",
+  "companySettingsPairedPickCar": "Telefonen är kopplad till {plate}. Välj bilen i listan.",
+  "@companySettingsPairedPickCar": {
+    "placeholders": {
+      "plate": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsPausedTitle": "Pausat",
+  "companySettingsPhoneBlocked": "Telefonen är spärrad",
+  "companySettingsPlateLabel": "Registreringsnummer",
+  "companySettingsRemove": "Ta bort",
+  "companySettingsRemoveCar": "Ta bort bilen",
+  "companySettingsRemoveCarBody": "Förarna i bilen slutar få tips direkt. Platsen i provet blir ledig.",
+  "companySettingsRemoveCarTitle": "Ta bort {plate}?",
+  "@companySettingsRemoveCarTitle": {
+    "placeholders": {
+      "plate": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsRename": "Byt namn",
+  "companySettingsRenewsLine": "Förnyas {date}",
+  "@companySettingsRenewsLine": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsResendInvite": "Skicka igen",
+  "companySettingsRetry": "Försök igen",
+  "companySettingsRevokeBody": "{email} kan inte längre använda inbjudan för att logga in.",
+  "@companySettingsRevokeBody": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsRevokeInvite": "Ta bort inbjudan",
+  "companySettingsRevokeTitle": "Ta bort inbjudan?",
+  "companySettingsSave": "Spara",
+  "companySettingsSendInvite": "Skicka inbjudan",
+  "companySettingsSuspendedLine": "Kontakta oss i chatten.",
+  "companySettingsSuspendedTitle": "Avstängt",
+  "companySettingsTapToChangeCounty": "Tryck för att byta län",
+  "companySettingsTheCar": "bilen",
+  "companySettingsThePhone": "telefonen",
+  "companySettingsThisPhone": "Den här telefonen",
+  "companySettingsTipsPaused": "Tipsen är pausade.",
+  "companySettingsTrialAllIncluded": "Allt i appen ingår under provet.",
+  "companySettingsTrialContinuesLine": "Medlemskapet fortsätter efter provet · {until} · {cars}",
+  "@companySettingsTrialContinuesLine": {
+    "placeholders": {
+      "until": {
+        "type": "String"
+      },
+      "cars": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsTrialEndedTitle": "Provet är slut",
+  "companySettingsTrialLine": "{until} · {cars}",
+  "@companySettingsTrialLine": {
+    "placeholders": {
+      "until": {
+        "type": "String"
+      },
+      "cars": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsTrialLockedNotIncluded": "Det som har ett lås i appen ingår inte i provet.",
+  "companySettingsTrialPendingLine": "Startar när första telefonen kopplas · {cars}",
+  "@companySettingsTrialPendingLine": {
+    "placeholders": {
+      "cars": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsTrialTitle": "Provperiod",
+  "companySettingsTrialUntil": "Provet gäller till {date}.",
+  "@companySettingsTrialUntil": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsWhereDoesCarDrive": "Var kör bilen?",
+  "companySettingsYourCompany": "Ditt företag",
+  "countyChecklistAllCounties": "Du ser tips från alla län i medlemskapet. Bocka ur dem du inte vill se.",
+  "countyChecklistChangeTrialCounty": "Byt provets län",
+  "countyChecklistDone": "Klar",
+  "countyChecklistNoCounties": "Medlemskapet har inga län än.",
+  "countyChecklistSomeCounties": "Du ser tips från {selected} av {total} län.",
+  "@countyChecklistSomeCounties": {
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "countyChecklistTitle": "Dina län",
+  "driverScreenAccessInactive": "Åtkomsten är inte aktiv.",
+  "driverScreenAllCountiesSelected": "Alla dina län är valda. Bocka ur dem du inte vill se.",
+  "driverScreenAllTips": "Alla tips",
+  "driverScreenAllYourCounties": "Alla dina län ({count})",
+  "@driverScreenAllYourCounties": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "driverScreenArea": "Område",
+  "driverScreenBack": "Tillbaka",
+  "driverScreenBlockedBody": "Kontakta TaxiTips support.",
+  "driverScreenBlockedTitle": "Kontot är avstängt",
+  "driverScreenCalm": "Lugnt just nu",
+  "driverScreenCancelled": "Avbrutet",
+  "driverScreenCategoryLocked": "{category} ingår inte i provet",
+  "@driverScreenCategoryLocked": {
+    "placeholders": {
+      "category": {
+        "type": "String"
+      }
+    }
+  },
+  "driverScreenChoose": "Välj",
+  "driverScreenChooseAreaText": "Välj ditt körområde för att se tips.",
+  "driverScreenChooseCar": "Välj vilken bil du kör för att se tips.",
+  "driverScreenChooseCarAction": "Välj bil",
+  "driverScreenChooseCarFirstCounties": "Välj bil först. Då visas bilens län här.",
+  "driverScreenClear": "Rensa",
+  "driverScreenClearFilters": "Rensa filter",
+  "driverScreenConnectingPhone": "Kopplar telefon…",
+  "driverScreenCountiesAndMunicipalities": "Län och kommuner",
+  "driverScreenDayToday": "I dag",
+  "driverScreenDayTomorrow": "I morgon",
+  "driverScreenDayWeekend": "Helgen",
+  "driverScreenDays": "{count, plural, other{{count} dagar}}",
+  "@driverScreenDays": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "driverScreenDone": "Klar",
+  "driverScreenDrivingArea": "Körområde",
+  "driverScreenDrivingAreaText": "Länen du kör i. Notiserna, och listan när appen inte har din plats, följer körområdet.",
+  "driverScreenEvents": "Event",
+  "driverScreenEventsFailed": "Kan inte hämta event just nu.",
+  "driverScreenEventsToday": "Event i dag",
+  "driverScreenFerries": "Färjor",
+  "driverScreenFetchingPosition": "Hämtar position…",
+  "driverScreenFilter": "Filter",
+  "driverScreenGpsOff": "Slå på plats (GPS) i telefonens inställningar",
+  "driverScreenGpsTimeout": "GPS tog för lång tid — försök utomhus eller igen",
+  "driverScreenGroupMedium": "Medel",
+  "driverScreenGroupOther": "Övrigt",
+  "driverScreenGroupStrong": "Starka",
+  "driverScreenGroupTitle": "{name} · {count}",
+  "@driverScreenGroupTitle": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "driverScreenGroupWeak": "Svaga",
+  "driverScreenHidden": "Dolt: {types}",
+  "@driverScreenHidden": {
+    "placeholders": {
+      "types": {
+        "type": "String"
+      }
+    }
+  },
+  "driverScreenHiddenTiers": "{count, plural, other{{count} störningstyper dolda}}",
+  "@driverScreenHiddenTiers": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "driverScreenHistory": "Historik",
+  "driverScreenKm": "{km} km",
+  "@driverScreenKm": {
+    "placeholders": {
+      "km": {
+        "type": "int"
+      }
+    }
+  },
+  "driverScreenLegend": "Vad betyder symbolerna?",
+  "driverScreenLocationAllow": "Tillåt plats för TaxiTips i telefonens inställningar",
+  "driverScreenLocationDenied": "Platsbehörighet nekades",
+  "driverScreenLocationTimeout": "Plats tog för lång tid",
+  "driverScreenLockedCount": "{count, plural, =1{Just nu finns 1 sådant tips i ditt område.} other{Just nu finns {count} sådana tips i ditt område.}}",
+  "@driverScreenLockedCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "driverScreenLoginInvalid": "Inloggningen fungerar inte. Logga in igen.",
+  "driverScreenMoreDates": "Fler datum",
+  "driverScreenMoreOptions": "Fler val: dölj typer",
+  "driverScreenMovedBody": "Ditt konto används nu på en annan telefon. Logga in här igen om du vill flytta tillbaka. Telefonen går att byta en gång i månaden.",
+  "driverScreenMovedTitle": "Inloggad på en annan telefon",
+  "driverScreenMunicipalitiesChosen": "{count, plural, other{{count} kommuner valda}}",
+  "@driverScreenMunicipalitiesChosen": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "driverScreenMyPosition": "Min position",
+  "driverScreenNavFailed": "Kunde inte öppna navigeringen.",
+  "driverScreenNearMe": "Nära mig",
+  "driverScreenNearYou": "Nära dig",
+  "driverScreenNearYou25": "Nära dig (25 km)",
+  "driverScreenNeedsInternet": "Kräver internet. Försök igen när du har nät.",
+  "driverScreenNoAccess": "Telefonen har ingen åtkomst. Logga in igen, eller be din chef att bjuda in dig.",
+  "driverScreenNoCountiesYet": "Inga län än. Välj bil först.",
+  "driverScreenNoCounty": "Inget län valt",
+  "driverScreenNoEventsDays": "Inga event de här dagarna.",
+  "driverScreenNoEventsWithin": "Inga event inom {km} km. Välj ett längre avstånd.",
+  "@driverScreenNoEventsWithin": {
+    "placeholders": {
+      "km": {
+        "type": "int"
+      }
+    }
+  },
+  "driverScreenNoFerries": "Inga färjor på väg in just nu.",
+  "driverScreenNoNewTips": "Nya tips visas inte just nu. {web} Det är inte samma sak som \"inga störningar just nu\".",
+  "@driverScreenNoNewTips": {
+    "placeholders": {
+      "web": {
+        "type": "String"
+      }
+    }
+  },
+  "driverScreenNoRoadAccidents": "Inga trafikolyckor i ditt område just nu.",
+  "driverScreenNoTipsFilters": "Inga tips med de här filtren.",
+  "driverScreenNotUpdated": "Inte uppdaterat sedan {time}",
+  "@driverScreenNotUpdated": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "driverScreenNothingSaved": "Inget sparat än.\n\nTryck på ☆ på ett tips eller ett event. Tips sparas i sju dagar; event tills dagen efter.",
+  "driverScreenNow": "Nu",
+  "driverScreenOnlyStrong": "Bara starka",
+  "driverScreenOnlyStrongest": "Bara starkast",
+  "driverScreenOpenSettings": "Öppna inställningar",
+  "driverScreenPausedBody": "{notice} Det är inte samma sak som \"inga störningar just nu\".",
+  "@driverScreenPausedBody": {
+    "placeholders": {
+      "notice": {
+        "type": "String"
+      }
+    }
+  },
+  "driverScreenPausedTitle": "Medlemskapet är pausat",
+  "driverScreenPhonePaired": "Telefon kopplad",
+  "driverScreenPositionFailed": "Kunde inte hämta din position",
+  "driverScreenPositionFailedShort": "Kunde inte hämta position",
+  "driverScreenPresetAll": "Alla",
+  "driverScreenPresetStrong": "Starka",
+  "driverScreenPresetStrongest": "Starkast",
+  "driverScreenRecentlyOver": "Nyss slut ({count})",
+  "@driverScreenRecentlyOver": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "driverScreenRemovedSnack": "Borttaget från sparade.",
+  "driverScreenResetFilter": "Återställ filter",
+  "driverScreenRoadOnly": "Bara trafikolyckor. Vägarbeten och avstängningar visas inte.",
+  "driverScreenSaveFailed": "Kunde inte spara tipset",
+  "driverScreenSaved": "Sparat",
+  "driverScreenSavedSnack": "Sparat. Syns under ⭐ Sparat i sju dagar.",
+  "driverScreenSectionTips": "Tips",
+  "driverScreenSeeSettings": "Se inställningar",
+  "driverScreenSettings": "Inställningar",
+  "driverScreenSettingsNewReply": "Inställningar – nytt svar från supporten",
+  "driverScreenShow": "Visa",
+  "driverScreenShowAll": "Visa allt",
+  "driverScreenShowDistance": "Visa avstånd",
+  "driverScreenShowFullList": "Visa hela listan",
+  "driverScreenShowMap": "Visa kartan",
+  "driverScreenSort": "Sortera",
+  "driverScreenSortImportant": "Viktigast",
+  "driverScreenSortNearest": "Närmast",
+  "driverScreenSortNewest": "Nyast",
+  "driverScreenStrength": "Styrka",
+  "driverScreenStrengthRange": "Styrka {min}–{max}",
+  "@driverScreenStrengthRange": {
+    "placeholders": {
+      "min": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "driverScreenTipGone": "Tipset finns inte längre, eller så har bilen inte tillgång till det.",
+  "driverScreenTipsPausedTitle": "Tipsen är pausade",
+  "driverScreenTrialEndedTitle": "Provperioden är slut",
+  "driverScreenTrialNotStartedBody": "Välj län under Inställningar. Förare bjuds in på webben. Provperioden startar när den första föraren loggar in.",
+  "driverScreenTrialNotStartedTitle": "Välkommen! Ett steg kvar",
+  "driverScreenUnsaveFailed": "Kunde inte ta bort tipset",
+  "driverScreenWholeCounty": "Hela länet · välj kommuner",
+  "driverScreenWholeCountyShort": "Hela länet",
+  "driverScreenWithin25": "Inom ca 25 km",
+  "driverScreenYellowShown": "Gul = visas. Tryck för att dölja.",
+  "driverScreenZoomIn": "Zooma in",
+  "driverScreenZoomOut": "Zooma ut",
+  "driverTourCategoriesText": "Välj vad du vill se: tåg och buss, väg, flyg, färja eller event. Siffran är antal tips. Sparat visar tipsen du har sparat.",
+  "driverTourCategoriesTitle": "Kategorier",
+  "driverTourDrive": "Kör dit",
+  "driverTourFilterText": "Med Filter väljer du län, hur starka tips du vill se och vad som ska döljas. Välj ditt län här så får du tips därifrån.",
+  "driverTourFilterTitle": "Filter och län",
+  "driverTourHowWasIt": "Hur gick det?",
+  "driverTourListText": "Här är tipsen nära dig. Det starkaste ligger överst. Dra listan uppåt för att se fler.",
+  "driverTourListTitle": "Tipslistan",
+  "driverTourMapText": "Varje nål är ett tips. Nålen har samma färg som tipset. Tryck på en nål för att öppna tipset. Överst förklarar frågetecknet symbolerna, och klockan i vänstra hörnet är Historik: tipsen från det senaste dygnet.",
+  "driverTourMapTitle": "Kartan och nålarna",
+  "driverTourSave": "Spara",
+  "driverTourSettingsDriver": "Här slår du på notiser och väljer bilen du kör. Notiser säger till när ett starkt tips dyker upp nära dig. Genomgången finns kvar under Hjälp.",
+  "driverTourSettingsOwner": "Här väljer du län och slår på notiser. Förare bjuds in på webben. Här väljer du också vilken plats du kör med. Genomgången finns kvar under Hjälp.",
+  "driverTourSettingsTitle": "Inställningar",
+  "driverTourStrengthText": "Varje tips har en färg och ett ord. Längst ner i listan finns \"Övrigt\": meddelanden från trafikbolag. Det är information, inte tips.",
+  "driverTourStrengthTitle": "Färgen visar styrkan",
+  "driverTourTipText": "Då öppnas ett blad med mer om tipset. Där kan du köra dit, spara tipset och svara hur det gick. Svaren gör tipsen bättre.",
+  "driverTourTipTitle": "Tryck på ett tips",
+  "eventsScreenAllCounties": "Alla län",
+  "eventsScreenAllKinds": "Alla sorter",
+  "eventsScreenCount": "{count, plural, other{{count} evenemang}}",
+  "@eventsScreenCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "eventsScreenError": "Kunde inte hämta evenemangen: {error}",
+  "@eventsScreenError": {
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "eventsScreenFollowing": "Du följer eventet. Det finns under ⭐ Sparat på kartan.",
+  "eventsScreenLoading": "Hämtar {period}…",
+  "@eventsScreenLoading": {
+    "placeholders": {
+      "period": {
+        "type": "String"
+      }
+    }
+  },
+  "eventsScreenMonth": "30 dagar",
+  "eventsScreenNone": "Inga evenemang {period} i ditt område.",
+  "@eventsScreenNone": {
+    "placeholders": {
+      "period": {
+        "type": "String"
+      }
+    }
+  },
+  "eventsScreenNoneHint": "Dagarna ovan har evenemang — tryck på en av dem, eller välj en längre period.",
+  "eventsScreenNoneThin": "Utbudet är tunt utanför storstäderna. Prova ett annat län.",
+  "eventsScreenOtherKind": "Övrigt",
+  "eventsScreenPickDay": "Välj dag",
+  "eventsScreenPickPeriod": "Välj period",
+  "eventsScreenQuarter": "3 månader",
+  "eventsScreenSortLargest": "Störst",
+  "eventsScreenSortNearest": "Närmast",
+  "eventsScreenSortTime": "Tid",
+  "eventsScreenSummary": "{count} · {period}",
+  "@eventsScreenSummary": {
+    "placeholders": {
+      "count": {
+        "type": "String"
+      },
+      "period": {
+        "type": "String"
+      }
+    }
+  },
+  "eventsScreenSummaryFiltered": "{shown} av {total} evenemang · {period}",
+  "@eventsScreenSummaryFiltered": {
+    "placeholders": {
+      "shown": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "period": {
+        "type": "String"
+      }
+    }
+  },
+  "eventsScreenTitle": "Evenemang",
+  "eventsScreenToday": "I dag",
+  "eventsScreenTodayPrefix": "I dag · ",
+  "eventsScreenTomorrow": "I morgon",
+  "eventsScreenTomorrowPrefix": "I morgon · ",
+  "eventsScreenUnfollowed": "Du följer det inte längre.",
+  "eventsScreenWeek": "7 dagar",
+  "eventsScreenWeekend": "Helgen",
+  "eventsScreenWholeArea": "Hela området",
+  "ferryEventApproaching": "På väg in",
+  "ferryEventAtQuay": "Vid kaj",
+  "ferryEventAtQuaySince": "Vid kaj sedan {clock}",
+  "@ferryEventAtQuaySince": {
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventAtTime": "Kl {time}",
+  "@ferryEventAtTime": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventByTimetable": "Enligt tidtabell",
+  "ferryEventConfirmed": "Bekräftad",
+  "ferryEventConfirmedApproaching": "Bekräftad – fartyget är på väg in",
+  "ferryEventConfirmedBerthed": "Bekräftad – fartyget ligger vid kaj",
+  "ferryEventDistance": "{distance} · ca {time} med bil",
+  "@ferryEventDistance": {
+    "placeholders": {
+      "distance": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventDockingNow": "Lägger till nu",
+  "ferryEventDocksAt": "Lägger till {clock} · {relative}",
+  "@ferryEventDocksAt": {
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      },
+      "relative": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventEarly": "{time} tidig",
+  "@ferryEventEarly": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventEndEstimated": "Sluttiden är uppskattad, inte angiven av arrangören.",
+  "ferryEventEndsAbout": "Slutar ca {time}",
+  "@ferryEventEndsAbout": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventFerry": "Färja",
+  "ferryEventFollow": "Följ",
+  "ferryEventFollowing": "Följer",
+  "ferryEventFrom": "Från {place}",
+  "@ferryEventFrom": {
+    "placeholders": {
+      "place": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventInternational": "Utrikes",
+  "ferryEventLate": "{time} sen",
+  "@ferryEventLate": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventOnTime": "I tid",
+  "ferryEventOngoing": "Pågår nu",
+  "ferryEventOriginDeparted": "{from}, avgick {clock}",
+  "@ferryEventOriginDeparted": {
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventOriginDeparts": "{from}, avgår {clock}",
+  "@ferryEventOriginDeparts": {
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventPeopleLeave": "Folk går till {time}",
+  "@ferryEventPeopleLeave": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventPickupNow": "Folk kommer ut nu, till {clock}",
+  "@ferryEventPickupNow": {
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventPickupRange": "Folk kommer ut {range}",
+  "@ferryEventPickupRange": {
+    "placeholders": {
+      "range": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventPickupValueNow": "nu, till {clock}",
+  "@ferryEventPickupValueNow": {
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventReachAfter": "Framme ca {clock} – efter att de flesta gått",
+  "@ferryEventReachAfter": {
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventReachBefore": "Framme ca {clock} – före folk kommer ut",
+  "@ferryEventReachBefore": {
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventReachDuring": "Framme ca {clock} – medan folk kommer ut",
+  "@ferryEventReachDuring": {
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventReachNoWindow": "Framme ca {clock}",
+  "@ferryEventReachNoWindow": {
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventRowArrival": "Ankomst",
+  "ferryEventRowAtQuay": "Vid kajen",
+  "ferryEventRowCertainty": "Hur säkert",
+  "ferryEventRowComingFrom": "Kommer från",
+  "ferryEventRowDelay": "Försening",
+  "ferryEventRowDistance": "Avstånd",
+  "ferryEventRowEndsAbout": "Slutar ca",
+  "ferryEventRowKind": "Sort",
+  "ferryEventRowOperator": "Rederi",
+  "ferryEventRowPeopleCome": "Folk kommer ut",
+  "ferryEventRowPeopleLeaving": "Folk på väg ut",
+  "ferryEventRowQuay": "Kaj",
+  "ferryEventRowReach": "Hinner du",
+  "ferryEventRowRoute": "Linje",
+  "ferryEventRowSameQuay": "Samma kaj ±30 min",
+  "ferryEventRowService": "Trafik",
+  "ferryEventRowSize": "Storlek",
+  "ferryEventRowStatus": "Status",
+  "ferryEventRowTimetable": "Tidtabell",
+  "ferryEventSameMany": "{count, plural, other{{count} färjor till anländer}}",
+  "@ferryEventSameMany": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ferryEventSameManyFirst": "{count, plural, other{{count} färjor till anländer, första {at}}}",
+  "@ferryEventSameManyFirst": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "at": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventSameOne": "1 färja till anländer",
+  "ferryEventSameOneAt": "1 färja till anländer {at}",
+  "@ferryEventSameOneAt": {
+    "placeholders": {
+      "at": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventSectionContext": "Sammanhang",
+  "ferryEventSectionWhen": "När",
+  "ferryEventSectionWhere": "Var",
+  "ferryEventSectionWho": "Vilka kliver av",
+  "ferryEventShouldHaveDocked": "Skulle lägga till {clock} enligt tidtabell",
+  "@ferryEventShouldHaveDocked": {
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventSizeLarge": "Stor färja",
+  "ferryEventSizeMedium": "Medelstor färja",
+  "ferryEventSizeSmall": "Mindre färja",
+  "ferryEventTimeNotSet": "Tid ej satt",
+  "ferryEventToday": "i dag",
+  "ferryEventTomorrow": "i morgon",
+  "ferryEventUnknown": "okänt",
+  "ferryEventVenueCapacity": "Arena för {capacity}",
+  "@ferryEventVenueCapacity": {
+    "placeholders": {
+      "capacity": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventVenueCapacityNote": "arena för {capacity} (kapacitet, inte publik)",
+  "@ferryEventVenueCapacityNote": {
+    "placeholders": {
+      "capacity": {
+        "type": "String"
+      }
+    }
+  },
+  "followUpCardClose": "Stäng",
+  "followUpCardDrove": "Du körde mot {place} {time}",
+  "@followUpCardDrove": {
+    "placeholders": {
+      "place": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "forceUpgradeBody": "Den här versionen fungerar inte längre. Uppdatera för att fortsätta.",
+  "forceUpgradeClose": "Stäng",
+  "forceUpgradeNudge": "Ny version finns. Uppdatera när du kan.",
+  "forceUpgradeTitle": "Uppdatera appen",
+  "forceUpgradeUpdate": "Uppdatera",
+  "forceUpgradeVersions": "Din version: {installed}  ·  Krävs: {required}",
+  "@forceUpgradeVersions": {
+    "placeholders": {
+      "installed": {
+        "type": "String"
+      },
+      "required": {
+        "type": "String"
+      }
+    }
+  },
+  "guidedTourDone": "Klar",
+  "guidedTourNext": "Nästa",
+  "guidedTourSkip": "Hoppa över",
+  "guidedTourStep": "Steg {position} av {total}",
+  "@guidedTourStep": {
+    "placeholders": {
+      "position": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "historyScreenAnd": " och ",
+  "historyScreenEarlier": "Började tidigare",
+  "historyScreenEnded": "Slut",
+  "historyScreenHidden": "{count} tips visas inte.",
+  "@historyScreenHidden": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "historyScreenHiddenIn": "{count} tips i {categories} visas inte.",
+  "@historyScreenHiddenIn": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "categories": {
+        "type": "String"
+      }
+    }
+  },
+  "historyScreenHours": "{hours} tim",
+  "@historyScreenHours": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "historyScreenLoadError": "Kunde inte hämta historiken. Försök igen.",
+  "historyScreenNeedsArea": "Välj ditt körområde för att se historiken.",
+  "historyScreenNoAccess": "Historiken visas när telefonen har åtkomst till tips.",
+  "historyScreenNone": "Inga tips de senaste {hours} timmarna.",
+  "@historyScreenNone": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "historyScreenOngoing": "Pågår",
+  "historyScreenRetry": "Försök igen",
+  "historyScreenShowingLatest": "Visar de {count} senaste.",
+  "@historyScreenShowingLatest": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "historyScreenSummary": "{count} tips de senaste {hours} timmarna · {active} pågår",
+  "@historyScreenSummary": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "hours": {
+        "type": "int"
+      },
+      "active": {
+        "type": "int"
+      }
+    }
+  },
+  "historyScreenTitle": "Historik",
+  "historyScreenUnavailable": "Historiken finns inte i den här versionen.",
+  "languageButtonLabel": "Byt språk",
+  "@languageButtonLabel": {
+    "description": "Tillgänglighetsetikett för språkknappen på välkomstskärmen"
+  },
+  "languageCurrentAuto": "{language} (telefonens språk)",
+  "@languageCurrentAuto": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "languageFollowPhone": "Telefonens språk",
+  "languageFollowPhoneDetail": "Nu: {language}",
+  "@languageFollowPhoneDetail": {
+    "placeholders": {
+      "language": {
+        "type": "String"
+      }
+    }
+  },
+  "languageSectionDescription": "Appen följer telefonens språk om den finns på det.",
+  "languageTitle": "Språk",
+  "@languageTitle": {
+    "description": "Rubrik för språkvalet i inställningarna och i väljaren"
+  },
+  "netStatusGenericError": "Något gick fel. Försök igen.",
+  "netStatusOffline": "Ingen internetanslutning",
+  "netStatusTimeout": "Dålig uppkoppling. Försök igen.",
+  "netStatusUnreachable": "Servern svarar inte just nu",
+  "notificationLogSheetArchived": "· arkiverad",
+  "notificationLogSheetEmptyBody": "Notiser skickas bara för störningar som är värda att avbryta för. Är det lugnt i dina län hör du inget — och det är meningen.",
+  "notificationLogSheetEmptyTitle": "Inga notiser än",
+  "notificationLogSheetHoursAgo": "För {hours} tim sedan",
+  "@notificationLogSheetHoursAgo": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "notificationLogSheetIntro": "Notiser som skickats till den här telefonen. Vill du spara ett tips? Gör det med stjärnan i tipslistan — då ligger det under Sparat i sju dagar.",
+  "notificationLogSheetMinAgo": "För {minutes} min sedan",
+  "@notificationLogSheetMinAgo": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "notificationLogSheetNeedsBackend": "Notishistorik kräver backend",
+  "notificationLogSheetNoPhone": "Ingen parad telefon",
+  "notificationLogSheetNoPhoneBody": "Notiser skickas till en parad enhet. Den här inloggningen har ingen.",
+  "notificationLogSheetNow": "Just nu",
+  "notificationLogSheetTitle": "Mina notiser",
+  "notifyPrefsAreaLine": "Körområde: {counties}",
+  "@notifyPrefsAreaLine": {
+    "placeholders": {
+      "counties": {
+        "type": "String"
+      }
+    }
+  },
+  "notifyPrefsByArea": "Enligt körområdet",
+  "notifyPrefsHowImportant": "Hur viktiga?",
+  "notifyPrefsLevelAll": "Alla",
+  "notifyPrefsLevelMedium": "Medel +",
+  "notifyPrefsLevelStrong": "Starka",
+  "notifyPrefsMoreOptions": "Fler val",
+  "notifyPrefsNeedsLocation": "I tjänst behöver plats när appen används",
+  "notifyPrefsNoActiveSeat": "Ingen aktiv plats på den här enheten — inställningarna kan inte sparas.",
+  "notifyPrefsOnAgain": "Notiserna är på igen.",
+  "notifyPrefsOnDuty": "I tjänst",
+  "notifyPrefsPause": "Paus",
+  "notifyPrefsPause1h": "1 tim",
+  "notifyPrefsPause4h": "4 tim",
+  "notifyPrefsPauseTonight": "I natt",
+  "notifyPrefsPausedUntilSnack": "Pausat till {time}.",
+  "@notifyPrefsPausedUntilSnack": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "notifyPrefsPausedUntilTitle": "Pausat till {time}",
+  "@notifyPrefsPausedUntilTitle": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "notifyPrefsResume": "Starta igen",
+  "notifyPrefsSaved": "Sparat",
+  "notifyPrefsSendNotifications": "Skicka notiser",
+  "notifyPrefsTitle": "Notiser",
+  "notifyPrefsTomorrowAt": "i morgon {time}",
+  "@notifyPrefsTomorrowAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "notifyPrefsWhichNotifications": "Vilka notiser?",
+  "notifyPrefsWithinKm": "Inom 30 km av dig",
+  "notifyRulesApiInvalidResponse": "Ogiltigt svar från servern",
+  "notifyRulesApiServerResponded": "Servern svarade {status}",
+  "@notifyRulesApiServerResponded": {
+    "placeholders": {
+      "status": {
+        "type": "int"
+      }
+    }
+  },
+  "offlineBannerOffline": "Offline – visar senaste tips från {at}",
+  "@offlineBannerOffline": {
+    "placeholders": {
+      "at": {
+        "type": "String"
+      }
+    }
+  },
+  "offlineBannerRetry": "Försök igen",
+  "offlineBannerTimeout": "Dålig uppkoppling – visar tips från {at}",
+  "@offlineBannerTimeout": {
+    "placeholders": {
+      "at": {
+        "type": "String"
+      }
+    }
+  },
+  "offlineBannerUnreachable": "Servern svarar inte – visar tips från {at}",
+  "@offlineBannerUnreachable": {
+    "placeholders": {
+      "at": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsScreenAboutTips": "Om tipsen",
+  "settingsScreenAccountClosed": "Kontot är avslutat.",
+  "settingsScreenAccountDescription": "Logga ut om du slutar köra eller byter telefon.",
+  "settingsScreenAccountTitle": "Konto",
+  "settingsScreenCancel": "Avbryt",
+  "settingsScreenCloseAccountBody": "Medlemskapet förnyas inte. Pågår ett prov avslutas det. Ni kan använda appen perioden ut.",
+  "settingsScreenCloseAccountConfirm": "Avsluta",
+  "settingsScreenCloseAccountTitle": "Avsluta företagskontot?",
+  "settingsScreenCloseCompanyAccount": "Avsluta företagskontot",
+  "settingsScreenCompanyDescription": "Hantera företagskontot i kundportalen på webben.",
+  "settingsScreenCompanyTitle": "Företaget",
+  "settingsScreenCountiesMany": "Tips och notiser i dina län. Tryck för att välja vilka.",
+  "settingsScreenCountiesOne": "Tips och notiser i det här länet.",
+  "settingsScreenDelete": "Radera",
+  "settingsScreenDeleteBodyDriver": "Ditt förarkonto tas bort och enheten kopplas från din plats. Din chef kan bjuda in dig igen. Det går inte att ångra.",
+  "settingsScreenDeleteBodyOffice": "Ditt konto och din inloggning tas bort för gott. Enheter du kört med kopplas från medlemskapet.\n\nÄr du ensam ägare avslutas företaget direkt: medlemskapet och ett pågående prov upphör, förarna slutar få tips och företaget arkiveras. Det går inte att ångra.",
+  "settingsScreenDeleteFailedTitle": "Kontot raderades inte",
+  "settingsScreenDeleteMyAccount": "Radera mitt konto",
+  "settingsScreenDeleteTitle": "Radera ditt konto?",
+  "settingsScreenDeleted": "Ditt konto är raderat.",
+  "settingsScreenHelpChat": "Chatta med oss",
+  "settingsScreenHelpDescription": "Se hur appen fungerar, eller skriv till oss.",
+  "settingsScreenHelpHowDriver": "Fyra korta sidor",
+  "settingsScreenHelpHowItWorks": "Så fungerar Taxi Tips",
+  "settingsScreenHelpHowOffice": "Provet, medlemskap och förare",
+  "settingsScreenHelpTitle": "Hjälp",
+  "settingsScreenHelpTour": "Visa genomgången igen",
+  "settingsScreenHelpTourSub": "Visar var du trycker på startsidan",
+  "settingsScreenHelpUnread": "{count, plural, =1{Ett nytt svar} other{{count} nya svar}}",
+  "@settingsScreenHelpUnread": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsScreenLoginForSettings": "Logga in för att se inställningarna.",
+  "settingsScreenLogout": "Logga ut",
+  "settingsScreenMembershipDescription": "Platsen du kör med och länen du får tips från.",
+  "settingsScreenMembershipDescriptionCompany": "Platsen du kör med och länen du får tips från. Företag: {company}.",
+  "@settingsScreenMembershipDescriptionCompany": {
+    "placeholders": {
+      "company": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsScreenMembershipTitle": "Medlemskap",
+  "settingsScreenNotifyAllCounties": "Alla dina län",
+  "settingsScreenNotifyDescription": "Välj när telefonen ska säga till om ett starkt tips.",
+  "settingsScreenNotifyFilter": "Filter: {counties}",
+  "@settingsScreenNotifyFilter": {
+    "placeholders": {
+      "counties": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsScreenNotifyTitle": "Notiser",
+  "settingsScreenOk": "OK",
+  "settingsScreenPrivacy": "Datapolicy",
+  "settingsScreenSignedInAs": "Inloggad som",
+  "settingsScreenTerms": "Villkor",
+  "settingsScreenTitle": "Inställningar",
+  "settingsScreenYourCounties": "Dina län",
+  "severityLabelsCancelledAt": "Inställd {clock}",
+  "@severityLabelsCancelledAt": {
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsClockChange": "{from} → {to}",
+  "@severityLabelsClockChange": {
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsCompensationBase": "Resenären kan få taxin betald",
+  "severityLabelsCompensationMaybe": "Taxi kan ersättas",
+  "severityLabelsCompensationSentenceUpTo": "Resenären kan få taxin betald upp till {amount} kr{per, select, person{ per resenär} trip{ per resa} other{}}",
+  "@severityLabelsCompensationSentenceUpTo": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "per": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsCompensationUpTo": "Taxi ersätts · upp till {amount} kr{per, select, person{ per resenär} trip{ per resa} other{}}",
+  "@severityLabelsCompensationUpTo": {
+    "placeholders": {
+      "amount": {
+        "type": "int"
+      },
+      "per": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsConfidenceHigh": "Hög — tydligt i källdatan",
+  "severityLabelsConfidenceLow": "Låg — osäker tolkning av källdatan",
+  "severityLabelsConfidenceMedium": "Medel",
+  "severityLabelsDelayed": "Försenad",
+  "severityLabelsDelayedBy": "Försenad {delay}",
+  "@severityLabelsDelayedBy": {
+    "placeholders": {
+      "delay": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsDeparted": "har gått",
+  "severityLabelsDepartsNow": "avgår nu",
+  "severityLabelsHours": "{hours} tim",
+  "@severityLabelsHours": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "severityLabelsHoursMinutes": "{hours} tim {minutes} min",
+  "@severityLabelsHoursMinutes": {
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "severityLabelsIn": "om {time}",
+  "@severityLabelsIn": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsMinutes": "{minutes} min",
+  "@severityLabelsMinutes": {
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "severityLabelsModeBoat": "Båt",
+  "severityLabelsModeBus": "Buss",
+  "severityLabelsModeEvents": "Evenemang",
+  "severityLabelsModeFerries": "Färjor",
+  "severityLabelsModeFlight": "Flyg",
+  "severityLabelsModeMetro": "Tunnelbana",
+  "severityLabelsModeRoad": "Väg",
+  "severityLabelsModeTrain": "Tåg",
+  "severityLabelsModeTram": "Spårvagn",
+  "severityLabelsMonthShort": "{m, select, m1{jan} m2{feb} m3{mar} m4{apr} m5{maj} m6{jun} m7{jul} m8{aug} m9{sep} m10{okt} m11{nov} m12{dec} other{}}",
+  "@severityLabelsMonthShort": {
+    "placeholders": {
+      "m": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsShortArrivalWave": "Ankomstvåg",
+  "severityLabelsShortIgnore": "Övrigt",
+  "severityLabelsShortLastArrival": "Sista ankomsten",
+  "severityLabelsShortLineDelayed": "Försening, linjen kör",
+  "severityLabelsShortLinePaused": "Hela linjen stoppad",
+  "severityLabelsShortRoadAccident": "Olycka/avstängning",
+  "severityLabelsShortRoadWork": "Vägarbete",
+  "severityLabelsShortRoadWorkQueue": "Vägarbete/kö",
+  "severityLabelsShortUnclassified": "Osäker bedömning",
+  "severityLabelsShortVehicleCancelled": "Enstaka avgång inställd",
+  "severityLabelsShortVehicleDelayed": "Enstaka avgång försenad",
+  "severityLabelsTierArrivalWave": "Många flyg landar samtidigt",
+  "severityLabelsTierArrivalWaveFerry": "Många färjor kommer in samtidigt",
+  "severityLabelsTierIgnore": "Övrigt – trafikbolagets meddelande",
+  "severityLabelsTierLastArrival": "Sista planet — inget mer landar på flera timmar",
+  "severityLabelsTierLastArrivalFerry": "Sista färjan — inget mer anländer på flera timmar",
+  "severityLabelsTierLineDelayed": "Försening på linjen",
+  "severityLabelsTierLinePaused": "Hela linjen är stoppad",
+  "severityLabelsTierRoadAccident": "Olycka eller avstängd väg",
+  "severityLabelsTierRoadWork": "Mindre vägarbete",
+  "severityLabelsTierRoadWorkQueue": "Vägarbete eller köbildning",
+  "severityLabelsTierUnclassified": "Störning (osäker klassificering)",
+  "severityLabelsTierVehicleCancelled": "En avgång inställd",
+  "severityLabelsTierVehicleDelayed": "En avgång försenad",
+  "severityLabelsTipFallback": "Tips",
+  "severityLabelsTitleWithMode": "{mode}: {title}",
+  "@severityLabelsTitleWithMode": {
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      },
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsTowards": "mot {destination}",
+  "@severityLabelsTowards": {
+    "placeholders": {
+      "destination": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsWaitLast": "Sista avgången härifrån",
+  "severityLabelsWaitThere": "Nästa dit{at}, {gap} senare",
+  "@severityLabelsWaitThere": {
+    "placeholders": {
+      "at": {
+        "type": "String"
+      },
+      "gap": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsWaitThereFirst": "Nästa dit först{at}, {gap} senare",
+  "@severityLabelsWaitThereFirst": {
+    "placeholders": {
+      "at": {
+        "type": "String"
+      },
+      "gap": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsWaitTrip": "Nästa resa{at}, {gap} senare",
+  "@severityLabelsWaitTrip": {
+    "placeholders": {
+      "at": {
+        "type": "String"
+      },
+      "gap": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsWaitTripFirst": "Nästa resa först{at}, {gap} senare",
+  "@severityLabelsWaitTripFirst": {
+    "placeholders": {
+      "at": {
+        "type": "String"
+      },
+      "gap": {
+        "type": "String"
+      }
+    }
+  },
+  "signalCardDrive": "Kör dit",
+  "signalCardNoteBody": "Vi läser av trafiken och visar var folk kan behöva taxi. Du avgör själv om det är värt att åka.",
+  "signalCardNoteLine": "Tips från trafikläget, ingen garanti för körning",
+  "signalCardNoteMore": "{title}. Visa mer",
+  "@signalCardNoteMore": {
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "signalCardNoteOk": "Uppfattat",
+  "signalCardNoteTitle": "Tips, inte beställningar",
+  "signalCardOver": "Slut",
+  "signalCardSave": "Spara tipset",
+  "signalCardTaxiPays": "Taxi betalas",
+  "signalCardUnsave": "Ta bort sparat",
+  "signalKindsAgoDays": "{days} d",
+  "@signalKindsAgoDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "signalKindsAgoNow": "Nu",
+  "signalKindsCategoryEvent": "Event",
+  "signalKindsCategoryFerry": "Färja",
+  "signalKindsCategoryFlight": "Flyg",
+  "signalKindsCategoryRoad": "Väg",
+  "signalKindsCategoryTransit": "Tåg & buss",
+  "signalKindsDistanceKm": "{km} km",
+  "@signalKindsDistanceKm": {
+    "placeholders": {
+      "km": {
+        "type": "String"
+      }
+    }
+  },
+  "signalKindsDistanceMeters": "{meters} m",
+  "@signalKindsDistanceMeters": {
+    "placeholders": {
+      "meters": {
+        "type": "int"
+      }
+    }
+  },
+  "signalKindsExplainEvent": "Match, konsert eller annat. Publiken går hem samtidigt.",
+  "signalKindsExplainFerry": "Färja på väg in. Folk kliver av i hamnen.",
+  "signalKindsExplainFlight": "Många flyg landar, eller sista flyget. Folk behöver taxi från flygplatsen.",
+  "signalKindsExplainRoad": "Trafikolycka. Räkna med kö, eller kör en annan väg.",
+  "signalKindsExplainTransit": "Tåg, buss eller tunnelbana står still eller är sen. Folk behöver taxi.",
+  "signalKindsLongDayRelative": "{relative}, {weekday}",
+  "@signalKindsLongDayRelative": {
+    "placeholders": {
+      "relative": {
+        "type": "String"
+      },
+      "weekday": {
+        "type": "String"
+      }
+    }
+  },
+  "signalKindsMeaningHigh": "Troligt att folk behöver taxi här.",
+  "signalKindsMeaningLow": "Troligen få som behöver taxi här.",
+  "signalKindsMeaningMedium": "Kan vara värt att följa. Håll koll.",
+  "signalKindsMonthLong": "{m, select, m1{januari} m2{februari} m3{mars} m4{april} m5{maj} m6{juni} m7{juli} m8{augusti} m9{september} m10{oktober} m11{november} m12{december} other{}}",
+  "@signalKindsMonthLong": {
+    "placeholders": {
+      "m": {
+        "type": "String"
+      }
+    }
+  },
+  "signalKindsRoadClosed": "Vägen avstängd",
+  "signalKindsRoadHazard": "Hinder på vägen",
+  "signalKindsRoadMajor": "Stor störning",
+  "signalKindsToday": "I dag",
+  "signalKindsTomorrow": "I morgon",
+  "signalKindsWeekdayLong": "{d, select, d1{måndag} d2{tisdag} d3{onsdag} d4{torsdag} d5{fredag} d6{lördag} d7{söndag} other{}}",
+  "@signalKindsWeekdayLong": {
+    "placeholders": {
+      "d": {
+        "type": "String"
+      }
+    }
+  },
+  "signalKindsWeekdayShort": "{d, select, d1{mån} d2{tis} d3{ons} d4{tor} d5{fre} d6{lör} d7{sön} other{}}",
+  "@signalKindsWeekdayShort": {
+    "placeholders": {
+      "d": {
+        "type": "String"
+      }
+    }
+  },
+  "signalKindsWordAccident": "Olycka",
+  "signalKindsWordBig": "Stort",
+  "signalKindsWordMedium": "Medel",
+  "signalKindsWordMiddle": "Mellan",
+  "signalKindsWordQueue": "Kö",
+  "signalKindsWordSmall": "Litet",
+  "signalKindsWordStrong": "Stark",
+  "signalKindsWordWeak": "Svag",
+  "signalKindsWordWork": "Arbete",
+  "signalKindsYesterday": "I går",
+  "signalMapCluster": "{count} saker här",
+  "@signalMapCluster": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "signalMapFerry": "Färja {name}",
+  "@signalMapFerry": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "supportChatEmptyBody": "Skriv din fråga nedan. Du får en notis när vi svarat.",
+  "supportChatEmptyTitle": "Hur kan vi hjälpa till?",
+  "supportChatHint": "Skriv ett meddelande",
+  "supportChatLoadFailed": "Kunde inte hämta chatten. Kontrollera nätet.",
+  "supportChatRetry": "Försök igen",
+  "supportChatSend": "Skicka",
+  "supportChatSendFailed": "Meddelandet skickades inte. Försök igen.",
+  "supportChatSubtitle": "Vi svarar så snart vi kan",
+  "supportChatTitle": "Support",
+  "tipDetailPartsChipCancelled": "INSTÄLLD",
+  "tipDetailPartsChipDelayed": "FÖRSENAD",
+  "tipDetailPartsChipDelayedBy": "FÖRSENAD {delay}",
+  "@tipDetailPartsChipDelayedBy": {
+    "placeholders": {
+      "delay": {
+        "type": "String"
+      }
+    }
+  },
+  "tipDetailPartsNewClock": "→ {clock}",
+  "@tipDetailPartsNewClock": {
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "tipReportCancel": "Avbryt",
+  "tipReportFailed": "Kunde inte skicka rapporten. Prova igen.",
+  "tipReportHint": "Valfri förklaring",
+  "tipReportIntro": "Berätta kort vad som inte stämmer, till exempel fel plats eller att störningen redan är löst.",
+  "tipReportReceived": "Rapport mottagen — tack.",
+  "tipReportSend": "Skicka rapport",
+  "tipReportThanks": "Tack — vi granskar tipset.",
+  "tipReportTitle": "Rapportera felaktigt tips",
+  "tipSheetAffectedParty": "Berörd part: {party}",
+  "@tipSheetAffectedParty": {
+    "placeholders": {
+      "party": {
+        "type": "String"
+      }
+    }
+  },
+  "tipSheetAlternativeTraffic": "Alternativ trafik",
+  "tipSheetCircumstances": "Särskilda omständigheter",
+  "tipSheetClockAt": "kl {clock}",
+  "@tipSheetClockAt": {
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "tipSheetClose": "Stäng",
+  "tipSheetCompensationDisclaimer": "Beloppet gäller när trafikbolagets villkor är uppfyllda. Vi kan inte bedöma den enskilda resan.",
+  "tipSheetCompensationLink": "Läs reglerna hos {operator}",
+  "@tipSheetCompensationLink": {
+    "placeholders": {
+      "operator": {
+        "type": "String"
+      }
+    }
+  },
+  "tipSheetCompensationTitle": "Taxiersättning",
+  "tipSheetDriveThere": "Kör dit",
+  "tipSheetEnded": "Slut",
+  "tipSheetEndedAgo": "Tog slut för {span} sedan",
+  "@tipSheetEndedAgo": {
+    "placeholders": {
+      "span": {
+        "type": "String"
+      }
+    }
+  },
+  "tipSheetEndedBanner": "Slut. Tipset gäller inte längre.",
+  "tipSheetEndedJustNow": "Tog slut nyss",
+  "tipSheetGotFare": "Fick körning",
+  "tipSheetHide": "Dölj",
+  "tipSheetLineTo": "{line} → {to}",
+  "@tipSheetLineTo": {
+    "placeholders": {
+      "line": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "tipSheetMinorNote": "Allmänt meddelande. Vi bedömer inte om det är värt att köra dit.",
+  "tipSheetNavFailed": "Kunde inte öppna navigeringen.",
+  "tipSheetNoCustomer": "Ingen kund",
+  "tipSheetNoDescription": "Ingen ytterligare beskrivning tillgänglig.",
+  "tipSheetOpenNavigation": "Öppna navigering",
+  "tipSheetOperatorFallback": "trafikbolaget",
+  "tipSheetReadMore": "Läs mer",
+  "tipSheetReported": "Rapporterat",
+  "tipSheetRoadAdvice": "Räkna med kö, eller välj en annan väg.",
+  "tipSheetSave": "Spara tipset",
+  "tipSheetSectionEvent": "Händelse & beskrivning",
+  "tipSheetSectionNotice": "Trafikbolagets meddelande",
+  "tipSheetSectionRoad": "Vägen dit",
+  "tipSheetShowAllReasons": "Visa alla skäl",
+  "tipSheetShowFewerReasons": "Visa färre skäl",
+  "tipSheetShowFullText": "Visa hela texten",
+  "tipSheetShowLess": "Visa mindre",
+  "tipSheetSourcePage": "Trafikbolagets sida",
+  "tipSheetStartedAgo": "Började för {span} sedan",
+  "@tipSheetStartedAgo": {
+    "placeholders": {
+      "span": {
+        "type": "String"
+      }
+    }
+  },
+  "tipSheetStartedJustNow": "Började nyss",
+  "tipSheetStartsIn": "Börjar om {span}",
+  "@tipSheetStartsIn": {
+    "placeholders": {
+      "span": {
+        "type": "String"
+      }
+    }
+  },
+  "tipSheetStartsNow": "Börjar nu",
+  "tipSheetStatusNotice": "MEDDELANDE",
+  "tipSheetStatusStopped": "STOPP I TRAFIKEN",
+  "tipSheetTaxiPaid": "Taxi betalas",
+  "tipSheetUnsave": "Ta bort sparat",
+  "vehicleSessionAnotherPhone": "en annan telefon",
+  "vehicleSessionCancel": "Avbryt",
+  "vehicleSessionCar": "Bil",
+  "vehicleSessionCountiesCount": "{count} län",
+  "@vehicleSessionCountiesCount": {
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "vehicleSessionDrive": "Kör",
+  "vehicleSessionLeave": "Lämna bilen",
+  "vehicleSessionNoVehicles": "Telefonen är inte kopplad till någon bil. Be din chef bjuda in dig med din e-post, och logga in som förare.",
+  "vehicleSessionSubtitle": "Tipsen gäller bilens län. En bil kan bara ha en telefon åt gången.",
+  "vehicleSessionTakeOver": "Ta över",
+  "vehicleSessionTakeOverBody": "{message}\n\nDen andra telefonen slutar visa tips för den här bilen direkt.",
+  "@vehicleSessionTakeOverBody": {
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "vehicleSessionTakeOverCar": "Ta över bilen",
+  "vehicleSessionTakeOverTitle": "Ta över {plate}?",
+  "@vehicleSessionTakeOverTitle": {
+    "placeholders": {
+      "plate": {
+        "type": "String"
+      }
+    }
+  },
+  "vehicleSessionTheCar": "bilen",
+  "vehicleSessionTitle": "Vilken bil kör du?",
+  "vehicleSessionUsedBy": "Används av {name}",
+  "@vehicleSessionUsedBy": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "vehicleSessionYouDriveThis": "Du kör den här"
+}

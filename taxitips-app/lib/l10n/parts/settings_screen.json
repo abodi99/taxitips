@@ -1,0 +1,237 @@
+{
+  "settingsScreenTitle": {
+    "sv": "Inställningar",
+    "en": "Settings",
+    "ar": "الإعدادات"
+  },
+  "settingsScreenCloseAccountTitle": {
+    "sv": "Avsluta företagskontot?",
+    "en": "Close the company account?",
+    "ar": "إنهاء حساب الشركة؟"
+  },
+  "settingsScreenCloseAccountBody": {
+    "sv": "Medlemskapet förnyas inte. Pågår ett prov avslutas det. Ni kan använda appen perioden ut.",
+    "en": "The membership will not renew. A trial in progress will end. You can keep using the app until the period ends.",
+    "ar": "لن يتم تجديد العضوية. وإذا كانت هناك فترة تجريبية فستنتهي. يمكنكم استخدام التطبيق حتى نهاية الفترة."
+  },
+  "settingsScreenCancel": {
+    "sv": "Avbryt",
+    "en": "Cancel",
+    "ar": "إلغاء"
+  },
+  "settingsScreenCloseAccountConfirm": {
+    "sv": "Avsluta",
+    "en": "Close",
+    "ar": "إنهاء"
+  },
+  "settingsScreenAccountClosed": {
+    "sv": "Kontot är avslutat.",
+    "en": "The account is closed.",
+    "ar": "تم إنهاء الحساب."
+  },
+  "settingsScreenCompanyTitle": {
+    "sv": "Företaget",
+    "en": "Company",
+    "ar": "الشركة"
+  },
+  "settingsScreenCompanyDescription": {
+    "sv": "Hantera företagskontot i kundportalen på webben.",
+    "en": "Manage the company account in the customer portal on the web.",
+    "ar": "أدِر حساب الشركة من بوابة العملاء على الويب."
+  },
+  "settingsScreenMembershipTitle": {
+    "sv": "Medlemskap",
+    "en": "Membership",
+    "ar": "العضوية"
+  },
+  "settingsScreenMembershipDescription": {
+    "sv": "Platsen du kör med och länen du får tips från.",
+    "en": "The seat you drive with and the counties you get tips from.",
+    "ar": "المقعد الذي تعمل به والمقاطعات التي تصلك منها التنبيهات."
+  },
+  "settingsScreenMembershipDescriptionCompany": {
+    "sv": "Platsen du kör med och länen du får tips från. Företag: {company}.",
+    "en": "The seat you drive with and the counties you get tips from. Company: {company}.",
+    "ar": "المقعد الذي تعمل به والمقاطعات التي تصلك منها التنبيهات. الشركة: {company}.",
+    "placeholders": {
+      "company": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsScreenSignedInAs": {
+    "sv": "Inloggad som",
+    "en": "Signed in as",
+    "ar": "مسجَّل الدخول باسم"
+  },
+  "settingsScreenNotifyTitle": {
+    "sv": "Notiser",
+    "en": "Notifications",
+    "ar": "الإشعارات"
+  },
+  "settingsScreenNotifyDescription": {
+    "sv": "Välj när telefonen ska säga till om ett starkt tips.",
+    "en": "Choose when the phone should alert you about a strong tip.",
+    "ar": "اختر متى ينبّهك الهاتف إلى تنبيه قوي."
+  },
+  "settingsScreenNotifyFilter": {
+    "sv": "Filter: {counties}",
+    "en": "Filter: {counties}",
+    "ar": "التصفية: {counties}",
+    "placeholders": {
+      "counties": {
+        "type": "String"
+      }
+    }
+  },
+  "settingsScreenNotifyAllCounties": {
+    "sv": "Alla dina län",
+    "en": "All your counties",
+    "ar": "كل مقاطعاتك"
+  },
+  "settingsScreenAccountTitle": {
+    "sv": "Konto",
+    "en": "Account",
+    "ar": "الحساب"
+  },
+  "settingsScreenAccountDescription": {
+    "sv": "Logga ut om du slutar köra eller byter telefon.",
+    "en": "Log out if you stop driving or change phone.",
+    "ar": "سجّل الخروج إذا توقفت عن القيادة أو غيّرت هاتفك."
+  },
+  "settingsScreenLogout": {
+    "sv": "Logga ut",
+    "en": "Log out",
+    "ar": "تسجيل الخروج"
+  },
+  "settingsScreenHelpTitle": {
+    "sv": "Hjälp",
+    "en": "Help",
+    "ar": "المساعدة"
+  },
+  "settingsScreenHelpDescription": {
+    "sv": "Se hur appen fungerar, eller skriv till oss.",
+    "en": "See how the app works, or write to us.",
+    "ar": "تعرّف على طريقة عمل التطبيق، أو راسلنا."
+  },
+  "settingsScreenHelpHowItWorks": {
+    "sv": "Så fungerar Taxi Tips",
+    "en": "How Taxi Tips works",
+    "ar": "كيف يعمل Taxi Tips"
+  },
+  "settingsScreenHelpHowOffice": {
+    "sv": "Provet, medlemskap och förare",
+    "en": "The trial, membership and drivers",
+    "ar": "الفترة التجريبية والعضوية والسائقون"
+  },
+  "settingsScreenHelpHowDriver": {
+    "sv": "Fyra korta sidor",
+    "en": "Four short pages",
+    "ar": "أربع صفحات قصيرة"
+  },
+  "settingsScreenHelpTour": {
+    "sv": "Visa genomgången igen",
+    "en": "Show the tour again",
+    "ar": "عرض الجولة التعريفية مرة أخرى"
+  },
+  "settingsScreenHelpTourSub": {
+    "sv": "Visar var du trycker på startsidan",
+    "en": "Shows where to tap on the home screen",
+    "ar": "تُظهر أين تضغط في الشاشة الرئيسية"
+  },
+  "settingsScreenHelpChat": {
+    "sv": "Chatta med oss",
+    "en": "Chat with us",
+    "ar": "تحدث معنا"
+  },
+  "settingsScreenHelpUnread": {
+    "sv": "{count, plural, =1{Ett nytt svar} other{{count} nya svar}}",
+    "en": "{count, plural, =1{One new reply} other{{count} new replies}}",
+    "ar": "{count, plural, zero{لا ردود جديدة} one{رد جديد واحد} two{ردّان جديدان} few{{count} ردود جديدة} many{{count} ردًا جديدًا} other{{count} رد جديد}}",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "settingsScreenLoginForSettings": {
+    "sv": "Logga in för att se inställningarna.",
+    "en": "Log in to see the settings.",
+    "ar": "سجّل الدخول لعرض الإعدادات."
+  },
+  "settingsScreenDeleteTitle": {
+    "sv": "Radera ditt konto?",
+    "en": "Delete your account?",
+    "ar": "حذف حسابك؟"
+  },
+  "settingsScreenDeleteBodyOffice": {
+    "sv": "Ditt konto och din inloggning tas bort för gott. Enheter du kört med kopplas från medlemskapet.\n\nÄr du ensam ägare avslutas företaget direkt: medlemskapet och ett pågående prov upphör, förarna slutar få tips och företaget arkiveras. Det går inte att ångra.",
+    "en": "Your account and login are removed for good. Devices you have driven with are disconnected from the membership.\n\nIf you are the only owner, the company is closed right away: the membership and any trial in progress end, the drivers stop getting tips and the company is archived. This cannot be undone.",
+    "ar": "سيُحذف حسابك وتسجيل دخولك نهائيًا. وستُفصل الأجهزة التي استخدمتها عن العضوية.\n\nإذا كنت المالك الوحيد، تُغلق الشركة فورًا: تنتهي العضوية وأي فترة تجريبية جارية، ويتوقف السائقون عن تلقي التنبيهات، وتُؤرشف الشركة. لا يمكن التراجع عن ذلك."
+  },
+  "settingsScreenDeleteBodyDriver": {
+    "sv": "Ditt förarkonto tas bort och enheten kopplas från din plats. Din chef kan bjuda in dig igen. Det går inte att ångra.",
+    "en": "Your driver account is removed and the device is disconnected from your seat. Your manager can invite you again. This cannot be undone.",
+    "ar": "سيُحذف حساب السائق الخاص بك ويُفصل الجهاز عن مقعدك. يمكن لمديرك دعوتك مرة أخرى. لا يمكن التراجع عن ذلك."
+  },
+  "settingsScreenDelete": {
+    "sv": "Radera",
+    "en": "Delete",
+    "ar": "حذف"
+  },
+  "settingsScreenDeleteFailedTitle": {
+    "sv": "Kontot raderades inte",
+    "en": "The account was not deleted",
+    "ar": "لم يُحذف الحساب"
+  },
+  "settingsScreenOk": {
+    "sv": "OK",
+    "en": "OK",
+    "ar": "حسنًا"
+  },
+  "settingsScreenDeleted": {
+    "sv": "Ditt konto är raderat.",
+    "en": "Your account is deleted.",
+    "ar": "تم حذف حسابك."
+  },
+  "settingsScreenDeleteMyAccount": {
+    "sv": "Radera mitt konto",
+    "en": "Delete my account",
+    "ar": "حذف حسابي"
+  },
+  "settingsScreenAboutTips": {
+    "sv": "Om tipsen",
+    "en": "About the tips",
+    "ar": "حول التنبيهات"
+  },
+  "settingsScreenPrivacy": {
+    "sv": "Datapolicy",
+    "en": "Data policy",
+    "ar": "سياسة البيانات"
+  },
+  "settingsScreenTerms": {
+    "sv": "Villkor",
+    "en": "Terms",
+    "ar": "الشروط"
+  },
+  "settingsScreenCloseCompanyAccount": {
+    "sv": "Avsluta företagskontot",
+    "en": "Close the company account",
+    "ar": "إنهاء حساب الشركة"
+  },
+  "settingsScreenYourCounties": {
+    "sv": "Dina län",
+    "en": "Your counties",
+    "ar": "مقاطعاتك"
+  },
+  "settingsScreenCountiesOne": {
+    "sv": "Tips och notiser i det här länet.",
+    "en": "Tips and notifications in this county.",
+    "ar": "التنبيهات والإشعارات في هذه المقاطعة."
+  },
+  "settingsScreenCountiesMany": {
+    "sv": "Tips och notiser i dina län. Tryck för att välja vilka.",
+    "en": "Tips and notifications in your counties. Tap to choose which.",
+    "ar": "التنبيهات والإشعارات في مقاطعاتك. اضغط لاختيار المقاطعات."
+  }
+}

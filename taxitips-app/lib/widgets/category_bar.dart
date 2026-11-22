@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../signal_kinds.dart';
 import '../theme.dart';
 
@@ -51,7 +52,7 @@ class CategoryBar extends StatelessWidget {
         children: [
           _CategoryChip(
             icon: Icons.apps_rounded,
-            label: 'Alla',
+            label: tr.categoryBarAll,
             count: total,
             selected: selected == null,
             onTap: () => onSelect(null),
@@ -76,7 +77,7 @@ class CategoryBar extends StatelessWidget {
               ),
           _CategoryChip(
             icon: Icons.star_rounded,
-            label: 'Sparat',
+            label: tr.categoryBarSaved,
             count: followedCount,
             selected: selected == 'followed',
             onTap: () => onSelect('followed'),
@@ -115,7 +116,7 @@ class _CategoryChip extends StatelessWidget {
         : (empty ? TbColors.skiffer : TbColors.midnatt);
     final bg = selected ? TbColors.midnatt : TbColors.vit;
     return Padding(
-      padding: const EdgeInsets.only(right: 8, top: 2, bottom: 6),
+      padding: const EdgeInsetsDirectional.only(end: 8, top: 2, bottom: 6),
       child: Material(
         color: bg,
         elevation: selected ? 3 : 2,
@@ -127,7 +128,7 @@ class _CategoryChip extends StatelessWidget {
           customBorder: const StadiumBorder(),
           onTap: onTap,
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(12, 0, 8, 0),
+            padding: const EdgeInsetsDirectional.fromSTEB(12, 0, 8, 0),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [

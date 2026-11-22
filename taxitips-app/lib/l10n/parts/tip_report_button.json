@@ -1,0 +1,14 @@
+{
+  "tipReportTitle": {"sv": "Rapportera felaktigt tips", "en": "Report a wrong tip", "ar": "الإبلاغ عن تنبيه خاطئ"},
+  "tipReportIntro": {
+    "sv": "Berätta kort vad som inte stämmer, till exempel fel plats eller att störningen redan är löst.",
+    "en": "Tell us briefly what is wrong, for example the wrong place or a problem that is already fixed.",
+    "ar": "أخبرنا باختصار ما الخطأ، مثلاً مكان غير صحيح أو أن المشكلة انتهت بالفعل."
+  },
+  "tipReportHint": {"sv": "Valfri förklaring", "en": "Optional explanation", "ar": "شرح اختياري"},
+  "tipReportCancel": {"sv": "Avbryt", "en": "Cancel", "ar": "إلغاء"},
+  "tipReportSend": {"sv": "Skicka rapport", "en": "Send report", "ar": "إرسال البلاغ"},
+  "tipReportThanks": {"sv": "Tack — vi granskar tipset.", "en": "Thanks — we will check the tip.", "ar": "شكراً — سنراجع التنبيه."},
+  "tipReportFailed": {"sv": "Kunde inte skicka rapporten. Prova igen.", "en": "Could not send the report. Try again.", "ar": "تعذّر إرسال البلاغ. حاول مرة أخرى."},
+  "tipReportReceived": {"sv": "Rapport mottagen — tack.", "en": "Report received — thank you.", "ar": "تم استلام البلاغ — شكراً."}
+}

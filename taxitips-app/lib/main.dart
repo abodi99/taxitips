@@ -9,6 +9,7 @@ import 'api_client.dart';
 import 'client_info.dart';
 import 'client_log.dart';
 import 'crashlytics.dart';
+import 'l10n/l10n.dart';
 import 'net_status.dart';
 import 'performance_monitoring.dart';
 import 'push_service.dart';
@@ -39,6 +40,8 @@ void main() async {
     onTimeout: () {},
   );
   await initAnalyticsSafe();
+  // Användarens språkval (annars telefonens språk), före första bilden.
+  await loadChosenLocale();
   final api = ApiClient();
   ClientLog.attach(api.sendClientLog);
   await api.ensureInitialized();
@@ -250,7 +253,8 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
     // Provet är numera aktivt redan efter e-postbekräftelsen (inte bara
     // `pending`), men platsen saknas tills ägaren valt län i appen.
     final trialOpen =
-        trial is Map && (trial['status'] == 'pending' || trial['status'] == 'active');
+        trial is Map &&
+        (trial['status'] == 'pending' || trial['status'] == 'active');
     if (trialOpen && licenses.isEmpty) {
       if (!mounted) return;
       _membership = null;
@@ -318,110 +322,121 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
   Widget build(BuildContext context) {
     _logRoute();
     final observer = analyticsObserver();
-    return MaterialApp(
-      title: 'Taxitips',
-      theme: buildTaxiTheme(),
-      // Svenska för datumväljare och andra Material-texter.
-      locale: const Locale('sv'),
-      supportedLocales: const [Locale('sv'), Locale('en')],
-      localizationsDelegates: GlobalMaterialLocalizations.delegates,
-      debugShowCheckedModeBanner: false,
-      navigatorObservers: [?observer],
-      builder: (context, child) =>
-          ForceUpgradeOverlay(child: child ?? const SizedBox.shrink()),
-      home: _booting
-          ? const _SplashScreen()
-          : switch (_route) {
-              AppRoute.onboarding => OnboardingScreen(
-                onDone: () => setState(() => _route = AppRoute.welcome),
-              ),
-              AppRoute.welcome => WelcomeScreen(
-                onLogin: () => setState(() => _route = AppRoute.login),
-                onSignup: () => setState(() => _route = AppRoute.signup),
-              ),
-              // Alla loggar in med e-post och lösenord: ägare, kontor och förare
-              // (ägarens beslut 2026-10-04). Servern avgör vem som loggade in.
-              AppRoute.login => LoginScreen(
-                api: widget.api,
-                // Ägare/kontor: registrering som väntade görs klart först.
-                onOwner: () async {
-                  await logAnalyticsEvent(
-                    'login',
-                    params: {'method': 'email', 'role': 'owner'},
-                  );
-                  await registerForPush(widget.api);
-                  await _afterLogin();
-                },
-                // Förare: telefonen är kopplad till bilen.
-                onDriver: () async {
-                  await logAnalyticsEvent(
-                    'login',
-                    params: {'method': 'email', 'role': 'driver'},
-                  );
-                  await registerForPush(widget.api);
-                  _goShell();
-                },
-                onSignup: () => setState(() => _route = AppRoute.signup),
-                onBack: () => setState(() => _route = AppRoute.welcome),
-              ),
-              AppRoute.signup => SignupScreen(
-                api: widget.api,
-                // Konto skapat och e-post bekräftad: ta medlemskapet och välj
-                // län (eller välkomsten till provet).
-                onDone: () async {
-                  await registerForPush(widget.api);
-                  await _afterLogin();
-                },
-                onLogin: () => setState(() => _route = AppRoute.login),
-                onBack: () => setState(() => _route = AppRoute.welcome),
-              ),
-              AppRoute.trialWelcome => TrialWelcomeScreen(
-                api: widget.api,
-                onDone: _goShell,
-              ),
-              // Registrerat och e-posten bekräftad: välj län för provet. Ett nytt
-              // prov går vidare till välkomsten, en inbjuden förare rakt in.
-              AppRoute.membershipCounty => MembershipCountyScreen(
-                api: widget.api,
-                licenseId: _membership?['licenseId']?.toString(),
-                onDone: () {
-                  final newTrial = _membership == null;
-                  _membership = null;
-                  if (newTrial) {
-                    unawaited(_goAfterRegistration());
-                  } else {
+    // Språket: användarens val, annars telefonens om appen finns på det,
+    // annars svenska (lib/l10n/l10n.dart). Arabiska ritas höger till vänster.
+    return ValueListenableBuilder<Locale?>(
+      valueListenable: chosenLocale,
+      builder: (context, chosen, _) => MaterialApp(
+        title: 'Taxitips',
+        theme: buildTaxiTheme(),
+        locale: chosen,
+        supportedLocales: supportedLocales,
+        localeListResolutionCallback: (locales, _) =>
+            resolveDeviceLocales(locales),
+        localizationsDelegates: const [
+          AppLocalizations.delegate,
+          ...GlobalMaterialLocalizations.delegates,
+        ],
+        debugShowCheckedModeBanner: false,
+        navigatorObservers: [?observer],
+        builder: (context, child) {
+          setTrLocale(Localizations.localeOf(context));
+          return ForceUpgradeOverlay(child: child ?? const SizedBox.shrink());
+        },
+        home: _booting
+            ? const _SplashScreen()
+            : switch (_route) {
+                AppRoute.onboarding => OnboardingScreen(
+                  onDone: () => setState(() => _route = AppRoute.welcome),
+                ),
+                AppRoute.welcome => WelcomeScreen(
+                  onLogin: () => setState(() => _route = AppRoute.login),
+                  onSignup: () => setState(() => _route = AppRoute.signup),
+                ),
+                // Alla loggar in med e-post och lösenord: ägare, kontor och förare
+                // (ägarens beslut 2026-10-04). Servern avgör vem som loggade in.
+                AppRoute.login => LoginScreen(
+                  api: widget.api,
+                  // Ägare/kontor: registrering som väntade görs klart först.
+                  onOwner: () async {
+                    await logAnalyticsEvent(
+                      'login',
+                      params: {'method': 'email', 'role': 'owner'},
+                    );
+                    await registerForPush(widget.api);
+                    await _afterLogin();
+                  },
+                  // Förare: telefonen är kopplad till bilen.
+                  onDriver: () async {
+                    await logAnalyticsEvent(
+                      'login',
+                      params: {'method': 'email', 'role': 'driver'},
+                    );
+                    await registerForPush(widget.api);
                     _goShell();
-                  }
-                },
-              ),
-              AppRoute.shell => _AppShell(
-                api: widget.api,
-                // Utloggning lämnar telefonen helt: kontot OCH telefonens
-                // koppling. Annars startade appen nästa gång direkt i
-                // förarläget med det förra kontots bolag. Installations-id:t
-                // ligger kvar, så samma telefon känns igen vid nästa inloggning
-                // (räknas inte som ett telefonbyte).
-                onLogout: () async {
-                  await widget.api.leaveAll();
-                  if (mounted) setState(() => _route = AppRoute.login);
-                },
-                onLeftDevice: () {
-                  setState(() {
-                    _route = AppRoute.welcome;
-                  });
-                },
-              ),
-              AppRoute.driverInvite => DriverScreen(
-                api: widget.api,
-                inviteToken: _invite,
-                onBack: _goShell,
-              ),
-              AppRoute.loginError => _LoginErrorScreen(
-                message: _loginError ?? 'Något gick fel.',
-                onRetry: () => unawaited(_afterLogin()),
-                onLogout: () => unawaited(_logoutToLogin()),
-              ),
-            },
+                  },
+                  onSignup: () => setState(() => _route = AppRoute.signup),
+                  onBack: () => setState(() => _route = AppRoute.welcome),
+                ),
+                AppRoute.signup => SignupScreen(
+                  api: widget.api,
+                  // Konto skapat och e-post bekräftad: ta medlemskapet och välj
+                  // län (eller välkomsten till provet).
+                  onDone: () async {
+                    await registerForPush(widget.api);
+                    await _afterLogin();
+                  },
+                  onLogin: () => setState(() => _route = AppRoute.login),
+                  onBack: () => setState(() => _route = AppRoute.welcome),
+                ),
+                AppRoute.trialWelcome => TrialWelcomeScreen(
+                  api: widget.api,
+                  onDone: _goShell,
+                ),
+                // Registrerat och e-posten bekräftad: välj län för provet. Ett nytt
+                // prov går vidare till välkomsten, en inbjuden förare rakt in.
+                AppRoute.membershipCounty => MembershipCountyScreen(
+                  api: widget.api,
+                  licenseId: _membership?['licenseId']?.toString(),
+                  onDone: () {
+                    final newTrial = _membership == null;
+                    _membership = null;
+                    if (newTrial) {
+                      unawaited(_goAfterRegistration());
+                    } else {
+                      _goShell();
+                    }
+                  },
+                ),
+                AppRoute.shell => _AppShell(
+                  api: widget.api,
+                  // Utloggning lämnar telefonen helt: kontot OCH telefonens
+                  // koppling. Annars startade appen nästa gång direkt i
+                  // förarläget med det förra kontots bolag. Installations-id:t
+                  // ligger kvar, så samma telefon känns igen vid nästa inloggning
+                  // (räknas inte som ett telefonbyte).
+                  onLogout: () async {
+                    await widget.api.leaveAll();
+                    if (mounted) setState(() => _route = AppRoute.login);
+                  },
+                  onLeftDevice: () {
+                    setState(() {
+                      _route = AppRoute.welcome;
+                    });
+                  },
+                ),
+                AppRoute.driverInvite => DriverScreen(
+                  api: widget.api,
+                  inviteToken: _invite,
+                  onBack: _goShell,
+                ),
+                AppRoute.loginError => _LoginErrorScreen(
+                  message: _loginError ?? 'Något gick fel.',
+                  onRetry: () => unawaited(_afterLogin()),
+                  onLogout: () => unawaited(_logoutToLogin()),
+                ),
+              },
+      ),
     );
   }
 }

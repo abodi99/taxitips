@@ -1,0 +1,8 @@
+{
+  "alertFeedbackSaveFailed": {"sv": "Kunde inte spara svaret. Försök igen.", "en": "Could not save your answer. Try again.", "ar": "تعذّر حفظ إجابتك. حاول مرة أخرى."},
+  "alertFeedbackQueued": {"sv": "Sparat. Skickas när du har nät.", "en": "Saved. Will be sent when you have signal.", "ar": "تم الحفظ. سيُرسل عند توفر الشبكة."},
+  "alertFeedbackThanks": {"sv": "Tack!", "en": "Thanks!", "ar": "شكراً!"},
+  "alertFeedbackTitle": {"sv": "Hur gick det?", "en": "How did it go?", "ar": "كيف كانت النتيجة؟"},
+  "alertFeedbackGotFare": {"sv": "Fick körning", "en": "Got a fare", "ar": "حصلت على راكب"},
+  "alertFeedbackNoCustomer": {"sv": "Ingen kund", "en": "No customer", "ar": "لا يوجد زبون"}
+}

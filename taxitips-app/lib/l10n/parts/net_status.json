@@ -1,0 +1,22 @@
+{
+  "netStatusOffline": {
+    "sv": "Ingen internetanslutning",
+    "en": "No internet connection",
+    "ar": "لا يوجد اتصال بالإنترنت"
+  },
+  "netStatusUnreachable": {
+    "sv": "Servern svarar inte just nu",
+    "en": "The server is not responding right now",
+    "ar": "الخادم لا يستجيب الآن"
+  },
+  "netStatusTimeout": {
+    "sv": "Dålig uppkoppling. Försök igen.",
+    "en": "Poor connection. Try again.",
+    "ar": "الاتصال ضعيف. حاول مرة أخرى."
+  },
+  "netStatusGenericError": {
+    "sv": "Något gick fel. Försök igen.",
+    "en": "Something went wrong. Try again.",
+    "ar": "حدث خطأ ما. حاول مرة أخرى."
+  }
+}

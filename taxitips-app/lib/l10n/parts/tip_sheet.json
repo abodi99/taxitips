@@ -1,0 +1,250 @@
+{
+  "tipSheetStartedAgo": {
+    "sv": "Började för {span} sedan",
+    "en": "Started {span} ago",
+    "ar": "بدأ قبل {span}",
+    "placeholders": {
+      "span": {
+        "type": "String"
+      }
+    }
+  },
+  "tipSheetStartsIn": {
+    "sv": "Börjar om {span}",
+    "en": "Starts in {span}",
+    "ar": "يبدأ بعد {span}",
+    "placeholders": {
+      "span": {
+        "type": "String"
+      }
+    }
+  },
+  "tipSheetStartedJustNow": {
+    "sv": "Började nyss",
+    "en": "Just started",
+    "ar": "بدأ للتو"
+  },
+  "tipSheetStartsNow": {
+    "sv": "Börjar nu",
+    "en": "Starts now",
+    "ar": "يبدأ الآن"
+  },
+  "tipSheetEndedJustNow": {
+    "sv": "Tog slut nyss",
+    "en": "Ended just now",
+    "ar": "انتهى للتو"
+  },
+  "tipSheetEndedAgo": {
+    "sv": "Tog slut för {span} sedan",
+    "en": "Ended {span} ago",
+    "ar": "انتهى قبل {span}",
+    "placeholders": {
+      "span": {
+        "type": "String"
+      }
+    }
+  },
+  "tipSheetClockAt": {
+    "sv": "kl {clock}",
+    "en": "at {clock}",
+    "ar": "الساعة {clock}",
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "tipSheetOperatorFallback": {
+    "sv": "trafikbolaget",
+    "en": "the transport company",
+    "ar": "شركة النقل"
+  },
+  "tipSheetNavFailed": {
+    "sv": "Kunde inte öppna navigeringen.",
+    "en": "Could not open navigation.",
+    "ar": "تعذّر فتح الملاحة."
+  },
+  "tipSheetReported": {
+    "sv": "Rapporterat",
+    "en": "Reported",
+    "ar": "تم الإبلاغ"
+  },
+  "tipSheetSourcePage": {
+    "sv": "Trafikbolagets sida",
+    "en": "Transport company's page",
+    "ar": "صفحة شركة النقل"
+  },
+  "tipSheetUnsave": {
+    "sv": "Ta bort sparat",
+    "en": "Remove from saved",
+    "ar": "إزالة من المحفوظات"
+  },
+  "tipSheetSave": {
+    "sv": "Spara tipset",
+    "en": "Save the tip",
+    "ar": "حفظ التنبيه"
+  },
+  "tipSheetClose": {
+    "sv": "Stäng",
+    "en": "Close",
+    "ar": "إغلاق"
+  },
+  "tipSheetOpenNavigation": {
+    "sv": "Öppna navigering",
+    "en": "Open navigation",
+    "ar": "فتح الملاحة"
+  },
+  "tipSheetDriveThere": {
+    "sv": "Kör dit",
+    "en": "Drive there",
+    "ar": "اذهب إلى هناك"
+  },
+  "tipSheetTaxiPaid": {
+    "sv": "Taxi betalas",
+    "en": "Taxi is paid",
+    "ar": "التاكسي مدفوع"
+  },
+  "tipSheetGotFare": {
+    "sv": "Fick körning",
+    "en": "Got a fare",
+    "ar": "حصلت على راكب"
+  },
+  "tipSheetNoCustomer": {
+    "sv": "Ingen kund",
+    "en": "No customer",
+    "ar": "لا يوجد زبون"
+  },
+  "tipSheetEnded": {
+    "sv": "Slut",
+    "en": "Ended",
+    "ar": "انتهى"
+  },
+  "tipSheetStatusStopped": {
+    "sv": "STOPP I TRAFIKEN",
+    "en": "TRAFFIC STOPPED",
+    "ar": "توقف الحركة"
+  },
+  "tipSheetStatusNotice": {
+    "sv": "MEDDELANDE",
+    "en": "NOTICE",
+    "ar": "إشعار"
+  },
+  "tipSheetLineTo": {
+    "sv": "{line} → {to}",
+    "en": "{line} → {to}",
+    "ar": "{line} ← {to}",
+    "placeholders": {
+      "line": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "tipSheetSectionRoad": {
+    "sv": "Vägen dit",
+    "en": "The road there",
+    "ar": "الطريق إلى هناك"
+  },
+  "tipSheetSectionNotice": {
+    "sv": "Trafikbolagets meddelande",
+    "en": "Transport company's message",
+    "ar": "رسالة شركة النقل"
+  },
+  "tipSheetSectionEvent": {
+    "sv": "Händelse & beskrivning",
+    "en": "Event & description",
+    "ar": "الحدث والوصف"
+  },
+  "tipSheetRoadAdvice": {
+    "sv": "Räkna med kö, eller välj en annan väg.",
+    "en": "Expect queues, or choose another road.",
+    "ar": "توقع ازدحاماً، أو اختر طريقاً آخر."
+  },
+  "tipSheetNoDescription": {
+    "sv": "Ingen ytterligare beskrivning tillgänglig.",
+    "en": "No further description available.",
+    "ar": "لا يوجد وصف إضافي."
+  },
+  "tipSheetMinorNote": {
+    "sv": "Allmänt meddelande. Vi bedömer inte om det är värt att köra dit.",
+    "en": "General message. We do not judge whether it is worth driving there.",
+    "ar": "رسالة عامة. لا نقيّم ما إذا كان الذهاب إلى هناك مجدياً."
+  },
+  "tipSheetEndedBanner": {
+    "sv": "Slut. Tipset gäller inte längre.",
+    "en": "Ended. The tip is no longer valid.",
+    "ar": "انتهى. لم يعد التنبيه صالحاً."
+  },
+  "tipSheetCircumstances": {
+    "sv": "Särskilda omständigheter",
+    "en": "Special circumstances",
+    "ar": "ظروف خاصة"
+  },
+  "tipSheetShowFewerReasons": {
+    "sv": "Visa färre skäl",
+    "en": "Show fewer reasons",
+    "ar": "عرض أسباب أقل"
+  },
+  "tipSheetShowAllReasons": {
+    "sv": "Visa alla skäl",
+    "en": "Show all reasons",
+    "ar": "عرض كل الأسباب"
+  },
+  "tipSheetCompensationTitle": {
+    "sv": "Taxiersättning",
+    "en": "Taxi compensation",
+    "ar": "تعويض التاكسي"
+  },
+  "tipSheetCompensationDisclaimer": {
+    "sv": "Beloppet gäller när trafikbolagets villkor är uppfyllda. Vi kan inte bedöma den enskilda resan.",
+    "en": "The amount applies when the transport company's conditions are met. We cannot judge the individual trip.",
+    "ar": "يُطبَّق المبلغ عند استيفاء شروط شركة النقل. لا نستطيع تقييم الرحلة الفردية."
+  },
+  "tipSheetCompensationLink": {
+    "sv": "Läs reglerna hos {operator}",
+    "en": "Read the rules at {operator}",
+    "ar": "اقرأ القواعد لدى {operator}",
+    "placeholders": {
+      "operator": {
+        "type": "String"
+      }
+    }
+  },
+  "tipSheetHide": {
+    "sv": "Dölj",
+    "en": "Hide",
+    "ar": "إخفاء"
+  },
+  "tipSheetReadMore": {
+    "sv": "Läs mer",
+    "en": "Read more",
+    "ar": "اقرأ المزيد"
+  },
+  "tipSheetAffectedParty": {
+    "sv": "Berörd part: {party}",
+    "en": "Responsible party: {party}",
+    "ar": "الجهة المعنية: {party}",
+    "placeholders": {
+      "party": {
+        "type": "String"
+      }
+    }
+  },
+  "tipSheetShowLess": {
+    "sv": "Visa mindre",
+    "en": "Show less",
+    "ar": "عرض أقل"
+  },
+  "tipSheetShowFullText": {
+    "sv": "Visa hela texten",
+    "en": "Show full text",
+    "ar": "عرض النص كاملاً"
+  },
+  "tipSheetAlternativeTraffic": {
+    "sv": "Alternativ trafik",
+    "en": "Alternative transport",
+    "ar": "وسيلة نقل بديلة"
+  }
+}

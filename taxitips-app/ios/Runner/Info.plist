@@ -8,6 +8,12 @@
 		<true/>
 		<key>CFBundleDevelopmentRegion</key>
 		<string>$(DEVELOPMENT_LANGUAGE)</string>
+		<key>CFBundleLocalizations</key>
+		<array>
+			<string>sv</string>
+			<string>en</string>
+			<string>ar</string>
+		</array>
 		<key>CFBundleDisplayName</key>
 		<string>Taxitips</string>
 		<key>CFBundleExecutable</key>

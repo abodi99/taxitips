@@ -9,8 +9,10 @@ import '../membership_copy.dart';
 import '../net_status.dart';
 import '../signal_kinds.dart' show countyShort;
 import '../theme.dart';
+import '../l10n/l10n.dart';
 import '../widgets/brand_icons.dart';
 import '../widgets/county_checklist.dart';
+import '../widgets/language_picker.dart';
 import '../widgets/notify_prefs_sheet.dart';
 import '../widgets/settings_ui.dart';
 import 'membership_county_screen.dart';
@@ -281,20 +283,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Avsluta företagskontot?'),
-        content: const Text(
-          'Medlemskapet förnyas inte. Pågår ett prov avslutas det. '
-          'Ni kan använda appen perioden ut.',
-        ),
+        title: Text(tr.settingsScreenCloseAccountTitle),
+        content: Text(tr.settingsScreenCloseAccountBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Avbryt'),
+            child: Text(tr.settingsScreenCancel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: TbColors.danger),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Avsluta'),
+            child: Text(tr.settingsScreenCloseAccountConfirm),
           ),
         ],
       ),
@@ -302,7 +301,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (ok != true) return;
     try {
       final result = await widget.api.closeCompanyAccount();
-      _showSnack(result['explanation']?.toString() ?? 'Kontot är avslutat.');
+      _showSnack(
+        result['explanation']?.toString() ?? tr.settingsScreenAccountClosed,
+      );
       await _load();
     } catch (e) {
       _showSnack(_cleanError(e), isError: true);
@@ -320,9 +321,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   /// kundportalen på webben, inte i appen -- här finns bara genvägen dit som
   /// kontohantering, inte en köpknapp (membership_copy.dart).
   List<Widget> _companySection() => [
-    const SettingsSectionHeader(
-      title: 'Företaget',
-      description: 'Hantera företagskontot i kundportalen på webben.',
+    SettingsSectionHeader(
+      title: tr.settingsScreenCompanyTitle,
+      description: tr.settingsScreenCompanyDescription,
     ),
     SettingsGroup(
       children: [
@@ -346,10 +347,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (_licenseCountyLabels.isEmpty && !hasEmail) return const [];
     return [
       SettingsSectionHeader(
-        title: 'Medlemskap',
+        title: tr.settingsScreenMembershipTitle,
         description: _companyName == null
-            ? 'Platsen du kör med och länen du får tips från.'
-            : 'Platsen du kör med och länen du får tips från. Företag: $_companyName.',
+            ? tr.settingsScreenMembershipDescription
+            : tr.settingsScreenMembershipDescriptionCompany(_companyName!),
       ),
       if (_licenseCountyLabels.isNotEmpty) ...[
         _CountiesOverview(
@@ -363,7 +364,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
           children: [
             SettingsInfoRow(
               icon: Icons.person_outline,
-              title: 'Inloggad som',
+              title: tr.settingsScreenSignedInAs,
               value: _accountEmail!,
             ),
           ],
@@ -372,19 +373,41 @@ class _SettingsScreenState extends State<SettingsScreen> {
     ];
   }
 
+  /// Språket, överst och för alla -- även utloggad. Den som inte läser
+  /// svenska ska hitta det först (jordglob och språkets eget namn).
+  List<Widget> _languageSection() => [
+    SettingsSectionHeader(
+      title: tr.languageTitle,
+      description: tr.languageSectionDescription,
+    ),
+    SettingsGroup(
+      children: [
+        SettingsNavRow(
+          icon: Icons.language,
+          title: tr.languageTitle,
+          subtitle: currentLanguageLabel(),
+          onTap: () => showLanguagePicker(context),
+        ),
+      ],
+    ),
+    const SizedBox(height: 28),
+  ];
+
   List<Widget> _notifySection() => [
-    const SettingsSectionHeader(
-      title: 'Notiser',
-      description: 'Välj när telefonen ska säga till om ett starkt tips.',
+    SettingsSectionHeader(
+      title: tr.settingsScreenNotifyTitle,
+      description: tr.settingsScreenNotifyDescription,
     ),
     SettingsGroup(
       children: [
         SettingsNavRow(
           icon: BrandIcons.notification(size: 24, color: TbColors.muted),
-          title: 'Notiser',
+          title: tr.settingsScreenNotifyTitle,
           subtitle: _activeCountyLabels.isNotEmpty
-              ? 'Filter: ${_activeCountyLabels.join(', ')}'
-              : (_licenseCountyLabels.isEmpty ? null : 'Alla dina län'),
+              ? tr.settingsScreenNotifyFilter(_activeCountyLabels.join(', '))
+              : (_licenseCountyLabels.isEmpty
+                    ? null
+                    : tr.settingsScreenNotifyAllCounties),
           onTap: _openNotify,
         ),
       ],
@@ -400,13 +423,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
   List<Widget> _accountSection() {
     if (_isOffice) {
       return [
-        const SettingsSectionHeader(title: 'Konto'),
+        SettingsSectionHeader(title: tr.settingsScreenAccountTitle),
         SettingsGroup(
           children: [
             if (widget.onLogout != null)
               SettingsNavRow(
                 icon: Icons.logout,
-                title: 'Logga ut',
+                title: tr.settingsScreenLogout,
                 trailingIcon: Icons.chevron_right,
                 onTap: widget.onLogout!,
               ),
@@ -420,15 +443,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
       // som "Visa genomgången igen").
       if (widget.onLogout == null) return const [];
       return [
-        const SettingsSectionHeader(
-          title: 'Konto',
-          description: 'Logga ut om du slutar köra eller byter telefon.',
+        SettingsSectionHeader(
+          title: tr.settingsScreenAccountTitle,
+          description: tr.settingsScreenAccountDescription,
         ),
         SettingsGroup(
           children: [
             SettingsNavRow(
               icon: Icons.logout,
-              title: 'Logga ut',
+              title: tr.settingsScreenLogout,
               trailingIcon: Icons.chevron_right,
               onTap: widget.onLogout!,
             ),
@@ -444,9 +467,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
   List<Widget> _helpSection() {
     final canChat = widget.api.canUseSupport;
     return [
-      const SettingsSectionHeader(
-        title: 'Hjälp',
-        description: 'Se hur appen fungerar, eller skriv till oss.',
+      SettingsSectionHeader(
+        title: tr.settingsScreenHelpTitle,
+        description: tr.settingsScreenHelpDescription,
       ),
       SettingsGroup(
         children: [
@@ -454,10 +477,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SettingsNavRow(
             icon: Icons.help_outline,
             iconColor: TbColors.taxiDeep,
-            title: 'Så fungerar Taxi Tips',
+            title: tr.settingsScreenHelpHowItWorks,
             subtitle: _isOffice
-                ? 'Provet, medlemskap och förare'
-                : 'Fyra korta sidor',
+                ? tr.settingsScreenHelpHowOffice
+                : tr.settingsScreenHelpHowDriver,
             onTap: () => _isOffice
                 ? TrialWelcomeScreen.openFromSettings(context, widget.api)
                 : OnboardingScreen.openFromSettings(context),
@@ -467,19 +490,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
             SettingsNavRow(
               icon: Icons.tour_outlined,
               iconColor: TbColors.taxiDeep,
-              title: 'Visa genomgången igen',
-              subtitle: 'Visar var du trycker på startsidan',
+              title: tr.settingsScreenHelpTour,
+              subtitle: tr.settingsScreenHelpTourSub,
               onTap: widget.onShowTour!,
             ),
           if (canChat)
             SettingsNavRow(
               icon: Icons.chat_bubble_outline,
               iconColor: TbColors.taxiDeep,
-              title: 'Chatta med oss',
+              title: tr.settingsScreenHelpChat,
               subtitle: _supportUnread > 0
-                  ? (_supportUnread == 1
-                        ? 'Ett nytt svar'
-                        : '$_supportUnread nya svar')
+                  ? tr.settingsScreenHelpUnread(_supportUnread)
                   : null,
               trailing: _supportUnread > 0
                   ? Badge.count(
@@ -499,7 +520,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: TbColors.foam,
-      appBar: AppBar(title: const Text('Inställningar')),
+      appBar: AppBar(title: Text(tr.settingsScreenTitle)),
       body: _loading
           ? const Center(child: CircularProgressIndicator(color: TbColors.taxi))
           : RefreshIndicator(
@@ -521,6 +542,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     const SizedBox(height: 16),
                   ],
 
+                  ..._languageSection(),
                   if (_isOffice) ..._companySection(),
                   if (_isDevice) ..._membershipSection(),
                   if (_isDevice) ..._notifySection(),
@@ -528,9 +550,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                   if (_isOffice || _isDevice) ..._helpSection(),
 
                   if (!_isOffice && !_isDevice)
-                    const Padding(
-                      padding: EdgeInsets.only(bottom: 24),
-                      child: Text('Logga in för att se inställningarna.'),
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 24),
+                      child: Text(tr.settingsScreenLoginForSettings),
                     ),
 
                   _Footer(
@@ -563,25 +585,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Radera ditt konto?'),
+        title: Text(tr.settingsScreenDeleteTitle),
         content: Text(
           _isOffice
-              ? 'Ditt konto och din inloggning tas bort för gott. Enheter du '
-                    'kört med kopplas från medlemskapet.\n\nÄr du ensam ägare avslutas '
-                    'företaget direkt: medlemskapet och ett pågående prov upphör, '
-                    'förarna slutar få tips och företaget arkiveras. Det går inte att ångra.'
-              : 'Ditt förarkonto tas bort och enheten kopplas från din plats. '
-                    'Din chef kan bjuda in dig igen. Det går inte att ångra.',
+              ? tr.settingsScreenDeleteBodyOffice
+              : tr.settingsScreenDeleteBodyDriver,
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Avbryt'),
+            child: Text(tr.settingsScreenCancel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: TbColors.danger),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Radera'),
+            child: Text(tr.settingsScreenDelete),
           ),
         ],
       ),
@@ -614,12 +632,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
       await showDialog<void>(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('Kontot raderades inte'),
+          title: Text(tr.settingsScreenDeleteFailedTitle),
           content: Text(_cleanError(error!)),
           actions: [
             FilledButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('OK'),
+              child: Text(tr.settingsScreenOk),
             ),
           ],
         ),
@@ -630,7 +648,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     messenger.showSnackBar(
       SnackBar(
         content: Text(
-          result?['message']?.toString() ?? 'Ditt konto är raderat.',
+          result?['message']?.toString() ?? tr.settingsScreenDeleted,
         ),
         backgroundColor: TbColors.live,
       ),
@@ -680,7 +698,7 @@ class _AccountDeletionFooter extends StatelessWidget {
               minimumSize: const Size(0, 44),
               textStyle: const TextStyle(fontSize: 14),
             ),
-            child: const Text('Radera mitt konto'),
+            child: Text(tr.settingsScreenDeleteMyAccount),
           ),
         ],
       ),
@@ -722,14 +740,14 @@ class _Footer extends StatelessWidget {
         Wrap(
           alignment: WrapAlignment.center,
           children: [
-            link('Om tipsen', onData),
-            link('Datapolicy', onPrivacy),
-            link('Villkor', onTerms),
+            link(tr.settingsScreenAboutTips, onData),
+            link(tr.settingsScreenPrivacy, onPrivacy),
+            link(tr.settingsScreenTerms, onTerms),
           ],
         ),
         if (onCloseAccount != null)
           link(
-            'Avsluta företagskontot',
+            tr.settingsScreenCloseCompanyAccount,
             onCloseAccount!,
             color: TbColors.muted,
           ),
@@ -762,7 +780,7 @@ class _CountiesOverview extends StatelessWidget {
       child: InkWell(
         onTap: onOpenCountyPicker,
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 14, 12, 14),
+          padding: const EdgeInsetsDirectional.fromSTEB(16, 14, 12, 14),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -772,7 +790,7 @@ class _CountiesOverview extends StatelessWidget {
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      'Dina län',
+                      tr.settingsScreenYourCounties,
                       style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 16,
@@ -818,8 +836,8 @@ class _CountiesOverview extends StatelessWidget {
               const SizedBox(height: 8),
               Text(
                 licenseLabels.length == 1
-                    ? 'Tips och notiser i det här länet.'
-                    : 'Tips och notiser i dina län. Tryck för att välja vilka.',
+                    ? tr.settingsScreenCountiesOne
+                    : tr.settingsScreenCountiesMany,
                 style: const TextStyle(
                   fontSize: 13,
                   color: TbColors.muted,

@@ -1,0 +1,8 @@
+# Appens språk: svenska (mallen), engelska och arabiska.
+# Texterna skrivs i lib/l10n/parts/*.json (alla tre språken bredvid varandra)
+# och slås ihop till app_sv/en/ar.arb med `python3 tool/build_arb.py`.
+arb-dir: lib/l10n
+template-arb-file: app_sv.arb
+output-localization-file: app_localizations.dart
+output-class: AppLocalizations
+nullable-getter: false

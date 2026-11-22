@@ -1,0 +1,92 @@
+{
+  "driverTourListTitle": {
+    "sv": "Tipslistan",
+    "en": "The tip list",
+    "ar": "قائمة النصائح"
+  },
+  "driverTourListText": {
+    "sv": "Här är tipsen nära dig. Det starkaste ligger överst. Dra listan uppåt för att se fler.",
+    "en": "These are the tips near you. The strongest is at the top. Pull the list up to see more.",
+    "ar": "هذه هي النصائح القريبة منك. الأقوى في الأعلى. اسحب القائمة لأعلى لرؤية المزيد."
+  },
+  "driverTourStrengthTitle": {
+    "sv": "Färgen visar styrkan",
+    "en": "The color shows the strength",
+    "ar": "اللون يدل على القوة"
+  },
+  "driverTourStrengthText": {
+    "sv": "Varje tips har en färg och ett ord. Längst ner i listan finns \"Övrigt\": meddelanden från trafikbolag. Det är information, inte tips.",
+    "en": "Every tip has a color and a word. At the bottom of the list is \"Other\": messages from transport companies. That is information, not tips.",
+    "ar": "لكل نصيحة لون وكلمة. في أسفل القائمة يوجد \"أخرى\": رسائل من شركات النقل. هذه معلومات وليست نصائح."
+  },
+  "driverTourMapTitle": {
+    "sv": "Kartan och nålarna",
+    "en": "The map and the pins",
+    "ar": "الخريطة والدبابيس"
+  },
+  "driverTourMapText": {
+    "sv": "Varje nål är ett tips. Nålen har samma färg som tipset. Tryck på en nål för att öppna tipset. Överst förklarar frågetecknet symbolerna, och klockan i vänstra hörnet är Historik: tipsen från det senaste dygnet.",
+    "en": "Each pin is a tip. The pin has the same color as the tip. Tap a pin to open the tip. At the top, the question mark explains the symbols, and the clock in the corner is History: the tips from the last 24 hours.",
+    "ar": "كل دبوس هو نصيحة، ولونه مثل لون النصيحة. اضغط على دبوس لفتح النصيحة. في الأعلى تشرح علامة الاستفهام الرموز، وأيقونة الساعة في الزاوية هي السجل: نصائح آخر 24 ساعة."
+  },
+  "driverTourTipTitle": {
+    "sv": "Tryck på ett tips",
+    "en": "Tap a tip",
+    "ar": "اضغط على نصيحة"
+  },
+  "driverTourTipText": {
+    "sv": "Då öppnas ett blad med mer om tipset. Där kan du köra dit, spara tipset och svara hur det gick. Svaren gör tipsen bättre.",
+    "en": "A sheet opens with more about the tip. There you can drive there, save the tip and answer how it went. Your answers make the tips better.",
+    "ar": "تفتح ورقة فيها المزيد عن النصيحة. يمكنك هناك الذهاب إلى المكان وحفظ النصيحة والإجابة عن كيف سارت الأمور. إجاباتك تجعل النصائح أفضل."
+  },
+  "driverTourCategoriesTitle": {
+    "sv": "Kategorier",
+    "en": "Categories",
+    "ar": "الفئات"
+  },
+  "driverTourCategoriesText": {
+    "sv": "Välj vad du vill se: tåg och buss, väg, flyg, färja eller event. Siffran är antal tips. Sparat visar tipsen du har sparat.",
+    "en": "Choose what you want to see: train and bus, road, flights, ferry or events. The number is how many tips. Saved shows the tips you have saved.",
+    "ar": "اختر ما تريد رؤيته: قطار وحافلة، طريق، طيران، عبّارة أو فعاليات. الرقم هو عدد النصائح. \"المحفوظ\" يعرض النصائح التي حفظتها."
+  },
+  "driverTourFilterTitle": {
+    "sv": "Filter och län",
+    "en": "Filter and county",
+    "ar": "التصفية والمقاطعة"
+  },
+  "driverTourFilterText": {
+    "sv": "Med Filter väljer du län, hur starka tips du vill se och vad som ska döljas. Välj ditt län här så får du tips därifrån.",
+    "en": "With Filter you choose county, how strong tips you want to see and what to hide. Choose your county here to get tips from there.",
+    "ar": "من التصفية تختار المقاطعة وقوة النصائح التي تريد رؤيتها وما يجب إخفاؤه. اختر مقاطعتك هنا لتصلك النصائح منها."
+  },
+  "driverTourSettingsTitle": {
+    "sv": "Inställningar",
+    "en": "Settings",
+    "ar": "الإعدادات"
+  },
+  "driverTourSettingsOwner": {
+    "sv": "Här väljer du län och slår på notiser. Förare bjuds in på webben. Här väljer du också vilken plats du kör med. Genomgången finns kvar under Hjälp.",
+    "en": "Here you choose county and turn on notifications. Drivers are invited on the web. Here you also choose which place you drive with. The tour stays available under Help.",
+    "ar": "هنا تختار المقاطعة وتفعّل الإشعارات. تتم دعوة السائقين عبر الموقع. وهنا تختار أيضًا المكان الذي تعمل به. الجولة تبقى متاحة ضمن المساعدة."
+  },
+  "driverTourSettingsDriver": {
+    "sv": "Här slår du på notiser och väljer bilen du kör. Notiser säger till när ett starkt tips dyker upp nära dig. Genomgången finns kvar under Hjälp.",
+    "en": "Here you turn on notifications and choose the car you drive. Notifications tell you when a strong tip appears near you. The tour stays available under Help.",
+    "ar": "هنا تفعّل الإشعارات وتختار السيارة التي تقودها. تنبّهك الإشعارات عند ظهور نصيحة قوية قربك. الجولة تبقى متاحة ضمن المساعدة."
+  },
+  "driverTourDrive": {
+    "sv": "Kör dit",
+    "en": "Drive there",
+    "ar": "اذهب إلى هناك"
+  },
+  "driverTourSave": {
+    "sv": "Spara",
+    "en": "Save",
+    "ar": "حفظ"
+  },
+  "driverTourHowWasIt": {
+    "sv": "Hur gick det?",
+    "en": "How did it go?",
+    "ar": "كيف سارت الأمور؟"
+  }
+}

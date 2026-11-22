@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../net_status.dart';
 import '../theme.dart';
 
@@ -29,9 +30,9 @@ class OfflineBanner extends StatelessWidget {
     if (lastUpdated == null) return netMessage(failure);
     final at = clockLabel(lastUpdated);
     return switch (failure) {
-      NetFailure.offline => 'Offline – visar senaste tips från $at',
-      NetFailure.unreachable => 'Servern svarar inte – visar tips från $at',
-      NetFailure.timeout => 'Dålig uppkoppling – visar tips från $at',
+      NetFailure.offline => tr.offlineBannerOffline(at),
+      NetFailure.unreachable => tr.offlineBannerUnreachable(at),
+      NetFailure.timeout => tr.offlineBannerTimeout(at),
     };
   }
 
@@ -45,7 +46,7 @@ class OfflineBanner extends StatelessWidget {
         shadowColor: Colors.black26,
         borderRadius: BorderRadius.circular(14),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(14, 4, 6, 4),
+          padding: const EdgeInsetsDirectional.fromSTEB(14, 4, 6, 4),
           child: Row(
             children: [
               const Icon(Icons.cloud_off, size: 18, color: TbColors.skiffer),
@@ -72,9 +73,9 @@ class OfflineBanner extends StatelessWidget {
               else if (onRetry != null)
                 TextButton(
                   onPressed: onRetry,
-                  child: const Text(
-                    'Försök igen',
-                    style: TextStyle(fontWeight: FontWeight.w800),
+                  child: Text(
+                    tr.offlineBannerRetry,
+                    style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),
             ],

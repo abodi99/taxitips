@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api_client.dart';
 import '../follow_up.dart';
+import '../l10n/l10n.dart';
 import '../theme.dart';
 import 'alert_feedback_bar.dart';
 
@@ -30,15 +31,14 @@ class FollowUpCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final at = followUp.at;
-    final clock =
-        '${at.hour.toString().padLeft(2, '0')}:${at.minute.toString().padLeft(2, '0')}';
+    final clock = formatTime(at);
     return Material(
       color: TbColors.vit,
       elevation: 3,
       shadowColor: Colors.black26,
       borderRadius: BorderRadius.circular(14),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 6, 6, 12),
+        padding: const EdgeInsetsDirectional.fromSTEB(14, 6, 6, 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -52,7 +52,7 @@ class FollowUpCard extends StatelessWidget {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    'Du körde mot ${followUp.place} $clock',
+                    tr.followUpCardDrove(followUp.place, clock),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: const TextStyle(
@@ -63,14 +63,14 @@ class FollowUpCard extends StatelessWidget {
                   ),
                 ),
                 IconButton(
-                  tooltip: 'Stäng',
+                  tooltip: tr.followUpCardClose,
                   icon: const Icon(Icons.close_rounded),
                   onPressed: () => onDone(followUp.id),
                 ),
               ],
             ),
             Padding(
-              padding: const EdgeInsets.only(right: 8),
+              padding: const EdgeInsetsDirectional.only(end: 8),
               child: AlertFeedbackBar(
                 api: api,
                 opportunityId: followUp.id,

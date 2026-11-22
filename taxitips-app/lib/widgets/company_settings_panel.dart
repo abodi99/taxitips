@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../l10n/l10n.dart';
 import '../membership_copy.dart';
 import '../push_service.dart';
 import '../signal_kinds.dart';
@@ -35,7 +36,7 @@ class CountyChanges {
 
   bool get exhausted => remaining <= 0;
 
-  String get label => 'Länbyten kvar den här månaden: $remaining av $total';
+  String get label => tr.companySettingsCountyChangesLeft(remaining, total);
 }
 
 CountyChanges? countyChangesOf(Map<String, dynamic> license) {
@@ -138,7 +139,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     final raw = e.toString();
     // PostgREST-fel ska aldrig visas råa i UI (t.ex. device_by_token).
     if (raw.contains('PostgrestException') || raw.contains('Postgrest')) {
-      return 'Kunde inte läsa företaget just nu. Dra ner för att försöka igen.';
+      return tr.companySettingsLoadFailedPull;
     }
     return raw.replaceFirst(RegExp(r'^(ApiException|Exception):\s*'), '');
   }
@@ -186,16 +187,22 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     final access = Map<String, dynamic>.from(_data?['access'] as Map? ?? {});
     final reason = access['reason']?.toString() ?? '';
     final trial = _trial;
-    final cars =
-        '${trial?['vehiclesUsed'] ?? 0} av ${trial?['vehicleLimit'] ?? 1} ${(trial?['vehicleLimit'] ?? 1) == 1 ? 'bil' : 'bilar'}';
+    final cars = tr.companySettingsCars(
+      ((trial?['vehiclesUsed'] as num?) ?? 0).toInt(),
+      ((trial?['vehicleLimit'] as num?) ?? 1).toInt(),
+    );
     if (_suspended) {
-      return (TbColors.danger, 'Avstängt', 'Kontakta oss i chatten.');
+      return (
+        TbColors.danger,
+        tr.companySettingsSuspendedTitle,
+        tr.companySettingsSuspendedLine,
+      );
     }
     if (trial != null && trial['status'] == 'pending') {
       return (
         TbColors.taxiDeep,
-        'Provperiod',
-        'Startar när första telefonen kopplas · $cars',
+        tr.companySettingsTrialTitle,
+        tr.companySettingsTrialPendingLine(cars),
       );
     }
     if (access['ok'] == true) {
@@ -206,32 +213,44 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
           // Inget om kort eller förnyelse: bara att företaget fortsätter.
           return (
             TbColors.live,
-            'Provperiod',
-            'Medlemskapet fortsätter efter provet · $until · $cars',
+            tr.companySettingsTrialTitle,
+            tr.companySettingsTrialContinuesLine(until, cars),
           );
         }
-        return (TbColors.taxiDeep, 'Provperiod', '$until · $cars');
+        return (
+          TbColors.taxiDeep,
+          tr.companySettingsTrialTitle,
+          tr.companySettingsTrialLine(until, cars),
+        );
       }
       if (reason == 'grace') {
         return (
           TbColors.taxiDeep,
-          'Medlemskap pausas snart',
-          'Tipsen fungerar till ${_date(access['validUntil'])}.',
+          tr.companySettingsGraceTitle,
+          tr.companySettingsGraceLine(_date(access['validUntil'])),
         );
       }
       final until = _date(access['validUntil']);
-      return (TbColors.live, 'Aktivt', until.isEmpty ? '' : 'Förnyas $until');
+      return (
+        TbColors.live,
+        tr.companySettingsActiveTitle,
+        until.isEmpty ? '' : tr.companySettingsRenewsLine(until),
+      );
     }
     if (reason == 'trial_ended') {
-      return (TbColors.muted, 'Provet är slut', 'Tipsen är pausade.');
+      return (
+        TbColors.muted,
+        tr.companySettingsTrialEndedTitle,
+        tr.companySettingsTipsPaused,
+      );
     }
     // Serverns text visas bara för skäl som inte handlar om medlemskap
     // (membershipNotice): en uppmaning att betala hör inte hemma i appen.
     return (
       TbColors.muted,
-      'Pausat',
+      tr.companySettingsPausedTitle,
       isMembershipReason(reason)
-          ? 'Tipsen är pausade.'
+          ? tr.companySettingsTipsPaused
           : membershipNotice(
               reason,
               serverMessage: access['message']?.toString(),
@@ -254,27 +273,15 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     final end = DateTime.tryParse(iso?.toString() ?? '')?.toLocal();
     if (end == null) return '';
     final days = end.difference(DateTime.now()).inHours / 24;
-    if (days <= 1) return 'Sista dagen';
-    return '${days.ceil()} dagar kvar';
+    if (days <= 1) return tr.companySettingsLastDay;
+    return tr.companySettingsDaysLeft(days.ceil());
   }
 
   String _date(Object? iso) {
     final d = DateTime.tryParse(iso?.toString() ?? '')?.toLocal();
     if (d == null) return '';
-    const months = [
-      'jan',
-      'feb',
-      'mar',
-      'apr',
-      'maj',
-      'jun',
-      'jul',
-      'aug',
-      'sep',
-      'okt',
-      'nov',
-      'dec',
-    ];
+    // Månadsnamnen kommer från språkfilerna (siffrorna är alltid 0-9).
+    final months = tr.companySettingsMonthsShort.split(',');
     return '${d.day} ${months[d.month - 1]} ${d.year}';
   }
 
@@ -284,10 +291,10 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
   /// väljer lösenord och loggar in i appen med e-post och lösenord -- då
   /// kopplas telefonen till bilen med bilens län (fleet/driver_invites.py).
   Future<void> _inviteDriver(Map<String, dynamic> license) async {
-    final plate = license['vehicle']?.toString() ?? 'bilen';
+    final plate = license['vehicle']?.toString() ?? tr.companySettingsTheCar;
     final vehicleId = license['vehicleId']?.toString();
     if (vehicleId == null) {
-      _snack('Bilen saknas på licensen. Kontakta support.', isError: true);
+      _snack(tr.companySettingsCarMissingOnLicense, isError: true);
       return;
     }
     final result = await showDialog<(String, String)>(
@@ -305,7 +312,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       );
       if (!mounted) return;
       await _reload();
-      _snack('Inbjudan skickad till $email');
+      _snack(tr.companySettingsInviteSent(email));
     } catch (e) {
       _snack(_cleanError(e), isError: true);
     }
@@ -316,7 +323,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       await widget.api.resendDriverInvite(invite['inviteId'].toString());
       if (!mounted) return;
       await _reload();
-      _snack('Inbjudan skickad igen till ${invite['email']}');
+      _snack(tr.companySettingsInviteResent('${invite['email']}'));
     } catch (e) {
       _snack(_cleanError(e), isError: true);
     }
@@ -326,19 +333,17 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Ta bort inbjudan?'),
-        content: Text(
-          '${invite['email']} kan inte längre använda inbjudan för att logga in.',
-        ),
+        title: Text(tr.companySettingsRevokeTitle),
+        content: Text(tr.companySettingsRevokeBody('${invite['email']}')),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Avbryt'),
+            child: Text(tr.companySettingsCancel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: TbColors.danger),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Ta bort'),
+            child: Text(tr.companySettingsRemove),
           ),
         ],
       ),
@@ -348,7 +353,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       await widget.api.revokeDriverInvite(invite['inviteId'].toString());
       if (!mounted) return;
       await _reload();
-      _snack('Inbjudan är borttagen');
+      _snack(tr.companySettingsInviteRemoved);
     } catch (e) {
       _snack(_cleanError(e), isError: true);
     }
@@ -358,20 +363,21 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Spärra ${phone['label'] ?? 'telefonen'}?'),
-        content: const Text(
-          'Telefonen slutar visa tips direkt och lämnar bilen. '
-          'Föraren behöver en ny inbjudan för att komma in igen.',
+        title: Text(
+          tr.companySettingsBlockTitle(
+            '${phone['label'] ?? tr.companySettingsThePhone}',
+          ),
         ),
+        content: Text(tr.companySettingsBlockBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Avbryt'),
+            child: Text(tr.companySettingsCancel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: TbColors.danger),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Spärra'),
+            child: Text(tr.companySettingsBlock),
           ),
         ],
       ),
@@ -381,7 +387,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       await widget.api.blockPhone(phone['approvalId'].toString());
       if (!mounted) return;
       await _reload();
-      _snack('Telefonen är spärrad');
+      _snack(tr.companySettingsPhoneBlocked);
     } catch (e) {
       _snack(_cleanError(e), isError: true);
     }
@@ -394,10 +400,10 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
   /// godkännandet, spärren och revisionen är desamma. Förut fick ägaren logga
   /// ut, välja "Anslut telefonen" och klistra in sin egen kod (2026-09-26).
   Future<void> _driveMyself(Map<String, dynamic> license) async {
-    final plate = license['vehicle']?.toString() ?? 'bilen';
+    final plate = license['vehicle']?.toString() ?? tr.companySettingsTheCar;
     final vehicleId = license['vehicleId']?.toString();
     if (vehicleId == null) {
-      _snack('Bilen saknas på licensen. Kontakta support.', isError: true);
+      _snack(tr.companySettingsCarMissingOnLicense, isError: true);
       return;
     }
     try {
@@ -415,8 +421,8 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       await _reload();
       _snack(
         paired['sessionStarted'] == true
-            ? 'Den här telefonen kör nu $plate'
-            : 'Telefonen är kopplad till $plate. Välj bilen i listan.',
+            ? tr.companySettingsNowDrives(plate)
+            : tr.companySettingsPairedPickCar(plate),
       );
     } catch (e) {
       _snack(_cleanError(e), isError: true);
@@ -436,7 +442,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       if (!mounted) return;
       await _reload();
       widget.onChanged?.call();
-      _snack('${result.$1} är tillagd');
+      _snack(tr.companySettingsCarAdded(result.$1));
     } catch (e) {
       _snack(_cleanError(e), isError: true);
     }
@@ -450,7 +456,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     // Raden är avstängd när inga byten finns kvar; det här är bältet och
     // hängslena, och servern avgör ändå (`county_change_limit`).
     if (changes != null && changes.exhausted) {
-      _snack('Inga länbyten kvar den här månaden.', isError: true);
+      _snack(tr.companySettingsNoChangesLeft, isError: true);
       return;
     }
     final entries = _countyNames.entries.toList()
@@ -463,18 +469,21 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
         child: ListView(
           shrinkWrap: true,
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(20, 0, 20, 4),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 0, 20, 4),
               child: Text(
-                'Var kör bilen?',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+                tr.companySettingsWhereDoesCarDrive,
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w800,
+                ),
               ),
             ),
             if (changes != null)
               Padding(
                 padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
                 child: Text(
-                  '${changes.label}. Ett byte använder ett av dem.',
+                  tr.companySettingsChangeUsesOne(changes.label),
                   style: const TextStyle(color: TbColors.muted, height: 1.35),
                 ),
               ),
@@ -497,7 +506,10 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       await _reload();
       widget.onChanged?.call();
       _snack(
-        '${license['vehicle']} kör nu i ${_countyNames[picked] ?? picked}',
+        tr.companySettingsNowDrivesIn(
+          '${license['vehicle']}',
+          _countyNames[picked] ?? picked,
+        ),
       );
     } on ApiException catch (e) {
       // Gränsen är nådd: serverns svenska text visas som den är, och raden
@@ -514,22 +526,22 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     final name = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Förarens namn'),
+        title: Text(tr.companySettingsDriverName),
         content: TextField(
           controller: ctrl,
           autofocus: true,
           textCapitalization: TextCapitalization.words,
-          decoration: const InputDecoration(hintText: 't.ex. Anna'),
+          decoration: InputDecoration(hintText: tr.companySettingsNameHint),
           onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Avbryt'),
+            child: Text(tr.companySettingsCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-            child: const Text('Spara'),
+            child: Text(tr.companySettingsSave),
           ),
         ],
       ),
@@ -550,19 +562,17 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Ta bort $plate?'),
-        content: const Text(
-          'Förarna i bilen slutar få tips direkt. Platsen i provet blir ledig.',
-        ),
+        title: Text(tr.companySettingsRemoveCarTitle(plate)),
+        content: Text(tr.companySettingsRemoveCarBody),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Avbryt'),
+            child: Text(tr.companySettingsCancel),
           ),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: TbColors.danger),
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Ta bort'),
+            child: Text(tr.companySettingsRemove),
           ),
         ],
       ),
@@ -573,7 +583,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
       if (!mounted) return;
       await _reload();
       widget.onChanged?.call();
-      _snack('$plate är borttagen');
+      _snack(tr.companySettingsCarRemoved(plate));
     } catch (e) {
       _snack(_cleanError(e), isError: true);
     }
@@ -621,7 +631,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                license['vehicle']?.toString() ?? 'Bil',
+                license['vehicle']?.toString() ?? tr.companySettingsCar,
                 style: const TextStyle(
                   fontFamily: kDisplayFont,
                   fontSize: 26,
@@ -636,9 +646,11 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                   if (canEditCar && !(changes?.exhausted ?? false))
                     SettingsNavRow(
                       icon: Icons.place_outlined,
-                      title: counties.isEmpty ? 'Inget län' : counties,
+                      title: counties.isEmpty
+                          ? tr.companySettingsNoCounty
+                          : counties,
                       subtitle: [
-                        'Tryck för att byta län',
+                        tr.companySettingsTapToChangeCounty,
                         if (changes != null) changes.label,
                       ].join('\n'),
                       onTap: () => act(ctx, () => _changeCounty(license)),
@@ -646,19 +658,22 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                   else
                     SettingsInfoRow(
                       icon: Icons.place_outlined,
-                      title: counties.isEmpty ? 'Inget län' : counties,
+                      title: counties.isEmpty
+                          ? tr.companySettingsNoCounty
+                          : counties,
                       value: canEditCar
                           // Inga byten kvar: nästa månad börjar om.
-                          ? '${changes!.label}\n'
-                                'Du kan byta län igen nästa månad.'
+                          ? tr.companySettingsChangeAgainNextMonth(
+                              changes!.label,
+                            )
                           : isTrial
-                          ? 'Bara en administratör kan byta län.'
-                          : 'Länet kan inte bytas i appen.',
+                          ? tr.companySettingsOnlyAdminChanges
+                          : tr.companySettingsCountyNotChangeable,
                     ),
                 ],
               ),
               const SizedBox(height: 16),
-              const SettingsGroupLabel('Förare'),
+              SettingsGroupLabel(tr.companySettingsDrivers),
               SettingsGroup(
                 children: [
                   for (final phone in phones)
@@ -669,40 +684,43 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                       ),
                       title: Text(
                         phone['deviceId']?.toString() == _thisDeviceId
-                            ? 'Den här telefonen'
-                            : (phone['label']?.toString() ?? 'Förare'),
+                            ? tr.companySettingsThisPhone
+                            : (phone['label']?.toString() ??
+                                  tr.companySettingsDriver),
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                       subtitle: phone['deviceId']?.toString() == activeDevice
-                          ? const Text(
-                              'Kör nu',
-                              style: TextStyle(
+                          ? Text(
+                              tr.companySettingsDrivingNow,
+                              style: const TextStyle(
                                 color: TbColors.live,
                                 fontWeight: FontWeight.w700,
                               ),
                             )
                           : (phone['deviceId']?.toString() == _thisDeviceId
-                                ? const Text('Redan kopplad')
+                                ? Text(tr.companySettingsAlreadyConnected)
                                 : null),
                       trailing: canManage
                           ? PopupMenuButton<String>(
-                              tooltip: 'Mer',
+                              tooltip: tr.companySettingsMore,
                               onSelected: (choice) => act(
                                 ctx,
                                 () => choice == 'rename'
                                     ? _renamePhone(phone)
                                     : _blockPhone(phone),
                               ),
-                              itemBuilder: (_) => const [
+                              itemBuilder: (_) => [
                                 PopupMenuItem(
                                   value: 'rename',
-                                  child: Text('Byt namn'),
+                                  child: Text(tr.companySettingsRename),
                                 ),
                                 PopupMenuItem(
                                   value: 'block',
                                   child: Text(
-                                    'Spärra telefonen',
-                                    style: TextStyle(color: TbColors.danger),
+                                    tr.companySettingsBlockPhone,
+                                    style: const TextStyle(
+                                      color: TbColors.danger,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -718,13 +736,14 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                       title: Text(
                         (invite['label']?.toString().isNotEmpty ?? false)
                             ? invite['label'].toString()
-                            : invite['email']?.toString() ?? 'Förare',
+                            : invite['email']?.toString() ??
+                                  tr.companySettingsDriver,
                         style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                       subtitle: Text(
                         invite['expired'] == true
-                            ? 'Inbjudan har gått ut'
-                            : 'Inbjuden · har inte loggat in än',
+                            ? tr.companySettingsInviteExpired
+                            : tr.companySettingsInvitedNotLoggedIn,
                         style: TextStyle(
                           color: invite['expired'] == true
                               ? TbColors.danger
@@ -733,23 +752,25 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                       ),
                       trailing: canManage
                           ? PopupMenuButton<String>(
-                              tooltip: 'Mer',
+                              tooltip: tr.companySettingsMore,
                               onSelected: (choice) => act(
                                 ctx,
                                 () => choice == 'resend'
                                     ? _resendInvite(invite)
                                     : _revokeInvite(invite),
                               ),
-                              itemBuilder: (_) => const [
+                              itemBuilder: (_) => [
                                 PopupMenuItem(
                                   value: 'resend',
-                                  child: Text('Skicka igen'),
+                                  child: Text(tr.companySettingsResendInvite),
                                 ),
                                 PopupMenuItem(
                                   value: 'revoke',
                                   child: Text(
-                                    'Ta bort inbjudan',
-                                    style: TextStyle(color: TbColors.danger),
+                                    tr.companySettingsRevokeInvite,
+                                    style: const TextStyle(
+                                      color: TbColors.danger,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -757,14 +778,14 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                           : null,
                     ),
                   if (phones.isEmpty && invites.isEmpty)
-                    const ListTile(
-                      leading: Icon(
+                    ListTile(
+                      leading: const Icon(
                         Icons.person_outline,
                         color: TbColors.muted,
                       ),
                       title: Text(
-                        'Ingen förare kopplad',
-                        style: TextStyle(color: TbColors.muted),
+                        tr.companySettingsNoDriverConnected,
+                        style: const TextStyle(color: TbColors.muted),
                       ),
                     ),
                 ],
@@ -781,8 +802,8 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                   ),
                   onPressed: () => act(ctx, () => _inviteDriver(license)),
                   icon: const Icon(Icons.forward_to_inbox_outlined),
-                  label: const Text(
-                    'Bjud in förare med e-post',
+                  label: Text(
+                    tr.companySettingsInviteByEmail,
                     style: TextStyle(fontWeight: FontWeight.w800),
                   ),
                 ),
@@ -794,7 +815,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                     ),
                     onPressed: () => act(ctx, () => _driveMyself(license)),
                     icon: const Icon(Icons.phone_android),
-                    label: const Text('Kör själv med den här telefonen'),
+                    label: Text(tr.companySettingsDriveMyself),
                   ),
                 ],
               ],
@@ -803,7 +824,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                 TextButton(
                   onPressed: () => act(ctx, () => _removeCar(license)),
                   style: TextButton.styleFrom(foregroundColor: TbColors.danger),
-                  child: const Text('Ta bort bilen'),
+                  child: Text(tr.companySettingsRemoveCar),
                 ),
               ],
             ],
@@ -828,11 +849,14 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _Banner(
-            message: _error ?? 'Kunde inte läsa företaget.',
+            message: _error ?? tr.companySettingsCouldNotReadCompany,
             color: TbColors.danger,
           ),
           const SizedBox(height: 8),
-          OutlinedButton(onPressed: _reload, child: const Text('Försök igen')),
+          OutlinedButton(
+            onPressed: _reload,
+            child: Text(tr.companySettingsRetry),
+          ),
         ],
       );
     }
@@ -878,7 +902,7 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
           ),
         ],
         const SizedBox(height: 20),
-        const SettingsGroupLabel('Bilar'),
+        SettingsGroupLabel(tr.companySettingsCarsLabel),
         SettingsGroup(
           children: [
             for (final license in licenses)
@@ -886,23 +910,26 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
                 icon: Icons.local_taxi_outlined,
                 title: license['vehicle']?.toString().isNotEmpty == true
                     ? license['vehicle'].toString()
-                    : 'Bil',
+                    : tr.companySettingsCar,
                 subtitle: _carSubtitle(license),
                 onTap: () => _openCar(license),
               ),
             if (licenses.isEmpty && !canAddTrialCar)
-              const ListTile(
-                leading: Icon(Icons.local_taxi_outlined, color: TbColors.muted),
+              ListTile(
+                leading: const Icon(
+                  Icons.local_taxi_outlined,
+                  color: TbColors.muted,
+                ),
                 title: Text(
-                  'Inga bilar',
-                  style: TextStyle(color: TbColors.muted),
+                  tr.companySettingsNoCars,
+                  style: const TextStyle(color: TbColors.muted),
                 ),
               ),
             if (canAddTrialCar)
               SettingsNavRow(
                 icon: Icons.add,
                 iconColor: TbColors.taxiDeep,
-                title: 'Lägg till bil',
+                title: tr.companySettingsAddCar,
                 titleColor: TbColors.taxiDeep,
                 onTap: _addTrialCar,
               ),
@@ -920,10 +947,12 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
         : null;
     final invited = (license['pendingInvites'] as List?)?.length ?? 0;
     final driver = active != null
-        ? 'Kör: $active'
+        ? tr.companySettingsDrivingBy(active)
         : phones == 0
-        ? (invited > 0 ? '$invited inbjuden' : 'Ingen förare')
-        : '$phones förare';
+        ? (invited > 0
+              ? tr.companySettingsInvitedCount(invited)
+              : tr.companySettingsNoDriver)
+        : tr.companySettingsDriversCount(phones);
     return [if (counties.isNotEmpty) counties, driver].join(' · ');
   }
 }
@@ -955,7 +984,7 @@ class _CompanyHeader extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            name.isEmpty ? 'Ditt företag' : name,
+            name.isEmpty ? tr.companySettingsYourCompany : name,
             style: const TextStyle(
               fontFamily: kDisplayFont,
               fontSize: 22,
@@ -1029,7 +1058,7 @@ class _InviteDriverDialogState extends State<_InviteDriverDialog> {
   void _send() {
     final email = _email.text.trim();
     if (!_emailPattern.hasMatch(email)) {
-      setState(() => _error = 'Skriv förarens e-post, t.ex. namn@exempel.se');
+      setState(() => _error = tr.companySettingsDriverEmailError);
       return;
     }
     Navigator.pop(context, (email, _name.text.trim()));
@@ -1038,15 +1067,14 @@ class _InviteDriverDialogState extends State<_InviteDriverDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Bjud in förare till ${widget.plate}'),
+      title: Text(tr.companySettingsInviteDriverTitle(widget.plate)),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          const Text(
-            'Föraren får ett mejl, väljer lösenord och loggar in i appen. '
-            'Då kopplas telefonen till bilen.',
-            style: TextStyle(color: TbColors.muted, height: 1.35),
+          Text(
+            tr.companySettingsInviteDriverBody,
+            style: const TextStyle(color: TbColors.muted, height: 1.35),
           ),
           const SizedBox(height: 12),
           TextField(
@@ -1056,7 +1084,7 @@ class _InviteDriverDialogState extends State<_InviteDriverDialog> {
             autocorrect: false,
             textInputAction: TextInputAction.next,
             decoration: InputDecoration(
-              labelText: 'Förarens e-post',
+              labelText: tr.companySettingsDriverEmail,
               errorText: _error,
             ),
           ),
@@ -1065,9 +1093,9 @@ class _InviteDriverDialogState extends State<_InviteDriverDialog> {
             controller: _name,
             textCapitalization: TextCapitalization.words,
             onSubmitted: (_) => _send(),
-            decoration: const InputDecoration(
-              labelText: 'Förarens namn (frivilligt)',
-              hintText: 't.ex. Anna',
+            decoration: InputDecoration(
+              labelText: tr.companySettingsDriverNameOptional,
+              hintText: tr.companySettingsNameHint,
             ),
           ),
         ],
@@ -1075,9 +1103,12 @@ class _InviteDriverDialogState extends State<_InviteDriverDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Avbryt'),
+          child: Text(tr.companySettingsCancel),
         ),
-        FilledButton(onPressed: _send, child: const Text('Skicka inbjudan')),
+        FilledButton(
+          onPressed: _send,
+          child: Text(tr.companySettingsSendInvite),
+        ),
       ],
     );
   }
@@ -1108,7 +1139,7 @@ class _AddCarDialogState extends State<_AddCarDialog> {
       ..sort((a, b) => a.value.compareTo(b.value));
     final plate = _plate.text.replaceAll(' ', '').toUpperCase();
     return AlertDialog(
-      title: const Text('Lägg till bil'),
+      title: Text(tr.companySettingsAddCar),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -1117,8 +1148,8 @@ class _AddCarDialogState extends State<_AddCarDialog> {
             autofocus: true,
             textCapitalization: TextCapitalization.characters,
             onChanged: (_) => setState(() {}),
-            decoration: const InputDecoration(
-              labelText: 'Registreringsnummer',
+            decoration: InputDecoration(
+              labelText: tr.companySettingsPlateLabel,
               hintText: 'ABC123',
             ),
           ),
@@ -1126,7 +1157,9 @@ class _AddCarDialogState extends State<_AddCarDialog> {
           DropdownButtonFormField<String>(
             initialValue: _county,
             isExpanded: true,
-            decoration: const InputDecoration(labelText: 'Län där bilen kör'),
+            decoration: InputDecoration(
+              labelText: tr.companySettingsCountyWhereCarDrives,
+            ),
             items: [
               for (final c in counties)
                 DropdownMenuItem(value: c.key, child: Text(c.value)),
@@ -1140,13 +1173,13 @@ class _AddCarDialogState extends State<_AddCarDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Avbryt'),
+          child: Text(tr.companySettingsCancel),
         ),
         FilledButton(
           onPressed: plate.length < 2 || _county == null
               ? null
               : () => Navigator.pop(context, (plate, _county!)),
-          child: const Text('Lägg till'),
+          child: Text(tr.companySettingsAdd),
         ),
       ],
     );
@@ -1170,20 +1203,19 @@ class _TrialIncludesNote extends StatelessWidget {
     final until = DateTime.tryParse(endsAt ?? '')?.toLocal();
     final date = until == null
         ? ''
-        : 'Provet gäller till '
-              '${until.year}-'
-              '${until.month.toString().padLeft(2, '0')}-'
-              '${until.day.toString().padLeft(2, '0')}. ';
+        : '${tr.companySettingsTrialUntil('${until.year}-'
+          '${until.month.toString().padLeft(2, '0')}-'
+          '${until.day.toString().padLeft(2, '0')}')} ';
     if (!anyLocked) {
       return _InfoNote(
         icon: Icons.info_outline,
-        text: '${date}Allt i appen ingår under provet. $kMembershipOnWeb',
+        text: '$date${tr.companySettingsTrialAllIncluded} $kMembershipOnWeb',
       );
     }
     return _InfoNote(
       icon: Icons.lock_outline,
       text:
-          '${date}Det som har ett lås i appen ingår inte i provet. '
+          '$date${tr.companySettingsTrialLockedNotIncluded} '
           '$kMembershipOnWeb',
     );
   }

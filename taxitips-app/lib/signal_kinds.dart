@@ -13,6 +13,7 @@ library;
 
 import 'package:flutter/material.dart';
 
+import 'l10n/l10n.dart';
 import 'severity_labels.dart';
 import 'theme.dart';
 
@@ -30,24 +31,20 @@ const signalCategoryOrder = [
 extension SignalCategoryText on SignalCategory {
   /// Kort etikett för chips och kartförklaring.
   String get label => switch (this) {
-    SignalCategory.transit => 'Tåg & buss',
-    SignalCategory.road => 'Väg',
-    SignalCategory.flight => 'Flyg',
-    SignalCategory.ferry => 'Färja',
-    SignalCategory.event => 'Event',
+    SignalCategory.transit => tr.signalKindsCategoryTransit,
+    SignalCategory.road => tr.signalKindsCategoryRoad,
+    SignalCategory.flight => tr.signalKindsCategoryFlight,
+    SignalCategory.ferry => tr.signalKindsCategoryFerry,
+    SignalCategory.event => tr.signalKindsCategoryEvent,
   };
 
   /// En mening i förklaringen: vad kategorin betyder för en taxiförare.
   String get explanation => switch (this) {
-    SignalCategory.transit =>
-      'Tåg, buss eller tunnelbana står still eller är sen. Folk behöver taxi.',
-    SignalCategory.road =>
-      'Trafikolycka. Räkna med kö, eller kör en annan väg.',
-    SignalCategory.flight =>
-      'Många flyg landar, eller sista flyget. Folk behöver taxi från flygplatsen.',
-    SignalCategory.ferry => 'Färja på väg in. Folk kliver av i hamnen.',
-    SignalCategory.event =>
-      'Match, konsert eller annat. Publiken går hem samtidigt.',
+    SignalCategory.transit => tr.signalKindsExplainTransit,
+    SignalCategory.road => tr.signalKindsExplainRoad,
+    SignalCategory.flight => tr.signalKindsExplainFlight,
+    SignalCategory.ferry => tr.signalKindsExplainFerry,
+    SignalCategory.event => tr.signalKindsExplainEvent,
   };
 
   IconData get icon => switch (this) {
@@ -160,31 +157,31 @@ String strengthWord(SignalStrength s, {SignalCategory? category}) {
     return switch (s) {
       // Föraren ser bara olyckor (backend: ROAD_SHOWN_CONDITIONS); Kö och
       // Arbete finns kvar för sparade favoriter från före urvalet.
-      SignalStrength.high => 'Olycka',
-      SignalStrength.medium => 'Kö',
-      SignalStrength.low => 'Arbete',
+      SignalStrength.high => tr.signalKindsWordAccident,
+      SignalStrength.medium => tr.signalKindsWordQueue,
+      SignalStrength.low => tr.signalKindsWordWork,
     };
   }
   if (category == SignalCategory.event) {
     return switch (s) {
-      SignalStrength.high => 'Stort',
-      SignalStrength.medium => 'Mellan',
-      SignalStrength.low => 'Litet',
+      SignalStrength.high => tr.signalKindsWordBig,
+      SignalStrength.medium => tr.signalKindsWordMiddle,
+      SignalStrength.low => tr.signalKindsWordSmall,
     };
   }
   return switch (s) {
-    SignalStrength.high => 'Stark',
-    SignalStrength.medium => 'Medel',
-    SignalStrength.low => 'Svag',
+    SignalStrength.high => tr.signalKindsWordStrong,
+    SignalStrength.medium => tr.signalKindsWordMedium,
+    SignalStrength.low => tr.signalKindsWordWeak,
   };
 }
 
 /// Vad styrkan betyder, i en mening: ett läge vi ser, aldrig ett löfte.
 /// Bara för tips -- ett väghinder har ingen "värt att köra"-bedömning.
 String strengthMeaning(SignalStrength s) => switch (s) {
-  SignalStrength.high => 'Troligt att folk behöver taxi här.',
-  SignalStrength.medium => 'Kan vara värt att följa. Håll koll.',
-  SignalStrength.low => 'Troligen få som behöver taxi här.',
+  SignalStrength.high => tr.signalKindsMeaningHigh,
+  SignalStrength.medium => tr.signalKindsMeaningMedium,
+  SignalStrength.low => tr.signalKindsMeaningLow,
 };
 
 /// Ikonen för ett tips: färdsättet för kollektivtrafik, typen av hinder för väg.
@@ -197,12 +194,12 @@ String? roadCondition(Map alert) {
 }
 
 /// Det som hänt, i ett eller två ord -- det föraren behöver veta om vägen dit.
-const roadConditionLabels = {
-  'accident': 'Olycka',
-  'closed': 'Vägen avstängd',
-  'queue': 'Kö',
-  'hazard_main_road': 'Hinder på vägen',
-  'major_main_road': 'Stor störning',
+Map<String, String> get roadConditionLabels => {
+  'accident': tr.signalKindsWordAccident,
+  'closed': tr.signalKindsRoadClosed,
+  'queue': tr.signalKindsWordQueue,
+  'hazard_main_road': tr.signalKindsRoadHazard,
+  'major_main_road': tr.signalKindsRoadMajor,
 };
 
 IconData iconForAlert(Map alert) {
@@ -285,54 +282,28 @@ String countyShort(String name) {
 }
 
 /// "3 km", "800 m" -- avstånd som en förare läser på en halv sekund.
+/// Decimalkomma på svenska, decimalpunkt på engelska och arabiska.
 String distanceText(num? km) {
   if (km == null) return '';
-  if (km < 1) return '${(km * 1000 / 50).round() * 50} m';
-  if (km < 10) return '${km.toStringAsFixed(1).replaceAll('.', ',')} km';
-  return '${km.round()} km';
+  if (km < 1) {
+    return tr.signalKindsDistanceMeters((km * 1000 / 50).round() * 50);
+  }
+  if (km < 10) {
+    final text = km.toStringAsFixed(1);
+    return tr.signalKindsDistanceKm(
+      currentLanguage == 'sv' ? text.replaceAll('.', ',') : text,
+    );
+  }
+  return tr.signalKindsDistanceKm('${km.round()}');
 }
-
-const _weekdaysShort = ['mån', 'tis', 'ons', 'tor', 'fre', 'lör', 'sön'];
-const _weekdaysLong = [
-  'måndag',
-  'tisdag',
-  'onsdag',
-  'torsdag',
-  'fredag',
-  'lördag',
-  'söndag',
-];
-const _monthsShort = [
-  'jan',
-  'feb',
-  'mar',
-  'apr',
-  'maj',
-  'jun',
-  'jul',
-  'aug',
-  'sep',
-  'okt',
-  'nov',
-  'dec',
-];
-const _monthsLong = [
-  'januari',
-  'februari',
-  'mars',
-  'april',
-  'maj',
-  'juni',
-  'juli',
-  'augusti',
-  'september',
-  'oktober',
-  'november',
-  'december',
-];
 
 String _clockText(DateTime d) =>
     '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+
+String _weekdayShort(DateTime d) => tr.signalKindsWeekdayShort('d${d.weekday}');
+String _weekdayLong(DateTime d) => tr.signalKindsWeekdayLong('d${d.weekday}');
+
+String _capitalized(String s) => '${s[0].toUpperCase()}${s.substring(1)}';
 
 /// "I dag", "I går", "I morgon" -- eller null för andra dagar.
 String? _relativeDay(DateTime date, DateTime now) {
@@ -340,9 +311,9 @@ String? _relativeDay(DateTime date, DateTime now) {
   final today = DateTime(now.year, now.month, now.day);
   // Avrundat: över sommartidsbytet är ett dygn 23 eller 25 timmar.
   return switch ((day.difference(today).inHours / 24).round()) {
-    0 => 'I dag',
-    -1 => 'I går',
-    1 => 'I morgon',
+    0 => tr.signalKindsToday,
+    -1 => tr.signalKindsYesterday,
+    1 => tr.signalKindsTomorrow,
     _ => null,
   };
 }
@@ -355,12 +326,9 @@ String dateText(DateTime? date, {DateTime? now}) {
   if (date == null) return '';
   final current = now ?? DateTime.now();
   final rel = _relativeDay(date, current);
-  final day =
-      rel ??
-      '${_weekdaysShort[date.weekday - 1][0].toUpperCase()}'
-          '${_weekdaysShort[date.weekday - 1].substring(1)}';
+  final day = rel ?? _capitalized(_weekdayShort(date));
   final year = date.year == current.year ? '' : ' ${date.year}';
-  return '$day ${date.day} ${_monthsShort[date.month - 1]}$year · '
+  return '$day ${date.day} ${monthShortName(date.month)}$year · '
       '${_clockText(date)}';
 }
 
@@ -369,13 +337,13 @@ String longDateText(DateTime? date, {DateTime? now}) {
   if (date == null) return '';
   final current = now ?? DateTime.now();
   final rel = _relativeDay(date, current);
-  final weekday = _weekdaysLong[date.weekday - 1];
+  final weekday = _weekdayLong(date);
   final year = date.year == current.year ? '' : ' ${date.year}';
   final dayText = rel == null
-      ? '${weekday[0].toUpperCase()}${weekday.substring(1)}'
-      : '$rel, $weekday';
-  return '$dayText ${date.day} ${_monthsLong[date.month - 1]}$year · '
-      '${_clockText(date)}';
+      ? _capitalized(weekday)
+      : tr.signalKindsLongDayRelative(rel, weekday);
+  final month = tr.signalKindsMonthLong('m${date.month}');
+  return '$dayText ${date.day} $month$year · ${_clockText(date)}';
 }
 
 /// "Nu", "5 min", "2 tim" -- hur färskt något är.
@@ -384,11 +352,13 @@ String ageText(DateTime? start, {DateTime? now}) {
   final diff = (now ?? DateTime.now()).difference(start);
   if (diff.isNegative) {
     final ahead = diff.abs();
-    if (ahead.inMinutes < 60) return 'om ${ahead.inMinutes} min';
-    return 'om ${ahead.inHours} tim';
+    if (ahead.inMinutes < 60) {
+      return tr.severityLabelsIn(tr.severityLabelsMinutes(ahead.inMinutes));
+    }
+    return tr.severityLabelsIn(tr.severityLabelsHours(ahead.inHours));
   }
-  if (diff.inMinutes < 1) return 'Nu';
-  if (diff.inMinutes < 60) return '${diff.inMinutes} min';
-  if (diff.inHours < 24) return '${diff.inHours} tim';
-  return '${diff.inDays} d';
+  if (diff.inMinutes < 1) return tr.signalKindsAgoNow;
+  if (diff.inMinutes < 60) return tr.severityLabelsMinutes(diff.inMinutes);
+  if (diff.inHours < 24) return tr.severityLabelsHours(diff.inHours);
+  return tr.signalKindsAgoDays(diff.inDays);
 }

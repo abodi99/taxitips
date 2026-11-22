@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
 
 import '../api_client.dart';
+import '../l10n/l10n.dart';
 import '../membership_copy.dart';
 import '../net_status.dart';
 import '../signal_kinds.dart';
@@ -161,7 +162,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
         }
         if (perm == LocationPermission.denied ||
             perm == LocationPermission.deniedForever) {
-          throw Exception('I tjänst behöver plats när appen används');
+          throw Exception(tr.notifyPrefsNeedsLocation);
         }
         final pos = await Geolocator.getCurrentPosition(
           locationSettings: const LocationSettings(
@@ -194,7 +195,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
       if (mounted) {
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(const SnackBar(content: Text('Sparat')));
+        ).showSnackBar(SnackBar(content: Text(tr.notifyPrefsSaved)));
       }
     } catch (e) {
       if (mounted) setState(() => _error = netAwareText(e));
@@ -218,8 +219,8 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
         SnackBar(
           content: Text(
             until == null
-                ? 'Notiserna är på igen.'
-                : 'Pausat till ${_clock(until)}.',
+                ? tr.notifyPrefsOnAgain
+                : tr.notifyPrefsPausedUntilSnack(_clock(until)),
           ),
         ),
       );
@@ -232,9 +233,8 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
 
   static String _clock(DateTime t) {
     final now = DateTime.now();
-    final hm =
-        '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
-    return t.day == now.day ? hm : 'i morgon $hm';
+    final hm = formatTime(t);
+    return t.day == now.day ? hm : tr.notifyPrefsTomorrowAt(hm);
   }
 
   /// Timmar till kl 07 nästa morgon -- "tyst i natt" (högst 24).
@@ -251,7 +251,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
       for (final c in (_counties.toList()..sort()))
         countyShort(_countyNames[c] ?? c),
     ];
-    return 'Körområde: ${names.join(', ')}';
+    return tr.notifyPrefsAreaLine(names.join(', '));
   }
 
   Widget _label(String text) => Padding(
@@ -331,9 +331,9 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                   ),
                 ),
               ),
-              const Text(
-                'Notiser',
-                style: TextStyle(
+              Text(
+                tr.notifyPrefsTitle,
+                style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w700,
                   color: TbColors.ink,
@@ -349,10 +349,9 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                 ),
               if (_readOnly) ...[
                 const SizedBox(height: 10),
-                const Text(
-                  'Ingen aktiv plats på den här enheten — inställningarna '
-                  'kan inte sparas.',
-                  style: TextStyle(
+                Text(
+                  tr.notifyPrefsNoActiveSeat,
+                  style: const TextStyle(
                     fontWeight: FontWeight.w700,
                     color: TbColors.ink,
                   ),
@@ -374,9 +373,9 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                 borderRadius: BorderRadius.circular(12),
                 child: SwitchListTile(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                  title: const Text(
-                    'Skicka notiser',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                  title: Text(
+                    tr.notifyPrefsSendNotifications,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   value: _enabled,
                   activeThumbColor: TbColors.ink,
@@ -389,7 +388,7 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                         },
                 ),
               ),
-              _label('Paus'),
+              _label(tr.notifyPrefsPause),
               if (_pausedUntil != null)
                 Material(
                   color: TbColors.guld.withValues(alpha: 0.18),
@@ -401,12 +400,12 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                       color: TbColors.guldDjup,
                     ),
                     title: Text(
-                      'Pausat till ${_clock(_pausedUntil!)}',
+                      tr.notifyPrefsPausedUntilTitle(_clock(_pausedUntil!)),
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                     trailing: TextButton(
                       onPressed: _saving ? null : () => _pause(0),
-                      child: const Text('Starta igen'),
+                      child: Text(tr.notifyPrefsResume),
                     ),
                   ),
                 )
@@ -416,9 +415,9 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                   runSpacing: 8,
                   children: [
                     for (final (label, hours) in [
-                      ('1 tim', 1.0),
-                      ('4 tim', 4.0),
-                      ('I natt', _hoursToMorning),
+                      (tr.notifyPrefsPause1h, 1.0),
+                      (tr.notifyPrefsPause4h, 4.0),
+                      (tr.notifyPrefsPauseTonight, _hoursToMorning),
                     ])
                       ActionChip(
                         avatar: const Icon(
@@ -434,19 +433,28 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                 ),
 
               if (_categoryCatalog.isNotEmpty) ...[
-                _label('Vilka notiser?'),
+                _label(tr.notifyPrefsWhichNotifications),
                 for (final c in _categoryCatalog) _categoryTile(c, editable),
               ],
-              _label('Hur viktiga?'),
+              _label(tr.notifyPrefsHowImportant),
               SegmentedButton<String>(
                 style: SegmentedButton.styleFrom(
                   selectedBackgroundColor: TbColors.taxi,
                   selectedForegroundColor: TbColors.ink,
                 ),
-                segments: const [
-                  ButtonSegment(value: 'all', label: Text('Alla')),
-                  ButtonSegment(value: 'medium', label: Text('Medel +')),
-                  ButtonSegment(value: 'high', label: Text('Starka')),
+                segments: [
+                  ButtonSegment(
+                    value: 'all',
+                    label: Text(tr.notifyPrefsLevelAll),
+                  ),
+                  ButtonSegment(
+                    value: 'medium',
+                    label: Text(tr.notifyPrefsLevelMedium),
+                  ),
+                  ButtonSegment(
+                    value: 'high',
+                    label: Text(tr.notifyPrefsLevelStrong),
+                  ),
                 ],
                 selected: {_minLevel},
                 onSelectionChanged: editable
@@ -462,12 +470,12 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                 borderRadius: BorderRadius.circular(12),
                 child: SwitchListTile(
                   contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-                  title: const Text(
-                    'I tjänst',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                  title: Text(
+                    tr.notifyPrefsOnDuty,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   subtitle: Text(
-                    _onDuty ? 'Inom 30 km av dig' : 'Enligt körområdet',
+                    _onDuty ? tr.notifyPrefsWithinKm : tr.notifyPrefsByArea,
                   ),
                   value: _onDuty,
                   activeThumbColor: TbColors.ink,
@@ -485,9 +493,9 @@ class _NotifyPrefsSheetState extends State<NotifyPrefsSheet> {
                 child: ExpansionTile(
                   tilePadding: EdgeInsets.zero,
                   childrenPadding: EdgeInsets.zero,
-                  title: const Text(
-                    'Fler val',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                  title: Text(
+                    tr.notifyPrefsMoreOptions,
+                    style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                   children: [
                     // Typer som aldrig kan ge notis (varken starka eller

@@ -1,0 +1,593 @@
+{
+  "companySettingsCountyChangesLeft": {
+    "sv": "Länbyten kvar den här månaden: {remaining} av {total}",
+    "en": "County changes left this month: {remaining} of {total}",
+    "ar": "تغييرات المقاطعة المتبقية هذا الشهر: {remaining} من {total}",
+    "placeholders": {
+      "remaining": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "companySettingsCars": {
+    "sv": "{used} av {limit, plural, =1{bil} other{bilar}}",
+    "en": "{used} of {limit, plural, =1{car} other{cars}}",
+    "ar": "{used} من {limit, plural, zero{سيارات} one{سيارة} two{سيارتين} few{سيارات} many{سيارة} other{سيارة}}",
+    "placeholders": {
+      "used": {
+        "type": "int"
+      },
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "companySettingsSuspendedTitle": {
+    "sv": "Avstängt",
+    "en": "Suspended",
+    "ar": "موقوف"
+  },
+  "companySettingsSuspendedLine": {
+    "sv": "Kontakta oss i chatten.",
+    "en": "Contact us in the chat.",
+    "ar": "تواصل معنا في المحادثة."
+  },
+  "companySettingsTrialTitle": {
+    "sv": "Provperiod",
+    "en": "Trial period",
+    "ar": "الفترة التجريبية"
+  },
+  "companySettingsTrialPendingLine": {
+    "sv": "Startar när första telefonen kopplas · {cars}",
+    "en": "Starts when the first phone is connected · {cars}",
+    "ar": "تبدأ عند ربط أول هاتف · {cars}",
+    "placeholders": {
+      "cars": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsTrialContinuesLine": {
+    "sv": "Medlemskapet fortsätter efter provet · {until} · {cars}",
+    "en": "The membership continues after the trial · {until} · {cars}",
+    "ar": "تستمر العضوية بعد الفترة التجريبية · {until} · {cars}",
+    "placeholders": {
+      "until": {
+        "type": "String"
+      },
+      "cars": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsTrialLine": {
+    "sv": "{until} · {cars}",
+    "en": "{until} · {cars}",
+    "ar": "{until} · {cars}",
+    "placeholders": {
+      "until": {
+        "type": "String"
+      },
+      "cars": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsGraceTitle": {
+    "sv": "Medlemskap pausas snart",
+    "en": "Membership will pause soon",
+    "ar": "ستتوقف العضوية قريبًا"
+  },
+  "companySettingsGraceLine": {
+    "sv": "Tipsen fungerar till {date}.",
+    "en": "Tips work until {date}.",
+    "ar": "تعمل التنبيهات حتى {date}.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsActiveTitle": {
+    "sv": "Aktivt",
+    "en": "Active",
+    "ar": "نشط"
+  },
+  "companySettingsRenewsLine": {
+    "sv": "Förnyas {date}",
+    "en": "Renews {date}",
+    "ar": "تُجدَّد في {date}",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsTrialEndedTitle": {
+    "sv": "Provet är slut",
+    "en": "The trial has ended",
+    "ar": "انتهت الفترة التجريبية"
+  },
+  "companySettingsTipsPaused": {
+    "sv": "Tipsen är pausade.",
+    "en": "Tips are paused.",
+    "ar": "التنبيهات متوقفة مؤقتًا."
+  },
+  "companySettingsPausedTitle": {
+    "sv": "Pausat",
+    "en": "Paused",
+    "ar": "متوقف مؤقتًا"
+  },
+  "companySettingsLastDay": {
+    "sv": "Sista dagen",
+    "en": "Last day",
+    "ar": "اليوم الأخير"
+  },
+  "companySettingsDaysLeft": {
+    "sv": "{days} dagar kvar",
+    "en": "{days, plural, =1{1 day left} other{{days} days left}}",
+    "ar": "{days, plural, zero{لم يتبق أيام} one{بقي يوم واحد} two{بقي يومان} few{بقيت {days} أيام} many{بقي {days} يومًا} other{بقي {days} يوم}}",
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "companySettingsMonthsShort": {
+    "sv": "jan,feb,mar,apr,maj,jun,jul,aug,sep,okt,nov,dec",
+    "en": "Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec",
+    "ar": "يناير,فبراير,مارس,أبريل,مايو,يونيو,يوليو,أغسطس,سبتمبر,أكتوبر,نوفمبر,ديسمبر",
+    "description": "Tolv förkortade månadsnamn, kommaseparerade, januari först. Används i datum som 5 jan 2027."
+  },
+  "companySettingsLoadFailedPull": {
+    "sv": "Kunde inte läsa företaget just nu. Dra ner för att försöka igen.",
+    "en": "Could not load the company right now. Pull down to try again.",
+    "ar": "تعذّر تحميل بيانات الشركة الآن. اسحب للأسفل للمحاولة مرة أخرى."
+  },
+  "companySettingsTheCar": {
+    "sv": "bilen",
+    "en": "the car",
+    "ar": "السيارة"
+  },
+  "companySettingsThePhone": {
+    "sv": "telefonen",
+    "en": "the phone",
+    "ar": "الهاتف"
+  },
+  "companySettingsCarMissingOnLicense": {
+    "sv": "Bilen saknas på licensen. Kontakta support.",
+    "en": "The car is missing on the license. Contact support.",
+    "ar": "السيارة غير موجودة في الترخيص. تواصل مع الدعم."
+  },
+  "companySettingsInviteSent": {
+    "sv": "Inbjudan skickad till {email}",
+    "en": "Invitation sent to {email}",
+    "ar": "تم إرسال الدعوة إلى {email}",
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsInviteResent": {
+    "sv": "Inbjudan skickad igen till {email}",
+    "en": "Invitation sent again to {email}",
+    "ar": "تم إرسال الدعوة مرة أخرى إلى {email}",
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsRevokeTitle": {
+    "sv": "Ta bort inbjudan?",
+    "en": "Remove the invitation?",
+    "ar": "إزالة الدعوة؟"
+  },
+  "companySettingsRevokeBody": {
+    "sv": "{email} kan inte längre använda inbjudan för att logga in.",
+    "en": "{email} can no longer use the invitation to log in.",
+    "ar": "لن يتمكن {email} من استخدام الدعوة لتسجيل الدخول.",
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsCancel": {
+    "sv": "Avbryt",
+    "en": "Cancel",
+    "ar": "إلغاء"
+  },
+  "companySettingsRemove": {
+    "sv": "Ta bort",
+    "en": "Remove",
+    "ar": "إزالة"
+  },
+  "companySettingsInviteRemoved": {
+    "sv": "Inbjudan är borttagen",
+    "en": "The invitation is removed",
+    "ar": "تمت إزالة الدعوة"
+  },
+  "companySettingsBlockTitle": {
+    "sv": "Spärra {label}?",
+    "en": "Block {label}?",
+    "ar": "حظر {label}؟",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsBlockBody": {
+    "sv": "Telefonen slutar visa tips direkt och lämnar bilen. Föraren behöver en ny inbjudan för att komma in igen.",
+    "en": "The phone stops showing tips right away and leaves the car. The driver needs a new invitation to get back in.",
+    "ar": "يتوقف الهاتف عن عرض التنبيهات فورًا ويغادر السيارة. يحتاج السائق إلى دعوة جديدة للعودة."
+  },
+  "companySettingsBlock": {
+    "sv": "Spärra",
+    "en": "Block",
+    "ar": "حظر"
+  },
+  "companySettingsPhoneBlocked": {
+    "sv": "Telefonen är spärrad",
+    "en": "The phone is blocked",
+    "ar": "تم حظر الهاتف"
+  },
+  "companySettingsNowDrives": {
+    "sv": "Den här telefonen kör nu {plate}",
+    "en": "This phone is now driving {plate}",
+    "ar": "هذا الهاتف يعمل الآن على {plate}",
+    "placeholders": {
+      "plate": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsPairedPickCar": {
+    "sv": "Telefonen är kopplad till {plate}. Välj bilen i listan.",
+    "en": "The phone is connected to {plate}. Pick the car in the list.",
+    "ar": "تم ربط الهاتف بالسيارة {plate}. اختر السيارة من القائمة.",
+    "placeholders": {
+      "plate": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsCarAdded": {
+    "sv": "{plate} är tillagd",
+    "en": "{plate} is added",
+    "ar": "تمت إضافة {plate}",
+    "placeholders": {
+      "plate": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsNoChangesLeft": {
+    "sv": "Inga länbyten kvar den här månaden.",
+    "en": "No county changes left this month.",
+    "ar": "لا توجد تغييرات مقاطعة متبقية هذا الشهر."
+  },
+  "companySettingsWhereDoesCarDrive": {
+    "sv": "Var kör bilen?",
+    "en": "Where does the car drive?",
+    "ar": "أين تعمل السيارة؟"
+  },
+  "companySettingsChangeUsesOne": {
+    "sv": "{label}. Ett byte använder ett av dem.",
+    "en": "{label}. One change uses one of them.",
+    "ar": "{label}. كل تغيير يستخدم واحدًا منها.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsNowDrivesIn": {
+    "sv": "{plate} kör nu i {county}",
+    "en": "{plate} now drives in {county}",
+    "ar": "{plate} تعمل الآن في {county}",
+    "placeholders": {
+      "plate": {
+        "type": "String"
+      },
+      "county": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsDriverName": {
+    "sv": "Förarens namn",
+    "en": "Driver name",
+    "ar": "اسم السائق"
+  },
+  "companySettingsNameHint": {
+    "sv": "t.ex. Anna",
+    "en": "e.g. Anna",
+    "ar": "مثلاً أحمد"
+  },
+  "companySettingsSave": {
+    "sv": "Spara",
+    "en": "Save",
+    "ar": "حفظ"
+  },
+  "companySettingsRemoveCarTitle": {
+    "sv": "Ta bort {plate}?",
+    "en": "Remove {plate}?",
+    "ar": "إزالة {plate}؟",
+    "placeholders": {
+      "plate": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsRemoveCarBody": {
+    "sv": "Förarna i bilen slutar få tips direkt. Platsen i provet blir ledig.",
+    "en": "The drivers in the car stop getting tips right away. The seat in the trial becomes free.",
+    "ar": "يتوقف سائقو السيارة عن تلقي التنبيهات فورًا. ويصبح المقعد في الفترة التجريبية شاغرًا."
+  },
+  "companySettingsCarRemoved": {
+    "sv": "{plate} är borttagen",
+    "en": "{plate} is removed",
+    "ar": "تمت إزالة {plate}",
+    "placeholders": {
+      "plate": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsCar": {
+    "sv": "Bil",
+    "en": "Car",
+    "ar": "سيارة"
+  },
+  "companySettingsNoCounty": {
+    "sv": "Inget län",
+    "en": "No county",
+    "ar": "لا توجد مقاطعة"
+  },
+  "companySettingsTapToChangeCounty": {
+    "sv": "Tryck för att byta län",
+    "en": "Tap to change county",
+    "ar": "اضغط لتغيير المقاطعة"
+  },
+  "companySettingsChangeAgainNextMonth": {
+    "sv": "{label}\nDu kan byta län igen nästa månad.",
+    "en": "{label}\nYou can change county again next month.",
+    "ar": "{label}\nيمكنك تغيير المقاطعة مرة أخرى الشهر القادم.",
+    "placeholders": {
+      "label": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsOnlyAdminChanges": {
+    "sv": "Bara en administratör kan byta län.",
+    "en": "Only an administrator can change county.",
+    "ar": "يمكن للمسؤول فقط تغيير المقاطعة."
+  },
+  "companySettingsCountyNotChangeable": {
+    "sv": "Länet kan inte bytas i appen.",
+    "en": "The county cannot be changed in the app.",
+    "ar": "لا يمكن تغيير المقاطعة من التطبيق."
+  },
+  "companySettingsDriver": {
+    "sv": "Förare",
+    "en": "Driver",
+    "ar": "سائق"
+  },
+  "companySettingsDrivers": {
+    "sv": "Förare",
+    "en": "Drivers",
+    "ar": "السائقون"
+  },
+  "companySettingsThisPhone": {
+    "sv": "Den här telefonen",
+    "en": "This phone",
+    "ar": "هذا الهاتف"
+  },
+  "companySettingsDrivingNow": {
+    "sv": "Kör nu",
+    "en": "Driving now",
+    "ar": "يعمل الآن"
+  },
+  "companySettingsAlreadyConnected": {
+    "sv": "Redan kopplad",
+    "en": "Already connected",
+    "ar": "مرتبط بالفعل"
+  },
+  "companySettingsMore": {
+    "sv": "Mer",
+    "en": "More",
+    "ar": "المزيد"
+  },
+  "companySettingsRename": {
+    "sv": "Byt namn",
+    "en": "Rename",
+    "ar": "تغيير الاسم"
+  },
+  "companySettingsBlockPhone": {
+    "sv": "Spärra telefonen",
+    "en": "Block the phone",
+    "ar": "حظر الهاتف"
+  },
+  "companySettingsInviteExpired": {
+    "sv": "Inbjudan har gått ut",
+    "en": "The invitation has expired",
+    "ar": "انتهت صلاحية الدعوة"
+  },
+  "companySettingsInvitedNotLoggedIn": {
+    "sv": "Inbjuden · har inte loggat in än",
+    "en": "Invited · has not logged in yet",
+    "ar": "تمت دعوته · لم يسجّل الدخول بعد"
+  },
+  "companySettingsResendInvite": {
+    "sv": "Skicka igen",
+    "en": "Send again",
+    "ar": "إرسال مرة أخرى"
+  },
+  "companySettingsRevokeInvite": {
+    "sv": "Ta bort inbjudan",
+    "en": "Remove the invitation",
+    "ar": "إزالة الدعوة"
+  },
+  "companySettingsNoDriverConnected": {
+    "sv": "Ingen förare kopplad",
+    "en": "No driver connected",
+    "ar": "لا يوجد سائق مرتبط"
+  },
+  "companySettingsInviteByEmail": {
+    "sv": "Bjud in förare med e-post",
+    "en": "Invite a driver by email",
+    "ar": "ادعُ سائقًا عبر البريد الإلكتروني"
+  },
+  "companySettingsDriveMyself": {
+    "sv": "Kör själv med den här telefonen",
+    "en": "Drive myself with this phone",
+    "ar": "أعمل بنفسي بهذا الهاتف"
+  },
+  "companySettingsRemoveCar": {
+    "sv": "Ta bort bilen",
+    "en": "Remove the car",
+    "ar": "إزالة السيارة"
+  },
+  "companySettingsCouldNotReadCompany": {
+    "sv": "Kunde inte läsa företaget.",
+    "en": "Could not load the company.",
+    "ar": "تعذّر تحميل بيانات الشركة."
+  },
+  "companySettingsRetry": {
+    "sv": "Försök igen",
+    "en": "Try again",
+    "ar": "حاول مرة أخرى"
+  },
+  "companySettingsCarsLabel": {
+    "sv": "Bilar",
+    "en": "Cars",
+    "ar": "السيارات"
+  },
+  "companySettingsNoCars": {
+    "sv": "Inga bilar",
+    "en": "No cars",
+    "ar": "لا توجد سيارات"
+  },
+  "companySettingsAddCar": {
+    "sv": "Lägg till bil",
+    "en": "Add a car",
+    "ar": "إضافة سيارة"
+  },
+  "companySettingsDrivingBy": {
+    "sv": "Kör: {name}",
+    "en": "Driving: {name}",
+    "ar": "السائق: {name}",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsInvitedCount": {
+    "sv": "{count} inbjuden",
+    "en": "{count, plural, =1{1 invited} other{{count} invited}}",
+    "ar": "{count, plural, zero{لا مدعوين} one{مدعو واحد} two{مدعوان} few{{count} مدعوين} many{{count} مدعوًا} other{{count} مدعو}}",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "companySettingsNoDriver": {
+    "sv": "Ingen förare",
+    "en": "No driver",
+    "ar": "لا يوجد سائق"
+  },
+  "companySettingsDriversCount": {
+    "sv": "{count} förare",
+    "en": "{count, plural, =1{1 driver} other{{count} drivers}}",
+    "ar": "{count, plural, zero{لا سائقين} one{سائق واحد} two{سائقان} few{{count} سائقين} many{{count} سائقًا} other{{count} سائق}}",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "companySettingsYourCompany": {
+    "sv": "Ditt företag",
+    "en": "Your company",
+    "ar": "شركتك"
+  },
+  "companySettingsInviteDriverTitle": {
+    "sv": "Bjud in förare till {plate}",
+    "en": "Invite a driver to {plate}",
+    "ar": "دعوة سائق إلى {plate}",
+    "placeholders": {
+      "plate": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsInviteDriverBody": {
+    "sv": "Föraren får ett mejl, väljer lösenord och loggar in i appen. Då kopplas telefonen till bilen.",
+    "en": "The driver gets an email, chooses a password and logs in to the app. The phone is then connected to the car.",
+    "ar": "يصل السائق بريد إلكتروني، ويختار كلمة مرور ويسجّل الدخول إلى التطبيق. عندها يُربط الهاتف بالسيارة."
+  },
+  "companySettingsDriverEmail": {
+    "sv": "Förarens e-post",
+    "en": "Driver email",
+    "ar": "البريد الإلكتروني للسائق"
+  },
+  "companySettingsDriverEmailError": {
+    "sv": "Skriv förarens e-post, t.ex. namn@exempel.se",
+    "en": "Enter the driver email, e.g. name@example.com",
+    "ar": "اكتب البريد الإلكتروني للسائق، مثلاً name@example.com"
+  },
+  "companySettingsDriverNameOptional": {
+    "sv": "Förarens namn (frivilligt)",
+    "en": "Driver name (optional)",
+    "ar": "اسم السائق (اختياري)"
+  },
+  "companySettingsSendInvite": {
+    "sv": "Skicka inbjudan",
+    "en": "Send invitation",
+    "ar": "إرسال الدعوة"
+  },
+  "companySettingsPlateLabel": {
+    "sv": "Registreringsnummer",
+    "en": "Registration number",
+    "ar": "رقم اللوحة"
+  },
+  "companySettingsCountyWhereCarDrives": {
+    "sv": "Län där bilen kör",
+    "en": "County where the car drives",
+    "ar": "المقاطعة التي تعمل فيها السيارة"
+  },
+  "companySettingsAdd": {
+    "sv": "Lägg till",
+    "en": "Add",
+    "ar": "إضافة"
+  },
+  "companySettingsTrialUntil": {
+    "sv": "Provet gäller till {date}.",
+    "en": "The trial is valid until {date}.",
+    "ar": "الفترة التجريبية سارية حتى {date}.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "companySettingsTrialAllIncluded": {
+    "sv": "Allt i appen ingår under provet.",
+    "en": "Everything in the app is included during the trial.",
+    "ar": "كل ما في التطبيق متاح خلال الفترة التجريبية."
+  },
+  "companySettingsTrialLockedNotIncluded": {
+    "sv": "Det som har ett lås i appen ingår inte i provet.",
+    "en": "Anything with a lock in the app is not part of the trial.",
+    "ar": "ما عليه قفل في التطبيق غير مشمول في الفترة التجريبية."
+  }
+}

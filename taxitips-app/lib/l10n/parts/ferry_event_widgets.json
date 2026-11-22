@@ -1,0 +1,482 @@
+{
+  "ferryEventFerry": {
+    "sv": "Färja",
+    "en": "Ferry",
+    "ar": "عبّارة"
+  },
+  "ferryEventSizeLarge": {
+    "sv": "Stor färja",
+    "en": "Large ferry",
+    "ar": "عبّارة كبيرة"
+  },
+  "ferryEventSizeMedium": {
+    "sv": "Medelstor färja",
+    "en": "Medium-sized ferry",
+    "ar": "عبّارة متوسطة"
+  },
+  "ferryEventSizeSmall": {
+    "sv": "Mindre färja",
+    "en": "Smaller ferry",
+    "ar": "عبّارة صغيرة"
+  },
+  "ferryEventAtQuay": {
+    "sv": "Vid kaj",
+    "en": "At the quay",
+    "ar": "عند الرصيف"
+  },
+  "ferryEventShouldHaveDocked": {
+    "sv": "Skulle lägga till {clock} enligt tidtabell",
+    "en": "Was due to dock {clock} according to timetable",
+    "ar": "كان من المقرر أن ترسو {clock} حسب الجدول",
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventAtQuaySince": {
+    "sv": "Vid kaj sedan {clock}",
+    "en": "At the quay since {clock}",
+    "ar": "عند الرصيف منذ {clock}",
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventApproaching": {
+    "sv": "På väg in",
+    "en": "Coming in",
+    "ar": "في الطريق إلى الميناء"
+  },
+  "ferryEventDockingNow": {
+    "sv": "Lägger till nu",
+    "en": "Docking now",
+    "ar": "ترسو الآن"
+  },
+  "ferryEventDocksAt": {
+    "sv": "Lägger till {clock} · {relative}",
+    "en": "Docks {clock} · {relative}",
+    "ar": "ترسو {clock} · {relative}",
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      },
+      "relative": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventFrom": {
+    "sv": "Från {place}",
+    "en": "From {place}",
+    "ar": "من {place}",
+    "placeholders": {
+      "place": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventOriginDeparts": {
+    "sv": "{from}, avgår {clock}",
+    "en": "{from}, departs {clock}",
+    "ar": "{from}، تغادر {clock}",
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventOriginDeparted": {
+    "sv": "{from}, avgick {clock}",
+    "en": "{from}, departed {clock}",
+    "ar": "{from}، غادرت {clock}",
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventPickupNow": {
+    "sv": "Folk kommer ut nu, till {clock}",
+    "en": "People are coming out now, until {clock}",
+    "ar": "الناس يخرجون الآن، حتى {clock}",
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventPickupRange": {
+    "sv": "Folk kommer ut {range}",
+    "en": "People come out {range}",
+    "ar": "الناس يخرجون {range}",
+    "placeholders": {
+      "range": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventPickupValueNow": {
+    "sv": "nu, till {clock}",
+    "en": "now, until {clock}",
+    "ar": "الآن، حتى {clock}",
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventLate": {
+    "sv": "{time} sen",
+    "en": "{time} late",
+    "ar": "متأخرة {time}",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventEarly": {
+    "sv": "{time} tidig",
+    "en": "{time} early",
+    "ar": "مبكرة {time}",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventOnTime": {
+    "sv": "I tid",
+    "en": "On time",
+    "ar": "في الموعد"
+  },
+  "ferryEventByTimetable": {
+    "sv": "Enligt tidtabell",
+    "en": "According to timetable",
+    "ar": "حسب الجدول"
+  },
+  "ferryEventConfirmed": {
+    "sv": "Bekräftad",
+    "en": "Confirmed",
+    "ar": "مؤكدة"
+  },
+  "ferryEventConfirmedBerthed": {
+    "sv": "Bekräftad – fartyget ligger vid kaj",
+    "en": "Confirmed – the ship is at the quay",
+    "ar": "مؤكدة – السفينة عند الرصيف"
+  },
+  "ferryEventConfirmedApproaching": {
+    "sv": "Bekräftad – fartyget är på väg in",
+    "en": "Confirmed – the ship is coming in",
+    "ar": "مؤكدة – السفينة في الطريق إلى الميناء"
+  },
+  "ferryEventSameOne": {
+    "sv": "1 färja till anländer",
+    "en": "1 more ferry arriving",
+    "ar": "عبّارة أخرى تصل"
+  },
+  "ferryEventSameOneAt": {
+    "sv": "1 färja till anländer {at}",
+    "en": "1 more ferry arriving {at}",
+    "ar": "عبّارة أخرى تصل {at}",
+    "placeholders": {
+      "at": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventSameMany": {
+    "sv": "{count, plural, other{{count} färjor till anländer}}",
+    "en": "{count, plural, other{{count} more ferries arriving}}",
+    "ar": "{count, plural, zero{لا عبّارات أخرى تصل} one{عبّارة أخرى تصل} two{عبّارتان أخريان تصلان} few{{count} عبّارات أخرى تصل} many{{count} عبّارة أخرى تصل} other{{count} عبّارة أخرى تصل}}",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "ferryEventSameManyFirst": {
+    "sv": "{count, plural, other{{count} färjor till anländer, första {at}}}",
+    "en": "{count, plural, other{{count} more ferries arriving, first {at}}}",
+    "ar": "{count, plural, zero{لا عبّارات أخرى تصل} one{عبّارة أخرى تصل {at}} two{عبّارتان أخريان تصلان، الأولى {at}} few{{count} عبّارات أخرى تصل، الأولى {at}} many{{count} عبّارة أخرى تصل، الأولى {at}} other{{count} عبّارة أخرى تصل، الأولى {at}}}",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "at": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventDistance": {
+    "sv": "{distance} · ca {time} med bil",
+    "en": "{distance} · about {time} by car",
+    "ar": "{distance} · نحو {time} بالسيارة",
+    "placeholders": {
+      "distance": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventReachNoWindow": {
+    "sv": "Framme ca {clock}",
+    "en": "Arrive about {clock}",
+    "ar": "الوصول نحو {clock}",
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventReachBefore": {
+    "sv": "Framme ca {clock} – före folk kommer ut",
+    "en": "Arrive about {clock} – before people come out",
+    "ar": "الوصول نحو {clock} – قبل خروج الناس",
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventReachDuring": {
+    "sv": "Framme ca {clock} – medan folk kommer ut",
+    "en": "Arrive about {clock} – while people come out",
+    "ar": "الوصول نحو {clock} – أثناء خروج الناس",
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventReachAfter": {
+    "sv": "Framme ca {clock} – efter att de flesta gått",
+    "en": "Arrive about {clock} – after most have left",
+    "ar": "الوصول نحو {clock} – بعد أن غادر معظمهم",
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventOngoing": {
+    "sv": "Pågår nu",
+    "en": "Happening now",
+    "ar": "جارية الآن"
+  },
+  "ferryEventToday": {
+    "sv": "i dag",
+    "en": "today",
+    "ar": "اليوم"
+  },
+  "ferryEventTomorrow": {
+    "sv": "i morgon",
+    "en": "tomorrow",
+    "ar": "غداً"
+  },
+  "ferryEventTimeNotSet": {
+    "sv": "Tid ej satt",
+    "en": "Time not set",
+    "ar": "الوقت غير محدد"
+  },
+  "ferryEventAtTime": {
+    "sv": "Kl {time}",
+    "en": "At {time}",
+    "ar": "الساعة {time}",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventVenueCapacity": {
+    "sv": "Arena för {capacity}",
+    "en": "Venue capacity {capacity}",
+    "ar": "سعة الملعب {capacity}",
+    "placeholders": {
+      "capacity": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventEndsAbout": {
+    "sv": "Slutar ca {time}",
+    "en": "Ends about {time}",
+    "ar": "تنتهي نحو {time}",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventPeopleLeave": {
+    "sv": "Folk går till {time}",
+    "en": "People leave until {time}",
+    "ar": "الناس يغادرون حتى {time}",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventSectionWhen": {
+    "sv": "När",
+    "en": "When",
+    "ar": "متى"
+  },
+  "ferryEventSectionWhere": {
+    "sv": "Var",
+    "en": "Where",
+    "ar": "أين"
+  },
+  "ferryEventSectionWho": {
+    "sv": "Vilka kliver av",
+    "en": "Who gets off",
+    "ar": "من ينزل"
+  },
+  "ferryEventSectionContext": {
+    "sv": "Sammanhang",
+    "en": "Context",
+    "ar": "السياق"
+  },
+  "ferryEventRowArrival": {
+    "sv": "Ankomst",
+    "en": "Arrival",
+    "ar": "الوصول"
+  },
+  "ferryEventRowPeopleCome": {
+    "sv": "Folk kommer ut",
+    "en": "People come out",
+    "ar": "خروج الناس"
+  },
+  "ferryEventRowTimetable": {
+    "sv": "Tidtabell",
+    "en": "Timetable",
+    "ar": "الجدول"
+  },
+  "ferryEventRowDelay": {
+    "sv": "Försening",
+    "en": "Delay",
+    "ar": "التأخير"
+  },
+  "ferryEventRowCertainty": {
+    "sv": "Hur säkert",
+    "en": "How certain",
+    "ar": "مدى التأكد"
+  },
+  "ferryEventRowQuay": {
+    "sv": "Kaj",
+    "en": "Quay",
+    "ar": "الرصيف"
+  },
+  "ferryEventRowDistance": {
+    "sv": "Avstånd",
+    "en": "Distance",
+    "ar": "المسافة"
+  },
+  "ferryEventRowReach": {
+    "sv": "Hinner du",
+    "en": "Will you make it",
+    "ar": "هل ستصل في الوقت"
+  },
+  "ferryEventRowKind": {
+    "sv": "Sort",
+    "en": "Type",
+    "ar": "النوع"
+  },
+  "ferryEventRowSize": {
+    "sv": "Storlek",
+    "en": "Size",
+    "ar": "الحجم"
+  },
+  "ferryEventRowComingFrom": {
+    "sv": "Kommer från",
+    "en": "Coming from",
+    "ar": "قادمة من"
+  },
+  "ferryEventRowOperator": {
+    "sv": "Rederi",
+    "en": "Shipping line",
+    "ar": "شركة الشحن"
+  },
+  "ferryEventRowRoute": {
+    "sv": "Linje",
+    "en": "Route",
+    "ar": "الخط"
+  },
+  "ferryEventRowService": {
+    "sv": "Trafik",
+    "en": "Service",
+    "ar": "نوع الخدمة"
+  },
+  "ferryEventInternational": {
+    "sv": "Utrikes",
+    "en": "International",
+    "ar": "دولي"
+  },
+  "ferryEventRowSameQuay": {
+    "sv": "Samma kaj ±30 min",
+    "en": "Same quay ±30 min",
+    "ar": "نفس الرصيف ±30 دقيقة"
+  },
+  "ferryEventRowAtQuay": {
+    "sv": "Vid kajen",
+    "en": "At the quay",
+    "ar": "عند الرصيف"
+  },
+  "ferryEventRowEndsAbout": {
+    "sv": "Slutar ca",
+    "en": "Ends about",
+    "ar": "تنتهي نحو"
+  },
+  "ferryEventUnknown": {
+    "sv": "okänt",
+    "en": "unknown",
+    "ar": "غير معروف"
+  },
+  "ferryEventRowPeopleLeaving": {
+    "sv": "Folk på väg ut",
+    "en": "People leaving",
+    "ar": "خروج الناس"
+  },
+  "ferryEventRowStatus": {
+    "sv": "Status",
+    "en": "Status",
+    "ar": "الحالة"
+  },
+  "ferryEventVenueCapacityNote": {
+    "sv": "arena för {capacity} (kapacitet, inte publik)",
+    "en": "venue capacity {capacity} (capacity, not crowd)",
+    "ar": "سعة الملعب {capacity} (السعة وليس عدد الحضور)",
+    "placeholders": {
+      "capacity": {
+        "type": "String"
+      }
+    }
+  },
+  "ferryEventEndEstimated": {
+    "sv": "Sluttiden är uppskattad, inte angiven av arrangören.",
+    "en": "The end time is an estimate, not given by the organiser.",
+    "ar": "وقت الانتهاء تقديري وليس من المنظّم."
+  },
+  "ferryEventFollowing": {
+    "sv": "Följer",
+    "en": "Following",
+    "ar": "تتابع"
+  },
+  "ferryEventFollow": {
+    "sv": "Följ",
+    "en": "Follow",
+    "ar": "تابع"
+  }
+}

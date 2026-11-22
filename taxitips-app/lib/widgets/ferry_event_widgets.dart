@@ -2,8 +2,9 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../navigation.dart';
-import '../severity_labels.dart' show humanMinutes;
+import '../severity_labels.dart' show humanMinutes, monthShortName;
 import '../signal_kinds.dart';
 import '../theme.dart';
 import 'signal_card.dart' show FollowButton;
@@ -12,59 +13,22 @@ import 'signal_card.dart' show FollowButton;
 /// kartan och detaljblad. Datan kommer från /api/ferries och /api/events -- se
 /// maritime/approach.py och events/api.py i backenden.
 
-const _weekdays = ['mån', 'tis', 'ons', 'tor', 'fre', 'lör', 'sön'];
-const _months = [
-  'jan',
-  'feb',
-  'mar',
-  'apr',
-  'maj',
-  'jun',
-  'jul',
-  'aug',
-  'sep',
-  'okt',
-  'nov',
-  'dec',
-];
-
-const _weekdaysLong = [
-  'måndag',
-  'tisdag',
-  'onsdag',
-  'torsdag',
-  'fredag',
-  'lördag',
-  'söndag',
-];
-const _monthsLong = [
-  'januari',
-  'februari',
-  'mars',
-  'april',
-  'maj',
-  'juni',
-  'juli',
-  'augusti',
-  'september',
-  'oktober',
-  'november',
-  'december',
-];
-
 String _cap(String s) =>
     s.isEmpty ? s : '${s[0].toUpperCase()}${s.substring(1)}';
 
-String weekdayShort(DateTime d) => _weekdays[d.weekday - 1];
-String monthShort(DateTime d) => _months[d.month - 1];
-String monthLong(DateTime d) => _monthsLong[d.month - 1];
+String _weekdayLongName(DateTime d) =>
+    tr.signalKindsWeekdayLong('d${d.weekday}');
+
+String weekdayShort(DateTime d) => tr.signalKindsWeekdayShort('d${d.weekday}');
+String monthShort(DateTime d) => monthShortName(d.month);
+String monthLong(DateTime d) => tr.signalKindsMonthLong('m${d.month}');
 
 /// "Lördag 20 september".
 String dayHeading(DateTime d) =>
-    '${_cap(_weekdaysLong[d.weekday - 1])} ${d.day} ${_monthsLong[d.month - 1]}';
+    '${_cap(_weekdayLongName(d))} ${d.day} ${monthLong(d)}';
 
 /// "20 sep".
-String shortDate(DateTime d) => '${d.day} ${_months[d.month - 1]}';
+String shortDate(DateTime d) => '${d.day} ${monthShort(d)}';
 
 Color ferryColor(String? status) => switch (status) {
   'approaching' => const Color(0xFFE8590C),
@@ -79,8 +43,11 @@ String? _clock(String? iso) {
   return '${t.hour.toString().padLeft(2, '0')}:${t.minute.toString().padLeft(2, '0')}';
 }
 
+/// Decimalkomma på svenska, decimalpunkt annars.
 String _km(num value) => value < 10
-    ? value.toStringAsFixed(1).replaceAll('.', ',')
+    ? (currentLanguage == 'sv'
+          ? value.toStringAsFixed(1).replaceAll('.', ',')
+          : value.toStringAsFixed(1))
     : value.round().toString();
 
 // --- Färjor ---------------------------------------------------------------
@@ -130,7 +97,7 @@ String ferryName(Map<String, dynamic> f) {
   ]) {
     if (candidate.isNotEmpty) return candidate;
   }
-  return 'Färja';
+  return tr.ferryEventFerry;
 }
 
 /// Kajen där föraren ska stå.
@@ -150,11 +117,13 @@ String ferrySize(Map<String, dynamic> f) {
   final length =
       ((f['vessel'] as Map?)?['lengthM'] as num?) ?? (f['lengthM'] as num?);
   // Samma band som serverns tips (maritime/tips.py SIZE_BANDS).
-  if (length != null && length >= 170) return 'Stor färja';
-  if (length != null && length >= 130) return 'Medelstor färja';
-  if (length != null && length >= 100) return 'Mindre färja';
+  if (length != null && length >= 170) return tr.ferryEventSizeLarge;
+  if (length != null && length >= 130) return tr.ferryEventSizeMedium;
+  if (length != null && length >= 100) return tr.ferryEventSizeSmall;
   final kind = (f['kindLabel'] ?? '').toString();
-  if (kind.isEmpty || kind == 'Stort passagerarfartyg') return 'Färja';
+  if (kind.isEmpty || kind == 'Stort passagerarfartyg') {
+    return tr.ferryEventFerry;
+  }
   return kind;
 }
 
@@ -196,23 +165,26 @@ String ferryEtaText(Map<String, dynamic> f, {DateTime? now}) {
   final iso = (f['expectedAt'] ?? f['eta'])?.toString();
   final at = _time(iso);
   if (ferryArrived(f)) {
-    if (at == null) return 'Vid kaj';
+    if (at == null) return tr.ferryEventAtQuay;
     return ferryConfirmed(f) == false
-        ? 'Skulle lägga till ${_clock(iso)} enligt tidtabell'
-        : 'Vid kaj sedan ${_clock(iso)}';
+        ? tr.ferryEventShouldHaveDocked(_clock(iso) ?? '')
+        : tr.ferryEventAtQuaySince(_clock(iso) ?? '');
   }
-  if (at == null) return 'På väg in';
+  if (at == null) return tr.ferryEventApproaching;
   final minutes =
       (f['etaMinutes'] as num?)?.toInt() ??
       at.difference(now ?? DateTime.now()).inMinutes;
-  if (minutes <= 0) return 'Lägger till nu';
-  return 'Lägger till ${_clock(iso)} · om ${humanMinutes(minutes)}';
+  if (minutes <= 0) return tr.ferryEventDockingNow;
+  return tr.ferryEventDocksAt(
+    _clock(iso) ?? '',
+    tr.severityLabelsIn(humanMinutes(minutes)),
+  );
 }
 
 /// "Från Visby" när det är känt.
 String ferryFromText(Map<String, dynamic> f) {
   final from = (f['from'] ?? '').toString().trim();
-  return from.isEmpty ? '' : 'Från $from';
+  return from.isEmpty ? '' : tr.ferryEventFrom(from);
 }
 
 /// "Visby, avgick 11:15" (tidtabellens avgång), annars bara orten.
@@ -222,8 +194,10 @@ String ferryOriginText(Map<String, dynamic> f, {DateTime? now}) {
   final iso = f['departedAt']?.toString();
   final at = _time(iso);
   if (at == null) return from;
-  final verb = at.isAfter(now ?? DateTime.now()) ? 'avgår' : 'avgick';
-  return '$from, $verb ${_clock(iso)}';
+  final clock = _clock(iso) ?? '';
+  return at.isAfter(now ?? DateTime.now())
+      ? tr.ferryEventOriginDeparts(from, clock)
+      : tr.ferryEventOriginDeparted(from, clock);
 }
 
 /// "14:10–14:45": när resenärerna kommer ut, om det är känt.
@@ -241,9 +215,24 @@ String ferryPickupLine(Map<String, dynamic> f, {DateTime? now}) {
   final t = now ?? DateTime.now();
   if (!t.isBefore(end)) return '';
   if (!t.isBefore(start)) {
-    return 'Folk kommer ut nu, till ${_clock(f['pickupUntil'].toString())}';
+    return tr.ferryEventPickupNow(_clock(f['pickupUntil'].toString()) ?? '');
   }
-  return 'Folk kommer ut ${ferryPickupText(f)}';
+  return tr.ferryEventPickupRange(ferryPickupText(f));
+}
+
+/// Raden i bladet, utan "Folk kommer ut": "nu, till 15:20" eller "14:45–15:20".
+String ferryPickupValue(Map<String, dynamic> f, {DateTime? now}) {
+  final start = _time(f['pickupFrom']);
+  final end = _time(f['pickupUntil']);
+  if (start == null || end == null) return '';
+  final t = now ?? DateTime.now();
+  if (!t.isBefore(end)) return '';
+  if (!t.isBefore(start)) {
+    return tr.ferryEventPickupValueNow(
+      _clock(f['pickupUntil'].toString()) ?? '',
+    );
+  }
+  return ferryPickupText(f);
 }
 
 /// "12 min sen", "5 min tidig", "I tid". Tom när förseningen inte är känd --
@@ -251,20 +240,20 @@ String ferryPickupLine(Map<String, dynamic> f, {DateTime? now}) {
 String ferryDelayText(Map<String, dynamic> f) {
   final delay = (f['delayMinutes'] as num?)?.round();
   if (delay == null) return '';
-  if (delay >= 3) return '${humanMinutes(delay)} sen';
-  if (delay <= -3) return '${humanMinutes(-delay)} tidig';
-  return 'I tid';
+  if (delay >= 3) return tr.ferryEventLate(humanMinutes(delay));
+  if (delay <= -3) return tr.ferryEventEarly(humanMinutes(-delay));
+  return tr.ferryEventOnTime;
 }
 
 /// Hur säker tiden är, utan källnamn. [short]: för kortets chip.
 String ferryConfidenceText(Map<String, dynamic> f, {bool short = false}) {
   final confirmed = ferryConfirmed(f);
   if (confirmed == null) return '';
-  if (!confirmed) return 'Enligt tidtabell';
-  if (short) return 'Bekräftad';
+  if (!confirmed) return tr.ferryEventByTimetable;
+  if (short) return tr.ferryEventConfirmed;
   return ferryArrived(f)
-      ? 'Bekräftad – fartyget ligger vid kaj'
-      : 'Bekräftad – fartyget är på väg in';
+      ? tr.ferryEventConfirmedBerthed
+      : tr.ferryEventConfirmedApproaching;
 }
 
 /// Sorten och vad den betyder för den som hämtar: "Stor färja – många kliver
@@ -285,11 +274,11 @@ String ferrySameTerminalText(Map<String, dynamic> f) {
   if (count <= 0) return '';
   final at = _clock(soon['nextAt']?.toString());
   if (count == 1) {
-    return at == null ? '1 färja till anländer' : '1 färja till anländer $at';
+    return at == null ? tr.ferryEventSameOne : tr.ferryEventSameOneAt(at);
   }
   return at == null
-      ? '$count färjor till anländer'
-      : '$count färjor till anländer, första $at';
+      ? tr.ferryEventSameMany(count)
+      : tr.ferryEventSameManyFirst(count, at);
 }
 
 // Körtiden räknas grovt ur avståndet fågelvägen: vägen är sällan rak (x1,3)
@@ -304,7 +293,10 @@ int ferryDriveMinutes(num km) =>
 /// "12 km · ca 21 min med bil".
 String ferryDistanceText(num? km) {
   if (km == null) return '';
-  return '${distanceText(km)} · ca ${humanMinutes(ferryDriveMinutes(km))} med bil';
+  return tr.ferryEventDistance(
+    distanceText(km),
+    humanMinutes(ferryDriveMinutes(km)),
+  );
 }
 
 /// Hinner föraren dit? Jämför ungefärlig framkomst med när folk kommer ut.
@@ -316,15 +308,15 @@ String ferryReachText(Map<String, dynamic> f, num? km, {DateTime? now}) {
       '${there.hour.toString().padLeft(2, '0')}:${there.minute.toString().padLeft(2, '0')}';
   final start = _time(f['pickupFrom']);
   final end = _time(f['pickupUntil']);
-  if (start == null || end == null) return 'Framme ca $clock';
-  if (!there.isAfter(start)) return 'Framme ca $clock – före folk kommer ut';
-  if (there.isBefore(end)) return 'Framme ca $clock – medan folk kommer ut';
-  return 'Framme ca $clock – efter att de flesta gått';
+  if (start == null || end == null) return tr.ferryEventReachNoWindow(clock);
+  if (!there.isAfter(start)) return tr.ferryEventReachBefore(clock);
+  if (there.isBefore(end)) return tr.ferryEventReachDuring(clock);
+  return tr.ferryEventReachAfter(clock);
 }
 
 /// "lör 20 sep · 19:30", "i dag · 19:30", "Pågår nu".
 String eventWhenText(Map<String, dynamic> e) {
-  if (e['ongoing'] == true) return 'Pågår nu';
+  if (e['ongoing'] == true) return tr.ferryEventOngoing;
   final date = DateTime.tryParse(e['startDate']?.toString() ?? '');
   final time = e['timeKnown'] == false ? null : e['startLocal']?.toString();
   if (date == null) return time ?? '';
@@ -335,10 +327,11 @@ String eventWhenText(Map<String, dynamic> e) {
     date.day,
   ).difference(DateTime(today.year, today.month, today.day)).inDays;
   final day = switch (days) {
-    0 => 'i dag',
-    1 => 'i morgon',
+    0 => tr.ferryEventToday,
+    1 => tr.ferryEventTomorrow,
     _ =>
-      '${_weekdays[date.weekday - 1]} ${date.day} ${_months[date.month - 1]}',
+      '${currentLanguage == 'sv' ? weekdayShort(date) : _cap(weekdayShort(date))} '
+          '${date.day} ${monthShort(date)}',
   };
   return time == null ? day : '$day · $time';
 }
@@ -442,7 +435,9 @@ class _CardShell extends StatelessWidget {
           decoration: accent == null
               ? null
               : BoxDecoration(
-                  border: Border(left: BorderSide(color: accent!, width: 4)),
+                  border: BorderDirectional(
+                    start: BorderSide(color: accent!, width: 4),
+                  ),
                 ),
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
           child: child,
@@ -587,7 +582,7 @@ class FerryCard extends StatelessWidget {
                 if (origin.isNotEmpty) ...[
                   const SizedBox(height: 6),
                   Text(
-                    'Från $origin',
+                    tr.ferryEventFrom(origin),
                     style: TextStyle(
                       fontSize: 13.5,
                       color: Colors.grey.shade800,
@@ -627,10 +622,10 @@ class EventCard extends StatelessWidget {
 
   String get _whenText {
     if (!compactTime) return eventWhenText(event);
-    if (event['ongoing'] == true) return 'Pågår nu';
-    if (event['timeKnown'] == false) return 'Tid ej satt';
+    if (event['ongoing'] == true) return tr.ferryEventOngoing;
+    if (event['timeKnown'] == false) return tr.ferryEventTimeNotSet;
     final start = event['startLocal']?.toString();
-    return start == null ? '' : 'Kl $start';
+    return start == null ? '' : tr.ferryEventAtTime(start);
   }
 
   Widget? _dateTile() {
@@ -690,7 +685,7 @@ class EventCard extends StatelessWidget {
     final attendance = (event['attendanceText']?.toString() ?? '').isNotEmpty
         ? event['attendanceText'].toString()
         : (capacity != null && capacity > 0
-              ? 'Arena för ${_thousands(capacity)}'
+              ? tr.ferryEventVenueCapacity(_thousands(capacity))
               : '');
     final distance = event['distanceKm'] as num?;
     final status = event['statusLabel']?.toString() ?? '';
@@ -706,7 +701,7 @@ class EventCard extends StatelessWidget {
           children: [
             Expanded(
               child: Align(
-                alignment: Alignment.centerLeft,
+                alignment: AlignmentDirectional.centerStart,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
@@ -727,7 +722,7 @@ class EventCard extends StatelessWidget {
                                           ? event['sportLabel']
                                           : event['categoryLabel'])
                                       ?.toString() ??
-                                  'Evenemang')
+                                  tr.severityLabelsModeEvents)
                               .toUpperCase(),
                           style: const TextStyle(
                             fontSize: 10.5,
@@ -747,7 +742,7 @@ class EventCard extends StatelessWidget {
             const SizedBox(width: 8),
             if (distance != null)
               Text(
-                '${_km(distance)} km',
+                tr.signalKindsDistanceKm(_km(distance)),
                 style: const TextStyle(
                   fontSize: 13.5,
                   fontWeight: FontWeight.w700,
@@ -815,11 +810,12 @@ class EventCard extends StatelessWidget {
             spacing: 6,
             runSpacing: 6,
             children: [
-              if (end != null) _InfoChip(Icons.logout, 'Slutar ca $end'),
+              if (end != null)
+                _InfoChip(Icons.logout, tr.ferryEventEndsAbout(end)),
               if (leave != null)
                 _InfoChip(
                   Icons.local_taxi,
-                  'Folk går till $leave',
+                  tr.ferryEventPeopleLeave(leave),
                   strong: true,
                 ),
               if (attendance.isNotEmpty)
@@ -1013,7 +1009,7 @@ Future<void> showFerrySheet(
   DateTime? now,
 }) {
   final port = ferryPort(f);
-  final pickupLine = ferryPickupLine(f, now: now);
+  final pickupValue = ferryPickupValue(f, now: now);
   final scheduled = _clock(f['scheduledAt']?.toString());
   final size = ferrySize(f);
   final kind = (f['kindLabel'] ?? '').toString().trim();
@@ -1040,33 +1036,46 @@ Future<void> showFerrySheet(
         style: TextStyle(fontSize: 15, color: Colors.grey.shade800),
       ),
       const SizedBox(height: 12),
-      ActionRow(lat: harborLat, lon: harborLon, driveLabel: 'Kör dit'),
-      _SheetSection('När', [
-        _DetailRow('Ankomst', ferryEtaText(f, now: now)),
+      ActionRow(
+        lat: harborLat,
+        lon: harborLon,
+        driveLabel: tr.tipSheetDriveThere,
+      ),
+      _SheetSection(tr.ferryEventSectionWhen, [
+        _DetailRow(tr.ferryEventRowArrival, ferryEtaText(f, now: now)),
+        _DetailRow(tr.ferryEventRowPeopleCome, pickupValue),
+        _DetailRow(tr.ferryEventRowTimetable, scheduled ?? ''),
+        _DetailRow(tr.ferryEventRowDelay, ferryDelayText(f)),
+        _DetailRow(tr.ferryEventRowCertainty, ferryConfidenceText(f)),
+      ]),
+      _SheetSection(tr.ferryEventSectionWhere, [
+        _DetailRow(tr.ferryEventRowQuay, port),
+        _DetailRow(tr.ferryEventRowDistance, ferryDistanceText(distanceKm)),
         _DetailRow(
-          'Folk kommer ut',
-          pickupLine.replaceFirst('Folk kommer ut ', ''),
+          tr.ferryEventRowReach,
+          ferryReachText(f, distanceKm, now: now),
         ),
-        _DetailRow('Tidtabell', scheduled ?? ''),
-        _DetailRow('Försening', ferryDelayText(f)),
-        _DetailRow('Hur säkert', ferryConfidenceText(f)),
       ]),
-      _SheetSection('Var', [
-        _DetailRow('Kaj', port),
-        _DetailRow('Avstånd', ferryDistanceText(distanceKm)),
-        _DetailRow('Hinner du', ferryReachText(f, distanceKm, now: now)),
+      _SheetSection(tr.ferryEventSectionWho, [
+        _DetailRow(tr.ferryEventRowKind, ferryKindDetailText(f)),
+        _DetailRow(tr.ferryEventRowSize, size == kind ? '' : size),
+        _DetailRow(tr.ferryEventRowComingFrom, ferryOriginText(f, now: now)),
+        _DetailRow(
+          tr.ferryEventRowOperator,
+          (f['operator'] ?? '').toString().trim(),
+        ),
+        _DetailRow(tr.ferryEventRowRoute, route == ferryName(f) ? '' : route),
+        _DetailRow(
+          tr.ferryEventRowService,
+          f['international'] == true ? tr.ferryEventInternational : '',
+        ),
       ]),
-      _SheetSection('Vilka kliver av', [
-        _DetailRow('Sort', ferryKindDetailText(f)),
-        _DetailRow('Storlek', size == kind ? '' : size),
-        _DetailRow('Kommer från', ferryOriginText(f, now: now)),
-        _DetailRow('Rederi', (f['operator'] ?? '').toString().trim()),
-        _DetailRow('Linje', route == ferryName(f) ? '' : route),
-        _DetailRow('Trafik', f['international'] == true ? 'Utrikes' : ''),
-      ]),
-      _SheetSection('Sammanhang', [
-        _DetailRow('Samma kaj ±30 min', ferrySameTerminalText(f)),
-        _DetailRow('Vid kajen', (f['terminalNote'] ?? '').toString().trim()),
+      _SheetSection(tr.ferryEventSectionContext, [
+        _DetailRow(tr.ferryEventRowSameQuay, ferrySameTerminalText(f)),
+        _DetailRow(
+          tr.ferryEventRowAtQuay,
+          (f['terminalNote'] ?? '').toString().trim(),
+        ),
       ]),
     ]),
   );
@@ -1126,14 +1135,14 @@ Future<void> showEventSheet(
       ActionRow(
         lat: lat,
         lon: lon,
-        driveLabel: 'Kör dit',
+        driveLabel: tr.tipSheetDriveThere,
         followed: followed,
         onToggleFollow: onToggleFollow,
       ),
       const SizedBox(height: 12),
-      _DetailRow('När', eventWhenText(e)),
+      _DetailRow(tr.ferryEventSectionWhen, eventWhenText(e)),
       _DetailRow(
-        'Var',
+        tr.ferryEventSectionWhere,
         [
           e['venueName'],
           e['address'],
@@ -1141,33 +1150,35 @@ Future<void> showEventSheet(
           e['countyName'],
         ].whereType<String>().where((s) => s.isNotEmpty).toSet().join(', '),
       ),
-      _DetailRow('Slutar ca', end ?? 'okänt'),
+      _DetailRow(tr.ferryEventRowEndsAbout, end ?? tr.ferryEventUnknown),
       _DetailRow(
-        'Folk på väg ut',
+        tr.ferryEventRowPeopleLeaving,
         leave == null || end == null ? '' : '$end–$leave',
       ),
       _DetailRow(
-        'Storlek',
+        tr.ferryEventRowSize,
         [
           e['attendanceText'],
           if ((e['venueCapacity'] as num?) != null)
-            'arena för ${_thousands((e['venueCapacity'] as num).toInt())} (kapacitet, inte publik)',
+            tr.ferryEventVenueCapacityNote(
+              _thousands((e['venueCapacity'] as num).toInt()),
+            ),
         ].whereType<String>().where((s) => s.isNotEmpty).join(' · '),
       ),
       _DetailRow(
-        'Avstånd',
-        e['distanceKm'] == null ? '' : '${_km(e['distanceKm'] as num)} km',
+        tr.ferryEventRowDistance,
+        e['distanceKm'] == null
+            ? ''
+            : tr.signalKindsDistanceKm(_km(e['distanceKm'] as num)),
       ),
       _DetailRow(
-        'Status',
+        tr.ferryEventRowStatus,
         e['happening'] == false ? (e['statusLabel']?.toString() ?? '') : '',
       ),
       if (endBasis != null && endBasis != 'source') ...[
         const SizedBox(height: 6),
         Text(
-          endNote.isNotEmpty
-              ? endNote
-              : 'Sluttiden är uppskattad, inte angiven av arrangören.',
+          endNote.isNotEmpty ? endNote : tr.ferryEventEndEstimated,
           style: TextStyle(
             fontSize: 12.5,
             height: 1.4,
@@ -1179,8 +1190,9 @@ Future<void> showEventSheet(
   );
 }
 
-/// 30000 -> "30 000", som svensk text.
+/// 30000 -> "30 000" (svenska, hårt mellanslag) eller "30,000" (engelska).
 String _thousands(int n) {
+  if (currentLanguage != 'sv') return formatNumber(n);
   final digits = n.toString();
   final out = StringBuffer();
   for (var i = 0; i < digits.length; i++) {
@@ -1200,7 +1212,7 @@ class ActionRow extends StatefulWidget {
     super.key,
     this.lat,
     this.lon,
-    this.driveLabel = 'Kör dit',
+    this.driveLabel,
     this.followed = false,
     this.onToggleFollow,
     this.compact = false,
@@ -1208,7 +1220,9 @@ class ActionRow extends StatefulWidget {
 
   final double? lat;
   final double? lon;
-  final String driveLabel;
+
+  /// Knappens text; utan egen text "Kör dit" på det aktiva språket.
+  final String? driveLabel;
   final bool followed;
   final ValueChanged<bool>? onToggleFollow;
 
@@ -1240,7 +1254,7 @@ class _ActionRowState extends State<ActionRow> {
               style: FilledButton.styleFrom(minimumSize: Size(64, height)),
               icon: Icon(Icons.navigation_rounded, size: iconSize),
               label: Text(
-                widget.driveLabel,
+                widget.driveLabel ?? tr.tipSheetDriveThere,
                 style: TextStyle(
                   fontSize: fontSize,
                   fontWeight: FontWeight.w700,
@@ -1249,11 +1263,9 @@ class _ActionRowState extends State<ActionRow> {
               onPressed: () async {
                 final ok = await openNavigation(widget.lat!, widget.lon!);
                 if (!ok && context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Kunde inte öppna navigeringen.'),
-                    ),
-                  );
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(tr.tipSheetNavFailed)));
                 }
               },
             ),
@@ -1279,7 +1291,7 @@ class _ActionRowState extends State<ActionRow> {
                 color: _followed ? TbColors.guldDjup : TbColors.midnatt,
               ),
               label: Text(
-                _followed ? 'Följer' : 'Följ',
+                _followed ? tr.ferryEventFollowing : tr.ferryEventFollow,
                 style: TextStyle(fontSize: fontSize),
               ),
               onPressed: () {

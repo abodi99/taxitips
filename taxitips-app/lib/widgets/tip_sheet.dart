@@ -6,6 +6,7 @@ import '../analytics.dart';
 import '../api_client.dart';
 import '../config.dart';
 import '../follow_up.dart';
+import '../l10n/l10n.dart';
 import '../navigation.dart';
 import '../severity_labels.dart';
 import '../signal_kinds.dart';
@@ -296,7 +297,7 @@ List<TipFactor> tipFactors(Map alert) {
 
 /// "25 min", "1 tim 6 min", "3 d" -- hur långt, så kort som det går.
 String _span(int minutes) {
-  if (minutes >= 2880) return '${minutes ~/ 1440} d';
+  if (minutes >= 2880) return tr.signalKindsAgoDays(minutes ~/ 1440);
   return humanMinutes(minutes);
 }
 
@@ -307,16 +308,16 @@ String _span(int minutes) {
 /// köra efter.
 String startedPhrase(DateTime start, DateTime now) {
   final secs = now.difference(start).inSeconds;
-  if (secs >= 60) return 'Började för ${_span((secs / 60).round())} sedan';
-  if (secs <= -60) return 'Börjar om ${_span((-secs / 60).round())}';
-  return secs >= 0 ? 'Började nyss' : 'Börjar nu';
+  if (secs >= 60) return tr.tipSheetStartedAgo(_span((secs / 60).round()));
+  if (secs <= -60) return tr.tipSheetStartsIn(_span((-secs / 60).round()));
+  return secs >= 0 ? tr.tipSheetStartedJustNow : tr.tipSheetStartsNow;
 }
 
 /// "Tog slut för 8 min sedan".
 String endedPhrase(DateTime end, DateTime now) {
   final secs = now.difference(end).inSeconds;
-  if (secs < 60) return 'Tog slut nyss';
-  return 'Tog slut för ${_span((secs / 60).round())} sedan';
+  if (secs < 60) return tr.tipSheetEndedJustNow;
+  return tr.tipSheetEndedAgo(_span((secs / 60).round()));
 }
 
 /// "kl 21:30" i dag, annars datumet med klockslag.
@@ -329,7 +330,7 @@ String _clockOrDate(DateTime t, DateTime now) {
   }
   final h = t.hour.toString().padLeft(2, '0');
   final m = t.minute.toString().padLeft(2, '0');
-  return 'kl $h:$m';
+  return tr.tipSheetClockAt('$h:$m');
 }
 
 /// Platserna tipset gäller (stationer/hållplatser), som backend skickar dem
@@ -425,7 +426,7 @@ String _compensationOperator(Map alert) {
   ].join(' ');
   return _mentionedOperator(text) ??
       _countyOperator[alert['countyName']?.toString() ?? ''] ??
-      'trafikbolaget';
+      tr.tipSheetOperatorFallback;
 }
 
 /// Linje-/tågnumret ur rubrik eller beskrivning, när källan skriver ut det.
@@ -440,17 +441,17 @@ String? _trainNumber(Map alert) {
   return match?.group(1);
 }
 
-/// Färdsättets namn på svenska, som fallback när tipset saknar operatör och
+/// Färdsättets namn i det aktiva språket, som fallback när tipset saknar operatör och
 /// linjenummer. Bygger på samma översättning som [displayTitle].
 String _modeLabel(Map alert) {
   return switch (alertFilterMode(Map<String, dynamic>.from(alert))) {
-    'metro' => 'Tunnelbana',
-    'tram' => 'Spårvagn',
-    'bus' => 'Buss',
-    'boat' => 'Båt',
-    'flight' => 'Flyg',
-    'road' => 'Väg',
-    _ => 'Tåg',
+    'metro' => tr.severityLabelsModeMetro,
+    'tram' => tr.severityLabelsModeTram,
+    'bus' => tr.severityLabelsModeBus,
+    'boat' => tr.severityLabelsModeBoat,
+    'flight' => tr.severityLabelsModeFlight,
+    'road' => tr.severityLabelsModeRoad,
+    _ => tr.severityLabelsModeTrain,
   };
 }
 
@@ -592,9 +593,9 @@ class _TopActionBarState extends State<_TopActionBar> {
     final ok = await openNavigation(lat, lon);
     if (ok) widget.onDriving?.call();
     if (!ok && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kunde inte öppna navigeringen.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr.tipSheetNavFailed)));
     }
   }
 
@@ -634,16 +635,14 @@ class _TopActionBarState extends State<_TopActionBar> {
       await widget.api.submitTipReport(opportunityId: _oppId, reason: reason);
       if (!mounted) return;
       setState(() => _reported = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tack — vi granskar tipset.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr.tipReportThanks)));
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Kunde inte skicka rapporten. Prova igen.'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr.tipReportFailed)));
     }
   }
 
@@ -706,7 +705,7 @@ class _TopActionBarState extends State<_TopActionBar> {
               size: 15,
             ),
             label: Text(
-              _reported ? 'Rapporterat' : 'Rapportera felaktigt tips',
+              _reported ? tr.tipSheetReported : tr.tipReportTitle,
               style: const TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w600,
@@ -718,9 +717,12 @@ class _TopActionBarState extends State<_TopActionBar> {
           TextButton.icon(
             style: style(),
             icon: const Icon(Icons.open_in_new, size: 15),
-            label: const Text(
-              'Trafikbolagets sida',
-              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+            label: Text(
+              tr.tipSheetSourcePage,
+              style: const TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             onPressed: widget.onOpenSourcePage,
           ),
@@ -748,7 +750,7 @@ class _TopActionBarState extends State<_TopActionBar> {
             onPressed: _toggleFollow,
             iconSize: 26,
             constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-            tooltip: _followed ? 'Ta bort sparat' : 'Spara tipset',
+            tooltip: _followed ? tr.tipSheetUnsave : tr.tipSheetSave,
             icon: Icon(
               _followed ? Icons.star_rounded : Icons.star_outline_rounded,
               color: _followed ? TbColors.guldDjup : TbColors.skiffer,
@@ -758,7 +760,7 @@ class _TopActionBarState extends State<_TopActionBar> {
           onPressed: widget.onClose,
           iconSize: 24,
           constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-          tooltip: 'Stäng',
+          tooltip: tr.tipSheetClose,
           icon: const Icon(Icons.close_rounded, color: TbColors.skiffer),
         ),
       ],
@@ -773,9 +775,9 @@ class _TopActionBarState extends State<_TopActionBar> {
               minimumSize: const Size.fromHeight(56),
             ),
             icon: const Icon(Icons.navigation_outlined, size: 24),
-            label: const Text(
-              'Öppna navigering',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+            label: Text(
+              tr.tipSheetOpenNavigation,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
             ),
             onPressed: _drive,
           )
@@ -786,9 +788,9 @@ class _TopActionBarState extends State<_TopActionBar> {
               minimumSize: const Size.fromHeight(56),
             ),
             icon: const Icon(Icons.navigation_rounded, size: 24),
-            label: const Text(
-              'Kör dit',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
+            label: Text(
+              tr.tipSheetDriveThere,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
             ),
             onPressed: _drive,
           );
@@ -826,11 +828,11 @@ class _TopActionBarState extends State<_TopActionBar> {
               text: f.text,
             ),
           if (pays)
-            const _ReasonRow(
+            _ReasonRow(
               icon: Icons.payments_rounded,
               color: TbColors.live,
-              text: 'Taxi betalas',
-              semanticLabel: 'Taxi betalas',
+              text: tr.tipSheetTaxiPaid,
+              semanticLabel: tr.tipSheetTaxiPaid,
             ),
         ],
         // 3. Fakta: linje, tider och trafikbolagets text. Allt öppet.
@@ -849,7 +851,7 @@ class _TopActionBarState extends State<_TopActionBar> {
                 icon: isFare
                     ? Icons.thumb_up_alt_rounded
                     : Icons.thumb_up_alt_outlined,
-                label: 'Fick körning',
+                label: tr.tipSheetGotFare,
                 selected: isFare,
                 color: TbColors.live,
                 onPressed: _busyFeedback ? null : () => _pickFeedback('fare'),
@@ -859,7 +861,7 @@ class _TopActionBarState extends State<_TopActionBar> {
                 icon: isEmpty
                     ? Icons.thumb_down_alt_rounded
                     : Icons.thumb_down_alt_outlined,
-                label: 'Ingen kund',
+                label: tr.tipSheetNoCustomer,
                 selected: isEmpty,
                 color: TbColors.skiffer,
                 onPressed: _busyFeedback ? null : () => _pickFeedback('empty'),
@@ -914,9 +916,9 @@ class _DecisionHeader extends StatelessWidget {
 
     Widget? decisionRow;
     if (ended) {
-      decisionRow = const Text(
-        'Slut',
-        style: TextStyle(
+      decisionRow = Text(
+        tr.tipSheetEnded,
+        style: const TextStyle(
           fontSize: 22,
           fontWeight: FontWeight.w800,
           color: TbColors.skiffer,
@@ -1166,7 +1168,7 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
     final String? lineRow = road || (minor && tipLine(alert).isEmpty)
         ? null
         : (route.to != null
-              ? '${trainDetails.badgeText} → ${route.to}'
+              ? tr.tipSheetLineTo(trainDetails.badgeText, route.to!)
               : trainDetails.badgeText);
     // Serverns rubrik överst säger redan "Tåg 45 min sent": då behövs ingen
     // statusbricka som säger samma sak.
@@ -1176,19 +1178,16 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
     final dep = travel?.departure;
     final titleLower = (alert['title']?.toString() ?? '').toLowerCase();
     final summaryLower = (alert['summary']?.toString() ?? '').toLowerCase();
-    final shortLower = shortWhat(alert).toLowerCase();
     final tier = alert['severity_tier']?.toString() ?? '';
 
     final isCancelled =
         dep?.cancelled == true ||
         tier.contains('cancelled') ||
-        shortLower.contains('inställ') ||
         titleLower.contains('inställ') ||
         summaryLower.contains('inställ');
 
     final isStopp =
         tier == 'line_paused' ||
-        shortLower.contains('stopp') ||
         titleLower.contains('stopp') ||
         summaryLower.contains('stopp');
 
@@ -1196,7 +1195,6 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
     final isDelayed =
         (delayMin != null && delayMin > 0) ||
         tier.contains('delay') ||
-        shortLower.contains('försen') ||
         titleLower.contains('försen');
 
     String statusLabel;
@@ -1205,24 +1203,24 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
     IconData statusIcon;
 
     if (isCancelled) {
-      statusLabel = 'INSTÄLLD';
+      statusLabel = tr.tipDetailPartsChipCancelled;
       statusBg = TbColors.danger;
       statusFg = TbColors.vit;
       statusIcon = Icons.cancel_rounded;
     } else if (isStopp) {
-      statusLabel = 'STOPP I TRAFIKEN';
+      statusLabel = tr.tipSheetStatusStopped;
       statusBg = TbColors.danger;
       statusFg = TbColors.vit;
       statusIcon = Icons.error_rounded;
     } else if (isDelayed) {
       statusLabel = delayMin != null
-          ? 'FÖRSENAD ${humanMinutes(delayMin).toUpperCase()}'
-          : 'FÖRSENAD';
+          ? tr.tipDetailPartsChipDelayedBy(humanMinutes(delayMin).toUpperCase())
+          : tr.tipDetailPartsChipDelayed;
       statusBg = TbColors.guld;
       statusFg = TbColors.midnatt;
       statusIcon = Icons.schedule_rounded;
     } else if (minor) {
-      statusLabel = 'MEDDELANDE';
+      statusLabel = tr.tipSheetStatusNotice;
       statusBg = tileColor;
       statusFg = TbColors.vit;
       statusIcon = iconForAlert(alert);
@@ -1368,7 +1366,7 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'kl $strikeClock',
+                        tr.tipSheetClockAt(strikeClock),
                         style: const TextStyle(
                           fontFamily: kDisplayFont,
                           fontSize: 19,
@@ -1385,7 +1383,7 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
                           dep!.newClock!.isNotEmpty) ...[
                         const SizedBox(width: 6),
                         Text(
-                          '→ ${dep.newClock}',
+                          tr.tipDetailPartsNewClock(dep.newClock!),
                           style: const TextStyle(
                             fontFamily: kDisplayFont,
                             fontSize: 19,
@@ -1486,10 +1484,10 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
               Expanded(
                 child: Text(
                   road
-                      ? 'Vägen dit'
+                      ? tr.tipSheetSectionRoad
                       : minor
-                      ? 'Trafikbolagets meddelande'
-                      : 'Händelse & beskrivning',
+                      ? tr.tipSheetSectionNotice
+                      : tr.tipSheetSectionEvent,
                   style: const TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
@@ -1518,9 +1516,9 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
           ],
           if (road) ...[
             const SizedBox(height: 6),
-            const Text(
-              'Räkna med kö, eller välj en annan väg.',
-              style: TextStyle(
+            Text(
+              tr.tipSheetRoadAdvice,
+              style: const TextStyle(
                 fontSize: 16,
                 height: 1.3,
                 fontWeight: FontWeight.w700,
@@ -1533,16 +1531,16 @@ class _UnifiedOverviewAndEventCard extends StatelessWidget {
             _LongText(summary),
           ] else if (!road) ...[
             const SizedBox(height: 6),
-            const Text(
-              'Ingen ytterligare beskrivning tillgänglig.',
-              style: TextStyle(fontSize: 15, color: TbColors.skiffer),
+            Text(
+              tr.tipSheetNoDescription,
+              style: const TextStyle(fontSize: 15, color: TbColors.skiffer),
             ),
           ],
           if (minor && !road) ...[
             const SizedBox(height: 8),
-            const Text(
-              'Allmänt meddelande. Vi bedömer inte om det är värt att köra dit.',
-              style: TextStyle(
+            Text(
+              tr.tipSheetMinorNote,
+              style: const TextStyle(
                 fontSize: 14,
                 height: 1.3,
                 fontWeight: FontWeight.w600,
@@ -1641,9 +1639,9 @@ class _EndedBanner extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Slut. Tipset gäller inte längre.',
-                  style: TextStyle(
+                Text(
+                  tr.tipSheetEndedBanner,
+                  style: const TextStyle(
                     fontFamily: kDisplayFont,
                     fontSize: 19,
                     height: 1.2,
@@ -1722,9 +1720,9 @@ class _WorthItAndCompensationCardState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (factors.isNotEmpty) ...[
-            const Text(
-              'Särskilda omständigheter',
-              style: TextStyle(
+            Text(
+              tr.tipSheetCircumstances,
+              style: const TextStyle(
                 fontSize: 13.5,
                 fontWeight: FontWeight.w800,
                 color: TbColors.skiffer,
@@ -1734,7 +1732,7 @@ class _WorthItAndCompensationCardState
             FactorList(factors: visible),
             if (hidden > 0)
               Align(
-                alignment: Alignment.centerLeft,
+                alignment: AlignmentDirectional.centerStart,
                 child: TextButton.icon(
                   style: TextButton.styleFrom(
                     foregroundColor: TbColors.midnatt,
@@ -1753,7 +1751,11 @@ class _WorthItAndCompensationCardState
                         : Icons.expand_more_rounded,
                     size: 20,
                   ),
-                  label: Text(_all ? 'Visa färre skäl' : 'Visa alla skäl'),
+                  label: Text(
+                    _all
+                        ? tr.tipSheetShowFewerReasons
+                        : tr.tipSheetShowAllReasons,
+                  ),
                 ),
               ),
           ],
@@ -1814,16 +1816,14 @@ class _CompensationBoxState extends State<CompensationBox> {
         : _compensationOperator(alert);
     final url = compensationRulesUrl(alert);
     return _CompensationGuideline(
-      title: 'Taxiersättning',
+      title: tr.tipSheetCompensationTitle,
       operatorName: operatorName,
       affectedParties: operatorName,
-      disclaimer:
-          'Beloppet gäller när trafikbolagets villkor är uppfyllda. Vi kan '
-          'inte bedöma den enskilda resan.',
+      disclaimer: tr.tipSheetCompensationDisclaimer,
       // Villkoren står på huvudmannens egen sida, och adressen kommer från
       // backend. En påhittad länk vore värre än ingen: utan adress ingen länk.
       url: url,
-      linkLabel: url == null ? null : 'Läs reglerna hos $operatorName',
+      linkLabel: url == null ? null : tr.tipSheetCompensationLink(operatorName),
     );
   }
 
@@ -1926,7 +1926,7 @@ class _CompensationBoxState extends State<CompensationBox> {
                         : Icons.expand_more_rounded,
                     size: 20,
                   ),
-                  label: Text(_open ? 'Dölj' : 'Läs mer'),
+                  label: Text(_open ? tr.tipSheetHide : tr.tipSheetReadMore),
                 ),
                 if (hasLink)
                   OutlinedButton.icon(
@@ -1964,7 +1964,7 @@ class _CompensationBoxState extends State<CompensationBox> {
           if (_open) ...[
             const SizedBox(height: 6),
             Text(
-              'Berörd part: ${guide.affectedParties}',
+              tr.tipSheetAffectedParty(guide.affectedParties),
               style: const TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w700,
@@ -2035,7 +2035,7 @@ class _LongTextState extends State<_LongText> {
               ),
             ),
             onPressed: () => setState(() => _open = !_open),
-            child: Text(_open ? 'Visa mindre' : 'Visa hela texten'),
+            child: Text(_open ? tr.tipSheetShowLess : tr.tipSheetShowFullText),
           ),
       ],
     );
@@ -2066,9 +2066,9 @@ class _AlternativeCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'Alternativ trafik',
-                  style: TextStyle(
+                Text(
+                  tr.tipSheetAlternativeTraffic,
+                  style: const TextStyle(
                     fontSize: 14.5,
                     fontWeight: FontWeight.w700,
                     color: TbColors.skiffer,

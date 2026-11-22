@@ -1,0 +1,30 @@
+{
+  "guidedTourStep": {
+    "sv": "Steg {position} av {total}",
+    "en": "Step {position} of {total}",
+    "ar": "الخطوة {position} من {total}",
+    "placeholders": {
+      "position": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "guidedTourSkip": {
+    "sv": "Hoppa över",
+    "en": "Skip",
+    "ar": "تخطَّ"
+  },
+  "guidedTourDone": {
+    "sv": "Klar",
+    "en": "Done",
+    "ar": "تم"
+  },
+  "guidedTourNext": {
+    "sv": "Nästa",
+    "en": "Next",
+    "ar": "التالي"
+  }
+}

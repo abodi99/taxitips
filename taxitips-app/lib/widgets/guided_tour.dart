@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../analytics.dart';
+import '../l10n/l10n.dart';
 import '../theme.dart';
 
 /// Den guidade genomgången: mörkar skärmen, lyser upp ETT element i taget med
@@ -500,7 +501,8 @@ class _TourCard extends StatelessWidget {
     return Semantics(
       container: true,
       liveRegion: true,
-      label: 'Steg $position av $total. ${step.title}. ${step.text}',
+      label:
+          '${tr.guidedTourStep(position, total)}. ${step.title}. ${step.text}',
       child: Material(
         color: TbColors.vit,
         elevation: 12,
@@ -513,7 +515,7 @@ class _TourCard extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               Text(
-                'Steg $position av $total',
+                tr.guidedTourStep(position, total),
                 style: const TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w700,
@@ -565,9 +567,9 @@ class _TourCard extends StatelessWidget {
                       minimumSize: const Size(48, 48),
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                     ),
-                    child: const Text(
-                      'Hoppa över',
-                      style: TextStyle(fontSize: 16),
+                    child: Text(
+                      tr.guidedTourSkip,
+                      style: const TextStyle(fontSize: 16),
                     ),
                   ),
                   FilledButton(
@@ -576,7 +578,7 @@ class _TourCard extends StatelessWidget {
                       minimumSize: const Size(112, 52),
                     ),
                     child: Text(
-                      last ? 'Klar' : 'Nästa',
+                      last ? tr.guidedTourDone : tr.guidedTourNext,
                       style: const TextStyle(
                         fontSize: 17,
                         fontWeight: FontWeight.w700,

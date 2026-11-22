@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../l10n/l10n.dart';
 import '../theme.dart';
 
 /// Dialogen där föraren beskriver vad som är fel med tipset.
@@ -37,21 +38,19 @@ class _TipReportDialogState extends State<_TipReportDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       scrollable: true,
-      title: const Text('Rapportera felaktigt tips'),
+      title: Text(tr.tipReportTitle),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Berätta kort vad som inte stämmer, till exempel fel plats eller att störningen redan är löst.',
-          ),
+          Text(tr.tipReportIntro),
           const SizedBox(height: 12),
           TextField(
             controller: _controller,
             maxLines: 3,
             textInputAction: TextInputAction.done,
-            decoration: const InputDecoration(
-              hintText: 'Valfri förklaring',
+            decoration: InputDecoration(
+              hintText: tr.tipReportHint,
               border: OutlineInputBorder(),
             ),
           ),
@@ -60,11 +59,11 @@ class _TipReportDialogState extends State<_TipReportDialog> {
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: const Text('Avbryt'),
+          child: Text(tr.tipReportCancel),
         ),
         FilledButton(
           onPressed: () => Navigator.pop(context, _controller.text.trim()),
-          child: const Text('Skicka rapport'),
+          child: Text(tr.tipReportSend),
         ),
       ],
     );
@@ -102,16 +101,14 @@ class _TipReportButtonState extends State<TipReportButton> {
       );
       if (!mounted) return;
       setState(() => _sent = true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Tack — vi granskar tipset.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr.tipReportThanks)));
     } catch (_) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Kunde inte skicka rapporten. Prova igen.'),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr.tipReportFailed)));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -121,12 +118,12 @@ class _TipReportButtonState extends State<TipReportButton> {
   Widget build(BuildContext context) {
     if (_sent) {
       return Text(
-        'Rapport mottagen — tack.',
+        tr.tipReportReceived,
         style: TextStyle(color: TbColors.muted, fontSize: 14.5),
       );
     }
     return Align(
-      alignment: Alignment.centerLeft,
+      alignment: AlignmentDirectional.centerStart,
       child: TextButton.icon(
         style: TextButton.styleFrom(
           foregroundColor: TbColors.muted,
@@ -145,7 +142,7 @@ class _TipReportButtonState extends State<TipReportButton> {
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
             : const Icon(Icons.flag_outlined, size: 16),
-        label: const Text('Rapportera felaktigt tips'),
+        label: Text(tr.tipReportTitle),
       ),
     );
   }

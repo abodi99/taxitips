@@ -15,6 +15,7 @@ import '../analytics.dart';
 import '../api_client.dart';
 import '../config.dart';
 import '../county_selection.dart';
+import '../l10n/l10n.dart';
 import '../feed_cache.dart';
 import '../follow_up.dart';
 import '../navigation.dart';
@@ -609,13 +610,9 @@ class _DriverScreenState extends State<DriverScreen>
     alert ??= await widget.api.alertById(id);
     if (!mounted) return;
     if (alert == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text(
-            'Tipset finns inte längre, eller så har bilen inte tillgång till det.',
-          ),
-        ),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr.driverScreenTipGone)));
       return;
     }
     await _openAlertDetail(alert);
@@ -724,7 +721,7 @@ class _DriverScreenState extends State<DriverScreen>
       try {
         await widget.api.claimInvite(widget.inviteToken!);
         registerForPushInBackground(widget.api);
-        setState(() => _status = 'Telefon kopplad');
+        setState(() => _status = tr.driverScreenPhonePaired);
       } catch (e) {
         setState(() => _error = _friendly(e));
       } finally {
@@ -740,7 +737,7 @@ class _DriverScreenState extends State<DriverScreen>
     // medan tipsen redan finns på servern. Körområdet räcker.
     await _updateCurrentPosition().timeout(
       const Duration(seconds: 4),
-      onTimeout: () => 'Plats tog för lång tid',
+      onTimeout: () => tr.driverScreenLocationTimeout,
     );
     await _load();
     _schedulePoll();
@@ -821,7 +818,7 @@ class _DriverScreenState extends State<DriverScreen>
         if (explain) {
           await Geolocator.openLocationSettings();
         }
-        return 'Slå på plats (GPS) i telefonens inställningar';
+        return tr.driverScreenGpsOff;
       }
 
       var perm = await Geolocator.checkPermission();
@@ -829,13 +826,13 @@ class _DriverScreenState extends State<DriverScreen>
         perm = await Geolocator.requestPermission();
       }
       if (perm == LocationPermission.denied) {
-        return 'Platsbehörighet nekades';
+        return tr.driverScreenLocationDenied;
       }
       if (perm == LocationPermission.deniedForever) {
         if (explain) {
           await Geolocator.openAppSettings();
         }
-        return 'Tillåt plats för TaxiTips i telefonens inställningar';
+        return tr.driverScreenLocationAllow;
       }
 
       final pos = await Geolocator.getCurrentPosition(
@@ -844,7 +841,7 @@ class _DriverScreenState extends State<DriverScreen>
           timeLimit: Duration(seconds: 20),
         ),
       );
-      if (!mounted) return 'Avbrutet';
+      if (!mounted) return tr.driverScreenCancelled;
       setState(() {
         _userLat = pos.latitude;
         _userLon = pos.longitude;
@@ -865,21 +862,21 @@ class _DriverScreenState extends State<DriverScreen>
       }
       return null;
     } on TimeoutException {
-      return 'GPS tog för lång tid — försök utomhus eller igen';
+      return tr.driverScreenGpsTimeout;
     } catch (e) {
       debugPrint('DriverScreen[_updateCurrentPosition] $e');
-      return 'Kunde inte hämta din position';
+      return tr.driverScreenPositionFailed;
     }
   }
 
   Future<void> _goToMyLocation() async {
-    setState(() => _status = 'Hämtar position…');
+    setState(() => _status = tr.driverScreenFetchingPosition);
     final err = await _updateCurrentPosition(explain: true);
     if (!mounted) return;
     if (err != null || _userLat == null || _userLon == null) {
       setState(() {
         _status = null;
-        _error = err ?? 'Kunde inte hämta din position';
+        _error = err ?? tr.driverScreenPositionFailed;
       });
       return;
     }
@@ -899,11 +896,10 @@ class _DriverScreenState extends State<DriverScreen>
     if (net != null) return netMessage(net);
     final s = e.toString();
     if (s.contains('Ogiltig')) {
-      return 'Inloggningen fungerar inte. Logga in igen.';
+      return tr.driverScreenLoginInvalid;
     }
     if (s.contains('401') || s.contains('licens')) {
-      return 'Telefonen har ingen åtkomst. Logga in igen, eller be din chef '
-          'att bjuda in dig.';
+      return tr.driverScreenNoAccess;
     }
     return s.replaceFirst(RegExp(r'^(ApiException|Exception):\s*'), '');
   }
@@ -1161,7 +1157,9 @@ class _DriverScreenState extends State<DriverScreen>
           lon: _userLon,
           counties: _countyParam,
           municipalities: _municipalityParam,
-          areaLabel: _counties.isEmpty ? 'Nära dig' : _areaFilterSummary,
+          areaLabel: _counties.isEmpty
+              ? tr.driverScreenNearYou
+              : _areaFilterSummary,
           onOpenTip: (a) => _openAlertDetail(a, readOnly: true),
         ),
       ),
@@ -1178,7 +1176,9 @@ class _DriverScreenState extends State<DriverScreen>
           lon: _userLon,
           counties: _countyParam,
           municipalities: _municipalityParam,
-          areaLabel: _counties.isEmpty ? 'Nära dig' : _areaFilterSummary,
+          areaLabel: _counties.isEmpty
+              ? tr.driverScreenNearYou
+              : _areaFilterSummary,
         ),
       ),
     );
@@ -1424,10 +1424,10 @@ class _DriverScreenState extends State<DriverScreen>
           content: Text(
             // Följa/avfölja kräver servern; ingen kö, så säg det rakt ut.
             isNetworkError(e)
-                ? 'Kräver internet. Försök igen när du har nät.'
+                ? tr.driverScreenNeedsInternet
                 : favorite
-                ? 'Kunde inte spara tipset'
-                : 'Kunde inte ta bort tipset',
+                ? tr.driverScreenSaveFailed
+                : tr.driverScreenUnsaveFailed,
           ),
         ),
       );
@@ -1441,13 +1441,11 @@ class _DriverScreenState extends State<DriverScreen>
       ..showSnackBar(
         SnackBar(
           content: Text(
-            followed
-                ? 'Sparat. Syns under ⭐ Sparat i sju dagar.'
-                : 'Borttaget från sparade.',
+            followed ? tr.driverScreenSavedSnack : tr.driverScreenRemovedSnack,
           ),
           action: followed
               ? SnackBarAction(
-                  label: 'Visa',
+                  label: tr.driverScreenShow,
                   onPressed: () => _selectCategory('followed'),
                 )
               : null,
@@ -1635,7 +1633,7 @@ class _DriverScreenState extends State<DriverScreen>
                   const SizedBox(width: 10),
                   Expanded(
                     child: Text(
-                      '${category.label} ingår inte i provet',
+                      tr.driverScreenCategoryLocked(category.label),
                       style: const TextStyle(
                         fontSize: 19,
                         fontWeight: FontWeight.w800,
@@ -1654,9 +1652,7 @@ class _DriverScreenState extends State<DriverScreen>
               if (count > 0) ...[
                 const SizedBox(height: 8),
                 Text(
-                  count == 1
-                      ? 'Just nu finns 1 sådant tips i ditt område.'
-                      : 'Just nu finns $count sådana tips i ditt område.',
+                  tr.driverScreenLockedCount(count),
                   style: const TextStyle(
                     fontSize: 15,
                     fontWeight: FontWeight.w700,
@@ -1843,9 +1839,9 @@ class _DriverScreenState extends State<DriverScreen>
     final ok = await openNavigation(lat, lon);
     if (!mounted) return;
     if (!ok) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kunde inte öppna navigeringen.')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(tr.driverScreenNavFailed)));
       return;
     }
     unawaited(FollowUps.remember(a));
@@ -2079,10 +2075,10 @@ class _DriverScreenState extends State<DriverScreen>
     }
     if (_licensedCounties != null) {
       return _licensedCounties!.isEmpty
-          ? 'Inga län än. Välj bil först.'
-          : 'Alla dina län (${_licensedCounties!.length})';
+          ? tr.driverScreenNoCountiesYet
+          : tr.driverScreenAllYourCounties(_licensedCounties!.length);
     }
-    return 'Inget län valt';
+    return tr.driverScreenNoCounty;
   }
 
   /// Checklista för län + städer — kompakt i stället för långa chip-rader.
@@ -2110,12 +2106,14 @@ class _DriverScreenState extends State<DriverScreen>
               final rows = _municipalityCatalog[county] ?? const [];
               if (rows.isEmpty) return null;
               return Padding(
-                padding: const EdgeInsets.only(left: 40),
+                padding: const EdgeInsetsDirectional.only(start: 40),
                 child: ExpansionTile(
                   title: Text(
                     _municipalitiesIn(county).isEmpty
-                        ? 'Hela länet · välj kommuner'
-                        : '${_municipalitiesIn(county).length} kommuner valda',
+                        ? tr.driverScreenWholeCounty
+                        : tr.driverScreenMunicipalitiesChosen(
+                            _municipalitiesIn(county).length,
+                          ),
                     style: TextStyle(fontSize: 13, color: Colors.grey.shade700),
                   ),
                   children: [
@@ -2163,10 +2161,10 @@ class _DriverScreenState extends State<DriverScreen>
                         children: [
                           const Icon(Icons.map_outlined, color: TbColors.ink),
                           const SizedBox(width: 10),
-                          const Expanded(
+                          Expanded(
                             child: Text(
-                              'Län och kommuner',
-                              style: TextStyle(
+                              tr.driverScreenCountiesAndMunicipalities,
+                              style: const TextStyle(
                                 fontFamily: kDisplayFont,
                                 fontSize: 22,
                                 fontWeight: FontWeight.w700,
@@ -2182,7 +2180,7 @@ class _DriverScreenState extends State<DriverScreen>
                                 _regions.clear();
                                 _cities.clear();
                               }),
-                              child: const Text('Rensa'),
+                              child: Text(tr.driverScreenClear),
                             ),
                         ],
                       ),
@@ -2203,11 +2201,11 @@ class _DriverScreenState extends State<DriverScreen>
                       child: ListView(
                         padding: const EdgeInsets.fromLTRB(8, 8, 8, 24),
                         children: [
-                          const Padding(
-                            padding: EdgeInsets.fromLTRB(8, 4, 8, 4),
+                          Padding(
+                            padding: const EdgeInsets.fromLTRB(8, 4, 8, 4),
                             child: Text(
-                              'Körområde',
-                              style: TextStyle(
+                              tr.driverScreenDrivingArea,
+                              style: const TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 15,
                               ),
@@ -2216,8 +2214,7 @@ class _DriverScreenState extends State<DriverScreen>
                           Padding(
                             padding: const EdgeInsets.fromLTRB(8, 0, 8, 6),
                             child: Text(
-                              'Länen du kör i. Notiserna, och listan när appen '
-                              'inte har din plats, följer körområdet.',
+                              tr.driverScreenDrivingAreaText,
                               style: TextStyle(
                                 color: Colors.grey.shade600,
                                 height: 1.35,
@@ -2229,9 +2226,8 @@ class _DriverScreenState extends State<DriverScreen>
                               padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                               child: Text(
                                 _licensedCounties!.isEmpty
-                                    ? 'Välj bil först. Då visas bilens län här.'
-                                    : 'Alla dina län är valda. Bocka ur dem du '
-                                          'inte vill se.',
+                                    ? tr.driverScreenChooseCarFirstCounties
+                                    : tr.driverScreenAllCountiesSelected,
                                 style: TextStyle(
                                   color: Colors.grey.shade700,
                                   fontWeight: FontWeight.w600,
@@ -2294,7 +2290,7 @@ class _DriverScreenState extends State<DriverScreen>
                       padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
                       child: FilledButton(
                         onPressed: () => Navigator.pop(ctx),
-                        child: const Text('Klar'),
+                        child: Text(tr.driverScreenDone),
                       ),
                     ),
                   ],
@@ -2379,9 +2375,9 @@ class _DriverScreenState extends State<DriverScreen>
                             ),
                           ),
                         ),
-                        const Text(
-                          'Filter',
-                          style: TextStyle(
+                        Text(
+                          tr.driverScreenFilter,
+                          style: const TextStyle(
                             fontFamily: kDisplayFont,
                             fontSize: 24,
                             fontWeight: FontWeight.w700,
@@ -2399,18 +2395,22 @@ class _DriverScreenState extends State<DriverScreen>
                           child: ExpansionTile(
                             tilePadding: EdgeInsets.zero,
                             childrenPadding: EdgeInsets.zero,
-                            title: const Text(
-                              'Fler val: dölj typer',
-                              style: TextStyle(fontWeight: FontWeight.w700),
+                            title: Text(
+                              tr.driverScreenMoreOptions,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                             children: [
-                              const Align(
-                                alignment: Alignment.centerLeft,
+                              Align(
+                                alignment: AlignmentDirectional.centerStart,
                                 child: Padding(
-                                  padding: EdgeInsets.only(bottom: 8),
+                                  padding: const EdgeInsets.only(bottom: 8),
                                   child: Text(
-                                    'Gul = visas. Tryck för att dölja.',
-                                    style: TextStyle(color: TbColors.skiffer),
+                                    tr.driverScreenYellowShown,
+                                    style: const TextStyle(
+                                      color: TbColors.skiffer,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -2472,17 +2472,17 @@ class _DriverScreenState extends State<DriverScreen>
                           ),
                         ),
                         const SizedBox(height: 16),
-                        const Text(
-                          'Styrka',
-                          style: TextStyle(fontWeight: FontWeight.w700),
+                        Text(
+                          tr.driverScreenStrength,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                         const SizedBox(height: 8),
                         Row(
                           children: [
-                            for (final (i, label) in const [
-                              (0, 'Alla'),
-                              (1, 'Starka'),
-                              (2, 'Starkast'),
+                            for (final (i, label) in [
+                              (0, tr.driverScreenPresetAll),
+                              (1, tr.driverScreenPresetStrong),
+                              (2, tr.driverScreenPresetStrongest),
                             ]) ...[
                               if (i > 0) const SizedBox(width: 8),
                               Expanded(
@@ -2499,9 +2499,9 @@ class _DriverScreenState extends State<DriverScreen>
                           ],
                         ),
                         const SizedBox(height: 8),
-                        const Text(
-                          'Område',
-                          style: TextStyle(fontWeight: FontWeight.w700),
+                        Text(
+                          tr.driverScreenArea,
+                          style: const TextStyle(fontWeight: FontWeight.w700),
                         ),
                         ListTile(
                           contentPadding: EdgeInsets.zero,
@@ -2514,9 +2514,9 @@ class _DriverScreenState extends State<DriverScreen>
                               color: TbColors.ink,
                             ),
                           ),
-                          title: const Text(
-                            'Län och kommuner',
-                            style: TextStyle(fontWeight: FontWeight.w700),
+                          title: Text(
+                            tr.driverScreenCountiesAndMunicipalities,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
                           subtitle: Text(
                             _areaFilterSummary,
@@ -2535,11 +2535,11 @@ class _DriverScreenState extends State<DriverScreen>
                             _nearMe ? Icons.near_me : Icons.near_me_disabled,
                             color: TbColors.ink,
                           ),
-                          title: const Text(
-                            'Nära mig',
-                            style: TextStyle(fontWeight: FontWeight.w700),
+                          title: Text(
+                            tr.driverScreenNearMe,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
                           ),
-                          subtitle: const Text('Inom ca 25 km'),
+                          subtitle: Text(tr.driverScreenWithin25),
                           value: _nearMe,
                           onChanged: (v) async {
                             if (v) {
@@ -2562,12 +2562,12 @@ class _DriverScreenState extends State<DriverScreen>
                                 Icons.filter_alt_off_outlined,
                                 size: 18,
                               ),
-                              label: const Text('Återställ filter'),
+                              label: Text(tr.driverScreenResetFilter),
                             ),
                             const Spacer(),
                             FilledButton(
                               onPressed: () => Navigator.pop(ctx),
-                              child: const Text('Klar'),
+                              child: Text(tr.driverScreenDone),
                             ),
                           ],
                         ),
@@ -2641,14 +2641,14 @@ class _DriverScreenState extends State<DriverScreen>
     if (err != null || _userLat == null || _userLon == null) {
       setState(() {
         _nearMe = false;
-        _error = err ?? 'Kunde inte hämta position';
+        _error = err ?? tr.driverScreenPositionFailedShort;
       });
       _saveFilters();
       return;
     }
     setState(() {
       _nearMe = true;
-      _status = 'Nära dig (25 km)';
+      _status = tr.driverScreenNearYou25;
       _error = null;
     });
     _saveFilters();
@@ -2719,7 +2719,7 @@ class _DriverScreenState extends State<DriverScreen>
     final n = ts is num ? ts.toInt() : int.tryParse('$ts');
     if (n == null) return '—';
     final d = DateTime.fromMillisecondsSinceEpoch(n);
-    return '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    return formatTime(d);
   }
 
   /// [readOnly]: öppnat från historiken -- ingen Spara-knapp.
@@ -2807,16 +2807,16 @@ class _DriverScreenState extends State<DriverScreen>
           decoration: TextDecoration.none,
         ),
         child: _claiming
-            ? const SafeArea(
+            ? SafeArea(
                 child: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      CircularProgressIndicator(color: TbColors.taxi),
-                      SizedBox(height: 16),
+                      const CircularProgressIndicator(color: TbColors.taxi),
+                      const SizedBox(height: 16),
                       Text(
-                        'Kopplar telefon…',
-                        style: TextStyle(
+                        tr.driverScreenConnectingPhone,
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
                           color: TbColors.ink,
@@ -2910,7 +2910,7 @@ class _DriverScreenState extends State<DriverScreen>
                                                   icon: const Icon(
                                                     Icons.arrow_back,
                                                   ),
-                                                  tooltip: 'Tillbaka',
+                                                  tooltip: tr.driverScreenBack,
                                                   color: TbColors.ink,
                                                   onPressed: widget.onBack!,
                                                 ),
@@ -2919,7 +2919,7 @@ class _DriverScreenState extends State<DriverScreen>
                                                 icon: const Icon(
                                                   Icons.history_rounded,
                                                 ),
-                                                tooltip: 'Historik',
+                                                tooltip: tr.driverScreenHistory,
                                                 color: TbColors.ink,
                                                 onPressed: _openHistory,
                                               ),
@@ -2937,8 +2937,7 @@ class _DriverScreenState extends State<DriverScreen>
                                                 icon: const Icon(
                                                   Icons.help_outline_rounded,
                                                 ),
-                                                tooltip:
-                                                    'Vad betyder symbolerna?',
+                                                tooltip: tr.driverScreenLegend,
                                                 color: TbColors.ink,
                                                 onPressed: () =>
                                                     showMapLegend(context),
@@ -2956,8 +2955,8 @@ class _DriverScreenState extends State<DriverScreen>
                                                     ),
                                                   ),
                                                   tooltip: _supportUnread > 0
-                                                      ? 'Inställningar – nytt svar från supporten'
-                                                      : 'Inställningar',
+                                                      ? tr.driverScreenSettingsNewReply
+                                                      : tr.driverScreenSettings,
                                                   color: TbColors.ink,
                                                   onPressed:
                                                       widget.onOpenSettings!,
@@ -2973,9 +2972,8 @@ class _DriverScreenState extends State<DriverScreen>
                                   const SizedBox(height: 8),
                                   _Notice(
                                     icon: Icons.local_taxi_outlined,
-                                    text:
-                                        'Välj vilken bil du kör för att se tips.',
-                                    action: 'Välj bil',
+                                    text: tr.driverScreenChooseCar,
+                                    action: tr.driverScreenChooseCarAction,
                                     onAction: _openVehiclePicker,
                                   ),
                                 ] else if (_entitled == false) ...[
@@ -2989,9 +2987,8 @@ class _DriverScreenState extends State<DriverScreen>
                                   const SizedBox(height: 8),
                                   _Notice(
                                     icon: Icons.map_outlined,
-                                    text:
-                                        'Välj ditt körområde för att se tips.',
-                                    action: 'Välj',
+                                    text: tr.driverScreenChooseAreaText,
+                                    action: tr.driverScreenChoose,
                                     onAction: _openAreaChecklist,
                                   ),
                                 ],
@@ -3017,8 +3014,9 @@ class _DriverScreenState extends State<DriverScreen>
                                   const SizedBox(height: 8),
                                   _Notice(
                                     icon: Icons.schedule,
-                                    text:
-                                        'Inte uppdaterat sedan ${_clock(_data?['updatedAt'])}',
+                                    text: tr.driverScreenNotUpdated(
+                                      _clock(_data?['updatedAt']),
+                                    ),
                                   ),
                                 ],
                                 if (_status != null) ...[
@@ -3097,7 +3095,7 @@ class _DriverScreenState extends State<DriverScreen>
                                   child: _MapLabelButton(
                                     heroTag: 'filter_fab',
                                     icon: Icons.tune,
-                                    label: 'Filter',
+                                    label: tr.driverScreenFilter,
                                     onPressed: _openFilters,
                                   ),
                                 ),
@@ -3120,7 +3118,7 @@ class _DriverScreenState extends State<DriverScreen>
                                       ? const Color(0xFF1A73E8)
                                       : TbColors.ink,
                                   elevation: 4,
-                                  tooltip: 'Min position',
+                                  tooltip: tr.driverScreenMyPosition,
                                   child: Icon(
                                     _userLat != null
                                         ? Icons.my_location
@@ -3183,8 +3181,8 @@ class _DriverScreenState extends State<DriverScreen>
                                 Semantics(
                                   button: true,
                                   label: _sheetExtent < 0.5
-                                      ? 'Visa hela listan'
-                                      : 'Visa kartan',
+                                      ? tr.driverScreenShowFullList
+                                      : tr.driverScreenShowMap,
                                   child: GestureDetector(
                                     behavior: HitTestBehavior.opaque,
                                     onTap: () => _expandSheet(
@@ -3241,21 +3239,21 @@ class _DriverScreenState extends State<DriverScreen>
     final String title;
     final int count;
     if (_category == 'followed') {
-      title = 'Sparat';
+      title = tr.driverScreenSaved;
       count = _followedCount;
     } else if (lens == SignalCategory.event) {
-      title = 'Event';
+      title = tr.driverScreenEvents;
       count = _eventsInWindow.length;
     } else if (lens == SignalCategory.ferry) {
-      title = 'Färjor';
+      title = tr.driverScreenFerries;
       count = _ferriesVisible.length + _tipsIn(lens).length;
     } else {
-      title = lens?.label ?? 'Alla tips';
+      title = lens?.label ?? tr.driverScreenAllTips;
       count = _tipsIn(lens).length;
     }
     final sortable = _category != 'followed' && lens != SignalCategory.event;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 0, 8, 0),
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 0, 8, 0),
       child: Row(
         key: _tourKeys.list,
         children: [
@@ -3288,14 +3286,14 @@ class _DriverScreenState extends State<DriverScreen>
               backgroundColor: TbColors.taxiDeep,
               offset: const Offset(-6, 6),
               child: IconButton(
-                tooltip: 'Filter',
+                tooltip: tr.driverScreenFilter,
                 onPressed: _openFilters,
                 icon: const Icon(Icons.tune, color: TbColors.midnatt),
               ),
             ),
           if (sortable)
             PopupMenuButton<String>(
-              tooltip: 'Sortera',
+              tooltip: tr.driverScreenSort,
               initialValue: _sortMode,
               onSelected: (v) {
                 setState(() => _sortMode = v);
@@ -3356,7 +3354,7 @@ class _DriverScreenState extends State<DriverScreen>
   Widget _roadScopeNote() => Padding(
     padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
     child: Text(
-      'Bara trafikolyckor. Vägarbeten och avstängningar visas inte.',
+      tr.driverScreenRoadOnly,
       style: TextStyle(fontSize: 13.5, color: Colors.grey.shade700),
     ),
   );
@@ -3368,26 +3366,28 @@ class _DriverScreenState extends State<DriverScreen>
     };
     final parts = <String>[
       if (_scorePreset == 1)
-        'Bara starka'
+        tr.driverScreenOnlyStrong
       else if (_scorePreset == 2)
-        'Bara starkast'
+        tr.driverScreenOnlyStrongest
       else if (_scoreFilterActive)
-        'Styrka ${_scoreMin.round()}–${_scoreMax.round()}',
-      if (_nearMe) 'Nära mig',
+        tr.driverScreenStrengthRange(_scoreMin.round(), _scoreMax.round()),
+      if (_nearMe) tr.driverScreenNearMe,
       if (_counties.isNotEmpty || _municipalities.isNotEmpty)
         _areaFilterSummary,
       if (_hiddenModes.isNotEmpty)
-        'Dolt: ${_hiddenModes.map((m) => modeLabels[m] ?? m).join(', ')}',
+        tr.driverScreenHidden(
+          _hiddenModes.map((m) => modeLabels[m] ?? m).join(', '),
+        ),
       if (_hiddenTiers.isNotEmpty)
-        '${_hiddenTiers.length} störningstyper dolda',
+        tr.driverScreenHiddenTiers(_hiddenTiers.length),
     ];
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 4, 8, 4),
+      padding: const EdgeInsetsDirectional.fromSTEB(16, 4, 8, 4),
       child: Material(
         color: TbColors.guld.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 4, 4, 4),
+          padding: const EdgeInsetsDirectional.fromSTEB(12, 4, 4, 4),
           child: Row(
             children: [
               const Icon(
@@ -3409,7 +3409,7 @@ class _DriverScreenState extends State<DriverScreen>
               ),
               TextButton(
                 onPressed: _clearFilters,
-                child: const Text('Visa allt'),
+                child: Text(tr.driverScreenShowAll),
               ),
             ],
           ),
@@ -3418,10 +3418,10 @@ class _DriverScreenState extends State<DriverScreen>
     );
   }
 
-  static const _sortOptions = <(String, IconData, String)>[
-    ('score', Icons.bolt_rounded, 'Viktigast'),
-    ('distance', Icons.near_me_rounded, 'Närmast'),
-    ('newest', Icons.schedule_rounded, 'Nyast'),
+  static List<(String, IconData, String)> get _sortOptions => [
+    ('score', Icons.bolt_rounded, tr.driverScreenSortImportant),
+    ('distance', Icons.near_me_rounded, tr.driverScreenSortNearest),
+    ('newest', Icons.schedule_rounded, tr.driverScreenSortNewest),
   ];
 
   IconData get _sortIcon => _sortOptions
@@ -3530,25 +3530,21 @@ class _DriverScreenState extends State<DriverScreen>
         );
       if (_favorites.isEmpty && events.isEmpty) {
         return [
-          empty(
-            'Inget sparat än.\n\nTryck på ☆ på ett tips eller ett event. '
-            'Tips sparas i sju dagar; event tills dagen efter.',
-            icon: Icons.star_outline_rounded,
-          ),
+          empty(tr.driverScreenNothingSaved, icon: Icons.star_outline_rounded),
         ];
       }
       return [
         if (_favorites.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
-            child: _SectionTitle('Tips'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+            child: _SectionTitle(tr.driverScreenSectionTips),
           ),
           ..._favorites.map(tipCard),
         ],
         if (events.isNotEmpty) ...[
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: _SectionTitle('Event'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: _SectionTitle(tr.driverScreenEvents),
           ),
           ...events.map(eventCard),
         ],
@@ -3568,14 +3564,14 @@ class _DriverScreenState extends State<DriverScreen>
           _eventsSourceOk
               ? empty(
                   _eventRadiusKm != null
-                      ? 'Inga event inom ${_eventRadiusKm!.round()} km. Välj ett längre avstånd.'
-                      : 'Inga event de här dagarna.',
+                      ? tr.driverScreenNoEventsWithin(_eventRadiusKm!.round())
+                      : tr.driverScreenNoEventsDays,
                   icon: Icons.event_busy_rounded,
-                  action: 'Fler datum',
+                  action: tr.driverScreenMoreDates,
                   onAction: _openEventsScreen,
                 )
               : empty(
-                  'Kan inte hämta event just nu.',
+                  tr.driverScreenEventsFailed,
                   icon: Icons.cloud_off_rounded,
                 ),
         // Alla, inte de 30 första: kartan ritar alla (_mapItems).
@@ -3588,7 +3584,7 @@ class _DriverScreenState extends State<DriverScreen>
               ),
               onPressed: _openEventsScreen,
               icon: const Icon(Icons.calendar_month_rounded),
-              label: const Text('Fler datum'),
+              label: Text(tr.driverScreenMoreDates),
             ),
           ),
       ];
@@ -3599,10 +3595,7 @@ class _DriverScreenState extends State<DriverScreen>
       final tips = _tipsIn(lens);
       if (_ferriesVisible.isEmpty && tips.isEmpty) {
         return [
-          empty(
-            'Inga färjor på väg in just nu.',
-            icon: Icons.directions_boat_rounded,
-          ),
+          empty(tr.driverScreenNoFerries, icon: Icons.directions_boat_rounded),
         ];
       }
       return [
@@ -3648,17 +3641,17 @@ class _DriverScreenState extends State<DriverScreen>
     final out = <Widget>[];
     if (saved.isNotEmpty) {
       out.add(
-        const Padding(
-          padding: EdgeInsets.fromLTRB(16, 4, 16, 8),
-          child: _SectionTitle('Sparat'),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+          child: _SectionTitle(tr.driverScreenSaved),
         ),
       );
       out.addAll(saved.map(tipCard));
       if (feedTips.isNotEmpty) {
         out.add(
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: _SectionTitle('Nu'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: _SectionTitle(tr.driverScreenNow),
           ),
         );
       }
@@ -3668,18 +3661,24 @@ class _DriverScreenState extends State<DriverScreen>
       // var de starka slutar. Med annan sortering (närmast, nyast) är
       // ordningen förarens val och listan hålls ihop.
       final groups = <String, List<Map<String, dynamic>>>{
-        'Starka': [],
-        'Medel': [],
-        'Svaga': [],
-        'Övrigt': [],
+        'high': [],
+        'medium': [],
+        'low': [],
+        'minor': [],
+      };
+      final groupNames = {
+        'high': tr.driverScreenGroupStrong,
+        'medium': tr.driverScreenGroupMedium,
+        'low': tr.driverScreenGroupWeak,
+        'minor': tr.driverScreenGroupOther,
       };
       for (final a in feedTips) {
         final name = a['minor'] == true
-            ? 'Övrigt'
+            ? 'minor'
             : switch (likelihoodForAlert(a)) {
-                CustomerLikelihood.high => 'Starka',
-                CustomerLikelihood.medium => 'Medel',
-                CustomerLikelihood.low => 'Svaga',
+                CustomerLikelihood.high => 'high',
+                CustomerLikelihood.medium => 'medium',
+                CustomerLikelihood.low => 'low',
               };
         groups[name]!.add(a);
       }
@@ -3688,7 +3687,9 @@ class _DriverScreenState extends State<DriverScreen>
         out.add(
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: _SectionTitle('$name · ${items.length}'),
+            child: _SectionTitle(
+              tr.driverScreenGroupTitle(groupNames[name]!, items.length),
+            ),
           ),
         );
         out.addAll(items.map(tipCard));
@@ -3704,15 +3705,15 @@ class _DriverScreenState extends State<DriverScreen>
       out.add(
         _filtersActive
             ? empty(
-                'Inga tips med de här filtren.',
+                tr.driverScreenNoTipsFilters,
                 icon: Icons.filter_alt_off_rounded,
-                action: 'Rensa filter',
+                action: tr.driverScreenClearFilters,
                 onAction: _clearFilters,
               )
             : empty(
                 lens == SignalCategory.road
-                    ? 'Inga trafikolyckor i ditt område just nu.'
-                    : 'Lugnt just nu',
+                    ? tr.driverScreenNoRoadAccidents
+                    : tr.driverScreenCalm,
                 icon: Icons.check_circle_outline_rounded,
               ),
       );
@@ -3722,9 +3723,9 @@ class _DriverScreenState extends State<DriverScreen>
     if (lens == null) {
       if (_ferriesVisible.isNotEmpty) {
         out.add(
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: _SectionTitle('Färjor'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: _SectionTitle(tr.driverScreenFerries),
           ),
         );
         for (final f in _ferriesVisible) {
@@ -3745,9 +3746,9 @@ class _DriverScreenState extends State<DriverScreen>
       final today = _eventsToday;
       if (today.isNotEmpty) {
         out.add(
-          const Padding(
-            padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
-            child: _SectionTitle('Event i dag'),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+            child: _SectionTitle(tr.driverScreenEventsToday),
           ),
         );
         out.addAll(today.map(eventCard));
@@ -3760,7 +3761,7 @@ class _DriverScreenState extends State<DriverScreen>
           child: ExpansionTile(
             tilePadding: const EdgeInsets.symmetric(horizontal: 16),
             title: Text(
-              'Nyss slut (${ended.length})',
+              tr.driverScreenRecentlyOver(ended.length),
               style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
             ),
             children: [for (final a in ended) tipCard(a)],
@@ -3774,18 +3775,18 @@ class _DriverScreenState extends State<DriverScreen>
   /// Dag och avstånd för event. Avståndet kräver position -- utan den visas
   /// en knapp som hämtar den i stället för val som inte kan göra något.
   Widget _eventFilters() {
-    const days = [
-      ('today', 'I dag'),
-      ('tomorrow', 'I morgon'),
-      ('weekend', 'Helgen'),
-      ('week', '7 dagar'),
-      ('all', '14 dagar'),
+    final days = [
+      ('today', tr.driverScreenDayToday),
+      ('tomorrow', tr.driverScreenDayTomorrow),
+      ('weekend', tr.driverScreenDayWeekend),
+      ('week', tr.driverScreenDays(7)),
+      ('all', tr.driverScreenDays(14)),
     ];
-    const radii = <(double?, String)>[
-      (null, 'Hela länet'),
-      (10, '10 km'),
-      (25, '25 km'),
-      (50, '50 km'),
+    final radii = <(double?, String)>[
+      (null, tr.driverScreenWholeCountyShort),
+      (10, tr.driverScreenKm(10)),
+      (25, tr.driverScreenKm(25)),
+      (50, tr.driverScreenKm(50)),
     ];
     Widget chip(
       String label,
@@ -3793,7 +3794,7 @@ class _DriverScreenState extends State<DriverScreen>
       VoidCallback onTap, {
       IconData? icon,
     }) => Padding(
-      padding: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsetsDirectional.only(end: 8),
       child: ChoiceChip(
         avatar: icon == null
             ? null
@@ -3846,12 +3847,12 @@ class _DriverScreenState extends State<DriverScreen>
               children: [
                 if (_userLat == null)
                   Padding(
-                    padding: const EdgeInsets.only(right: 8),
+                    padding: const EdgeInsetsDirectional.only(end: 8),
                     child: ActionChip(
                       avatar: const Icon(Icons.my_location_rounded, size: 18),
-                      label: const Text(
-                        'Visa avstånd',
-                        style: TextStyle(fontWeight: FontWeight.w700),
+                      label: Text(
+                        tr.driverScreenShowDistance,
+                        style: const TextStyle(fontWeight: FontWeight.w700),
                       ),
                       onPressed: _goToMyLocation,
                     ),
@@ -3983,47 +3984,47 @@ class _EntitlementBanner extends StatelessWidget {
 
   (String, String, IconData, Color) get _copy => switch (reason) {
     'trial_not_started' => (
-      'Välkommen! Ett steg kvar',
-      'Välj län under Inställningar. Förare bjuds in på webben. '
-          'Provperioden startar när den första föraren loggar in.',
+      tr.driverScreenTrialNotStartedTitle,
+      tr.driverScreenTrialNotStartedBody,
       Icons.flag_outlined,
       TbColors.live,
     ),
     // Kontot bytte telefon (fleet/access.py): ett konto, en telefon.
     'account_moved' => (
-      'Inloggad på en annan telefon',
-      message ??
-          'Ditt konto används nu på en annan telefon. Logga in här igen om '
-              'du vill flytta tillbaka. Telefonen går att byta en gång i månaden.',
+      tr.driverScreenMovedTitle,
+      message ?? tr.driverScreenMovedBody,
       Icons.phonelink_erase_rounded,
       TbColors.taxiDeep,
     ),
     'company_suspended' || 'account_blocked' => (
-      'Kontot är avstängt',
-      message ?? 'Kontakta TaxiTips support.',
+      tr.driverScreenBlockedTitle,
+      message ?? tr.driverScreenBlockedBody,
       Icons.block,
       TbColors.danger,
     ),
     // Skäl som handlar om medlemskap får appens neutrala text, aldrig serverns:
     // den kan innehålla en uppmaning om betalning (membership_copy.dart).
     'trial_ended' => (
-      'Provperioden är slut',
-      'Nya tips visas inte just nu. $kMembershipOnWeb Det är inte samma sak '
-          'som "inga störningar just nu".',
+      tr.driverScreenTrialEndedTitle,
+      tr.driverScreenNoNewTips(kMembershipOnWeb),
       Icons.info_outline,
       TbColors.taxiDeep,
     ),
     'company_paused' || 'account_paused' => (
-      'Medlemskapet är pausat',
-      'Nya tips visas inte just nu. $kMembershipOnWeb Det är inte samma sak '
-          'som "inga störningar just nu".',
+      tr.driverScreenPausedTitle,
+      tr.driverScreenNoNewTips(kMembershipOnWeb),
       Icons.pause_circle_outline,
       TbColors.taxiDeep,
     ),
     _ => (
-      'Tipsen är pausade',
-      '${membershipNotice(reason, serverMessage: message, fallback: 'Åtkomsten är inte aktiv.')} '
-          'Det är inte samma sak som "inga störningar just nu".',
+      tr.driverScreenTipsPausedTitle,
+      tr.driverScreenPausedBody(
+        membershipNotice(
+          reason,
+          serverMessage: message,
+          fallback: tr.driverScreenAccessInactive,
+        ),
+      ),
       Icons.info_outline,
       TbColors.taxiDeep,
     ),
@@ -4073,12 +4074,12 @@ class _EntitlementBanner extends StatelessWidget {
                     onPressed: onOpenSettings,
                     style: TextButton.styleFrom(
                       padding: EdgeInsets.zero,
-                      alignment: Alignment.centerLeft,
+                      alignment: AlignmentDirectional.centerStart,
                     ),
                     child: Text(
                       reason == 'trial_not_started'
-                          ? 'Öppna inställningar'
-                          : 'Se inställningar',
+                          ? tr.driverScreenOpenSettings
+                          : tr.driverScreenSeeSettings,
                     ),
                   ),
                 ],
@@ -4144,7 +4145,7 @@ class _ZoomButtons extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           IconButton(
-            tooltip: 'Zooma in',
+            tooltip: tr.driverScreenZoomIn,
             onPressed: onZoomIn,
             iconSize: 28,
             color: TbColors.ink,
@@ -4153,7 +4154,7 @@ class _ZoomButtons extends StatelessWidget {
           ),
           Container(width: 32, height: 1, color: TbColors.line),
           IconButton(
-            tooltip: 'Zooma ut',
+            tooltip: tr.driverScreenZoomOut,
             onPressed: onZoomOut,
             iconSize: 28,
             color: TbColors.ink,
@@ -4191,7 +4192,7 @@ class _Notice extends StatelessWidget {
       shadowColor: Colors.black26,
       borderRadius: BorderRadius.circular(14),
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(14, 6, 6, 6),
+        padding: const EdgeInsetsDirectional.fromSTEB(14, 6, 6, 6),
         child: Row(
           children: [
             Icon(icon, size: 20, color: color),

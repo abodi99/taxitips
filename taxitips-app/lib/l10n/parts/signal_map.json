@@ -1,0 +1,22 @@
+{
+  "signalMapCluster": {
+    "sv": "{count} saker här",
+    "en": "{count, plural, =1{1 item here} other{{count} items here}}",
+    "ar": "{count, plural, =0{لا عناصر هنا} =1{عنصر واحد هنا} =2{عنصران هنا} few{{count} عناصر هنا} many{{count} عنصرًا هنا} other{{count} عنصر هنا}}",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "signalMapFerry": {
+    "sv": "Färja {name}",
+    "en": "Ferry {name}",
+    "ar": "العبّارة {name}",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  }
+}

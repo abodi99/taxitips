@@ -3,37 +3,39 @@
 /// two never drift into saying different things about the same alert.
 library;
 
-const severityTierLabels = {
-  'line_paused': 'Hela linjen är stoppad',
-  'line_delayed': 'Försening på linjen',
+import 'l10n/l10n.dart';
+
+Map<String, String> get severityTierLabels => {
+  'line_paused': tr.severityLabelsTierLinePaused,
+  'line_delayed': tr.severityLabelsTierLineDelayed,
   // Inget löfte om ersättning här: den finns bara när källan säger det, och då
   // står den i resealternativet (has_alternative) -- inte i typens namn.
-  'vehicle_cancelled': 'En avgång inställd',
-  'vehicle_delayed': 'En avgång försenad',
-  'arrival_wave': 'Många flyg landar samtidigt',
-  'last_arrival': 'Sista planet — inget mer landar på flera timmar',
-  'road_accident_or_closure': 'Olycka eller avstängd väg',
-  'road_work_or_queue': 'Vägarbete eller köbildning',
-  'road_work': 'Mindre vägarbete',
-  'disruption_unclassified': 'Störning (osäker klassificering)',
+  'vehicle_cancelled': tr.severityLabelsTierVehicleCancelled,
+  'vehicle_delayed': tr.severityLabelsTierVehicleDelayed,
+  'arrival_wave': tr.severityLabelsTierArrivalWave,
+  'last_arrival': tr.severityLabelsTierLastArrival,
+  'road_accident_or_closure': tr.severityLabelsTierRoadAccident,
+  'road_work_or_queue': tr.severityLabelsTierRoadWorkQueue,
+  'road_work': tr.severityLabelsTierRoadWork,
+  'disruption_unclassified': tr.severityLabelsTierUnclassified,
   // Trafikbolagets meddelande som inte räknas som ett tips: visas längst ner
   // i listan, aldrig som notis (core/api.py, "minor").
-  'ignore': 'Övrigt – trafikbolagets meddelande',
+  'ignore': tr.severityLabelsTierIgnore,
 };
 
 /// Short (card-width) version of the same tiers, for the compact list view.
-const severityTierShortLabels = {
-  'line_paused': 'Hela linjen stoppad',
-  'line_delayed': 'Försening, linjen kör',
-  'vehicle_cancelled': 'Enstaka avgång inställd',
-  'vehicle_delayed': 'Enstaka avgång försenad',
-  'arrival_wave': 'Ankomstvåg',
-  'last_arrival': 'Sista ankomsten',
-  'road_accident_or_closure': 'Olycka/avstängning',
-  'road_work_or_queue': 'Vägarbete/kö',
-  'road_work': 'Vägarbete',
-  'disruption_unclassified': 'Osäker bedömning',
-  'ignore': 'Övrigt',
+Map<String, String> get severityTierShortLabels => {
+  'line_paused': tr.severityLabelsShortLinePaused,
+  'line_delayed': tr.severityLabelsShortLineDelayed,
+  'vehicle_cancelled': tr.severityLabelsShortVehicleCancelled,
+  'vehicle_delayed': tr.severityLabelsShortVehicleDelayed,
+  'arrival_wave': tr.severityLabelsShortArrivalWave,
+  'last_arrival': tr.severityLabelsShortLastArrival,
+  'road_accident_or_closure': tr.severityLabelsShortRoadAccident,
+  'road_work_or_queue': tr.severityLabelsShortRoadWorkQueue,
+  'road_work': tr.severityLabelsShortRoadWork,
+  'disruption_unclassified': tr.severityLabelsShortUnclassified,
+  'ignore': tr.severityLabelsShortIgnore,
 };
 
 /// Flyg och färja delar `arrival_wave`/`last_arrival` på servern. Etiketten
@@ -48,21 +50,21 @@ bool _isFerryTip(Map alert) {
 String severityTierLabel(String? tier, Map alert) {
   if (tier == 'arrival_wave') {
     return _isFerryTip(alert)
-        ? 'Många färjor kommer in samtidigt'
-        : 'Många flyg landar samtidigt';
+        ? tr.severityLabelsTierArrivalWaveFerry
+        : tr.severityLabelsTierArrivalWave;
   }
   if (tier == 'last_arrival') {
     return _isFerryTip(alert)
-        ? 'Sista färjan — inget mer anländer på flera timmar'
-        : 'Sista planet — inget mer landar på flera timmar';
+        ? tr.severityLabelsTierLastArrivalFerry
+        : tr.severityLabelsTierLastArrival;
   }
   return severityTierLabels[tier] ?? '';
 }
 
-const confidenceLabels = {
-  'high': 'Hög — tydligt i källdatan',
-  'medium': 'Medel',
-  'low': 'Låg — osäker tolkning av källdatan',
+Map<String, String> get confidenceLabels => {
+  'high': tr.severityLabelsConfidenceHigh,
+  'medium': tr.severityLabelsConfidenceMedium,
+  'low': tr.severityLabelsConfidenceLow,
 };
 
 /// Driver-facing "how likely are there customers here" read, replacing the
@@ -161,20 +163,8 @@ CustomerLikelihood customerLikelihood({
 // distance, which a driver can act on. CustomerLikelihood itself is kept and
 // still drives the badge colour and the "Bara hög prio" filter.
 
-const _months = [
-  'jan',
-  'feb',
-  'mar',
-  'apr',
-  'maj',
-  'jun',
-  'jul',
-  'aug',
-  'sep',
-  'okt',
-  'nov',
-  'dec',
-];
+/// Månadens korta namn i det aktiva språket ([month] 1–12): "okt" / "Oct".
+String monthShortName(int month) => tr.severityLabelsMonthShort('m$month');
 
 // Titles this generic carry no place/route info at all -- Trafiklab
 // genuinely sends nothing more specific for these (verified against real
@@ -196,16 +186,16 @@ const _genericTitles = {
 ///
 /// Ordningen speglar hur en taxiförare tänker: först det som skapar
 /// kunder (tåg/buss/…), sedan väg (sammanhang), färjor och evenemang.
-const filterModeOptions = <(String, String)>[
-  ('train', 'Tåg'),
-  ('metro', 'Tunnelbana'),
-  ('tram', 'Spårvagn'),
-  ('bus', 'Buss'),
-  ('boat', 'Båt'),
-  ('flight', 'Flyg'),
-  ('road', 'Väg'),
-  ('ferry', 'Färjor'),
-  ('events', 'Evenemang'),
+List<(String, String)> get filterModeOptions => [
+  ('train', tr.severityLabelsModeTrain),
+  ('metro', tr.severityLabelsModeMetro),
+  ('tram', tr.severityLabelsModeTram),
+  ('bus', tr.severityLabelsModeBus),
+  ('boat', tr.severityLabelsModeBoat),
+  ('flight', tr.severityLabelsModeFlight),
+  ('road', tr.severityLabelsModeRoad),
+  ('ferry', tr.severityLabelsModeFerries),
+  ('events', tr.severityLabelsModeEvents),
 ];
 
 const filterModeKeys = <String>[
@@ -238,24 +228,26 @@ String alertFilterMode(Map<String, dynamic> alert) {
 
 String displayTitle({required String? title, required String? mode}) {
   final t = title?.trim();
-  if (t == null || t.isEmpty) return 'Tips';
+  if (t == null || t.isEmpty) return tr.severityLabelsTipFallback;
   if (_genericTitles.contains(t.toLowerCase())) {
     final modeLabel = switch (mode) {
-      'train' || 'rail' => 'Tåg',
+      'train' || 'rail' => tr.severityLabelsModeTrain,
       // SL reports metro and tram distinctly, and the backend keeps them
       // distinct rather than flattening both into "Tåg" -- a Stockholm driver
       // reads "Tunnelbana" and knows immediately which kind of stop to head
       // for. They are scored on the same tiers as train (a stopped metro
       // line strands people identically); only the label differs.
-      'metro' => 'Tunnelbana',
-      'tram' => 'Spårvagn',
-      'bus' => 'Buss',
-      'boat' => 'Båt',
-      'road' => 'Väg',
-      'flight' => 'Flyg',
+      'metro' => tr.severityLabelsModeMetro,
+      'tram' => tr.severityLabelsModeTram,
+      'bus' => tr.severityLabelsModeBus,
+      'boat' => tr.severityLabelsModeBoat,
+      'road' => tr.severityLabelsModeRoad,
+      'flight' => tr.severityLabelsModeFlight,
       _ => null,
     };
-    if (modeLabel != null) return '$modeLabel: $t';
+    if (modeLabel != null) {
+      return tr.severityLabelsTitleWithMode(modeLabel, t);
+    }
   }
   return t;
 }
@@ -274,7 +266,7 @@ String dateTimeLabel(String? iso) {
   if (dt.year == now.year && dt.month == now.month && dt.day == now.day) {
     return time;
   }
-  return '${dt.day} ${_months[dt.month - 1]} $time';
+  return '${dt.day} ${monthShortName(dt.month)} $time';
 }
 
 /// Etiketten för lagstadgad förseningsersättning, delad mellan kortet och
@@ -288,14 +280,18 @@ String dateTimeLabel(String? iso) {
 /// kortet inget. Skillnaden är stor — Skånetrafikens 2 960 kr gäller per
 /// betalande resenär, medan SL skriver att beloppet inte blir högre vid
 /// samåkning. Fyra strandsatta resenärer är två olika affärer.
+String _perKey(bool? perPerson) => switch (perPerson) {
+  true => 'person',
+  false => 'trip',
+  null => 'none',
+};
+
 String compensationLabel(num? amountKr, {bool? perPerson}) {
-  if (amountKr == null) return 'Taxi kan ersättas';
-  final per = switch (perPerson) {
-    true => ' per resenär',
-    false => ' per resa',
-    null => '',
-  };
-  return 'Taxi ersätts · upp till ${amountKr.round()} kr$per';
+  if (amountKr == null) return tr.severityLabelsCompensationMaybe;
+  return tr.severityLabelsCompensationUpTo(
+    amountKr.round(),
+    _perKey(perPerson),
+  );
 }
 
 /// Ersättningen som en mening till föraren i tipsbladet: "Resenären kan få
@@ -306,20 +302,17 @@ String compensationLabel(num? amountKr, {bool? perPerson}) {
 /// följer samma regler som [compensationLabel] -- saknas beloppet nämns inget.
 /// Mellanslagen i beloppet är hårda så att "1 500 kr" aldrig bryts mitt i.
 String compensationSentence(num? amountKr, {bool? perPerson}) {
-  const base = 'Resenären kan få taxin betald';
-  if (amountKr == null) return base;
-  final per = switch (perPerson) {
-    true => ' per resenär',
-    false => ' per resa',
-    null => '',
-  };
+  if (amountKr == null) return tr.severityLabelsCompensationBase;
   final digits = amountKr.round().toString();
   final grouped = StringBuffer();
   for (var i = 0; i < digits.length; i++) {
     if (i > 0 && (digits.length - i) % 3 == 0) grouped.write('\u00A0');
     grouped.write(digits[i]);
   }
-  return '$base upp till $grouped\u00A0kr$per';
+  return tr.severityLabelsCompensationSentenceUpTo(
+    grouped.toString(),
+    _perKey(perPerson),
+  );
 }
 
 /// "Vad gör resenären i stället?" — nästa avgång och ersättningstrafik.
@@ -385,20 +378,28 @@ class TipDeparture {
 
   /// "Inställd 20:39 mot Göteborg C" / "Försenad 35 min · 20:39 → 21:14".
   String get headline {
-    final dest = destination == null ? '' : ' mot $destination';
-    if (cancelled) return 'Inställd $clock$dest';
-    final delay = delayMinutes == null ? '' : ' ${humanMinutes(delayMinutes!)}';
-    final change = newClock == null ? clock : '$clock → $newClock';
-    return 'Försenad$delay · $change$dest';
+    final dest = destination == null
+        ? ''
+        : ' ${tr.severityLabelsTowards(destination!)}';
+    if (cancelled) return '${tr.severityLabelsCancelledAt(clock)}$dest';
+    final head = delayMinutes == null
+        ? tr.severityLabelsDelayed
+        : tr.severityLabelsDelayedBy(humanMinutes(delayMinutes!));
+    final change = newClock == null
+        ? clock
+        : tr.severityLabelsClockChange(clock, newClock!);
+    return '$head · $change$dest';
   }
 }
 
 /// "45 min", "1 tim 6 min" -- samma som backendens human_gap.
 String humanMinutes(int minutes) {
-  if (minutes < 60) return '$minutes min';
+  if (minutes < 60) return tr.severityLabelsMinutes(minutes);
   final h = minutes ~/ 60;
   final m = minutes % 60;
-  return m == 0 ? '$h tim' : '$h tim $m min';
+  return m == 0
+      ? tr.severityLabelsHours(h)
+      : tr.severityLabelsHoursMinutes(h, m);
 }
 
 class TravelOptions {
@@ -497,16 +498,22 @@ class TravelOptions {
   /// "nästa dit 20:50, 11 min senare" / "nästa dit först 21:45, 1 tim 6 min
   /// senare" / "sista avgången". Null när vi inte vet.
   String? get waitText {
-    if (isLastDeparture) return 'Sista avgången härifrån';
+    if (isLastDeparture) return tr.severityLabelsWaitLast;
     final dep = departure;
     if (dep == null || !dep.cancelled) return null;
     final gap = gapMinutes;
     if (gap == null) return null;
-    final where = dep.destination == null ? 'Nästa resa' : 'Nästa dit';
+    final there = dep.destination != null;
     final at = nextClock == null ? '' : ' $nextClock';
-    return gap > 30
-        ? '$where först$at, ${humanMinutes(gap)} senare'
-        : '$where$at, ${humanMinutes(gap)} senare';
+    final gapText = humanMinutes(gap);
+    if (gap > 30) {
+      return there
+          ? tr.severityLabelsWaitThereFirst(at, gapText)
+          : tr.severityLabelsWaitTripFirst(at, gapText);
+    }
+    return there
+        ? tr.severityLabelsWaitThere(at, gapText)
+        : tr.severityLabelsWaitTrip(at, gapText);
   }
 
   /// Kortets rad för ett tips med avgång: avgången först, med "om X"
@@ -530,11 +537,8 @@ class TravelOptions {
 /// ger "har gått", inte "om -5 min".
 String relativeDeparture(DateTime at, {DateTime? now}) {
   final secs = at.difference(now ?? DateTime.now()).inSeconds;
-  if (secs <= -60) return 'har gått';
-  if (secs < 60) return 'avgår nu';
+  if (secs <= -60) return tr.severityLabelsDeparted;
+  if (secs < 60) return tr.severityLabelsDepartsNow;
   final minutes = (secs / 60).round();
-  if (minutes < 60) return 'om $minutes min';
-  final h = minutes ~/ 60;
-  final m = minutes % 60;
-  return m == 0 ? 'om $h tim' : 'om $h tim $m min';
+  return tr.severityLabelsIn(humanMinutes(minutes));
 }

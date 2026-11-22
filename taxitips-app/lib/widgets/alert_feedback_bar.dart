@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../analytics.dart';
 import '../api_client.dart';
 import '../config.dart';
+import '../l10n/l10n.dart';
 import '../theme.dart';
 
 /// 👍 / 👎 -- förarens svar på hur ett tips gick: "Fick körning" eller
@@ -102,7 +103,7 @@ class _AlertFeedbackBarState extends State<AlertFeedbackBar> {
         // som gjorde det -- det var precis så den gamla vägen kunde vara
         // trasig i månader utan att någon märkte det.
         _choice = previous;
-        _error = 'Kunde inte spara svaret. Försök igen.';
+        _error = tr.alertFeedbackSaveFailed;
       }
     });
   }
@@ -117,9 +118,9 @@ class _AlertFeedbackBarState extends State<AlertFeedbackBar> {
     final status = _error != null
         ? (_error!, TbColors.danger)
         : _queued
-        ? ('Sparat. Skickas när du har nät.', TbColors.muted)
+        ? (tr.alertFeedbackQueued, TbColors.muted)
         : _choice != null
-        ? ('Tack!', TbColors.live)
+        ? (tr.alertFeedbackThanks, TbColors.live)
         : null;
 
     return Column(
@@ -127,9 +128,9 @@ class _AlertFeedbackBarState extends State<AlertFeedbackBar> {
       children: [
         Row(
           children: [
-            const Text(
-              'Hur gick det?',
-              style: TextStyle(
+            Text(
+              tr.alertFeedbackTitle,
+              style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
                 color: TbColors.ink,
@@ -157,7 +158,7 @@ class _AlertFeedbackBarState extends State<AlertFeedbackBar> {
           children: [
             Expanded(
               child: _ChoiceButton(
-                label: 'Fick körning',
+                label: tr.alertFeedbackGotFare,
                 icon: Icons.thumb_up_alt_rounded,
                 color: TbColors.live,
                 selected: _choice == 'fare',
@@ -167,7 +168,7 @@ class _AlertFeedbackBarState extends State<AlertFeedbackBar> {
             const SizedBox(width: 8),
             Expanded(
               child: _ChoiceButton(
-                label: 'Ingen kund',
+                label: tr.alertFeedbackNoCustomer,
                 icon: Icons.thumb_down_alt_rounded,
                 color: TbColors.danger,
                 selected: _choice == 'empty',

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../l10n/l10n.dart';
 import '../signal_kinds.dart';
 import '../theme.dart';
 import 'ferry_event_widgets.dart';
@@ -233,7 +234,7 @@ class _SignalMapState extends State<SignalMap> {
           height: 64,
           child: Semantics(
             button: true,
-            label: '${group.length} saker här',
+            label: tr.signalMapCluster(group.length),
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: () => _openCluster(group),
@@ -306,7 +307,7 @@ class _SignalMapState extends State<SignalMap> {
           height: 48,
           child: Semantics(
             button: widget.onSelectFerry != null,
-            label: 'Färja ${ferryName(f)}',
+            label: tr.signalMapFerry(ferryName(f)),
             child: GestureDetector(
               behavior: HitTestBehavior.opaque,
               onTap: widget.onSelectFerry == null

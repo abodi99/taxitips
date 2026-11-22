@@ -1,0 +1,47 @@
+{
+  "supportChatLoadFailed": {
+    "sv": "Kunde inte hämta chatten. Kontrollera nätet.",
+    "en": "Could not load the chat. Check your connection.",
+    "ar": "تعذّر تحميل المحادثة. تحقق من الاتصال."
+  },
+  "supportChatSendFailed": {
+    "sv": "Meddelandet skickades inte. Försök igen.",
+    "en": "The message was not sent. Try again.",
+    "ar": "لم تُرسل الرسالة. حاول مرة أخرى."
+  },
+  "supportChatTitle": {
+    "sv": "Support",
+    "en": "Support",
+    "ar": "الدعم"
+  },
+  "supportChatSubtitle": {
+    "sv": "Vi svarar så snart vi kan",
+    "en": "We reply as soon as we can",
+    "ar": "نرد في أقرب وقت ممكن"
+  },
+  "supportChatRetry": {
+    "sv": "Försök igen",
+    "en": "Try again",
+    "ar": "حاول مرة أخرى"
+  },
+  "supportChatEmptyTitle": {
+    "sv": "Hur kan vi hjälpa till?",
+    "en": "How can we help?",
+    "ar": "كيف يمكننا المساعدة؟"
+  },
+  "supportChatEmptyBody": {
+    "sv": "Skriv din fråga nedan. Du får en notis när vi svarat.",
+    "en": "Write your question below. You get a notification when we have replied.",
+    "ar": "اكتب سؤالك أدناه. سيصلك إشعار عندما نرد."
+  },
+  "supportChatHint": {
+    "sv": "Skriv ett meddelande",
+    "en": "Write a message",
+    "ar": "اكتب رسالة"
+  },
+  "supportChatSend": {
+    "sv": "Skicka",
+    "en": "Send",
+    "ar": "إرسال"
+  }
+}

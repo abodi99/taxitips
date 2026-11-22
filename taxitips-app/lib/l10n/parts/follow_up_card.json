@@ -1,0 +1,20 @@
+{
+  "followUpCardDrove": {
+    "sv": "Du körde mot {place} {time}",
+    "en": "You drove to {place} {time}",
+    "ar": "قدت نحو {place} {time}",
+    "placeholders": {
+      "place": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "followUpCardClose": {
+    "sv": "Stäng",
+    "en": "Close",
+    "ar": "إغلاق"
+  }
+}

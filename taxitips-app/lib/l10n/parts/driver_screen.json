@@ -1,0 +1,673 @@
+{
+  "driverScreenTipGone": {
+    "sv": "Tipset finns inte längre, eller så har bilen inte tillgång till det.",
+    "en": "The tip no longer exists, or the car does not have access to it.",
+    "ar": "النصيحة لم تعد موجودة، أو أن السيارة لا يمكنها الوصول إليها."
+  },
+  "driverScreenPhonePaired": {
+    "sv": "Telefon kopplad",
+    "en": "Phone connected",
+    "ar": "تم ربط الهاتف"
+  },
+  "driverScreenLocationTimeout": {
+    "sv": "Plats tog för lång tid",
+    "en": "Location took too long",
+    "ar": "استغرق تحديد الموقع وقتًا طويلًا"
+  },
+  "driverScreenGpsOff": {
+    "sv": "Slå på plats (GPS) i telefonens inställningar",
+    "en": "Turn on location (GPS) in the phone settings",
+    "ar": "فعّل الموقع (GPS) في إعدادات الهاتف"
+  },
+  "driverScreenLocationDenied": {
+    "sv": "Platsbehörighet nekades",
+    "en": "Location permission was denied",
+    "ar": "تم رفض إذن الموقع"
+  },
+  "driverScreenLocationAllow": {
+    "sv": "Tillåt plats för TaxiTips i telefonens inställningar",
+    "en": "Allow location for TaxiTips in the phone settings",
+    "ar": "اسمح بالموقع لتطبيق TaxiTips في إعدادات الهاتف"
+  },
+  "driverScreenCancelled": {
+    "sv": "Avbrutet",
+    "en": "Cancelled",
+    "ar": "تم الإلغاء"
+  },
+  "driverScreenGpsTimeout": {
+    "sv": "GPS tog för lång tid — försök utomhus eller igen",
+    "en": "GPS took too long — try outdoors or try again",
+    "ar": "استغرق GPS وقتًا طويلًا — جرّب في الخارج أو أعد المحاولة"
+  },
+  "driverScreenPositionFailed": {
+    "sv": "Kunde inte hämta din position",
+    "en": "Could not get your position",
+    "ar": "تعذّر الحصول على موقعك"
+  },
+  "driverScreenFetchingPosition": {
+    "sv": "Hämtar position…",
+    "en": "Getting position…",
+    "ar": "جارٍ تحديد الموقع…"
+  },
+  "driverScreenLoginInvalid": {
+    "sv": "Inloggningen fungerar inte. Logga in igen.",
+    "en": "The login does not work. Log in again.",
+    "ar": "تسجيل الدخول لا يعمل. سجّل الدخول مرة أخرى."
+  },
+  "driverScreenNoAccess": {
+    "sv": "Telefonen har ingen åtkomst. Logga in igen, eller be din chef att bjuda in dig.",
+    "en": "The phone has no access. Log in again, or ask your manager to invite you.",
+    "ar": "ليس لهذا الهاتف صلاحية الوصول. سجّل الدخول مرة أخرى، أو اطلب من مديرك أن يدعوك."
+  },
+  "driverScreenNearYou": {
+    "sv": "Nära dig",
+    "en": "Near you",
+    "ar": "قربك"
+  },
+  "driverScreenNeedsInternet": {
+    "sv": "Kräver internet. Försök igen när du har nät.",
+    "en": "Needs internet. Try again when you have a connection.",
+    "ar": "يتطلب الإنترنت. حاول مرة أخرى عندما يتوفر لديك اتصال."
+  },
+  "driverScreenSaveFailed": {
+    "sv": "Kunde inte spara tipset",
+    "en": "Could not save the tip",
+    "ar": "تعذّر حفظ النصيحة"
+  },
+  "driverScreenUnsaveFailed": {
+    "sv": "Kunde inte ta bort tipset",
+    "en": "Could not remove the tip",
+    "ar": "تعذّرت إزالة النصيحة"
+  },
+  "driverScreenSavedSnack": {
+    "sv": "Sparat. Syns under ⭐ Sparat i sju dagar.",
+    "en": "Saved. Shown under ⭐ Saved for seven days.",
+    "ar": "تم الحفظ. تظهر ضمن ⭐ المحفوظ لمدة سبعة أيام."
+  },
+  "driverScreenRemovedSnack": {
+    "sv": "Borttaget från sparade.",
+    "en": "Removed from saved.",
+    "ar": "تمت الإزالة من المحفوظ."
+  },
+  "driverScreenShow": {
+    "sv": "Visa",
+    "en": "Show",
+    "ar": "عرض"
+  },
+  "driverScreenCategoryLocked": {
+    "sv": "{category} ingår inte i provet",
+    "en": "{category} is not included in the trial",
+    "ar": "{category} غير مشمولة في الفترة التجريبية",
+    "placeholders": {
+      "category": {
+        "type": "String"
+      }
+    }
+  },
+  "driverScreenLockedCount": {
+    "sv": "{count, plural, =1{Just nu finns 1 sådant tips i ditt område.} other{Just nu finns {count} sådana tips i ditt område.}}",
+    "en": "{count, plural, =1{There is 1 such tip in your area right now.} other{There are {count} such tips in your area right now.}}",
+    "ar": "{count, plural, =1{توجد حاليًا نصيحة واحدة من هذا النوع في منطقتك.} =2{توجد حاليًا نصيحتان من هذا النوع في منطقتك.} few{توجد حاليًا {count} نصائح من هذا النوع في منطقتك.} many{توجد حاليًا {count} نصيحة من هذا النوع في منطقتك.} other{توجد حاليًا {count} نصيحة من هذا النوع في منطقتك.}}",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "driverScreenNavFailed": {
+    "sv": "Kunde inte öppna navigeringen.",
+    "en": "Could not open navigation.",
+    "ar": "تعذّر فتح الملاحة."
+  },
+  "driverScreenNoCountiesYet": {
+    "sv": "Inga län än. Välj bil först.",
+    "en": "No counties yet. Choose a car first.",
+    "ar": "لا توجد مقاطعات بعد. اختر سيارة أولًا."
+  },
+  "driverScreenAllYourCounties": {
+    "sv": "Alla dina län ({count})",
+    "en": "All your counties ({count})",
+    "ar": "كل مقاطعاتك ({count})",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "driverScreenNoCounty": {
+    "sv": "Inget län valt",
+    "en": "No county selected",
+    "ar": "لم تُختر أي مقاطعة"
+  },
+  "driverScreenWholeCounty": {
+    "sv": "Hela länet · välj kommuner",
+    "en": "Whole county · choose municipalities",
+    "ar": "المقاطعة كاملة · اختر البلديات"
+  },
+  "driverScreenMunicipalitiesChosen": {
+    "sv": "{count, plural, other{{count} kommuner valda}}",
+    "en": "{count, plural, =1{1 municipality selected} other{{count} municipalities selected}}",
+    "ar": "{count, plural, =1{تم اختيار بلدية واحدة} =2{تم اختيار بلديتين} few{تم اختيار {count} بلديات} many{تم اختيار {count} بلدية} other{تم اختيار {count} بلدية}}",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "driverScreenCountiesAndMunicipalities": {
+    "sv": "Län och kommuner",
+    "en": "Counties and municipalities",
+    "ar": "المقاطعات والبلديات"
+  },
+  "driverScreenClear": {
+    "sv": "Rensa",
+    "en": "Clear",
+    "ar": "مسح"
+  },
+  "driverScreenDrivingArea": {
+    "sv": "Körområde",
+    "en": "Driving area",
+    "ar": "منطقة القيادة"
+  },
+  "driverScreenDrivingAreaText": {
+    "sv": "Länen du kör i. Notiserna, och listan när appen inte har din plats, följer körområdet.",
+    "en": "The counties you drive in. Notifications, and the list when the app does not have your location, follow the driving area.",
+    "ar": "المقاطعات التي تعمل فيها. الإشعارات والقائمة (عندما لا يعرف التطبيق موقعك) تتبع منطقة القيادة."
+  },
+  "driverScreenChooseCarFirstCounties": {
+    "sv": "Välj bil först. Då visas bilens län här.",
+    "en": "Choose a car first. The car's counties are then shown here.",
+    "ar": "اختر سيارة أولًا. ستظهر مقاطعات السيارة هنا."
+  },
+  "driverScreenAllCountiesSelected": {
+    "sv": "Alla dina län är valda. Bocka ur dem du inte vill se.",
+    "en": "All your counties are selected. Untick the ones you do not want to see.",
+    "ar": "تم اختيار كل مقاطعاتك. ألغِ تحديد التي لا تريد رؤيتها."
+  },
+  "driverScreenDone": {
+    "sv": "Klar",
+    "en": "Done",
+    "ar": "تم"
+  },
+  "driverScreenFilter": {
+    "sv": "Filter",
+    "en": "Filter",
+    "ar": "التصفية"
+  },
+  "driverScreenMoreOptions": {
+    "sv": "Fler val: dölj typer",
+    "en": "More options: hide types",
+    "ar": "خيارات أكثر: إخفاء الأنواع"
+  },
+  "driverScreenYellowShown": {
+    "sv": "Gul = visas. Tryck för att dölja.",
+    "en": "Yellow = shown. Tap to hide.",
+    "ar": "الأصفر = معروض. اضغط للإخفاء."
+  },
+  "driverScreenStrength": {
+    "sv": "Styrka",
+    "en": "Strength",
+    "ar": "القوة"
+  },
+  "driverScreenPresetAll": {
+    "sv": "Alla",
+    "en": "All",
+    "ar": "الكل"
+  },
+  "driverScreenPresetStrong": {
+    "sv": "Starka",
+    "en": "Strong",
+    "ar": "القوية"
+  },
+  "driverScreenPresetStrongest": {
+    "sv": "Starkast",
+    "en": "Strongest",
+    "ar": "الأقوى"
+  },
+  "driverScreenArea": {
+    "sv": "Område",
+    "en": "Area",
+    "ar": "المنطقة"
+  },
+  "driverScreenNearMe": {
+    "sv": "Nära mig",
+    "en": "Near me",
+    "ar": "قربي"
+  },
+  "driverScreenWithin25": {
+    "sv": "Inom ca 25 km",
+    "en": "Within about 25 km",
+    "ar": "ضمن حوالي 25 كم"
+  },
+  "driverScreenResetFilter": {
+    "sv": "Återställ filter",
+    "en": "Reset filters",
+    "ar": "إعادة ضبط التصفية"
+  },
+  "driverScreenPositionFailedShort": {
+    "sv": "Kunde inte hämta position",
+    "en": "Could not get position",
+    "ar": "تعذّر الحصول على الموقع"
+  },
+  "driverScreenNearYou25": {
+    "sv": "Nära dig (25 km)",
+    "en": "Near you (25 km)",
+    "ar": "قربك (25 كم)"
+  },
+  "driverScreenConnectingPhone": {
+    "sv": "Kopplar telefon…",
+    "en": "Connecting phone…",
+    "ar": "جارٍ ربط الهاتف…"
+  },
+  "driverScreenBack": {
+    "sv": "Tillbaka",
+    "en": "Back",
+    "ar": "رجوع"
+  },
+  "driverScreenHistory": {
+    "sv": "Historik",
+    "en": "History",
+    "ar": "السجل"
+  },
+  "driverScreenLegend": {
+    "sv": "Vad betyder symbolerna?",
+    "en": "What do the symbols mean?",
+    "ar": "ماذا تعني الرموز؟"
+  },
+  "driverScreenSettingsNewReply": {
+    "sv": "Inställningar – nytt svar från supporten",
+    "en": "Settings – new reply from support",
+    "ar": "الإعدادات – رد جديد من الدعم"
+  },
+  "driverScreenSettings": {
+    "sv": "Inställningar",
+    "en": "Settings",
+    "ar": "الإعدادات"
+  },
+  "driverScreenChooseCar": {
+    "sv": "Välj vilken bil du kör för att se tips.",
+    "en": "Choose which car you drive to see tips.",
+    "ar": "اختر السيارة التي تقودها لرؤية النصائح."
+  },
+  "driverScreenChooseCarAction": {
+    "sv": "Välj bil",
+    "en": "Choose car",
+    "ar": "اختر سيارة"
+  },
+  "driverScreenChooseAreaText": {
+    "sv": "Välj ditt körområde för att se tips.",
+    "en": "Choose your driving area to see tips.",
+    "ar": "اختر منطقة قيادتك لرؤية النصائح."
+  },
+  "driverScreenChoose": {
+    "sv": "Välj",
+    "en": "Choose",
+    "ar": "اختر"
+  },
+  "driverScreenNotUpdated": {
+    "sv": "Inte uppdaterat sedan {time}",
+    "en": "Not updated since {time}",
+    "ar": "لم يتم التحديث منذ {time}",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "driverScreenMyPosition": {
+    "sv": "Min position",
+    "en": "My position",
+    "ar": "موقعي"
+  },
+  "driverScreenShowFullList": {
+    "sv": "Visa hela listan",
+    "en": "Show the full list",
+    "ar": "عرض القائمة كاملة"
+  },
+  "driverScreenShowMap": {
+    "sv": "Visa kartan",
+    "en": "Show the map",
+    "ar": "عرض الخريطة"
+  },
+  "driverScreenSaved": {
+    "sv": "Sparat",
+    "en": "Saved",
+    "ar": "المحفوظ"
+  },
+  "driverScreenEvents": {
+    "sv": "Event",
+    "en": "Events",
+    "ar": "الفعاليات"
+  },
+  "driverScreenFerries": {
+    "sv": "Färjor",
+    "en": "Ferries",
+    "ar": "العبّارات"
+  },
+  "driverScreenAllTips": {
+    "sv": "Alla tips",
+    "en": "All tips",
+    "ar": "كل النصائح"
+  },
+  "driverScreenSort": {
+    "sv": "Sortera",
+    "en": "Sort",
+    "ar": "ترتيب"
+  },
+  "driverScreenRoadOnly": {
+    "sv": "Bara trafikolyckor. Vägarbeten och avstängningar visas inte.",
+    "en": "Only traffic accidents. Roadworks and closures are not shown.",
+    "ar": "حوادث السير فقط. أعمال الطرق والإغلاقات غير معروضة."
+  },
+  "driverScreenOnlyStrong": {
+    "sv": "Bara starka",
+    "en": "Only strong",
+    "ar": "القوية فقط"
+  },
+  "driverScreenOnlyStrongest": {
+    "sv": "Bara starkast",
+    "en": "Only strongest",
+    "ar": "الأقوى فقط"
+  },
+  "driverScreenStrengthRange": {
+    "sv": "Styrka {min}–{max}",
+    "en": "Strength {min}–{max}",
+    "ar": "القوة {min}–{max}",
+    "placeholders": {
+      "min": {
+        "type": "int"
+      },
+      "max": {
+        "type": "int"
+      }
+    }
+  },
+  "driverScreenHidden": {
+    "sv": "Dolt: {types}",
+    "en": "Hidden: {types}",
+    "ar": "مخفي: {types}",
+    "placeholders": {
+      "types": {
+        "type": "String"
+      }
+    }
+  },
+  "driverScreenHiddenTiers": {
+    "sv": "{count, plural, other{{count} störningstyper dolda}}",
+    "en": "{count, plural, =1{1 disruption type hidden} other{{count} disruption types hidden}}",
+    "ar": "{count, plural, =1{نوع اضطراب واحد مخفي} =2{نوعا اضطراب مخفيان} few{{count} أنواع اضطرابات مخفية} many{{count} نوع اضطراب مخفي} other{{count} نوع اضطراب مخفي}}",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "driverScreenShowAll": {
+    "sv": "Visa allt",
+    "en": "Show all",
+    "ar": "عرض الكل"
+  },
+  "driverScreenSortImportant": {
+    "sv": "Viktigast",
+    "en": "Most important",
+    "ar": "الأهم"
+  },
+  "driverScreenSortNearest": {
+    "sv": "Närmast",
+    "en": "Nearest",
+    "ar": "الأقرب"
+  },
+  "driverScreenSortNewest": {
+    "sv": "Nyast",
+    "en": "Newest",
+    "ar": "الأحدث"
+  },
+  "driverScreenNothingSaved": {
+    "sv": "Inget sparat än.\n\nTryck på ☆ på ett tips eller ett event. Tips sparas i sju dagar; event tills dagen efter.",
+    "en": "Nothing saved yet.\n\nTap ☆ on a tip or an event. Tips are saved for seven days; events until the day after.",
+    "ar": "لا شيء محفوظ بعد.\n\nاضغط ☆ على نصيحة أو فعالية. تُحفظ النصائح لمدة سبعة أيام، والفعاليات حتى اليوم التالي."
+  },
+  "driverScreenSectionTips": {
+    "sv": "Tips",
+    "en": "Tips",
+    "ar": "النصائح"
+  },
+  "driverScreenNoEventsWithin": {
+    "sv": "Inga event inom {km} km. Välj ett längre avstånd.",
+    "en": "No events within {km} km. Choose a longer distance.",
+    "ar": "لا فعاليات ضمن {km} كم. اختر مسافة أطول.",
+    "placeholders": {
+      "km": {
+        "type": "int"
+      }
+    }
+  },
+  "driverScreenNoEventsDays": {
+    "sv": "Inga event de här dagarna.",
+    "en": "No events on these days.",
+    "ar": "لا فعاليات في هذه الأيام."
+  },
+  "driverScreenMoreDates": {
+    "sv": "Fler datum",
+    "en": "More dates",
+    "ar": "تواريخ أخرى"
+  },
+  "driverScreenEventsFailed": {
+    "sv": "Kan inte hämta event just nu.",
+    "en": "Cannot get events right now.",
+    "ar": "لا يمكن جلب الفعاليات الآن."
+  },
+  "driverScreenNoFerries": {
+    "sv": "Inga färjor på väg in just nu.",
+    "en": "No ferries on their way in right now.",
+    "ar": "لا توجد عبّارات قادمة الآن."
+  },
+  "driverScreenNow": {
+    "sv": "Nu",
+    "en": "Now",
+    "ar": "الآن"
+  },
+  "driverScreenGroupStrong": {
+    "sv": "Starka",
+    "en": "Strong",
+    "ar": "قوية"
+  },
+  "driverScreenGroupMedium": {
+    "sv": "Medel",
+    "en": "Medium",
+    "ar": "متوسطة"
+  },
+  "driverScreenGroupWeak": {
+    "sv": "Svaga",
+    "en": "Weak",
+    "ar": "ضعيفة"
+  },
+  "driverScreenGroupOther": {
+    "sv": "Övrigt",
+    "en": "Other",
+    "ar": "أخرى"
+  },
+  "driverScreenGroupTitle": {
+    "sv": "{name} · {count}",
+    "en": "{name} · {count}",
+    "ar": "{name} · {count}",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      },
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "driverScreenNoTipsFilters": {
+    "sv": "Inga tips med de här filtren.",
+    "en": "No tips with these filters.",
+    "ar": "لا نصائح بهذه المرشحات."
+  },
+  "driverScreenClearFilters": {
+    "sv": "Rensa filter",
+    "en": "Clear filters",
+    "ar": "مسح التصفية"
+  },
+  "driverScreenNoRoadAccidents": {
+    "sv": "Inga trafikolyckor i ditt område just nu.",
+    "en": "No traffic accidents in your area right now.",
+    "ar": "لا حوادث سير في منطقتك الآن."
+  },
+  "driverScreenCalm": {
+    "sv": "Lugnt just nu",
+    "en": "Calm right now",
+    "ar": "هادئ الآن"
+  },
+  "driverScreenEventsToday": {
+    "sv": "Event i dag",
+    "en": "Events today",
+    "ar": "فعاليات اليوم"
+  },
+  "driverScreenRecentlyOver": {
+    "sv": "Nyss slut ({count})",
+    "en": "Just ended ({count})",
+    "ar": "انتهت للتو ({count})",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "driverScreenDayToday": {
+    "sv": "I dag",
+    "en": "Today",
+    "ar": "اليوم"
+  },
+  "driverScreenDayTomorrow": {
+    "sv": "I morgon",
+    "en": "Tomorrow",
+    "ar": "غدًا"
+  },
+  "driverScreenDayWeekend": {
+    "sv": "Helgen",
+    "en": "The weekend",
+    "ar": "عطلة نهاية الأسبوع"
+  },
+  "driverScreenDays": {
+    "sv": "{count, plural, other{{count} dagar}}",
+    "en": "{count, plural, =1{1 day} other{{count} days}}",
+    "ar": "{count, plural, =1{يوم واحد} =2{يومان} few{{count} أيام} many{{count} يومًا} other{{count} يوم}}",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "driverScreenWholeCountyShort": {
+    "sv": "Hela länet",
+    "en": "The whole county",
+    "ar": "المقاطعة كاملة"
+  },
+  "driverScreenKm": {
+    "sv": "{km} km",
+    "en": "{km} km",
+    "ar": "{km} كم",
+    "placeholders": {
+      "km": {
+        "type": "int"
+      }
+    }
+  },
+  "driverScreenShowDistance": {
+    "sv": "Visa avstånd",
+    "en": "Show distance",
+    "ar": "عرض المسافة"
+  },
+  "driverScreenTrialNotStartedTitle": {
+    "sv": "Välkommen! Ett steg kvar",
+    "en": "Welcome! One step left",
+    "ar": "مرحبًا! خطوة واحدة متبقية"
+  },
+  "driverScreenTrialNotStartedBody": {
+    "sv": "Välj län under Inställningar. Förare bjuds in på webben. Provperioden startar när den första föraren loggar in.",
+    "en": "Choose counties under Settings. Drivers are invited on the web. The trial starts when the first driver logs in.",
+    "ar": "اختر المقاطعات من الإعدادات. تتم دعوة السائقين عبر الموقع. تبدأ الفترة التجريبية عندما يسجّل أول سائق دخوله."
+  },
+  "driverScreenMovedTitle": {
+    "sv": "Inloggad på en annan telefon",
+    "en": "Logged in on another phone",
+    "ar": "تم تسجيل الدخول على هاتف آخر"
+  },
+  "driverScreenMovedBody": {
+    "sv": "Ditt konto används nu på en annan telefon. Logga in här igen om du vill flytta tillbaka. Telefonen går att byta en gång i månaden.",
+    "en": "Your account is now used on another phone. Log in here again if you want to move back. The phone can be changed once a month.",
+    "ar": "حسابك مستخدم الآن على هاتف آخر. سجّل الدخول هنا مرة أخرى إذا أردت العودة. يمكن تغيير الهاتف مرة واحدة في الشهر."
+  },
+  "driverScreenBlockedTitle": {
+    "sv": "Kontot är avstängt",
+    "en": "The account is suspended",
+    "ar": "الحساب معلّق"
+  },
+  "driverScreenBlockedBody": {
+    "sv": "Kontakta TaxiTips support.",
+    "en": "Contact TaxiTips support.",
+    "ar": "تواصل مع دعم TaxiTips."
+  },
+  "driverScreenTrialEndedTitle": {
+    "sv": "Provperioden är slut",
+    "en": "The trial has ended",
+    "ar": "انتهت الفترة التجريبية"
+  },
+  "driverScreenNoNewTips": {
+    "sv": "Nya tips visas inte just nu. {web} Det är inte samma sak som \"inga störningar just nu\".",
+    "en": "New tips are not shown right now. {web} This is not the same as \"no disruptions right now\".",
+    "ar": "لا تظهر نصائح جديدة الآن. {web} هذا لا يعني \"لا توجد اضطرابات الآن\".",
+    "placeholders": {
+      "web": {
+        "type": "String"
+      }
+    }
+  },
+  "driverScreenPausedTitle": {
+    "sv": "Medlemskapet är pausat",
+    "en": "The membership is paused",
+    "ar": "العضوية متوقفة مؤقتًا"
+  },
+  "driverScreenTipsPausedTitle": {
+    "sv": "Tipsen är pausade",
+    "en": "Tips are paused",
+    "ar": "النصائح متوقفة مؤقتًا"
+  },
+  "driverScreenAccessInactive": {
+    "sv": "Åtkomsten är inte aktiv.",
+    "en": "Access is not active.",
+    "ar": "الوصول غير مفعّل."
+  },
+  "driverScreenPausedBody": {
+    "sv": "{notice} Det är inte samma sak som \"inga störningar just nu\".",
+    "en": "{notice} This is not the same as \"no disruptions right now\".",
+    "ar": "{notice} هذا لا يعني \"لا توجد اضطرابات الآن\".",
+    "placeholders": {
+      "notice": {
+        "type": "String"
+      }
+    }
+  },
+  "driverScreenOpenSettings": {
+    "sv": "Öppna inställningar",
+    "en": "Open settings",
+    "ar": "افتح الإعدادات"
+  },
+  "driverScreenSeeSettings": {
+    "sv": "Se inställningar",
+    "en": "See settings",
+    "ar": "انظر الإعدادات"
+  },
+  "driverScreenZoomIn": {
+    "sv": "Zooma in",
+    "en": "Zoom in",
+    "ar": "تكبير"
+  },
+  "driverScreenZoomOut": {
+    "sv": "Zooma ut",
+    "en": "Zoom out",
+    "ar": "تصغير"
+  }
+}

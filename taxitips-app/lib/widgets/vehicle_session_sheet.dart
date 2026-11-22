@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../l10n/l10n.dart';
 import '../theme.dart';
 
 /// Bilvalet och skiftbytet.
@@ -119,19 +120,20 @@ class _VehicleSessionSheetState extends State<VehicleSessionSheet> {
     return showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Ta över ${vehicle['plate'] ?? 'bilen'}?'),
-        content: Text(
-          '$message\n\nDen andra telefonen slutar visa tips för den här bilen '
-          'direkt.',
+        title: Text(
+          tr.vehicleSessionTakeOverTitle(
+            '${vehicle['plate'] ?? tr.vehicleSessionTheCar}',
+          ),
         ),
+        content: Text(tr.vehicleSessionTakeOverBody(message)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
-            child: const Text('Avbryt'),
+            child: Text(tr.vehicleSessionCancel),
           ),
           FilledButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Ta över bilen'),
+            child: Text(tr.vehicleSessionTakeOverCar),
           ),
         ],
       ),
@@ -192,12 +194,12 @@ class _VehicleSessionSheetState extends State<VehicleSessionSheet> {
             ),
             const SizedBox(height: 16),
             Text(
-              'Vilken bil kör du?',
+              tr.vehicleSessionTitle,
               style: Theme.of(context).textTheme.titleLarge,
             ),
             const SizedBox(height: 4),
             Text(
-              'Tipsen gäller bilens län. En bil kan bara ha en telefon åt gången.',
+              tr.vehicleSessionSubtitle,
               style: TextStyle(color: Colors.grey.shade700, height: 1.3),
             ),
             const SizedBox(height: 16),
@@ -210,8 +212,7 @@ class _VehicleSessionSheetState extends State<VehicleSessionSheet> {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 child: Text(
-                  'Telefonen är inte kopplad till någon bil. Be din chef bjuda '
-                  'in dig med din e-post, och logga in som förare.',
+                  tr.vehicleSessionNoVehicles,
                   style: TextStyle(color: Colors.grey.shade800, height: 1.3),
                 ),
               )
@@ -226,7 +227,7 @@ class _VehicleSessionSheetState extends State<VehicleSessionSheet> {
               OutlinedButton.icon(
                 onPressed: _busy ? null : _leave,
                 icon: const Icon(Icons.logout),
-                label: const Text('Lämna bilen'),
+                label: Text(tr.vehicleSessionLeave),
               ),
             ],
           ],
@@ -249,24 +250,29 @@ class _VehicleSessionSheetState extends State<VehicleSessionSheet> {
           color: mine ? TbColors.asphalt : Colors.grey.shade600,
         ),
         title: Text(
-          vehicle['plate']?.toString() ?? 'Bil',
+          vehicle['plate']?.toString() ?? tr.vehicleSessionCar,
           style: const TextStyle(fontWeight: FontWeight.w600),
         ),
         subtitle: Text(
           [
             if ((vehicle['label']?.toString() ?? '').isNotEmpty)
               vehicle['label'].toString(),
-            if (counties.isNotEmpty) '${counties.length} län',
+            if (counties.isNotEmpty)
+              tr.vehicleSessionCountiesCount(counties.length),
             if (occupied)
-              'Används av ${vehicle['occupiedBy'] ?? 'en annan telefon'}',
-            if (mine) 'Du kör den här',
+              tr.vehicleSessionUsedBy(
+                '${vehicle['occupiedBy'] ?? tr.vehicleSessionAnotherPhone}',
+              ),
+            if (mine) tr.vehicleSessionYouDriveThis,
           ].join(' · '),
         ),
         trailing: mine
             ? const Icon(Icons.check_circle, color: Color(0xFF1B5E20))
             : FilledButton(
                 onPressed: _busy ? null : () => _take(vehicle),
-                child: Text(occupied ? 'Ta över' : 'Kör'),
+                child: Text(
+                  occupied ? tr.vehicleSessionTakeOver : tr.vehicleSessionDrive,
+                ),
               ),
       ),
     );

@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 
 import 'api_client.dart' show ApiException;
 import 'client_info.dart';
+import 'l10n/l10n.dart';
 import 'net_status.dart';
 
 /// POST /api/notify-prefs med de detaljerade valen: färdigt läge (`preset`),
@@ -49,7 +50,7 @@ Future<Map<String, dynamic>> postNotifyRules({
         res.statusCode,
         res.statusCode >= 502 && res.statusCode <= 504
             ? netMessage(NetFailure.unreachable)
-            : 'Ogiltigt svar från servern',
+            : tr.notifyRulesApiInvalidResponse,
       );
     }
     if (res.statusCode >= 400) {
@@ -57,7 +58,7 @@ Future<Map<String, dynamic>> postNotifyRules({
         res.statusCode,
         decoded['message']?.toString() ??
             decoded['error']?.toString() ??
-            'Servern svarade ${res.statusCode}',
+            tr.notifyRulesApiServerResponded(res.statusCode),
         reason: decoded['reason']?.toString(),
       );
     }

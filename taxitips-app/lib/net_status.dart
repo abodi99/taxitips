@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import 'api_client.dart' show ApiException;
+import 'l10n/l10n.dart';
 
 /// Nätverksfel på ett ställe.
 ///
@@ -28,9 +29,9 @@ String netReason(NetFailure f) => '$netReasonPrefix${f.name}';
 
 /// Kort, enkel svenska -- förare kan ha begränsad svenska.
 String netMessage(NetFailure f) => switch (f) {
-  NetFailure.offline => 'Ingen internetanslutning',
-  NetFailure.unreachable => 'Servern svarar inte just nu',
-  NetFailure.timeout => 'Dålig uppkoppling. Försök igen.',
+  NetFailure.offline => tr.netStatusOffline,
+  NetFailure.unreachable => tr.netStatusUnreachable,
+  NetFailure.timeout => tr.netStatusTimeout,
 };
 
 /// Null om felet inte är ett nätfel.
@@ -82,14 +83,11 @@ bool isNetworkError(Object error) => netFailureOf(error) != null;
 /// Gör vilket fel som helst till en kort text som är okej att visa.
 /// Serverns egna meddelanden (ApiException) behålls; nätfel får sin korta
 /// text; allt annat får [fallback] i stället för råa undantagstexten.
-String friendlyError(
-  Object error, {
-  String fallback = 'Något gick fel. Försök igen.',
-}) {
+String friendlyError(Object error, {String? fallback}) {
   final net = netFailureOf(error);
   if (net != null) return netMessage(net);
   if (error is ApiException) return error.message;
-  return fallback;
+  return fallback ?? tr.netStatusGenericError;
 }
 
 /// För ställen som visar `e.toString()` med prefixet bortrensat: nätfel får

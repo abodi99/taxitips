@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api_client.dart';
 import '../county_selection.dart';
+import '../l10n/l10n.dart';
 import '../net_status.dart';
 import '../signal_kinds.dart' show countyShort;
 import '../theme.dart';
@@ -217,11 +218,11 @@ class _CountyPickerSheetState extends State<CountyPickerSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Padding(
-              padding: EdgeInsets.fromLTRB(8, 0, 8, 4),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 0, 8, 4),
               child: Text(
-                'Dina län',
-                style: TextStyle(
+                tr.countyChecklistTitle,
+                style: const TextStyle(
                   fontFamily: kDisplayFont,
                   fontSize: 22,
                   fontWeight: FontWeight.w700,
@@ -239,7 +240,7 @@ class _CountyPickerSheetState extends State<CountyPickerSheet> {
               Padding(
                 padding: const EdgeInsets.fromLTRB(8, 4, 8, 12),
                 child: Text(
-                  _error ?? 'Medlemskapet har inga län än.',
+                  _error ?? tr.countyChecklistNoCounties,
                   style: const TextStyle(color: TbColors.muted, height: 1.35),
                 ),
               )
@@ -248,10 +249,11 @@ class _CountyPickerSheetState extends State<CountyPickerSheet> {
                 padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
                 child: Text(
                   all
-                      ? 'Du ser tips från alla län i medlemskapet. Bocka ur '
-                            'dem du inte vill se.'
-                      : 'Du ser tips från ${_selected.length} av '
-                            '${_licensed.length} län.',
+                      ? tr.countyChecklistAllCounties
+                      : tr.countyChecklistSomeCounties(
+                          _selected.length,
+                          _licensed.length,
+                        ),
                   style: const TextStyle(color: TbColors.muted, height: 1.35),
                 ),
               ),
@@ -279,17 +281,17 @@ class _CountyPickerSheetState extends State<CountyPickerSheet> {
             ],
             if (widget.onChangeTrialCounty != null && !_loading)
               Align(
-                alignment: Alignment.centerLeft,
+                alignment: AlignmentDirectional.centerStart,
                 child: TextButton(
                   onPressed: widget.onChangeTrialCounty,
-                  child: const Text('Byt provets län'),
+                  child: Text(tr.countyChecklistChangeTrialCounty),
                 ),
               ),
             Padding(
               padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
               child: FilledButton(
                 onPressed: () => Navigator.of(context).maybePop(),
-                child: const Text('Klar'),
+                child: Text(tr.countyChecklistDone),
               ),
             ),
           ],

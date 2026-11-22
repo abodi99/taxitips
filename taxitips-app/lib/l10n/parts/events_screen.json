@@ -1,0 +1,181 @@
+{
+  "eventsScreenTitle": {
+    "sv": "Evenemang",
+    "en": "Events",
+    "ar": "الفعاليات"
+  },
+  "eventsScreenOtherKind": {
+    "sv": "Övrigt",
+    "en": "Other",
+    "ar": "أخرى"
+  },
+  "eventsScreenFollowing": {
+    "sv": "Du följer eventet. Det finns under ⭐ Sparat på kartan.",
+    "en": "You are following the event. It is under ⭐ Saved on the map.",
+    "ar": "أنت تتابع الفعالية. ستجدها تحت ⭐ المحفوظات على الخريطة."
+  },
+  "eventsScreenUnfollowed": {
+    "sv": "Du följer det inte längre.",
+    "en": "You no longer follow it.",
+    "ar": "لم تعد تتابعها."
+  },
+  "eventsScreenToday": {
+    "sv": "I dag",
+    "en": "Today",
+    "ar": "اليوم"
+  },
+  "eventsScreenTomorrow": {
+    "sv": "I morgon",
+    "en": "Tomorrow",
+    "ar": "غداً"
+  },
+  "eventsScreenWeekend": {
+    "sv": "Helgen",
+    "en": "Weekend",
+    "ar": "عطلة نهاية الأسبوع"
+  },
+  "eventsScreenWeek": {
+    "sv": "7 dagar",
+    "en": "7 days",
+    "ar": "7 أيام"
+  },
+  "eventsScreenQuarter": {
+    "sv": "3 månader",
+    "en": "3 months",
+    "ar": "3 أشهر"
+  },
+  "eventsScreenMonth": {
+    "sv": "30 dagar",
+    "en": "30 days",
+    "ar": "30 يوماً"
+  },
+  "eventsScreenPickDay": {
+    "sv": "Välj dag",
+    "en": "Pick a day",
+    "ar": "اختر يوماً"
+  },
+  "eventsScreenPickPeriod": {
+    "sv": "Välj period",
+    "en": "Pick a period",
+    "ar": "اختر فترة"
+  },
+  "eventsScreenWholeArea": {
+    "sv": "Hela området",
+    "en": "Whole area",
+    "ar": "المنطقة كلها"
+  },
+  "eventsScreenAllCounties": {
+    "sv": "Alla län",
+    "en": "All counties",
+    "ar": "كل المقاطعات"
+  },
+  "eventsScreenSortTime": {
+    "sv": "Tid",
+    "en": "Time",
+    "ar": "الوقت"
+  },
+  "eventsScreenSortNearest": {
+    "sv": "Närmast",
+    "en": "Nearest",
+    "ar": "الأقرب"
+  },
+  "eventsScreenSortLargest": {
+    "sv": "Störst",
+    "en": "Largest",
+    "ar": "الأكبر"
+  },
+  "eventsScreenAllKinds": {
+    "sv": "Alla sorter",
+    "en": "All types",
+    "ar": "كل الأنواع"
+  },
+  "eventsScreenTodayPrefix": {
+    "sv": "I dag · ",
+    "en": "Today · ",
+    "ar": "اليوم · "
+  },
+  "eventsScreenTomorrowPrefix": {
+    "sv": "I morgon · ",
+    "en": "Tomorrow · ",
+    "ar": "غداً · "
+  },
+  "eventsScreenCount": {
+    "sv": "{count, plural, other{{count} evenemang}}",
+    "en": "{count, plural, one{{count} event} other{{count} events}}",
+    "ar": "{count, plural, zero{لا فعاليات} one{فعالية واحدة} two{فعاليتان} few{{count} فعاليات} many{{count} فعالية} other{{count} فعالية}}",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "eventsScreenLoading": {
+    "sv": "Hämtar {period}…",
+    "en": "Loading {period}…",
+    "ar": "جارٍ تحميل {period}…",
+    "placeholders": {
+      "period": {
+        "type": "String"
+      }
+    }
+  },
+  "eventsScreenSummary": {
+    "sv": "{count} · {period}",
+    "en": "{count} · {period}",
+    "ar": "{count} · {period}",
+    "placeholders": {
+      "count": {
+        "type": "String"
+      },
+      "period": {
+        "type": "String"
+      }
+    }
+  },
+  "eventsScreenSummaryFiltered": {
+    "sv": "{shown} av {total} evenemang · {period}",
+    "en": "{shown} of {total} events · {period}",
+    "ar": "{shown} من أصل {total} فعالية · {period}",
+    "placeholders": {
+      "shown": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      },
+      "period": {
+        "type": "String"
+      }
+    }
+  },
+  "eventsScreenError": {
+    "sv": "Kunde inte hämta evenemangen: {error}",
+    "en": "Could not load the events: {error}",
+    "ar": "تعذّر تحميل الفعاليات: {error}",
+    "placeholders": {
+      "error": {
+        "type": "String"
+      }
+    }
+  },
+  "eventsScreenNone": {
+    "sv": "Inga evenemang {period} i ditt område.",
+    "en": "No events {period} in your area.",
+    "ar": "لا توجد فعاليات {period} في منطقتك.",
+    "placeholders": {
+      "period": {
+        "type": "String"
+      }
+    }
+  },
+  "eventsScreenNoneThin": {
+    "sv": "Utbudet är tunt utanför storstäderna. Prova ett annat län.",
+    "en": "There are few events outside the big cities. Try another county.",
+    "ar": "عدد الفعاليات قليل خارج المدن الكبرى. جرّب مقاطعة أخرى."
+  },
+  "eventsScreenNoneHint": {
+    "sv": "Dagarna ovan har evenemang — tryck på en av dem, eller välj en längre period.",
+    "en": "The days above have events — tap one of them, or pick a longer period.",
+    "ar": "الأيام أعلاه فيها فعاليات — اضغط على أحدها، أو اختر فترة أطول."
+  }
+}

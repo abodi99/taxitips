@@ -1,0 +1,142 @@
+{
+  "notifyPrefsNeedsLocation": {
+    "sv": "I tjänst behöver plats när appen används",
+    "en": "On duty needs location while the app is in use",
+    "ar": "وضع الخدمة يحتاج إلى الموقع أثناء استخدام التطبيق"
+  },
+  "notifyPrefsSaved": {
+    "sv": "Sparat",
+    "en": "Saved",
+    "ar": "تم الحفظ"
+  },
+  "notifyPrefsOnAgain": {
+    "sv": "Notiserna är på igen.",
+    "en": "Notifications are on again.",
+    "ar": "الإشعارات تعمل مرة أخرى."
+  },
+  "notifyPrefsPausedUntilSnack": {
+    "sv": "Pausat till {time}.",
+    "en": "Paused until {time}.",
+    "ar": "متوقفة مؤقتًا حتى {time}.",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "notifyPrefsPausedUntilTitle": {
+    "sv": "Pausat till {time}",
+    "en": "Paused until {time}",
+    "ar": "متوقفة مؤقتًا حتى {time}",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "notifyPrefsTomorrowAt": {
+    "sv": "i morgon {time}",
+    "en": "tomorrow {time}",
+    "ar": "غدًا {time}",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "notifyPrefsAreaLine": {
+    "sv": "Körområde: {counties}",
+    "en": "Driving area: {counties}",
+    "ar": "منطقة العمل: {counties}",
+    "placeholders": {
+      "counties": {
+        "type": "String"
+      }
+    }
+  },
+  "notifyPrefsTitle": {
+    "sv": "Notiser",
+    "en": "Notifications",
+    "ar": "الإشعارات"
+  },
+  "notifyPrefsNoActiveSeat": {
+    "sv": "Ingen aktiv plats på den här enheten — inställningarna kan inte sparas.",
+    "en": "No active seat on this device — the settings cannot be saved.",
+    "ar": "لا يوجد مقعد نشط على هذا الجهاز — لا يمكن حفظ الإعدادات."
+  },
+  "notifyPrefsSendNotifications": {
+    "sv": "Skicka notiser",
+    "en": "Send notifications",
+    "ar": "إرسال الإشعارات"
+  },
+  "notifyPrefsPause": {
+    "sv": "Paus",
+    "en": "Pause",
+    "ar": "إيقاف مؤقت"
+  },
+  "notifyPrefsResume": {
+    "sv": "Starta igen",
+    "en": "Start again",
+    "ar": "تشغيل مرة أخرى"
+  },
+  "notifyPrefsPause1h": {
+    "sv": "1 tim",
+    "en": "1 hr",
+    "ar": "ساعة"
+  },
+  "notifyPrefsPause4h": {
+    "sv": "4 tim",
+    "en": "4 hr",
+    "ar": "4 ساعات"
+  },
+  "notifyPrefsPauseTonight": {
+    "sv": "I natt",
+    "en": "Tonight",
+    "ar": "الليلة"
+  },
+  "notifyPrefsWhichNotifications": {
+    "sv": "Vilka notiser?",
+    "en": "Which notifications?",
+    "ar": "أي إشعارات؟"
+  },
+  "notifyPrefsHowImportant": {
+    "sv": "Hur viktiga?",
+    "en": "How important?",
+    "ar": "ما درجة الأهمية؟"
+  },
+  "notifyPrefsLevelAll": {
+    "sv": "Alla",
+    "en": "All",
+    "ar": "الكل"
+  },
+  "notifyPrefsLevelMedium": {
+    "sv": "Medel +",
+    "en": "Medium +",
+    "ar": "متوسطة +"
+  },
+  "notifyPrefsLevelStrong": {
+    "sv": "Starka",
+    "en": "Strong",
+    "ar": "قوية"
+  },
+  "notifyPrefsOnDuty": {
+    "sv": "I tjänst",
+    "en": "On duty",
+    "ar": "في الخدمة"
+  },
+  "notifyPrefsWithinKm": {
+    "sv": "Inom 30 km av dig",
+    "en": "Within 30 km of you",
+    "ar": "ضمن 30 كم منك"
+  },
+  "notifyPrefsByArea": {
+    "sv": "Enligt körområdet",
+    "en": "By your driving area",
+    "ar": "حسب منطقة العمل"
+  },
+  "notifyPrefsMoreOptions": {
+    "sv": "Fler val",
+    "en": "More options",
+    "ar": "خيارات إضافية"
+  }
+}

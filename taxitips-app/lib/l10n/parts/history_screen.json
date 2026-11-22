@@ -1,0 +1,121 @@
+{
+  "historyScreenNoAccess": {
+    "sv": "Historiken visas när telefonen har åtkomst till tips.",
+    "en": "History is shown when the phone has access to tips.",
+    "ar": "يظهر السجل عندما يكون للهاتف حق الوصول إلى النصائح."
+  },
+  "historyScreenLoadError": {
+    "sv": "Kunde inte hämta historiken. Försök igen.",
+    "en": "Could not load the history. Try again.",
+    "ar": "تعذّر تحميل السجل. حاول مرة أخرى."
+  },
+  "historyScreenTitle": {
+    "sv": "Historik",
+    "en": "History",
+    "ar": "السجل"
+  },
+  "historyScreenHours": {
+    "sv": "{hours} tim",
+    "en": "{hours} h",
+    "ar": "{hours} س",
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "historyScreenRetry": {
+    "sv": "Försök igen",
+    "en": "Try again",
+    "ar": "حاول مرة أخرى"
+  },
+  "historyScreenUnavailable": {
+    "sv": "Historiken finns inte i den här versionen.",
+    "en": "History is not available in this version.",
+    "ar": "السجل غير متوفر في هذا الإصدار."
+  },
+  "historyScreenNeedsArea": {
+    "sv": "Välj ditt körområde för att se historiken.",
+    "en": "Choose your driving area to see the history.",
+    "ar": "اختر منطقة قيادتك لعرض السجل."
+  },
+  "historyScreenNone": {
+    "sv": "Inga tips de senaste {hours} timmarna.",
+    "en": "No tips in the last {hours} hours.",
+    "ar": "لا نصائح في آخر {hours} ساعة.",
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "historyScreenSummary": {
+    "sv": "{count} tips de senaste {hours} timmarna · {active} pågår",
+    "en": "{count} tips in the last {hours} hours · {active} ongoing",
+    "ar": "{count} نصيحة في آخر {hours} ساعة · {active} جارية",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "hours": {
+        "type": "int"
+      },
+      "active": {
+        "type": "int"
+      }
+    }
+  },
+  "historyScreenShowingLatest": {
+    "sv": "Visar de {count} senaste.",
+    "en": "Showing the latest {count}.",
+    "ar": "عرض آخر {count}.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "historyScreenEarlier": {
+    "sv": "Började tidigare",
+    "en": "Started earlier",
+    "ar": "بدأت قبل ذلك"
+  },
+  "historyScreenHiddenIn": {
+    "sv": "{count} tips i {categories} visas inte.",
+    "en": "{count} tips in {categories} are not shown.",
+    "ar": "{count} نصائح في {categories} غير معروضة.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      },
+      "categories": {
+        "type": "String"
+      }
+    }
+  },
+  "historyScreenHidden": {
+    "sv": "{count} tips visas inte.",
+    "en": "{count} tips are not shown.",
+    "ar": "{count} نصائح غير معروضة.",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "historyScreenAnd": {
+    "sv": " och ",
+    "en": " and ",
+    "ar": " و "
+  },
+  "historyScreenEnded": {
+    "sv": "Slut",
+    "en": "Over",
+    "ar": "انتهى"
+  },
+  "historyScreenOngoing": {
+    "sv": "Pågår",
+    "en": "Ongoing",
+    "ar": "جارٍ"
+  }
+}

@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../app_version.dart';
 import '../backend_api.dart';
 import '../config.dart';
+import '../l10n/l10n.dart';
 import '../remote_config_service.dart';
 import '../theme.dart';
 
@@ -253,9 +254,9 @@ class _BlockScreen extends StatelessWidget {
                     color: TbColors.guld,
                   ),
                   const SizedBox(height: 20),
-                  const Text(
-                    'Uppdatera appen',
-                    style: TextStyle(
+                  Text(
+                    tr.forceUpgradeTitle,
+                    style: const TextStyle(
                       fontFamily: kDisplayFont,
                       fontSize: 24,
                       fontWeight: FontWeight.w700,
@@ -264,10 +265,9 @@ class _BlockScreen extends StatelessWidget {
                     textAlign: TextAlign.center,
                   ),
                   const SizedBox(height: 12),
-                  const Text(
-                    'Den här versionen fungerar inte längre. '
-                    'Uppdatera för att fortsätta.',
-                    style: TextStyle(
+                  Text(
+                    tr.forceUpgradeBody,
+                    style: const TextStyle(
                       fontSize: 16,
                       height: 1.4,
                       color: TbColors.vit,
@@ -293,16 +293,18 @@ class _BlockScreen extends StatelessWidget {
                     child: FilledButton.icon(
                       onPressed: onUpdate,
                       icon: const Icon(Icons.download),
-                      label: const Text(
-                        'Uppdatera',
-                        style: TextStyle(fontSize: 17),
+                      label: Text(
+                        tr.forceUpgradeUpdate,
+                        style: const TextStyle(fontSize: 17),
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Din version: ${installed ?? '?'}  ·  '
-                    'Krävs: ${decision.required ?? '?'}',
+                    tr.forceUpgradeVersions(
+                      '${installed ?? '?'}',
+                      decision.required ?? '?',
+                    ),
                     style: const TextStyle(
                       fontSize: 13,
                       color: TbColors.ljusgraDjup,
@@ -344,7 +346,7 @@ class _NudgeBanner extends StatelessWidget {
             elevation: 6,
             borderRadius: BorderRadius.circular(14),
             child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 10, 4, 10),
+              padding: const EdgeInsetsDirectional.fromSTEB(14, 10, 4, 10),
               child: Row(
                 children: [
                   const Icon(Icons.system_update, color: TbColors.guld),
@@ -354,9 +356,9 @@ class _NudgeBanner extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Ny version finns. Uppdatera när du kan.',
-                          style: TextStyle(
+                        Text(
+                          tr.forceUpgradeNudge,
+                          style: const TextStyle(
                             color: TbColors.vit,
                             fontWeight: FontWeight.w600,
                             fontSize: 14,
@@ -379,12 +381,12 @@ class _NudgeBanner extends StatelessWidget {
                       style: TextButton.styleFrom(
                         foregroundColor: TbColors.guld,
                       ),
-                      child: const Text('Uppdatera'),
+                      child: Text(tr.forceUpgradeUpdate),
                     ),
                   // Ingen tooltip: banderollen ligger ovanför Navigator, där
                   // det inte finns någon Overlay att visa den i.
                   Semantics(
-                    label: 'Stäng',
+                    label: tr.forceUpgradeClose,
                     button: true,
                     child: IconButton(
                       onPressed: onClose,

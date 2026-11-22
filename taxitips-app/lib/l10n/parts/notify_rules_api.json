@@ -1,0 +1,17 @@
+{
+  "notifyRulesApiInvalidResponse": {
+    "sv": "Ogiltigt svar från servern",
+    "en": "Invalid response from the server",
+    "ar": "رد غير صالح من الخادم"
+  },
+  "notifyRulesApiServerResponded": {
+    "sv": "Servern svarade {status}",
+    "en": "The server responded {status}",
+    "ar": "ردّ الخادم برمز {status}",
+    "placeholders": {
+      "status": {
+        "type": "int"
+      }
+    }
+  }
+}

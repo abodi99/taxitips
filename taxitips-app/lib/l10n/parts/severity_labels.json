@@ -1,0 +1,404 @@
+{
+  "severityLabelsTierLinePaused": {
+    "sv": "Hela linjen är stoppad",
+    "en": "The whole line is stopped",
+    "ar": "الخط كله متوقف"
+  },
+  "severityLabelsTierLineDelayed": {
+    "sv": "Försening på linjen",
+    "en": "Delay on the line",
+    "ar": "تأخير على الخط"
+  },
+  "severityLabelsTierVehicleCancelled": {
+    "sv": "En avgång inställd",
+    "en": "A departure is cancelled",
+    "ar": "رحلة واحدة أُلغيت"
+  },
+  "severityLabelsTierVehicleDelayed": {
+    "sv": "En avgång försenad",
+    "en": "A departure is delayed",
+    "ar": "رحلة واحدة متأخرة"
+  },
+  "severityLabelsTierArrivalWave": {
+    "sv": "Många flyg landar samtidigt",
+    "en": "Many flights landing at once",
+    "ar": "طائرات كثيرة تهبط في وقت واحد"
+  },
+  "severityLabelsTierLastArrival": {
+    "sv": "Sista planet — inget mer landar på flera timmar",
+    "en": "Last plane — nothing else lands for several hours",
+    "ar": "آخر طائرة — لن تهبط طائرات أخرى لعدة ساعات"
+  },
+  "severityLabelsTierArrivalWaveFerry": {
+    "sv": "Många färjor kommer in samtidigt",
+    "en": "Many ferries arriving at once",
+    "ar": "عبّارات كثيرة تصل في وقت واحد"
+  },
+  "severityLabelsTierLastArrivalFerry": {
+    "sv": "Sista färjan — inget mer anländer på flera timmar",
+    "en": "Last ferry — nothing else arrives for several hours",
+    "ar": "آخر عبّارة — لن تصل عبّارات أخرى لعدة ساعات"
+  },
+  "severityLabelsTierRoadAccident": {
+    "sv": "Olycka eller avstängd väg",
+    "en": "Accident or closed road",
+    "ar": "حادث أو طريق مغلق"
+  },
+  "severityLabelsTierRoadWorkQueue": {
+    "sv": "Vägarbete eller köbildning",
+    "en": "Roadworks or queues",
+    "ar": "أعمال طريق أو ازدحام"
+  },
+  "severityLabelsTierRoadWork": {
+    "sv": "Mindre vägarbete",
+    "en": "Minor roadworks",
+    "ar": "أعمال طريق صغيرة"
+  },
+  "severityLabelsTierUnclassified": {
+    "sv": "Störning (osäker klassificering)",
+    "en": "Disruption (uncertain classification)",
+    "ar": "اضطراب (تصنيف غير مؤكد)"
+  },
+  "severityLabelsTierIgnore": {
+    "sv": "Övrigt – trafikbolagets meddelande",
+    "en": "Other – message from the transport company",
+    "ar": "أخرى – رسالة من شركة النقل"
+  },
+  "severityLabelsShortLinePaused": {
+    "sv": "Hela linjen stoppad",
+    "en": "Whole line stopped",
+    "ar": "الخط كله متوقف"
+  },
+  "severityLabelsShortLineDelayed": {
+    "sv": "Försening, linjen kör",
+    "en": "Delay, line is running",
+    "ar": "تأخير، والخط يعمل"
+  },
+  "severityLabelsShortVehicleCancelled": {
+    "sv": "Enstaka avgång inställd",
+    "en": "Single departure cancelled",
+    "ar": "رحلة واحدة ملغاة"
+  },
+  "severityLabelsShortVehicleDelayed": {
+    "sv": "Enstaka avgång försenad",
+    "en": "Single departure delayed",
+    "ar": "رحلة واحدة متأخرة"
+  },
+  "severityLabelsShortArrivalWave": {
+    "sv": "Ankomstvåg",
+    "en": "Arrival wave",
+    "ar": "موجة وصول"
+  },
+  "severityLabelsShortLastArrival": {
+    "sv": "Sista ankomsten",
+    "en": "Last arrival",
+    "ar": "آخر وصول"
+  },
+  "severityLabelsShortRoadAccident": {
+    "sv": "Olycka/avstängning",
+    "en": "Accident/closure",
+    "ar": "حادث/إغلاق"
+  },
+  "severityLabelsShortRoadWorkQueue": {
+    "sv": "Vägarbete/kö",
+    "en": "Roadworks/queue",
+    "ar": "أعمال طريق/ازدحام"
+  },
+  "severityLabelsShortRoadWork": {
+    "sv": "Vägarbete",
+    "en": "Roadworks",
+    "ar": "أعمال طريق"
+  },
+  "severityLabelsShortUnclassified": {
+    "sv": "Osäker bedömning",
+    "en": "Uncertain assessment",
+    "ar": "تقدير غير مؤكد"
+  },
+  "severityLabelsShortIgnore": {
+    "sv": "Övrigt",
+    "en": "Other",
+    "ar": "أخرى"
+  },
+  "severityLabelsConfidenceHigh": {
+    "sv": "Hög — tydligt i källdatan",
+    "en": "High — clear in the source data",
+    "ar": "عالية — واضحة في بيانات المصدر"
+  },
+  "severityLabelsConfidenceMedium": {
+    "sv": "Medel",
+    "en": "Medium",
+    "ar": "متوسطة"
+  },
+  "severityLabelsConfidenceLow": {
+    "sv": "Låg — osäker tolkning av källdatan",
+    "en": "Low — uncertain reading of the source data",
+    "ar": "منخفضة — قراءة غير مؤكدة لبيانات المصدر"
+  },
+  "severityLabelsMonthShort": {
+    "sv": "{m, select, m1{jan} m2{feb} m3{mar} m4{apr} m5{maj} m6{jun} m7{jul} m8{aug} m9{sep} m10{okt} m11{nov} m12{dec} other{}}",
+    "en": "{m, select, m1{Jan} m2{Feb} m3{Mar} m4{Apr} m5{May} m6{Jun} m7{Jul} m8{Aug} m9{Sep} m10{Oct} m11{Nov} m12{Dec} other{}}",
+    "ar": "{m, select, m1{يناير} m2{فبراير} m3{مارس} m4{أبريل} m5{مايو} m6{يونيو} m7{يوليو} m8{أغسطس} m9{سبتمبر} m10{أكتوبر} m11{نوفمبر} m12{ديسمبر} other{}}",
+    "placeholders": {
+      "m": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsModeTrain": {
+    "sv": "Tåg",
+    "en": "Train",
+    "ar": "قطار"
+  },
+  "severityLabelsModeMetro": {
+    "sv": "Tunnelbana",
+    "en": "Metro",
+    "ar": "مترو"
+  },
+  "severityLabelsModeTram": {
+    "sv": "Spårvagn",
+    "en": "Tram",
+    "ar": "ترام"
+  },
+  "severityLabelsModeBus": {
+    "sv": "Buss",
+    "en": "Bus",
+    "ar": "حافلة"
+  },
+  "severityLabelsModeBoat": {
+    "sv": "Båt",
+    "en": "Boat",
+    "ar": "قارب"
+  },
+  "severityLabelsModeFlight": {
+    "sv": "Flyg",
+    "en": "Flights",
+    "ar": "طيران"
+  },
+  "severityLabelsModeRoad": {
+    "sv": "Väg",
+    "en": "Road",
+    "ar": "طريق"
+  },
+  "severityLabelsModeFerries": {
+    "sv": "Färjor",
+    "en": "Ferries",
+    "ar": "عبّارات"
+  },
+  "severityLabelsModeEvents": {
+    "sv": "Evenemang",
+    "en": "Events",
+    "ar": "فعاليات"
+  },
+  "severityLabelsTipFallback": {
+    "sv": "Tips",
+    "en": "Tip",
+    "ar": "تنبيه"
+  },
+  "severityLabelsTitleWithMode": {
+    "sv": "{mode}: {title}",
+    "en": "{mode}: {title}",
+    "ar": "{mode}: {title}",
+    "placeholders": {
+      "mode": {
+        "type": "String"
+      },
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsCompensationMaybe": {
+    "sv": "Taxi kan ersättas",
+    "en": "Taxi may be reimbursed",
+    "ar": "قد يُعوَّض التاكسي"
+  },
+  "severityLabelsCompensationUpTo": {
+    "sv": "Taxi ersätts · upp till {amount} kr{per, select, person{ per resenär} trip{ per resa} other{}}",
+    "en": "Taxi reimbursed · up to {amount} kr{per, select, person{ per traveller} trip{ per trip} other{}}",
+    "ar": "يُعوَّض التاكسي · حتى {amount} kr{per, select, person{ لكل مسافر} trip{ لكل رحلة} other{}}",
+    "placeholders": {
+      "amount": {
+        "type": "int"
+      },
+      "per": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsCompensationBase": {
+    "sv": "Resenären kan få taxin betald",
+    "en": "The traveller may get the taxi paid",
+    "ar": "يمكن للمسافر الحصول على تعويض عن التاكسي"
+  },
+  "severityLabelsCompensationSentenceUpTo": {
+    "sv": "Resenären kan få taxin betald upp till {amount} kr{per, select, person{ per resenär} trip{ per resa} other{}}",
+    "en": "The traveller may get the taxi paid up to {amount} kr{per, select, person{ per traveller} trip{ per trip} other{}}",
+    "ar": "يمكن للمسافر الحصول على تعويض عن التاكسي حتى {amount} kr{per, select, person{ لكل مسافر} trip{ لكل رحلة} other{}}",
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      },
+      "per": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsCancelledAt": {
+    "sv": "Inställd {clock}",
+    "en": "Cancelled {clock}",
+    "ar": "ملغاة {clock}",
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsDelayed": {
+    "sv": "Försenad",
+    "en": "Delayed",
+    "ar": "متأخرة"
+  },
+  "severityLabelsDelayedBy": {
+    "sv": "Försenad {delay}",
+    "en": "Delayed {delay}",
+    "ar": "متأخرة {delay}",
+    "placeholders": {
+      "delay": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsTowards": {
+    "sv": "mot {destination}",
+    "en": "towards {destination}",
+    "ar": "باتجاه {destination}",
+    "placeholders": {
+      "destination": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsClockChange": {
+    "sv": "{from} → {to}",
+    "en": "{from} → {to}",
+    "ar": "{from} ← {to}",
+    "placeholders": {
+      "from": {
+        "type": "String"
+      },
+      "to": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsMinutes": {
+    "sv": "{minutes} min",
+    "en": "{minutes} min",
+    "ar": "{minutes} د",
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "severityLabelsHours": {
+    "sv": "{hours} tim",
+    "en": "{hours} h",
+    "ar": "{hours} س",
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "severityLabelsHoursMinutes": {
+    "sv": "{hours} tim {minutes} min",
+    "en": "{hours} h {minutes} min",
+    "ar": "{hours} س {minutes} د",
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      },
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "severityLabelsWaitLast": {
+    "sv": "Sista avgången härifrån",
+    "en": "Last departure from here",
+    "ar": "آخر رحلة من هنا"
+  },
+  "severityLabelsWaitThere": {
+    "sv": "Nästa dit{at}, {gap} senare",
+    "en": "Next there{at}, {gap} later",
+    "ar": "التالية إلى هناك{at}، بعد {gap}",
+    "placeholders": {
+      "at": {
+        "type": "String"
+      },
+      "gap": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsWaitThereFirst": {
+    "sv": "Nästa dit först{at}, {gap} senare",
+    "en": "Next there not until{at}, {gap} later",
+    "ar": "التالية إلى هناك فقط{at}، بعد {gap}",
+    "placeholders": {
+      "at": {
+        "type": "String"
+      },
+      "gap": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsWaitTrip": {
+    "sv": "Nästa resa{at}, {gap} senare",
+    "en": "Next trip{at}, {gap} later",
+    "ar": "الرحلة التالية{at}، بعد {gap}",
+    "placeholders": {
+      "at": {
+        "type": "String"
+      },
+      "gap": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsWaitTripFirst": {
+    "sv": "Nästa resa först{at}, {gap} senare",
+    "en": "Next trip not until{at}, {gap} later",
+    "ar": "الرحلة التالية فقط{at}، بعد {gap}",
+    "placeholders": {
+      "at": {
+        "type": "String"
+      },
+      "gap": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsIn": {
+    "sv": "om {time}",
+    "en": "in {time}",
+    "ar": "بعد {time}",
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "severityLabelsDepartsNow": {
+    "sv": "avgår nu",
+    "en": "departing now",
+    "ar": "تغادر الآن"
+  },
+  "severityLabelsDeparted": {
+    "sv": "har gått",
+    "en": "has left",
+    "ar": "غادرت"
+  }
+}

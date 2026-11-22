@@ -1,0 +1,40 @@
+{
+  "countyChecklistTitle": {
+    "sv": "Dina län",
+    "en": "Your counties",
+    "ar": "مقاطعاتك"
+  },
+  "countyChecklistNoCounties": {
+    "sv": "Medlemskapet har inga län än.",
+    "en": "The membership has no counties yet.",
+    "ar": "لا توجد مقاطعات في العضوية بعد."
+  },
+  "countyChecklistAllCounties": {
+    "sv": "Du ser tips från alla län i medlemskapet. Bocka ur dem du inte vill se.",
+    "en": "You see tips from all counties in the membership. Untick the ones you do not want to see.",
+    "ar": "تظهر لك التنبيهات من كل مقاطعات العضوية. أزل العلامة عن التي لا تريد رؤيتها."
+  },
+  "countyChecklistSomeCounties": {
+    "sv": "Du ser tips från {selected} av {total} län.",
+    "en": "You see tips from {selected} of {total} counties.",
+    "ar": "تظهر لك التنبيهات من {selected} من أصل {total} مقاطعة.",
+    "placeholders": {
+      "selected": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "countyChecklistChangeTrialCounty": {
+    "sv": "Byt provets län",
+    "en": "Change the trial county",
+    "ar": "تغيير مقاطعة الفترة التجريبية"
+  },
+  "countyChecklistDone": {
+    "sv": "Klar",
+    "en": "Done",
+    "ar": "تم"
+  }
+}

@@ -166,6 +166,21 @@ med sort (stor färja, pendelfärja, öbåt, pendelbåt, rundtur, vägfärja) oc
 filtrerar. Bara dubbletter, sådant utanför tidsfönstret och fartyg vid kaj utan sedd ankomst tas bort. Importen räknar också `stop_has_road` (buss, spårvagn eller tåg inom 600 m);
 efter en ändring av regeln behöver importen köras om ur samma zip.
 
+**Appens språk (2026-11-22): svenska, engelska och arabiska.** Appen följer
+telefonens språk om den finns på det, annars svenska; användaren kan välja själv
+överst i Inställningar och med jordglobsknappen på välkomstskärmen
+(`lib/widgets/language_picker.dart`, valet sparas som `tt_locale`). Texterna skrivs i
+`taxitips-app/lib/l10n/parts/<fil>.json` med alla tre språken bredvid varandra, slås
+ihop med `python3 tool/build_arb.py` och genereras med `flutter gen-l10n`. I koden:
+den globala `tr` (lib/l10n/l10n.dart), aldrig `AppLocalizations.of(context)`; utan
+app är `tr` svenska, så testerna jämför fortfarande mot svensk text. Arabiska ritas
+höger till vänster (använd `EdgeInsetsDirectional`, `AlignmentDirectional` m.fl.) och
+med västerländska siffror. Inte översatt än: inloggning, registrering, välkomstens
+texter, provets välkomst, BankID, `membership_copy.dart`, `api_client.dart`s
+felmeddelanden, kartförklaringen och push-bannern -- och allt som servern skriver
+(tipsens rader, notiser, felmeddelanden, mejl). Översättningarna bör läsas av någon
+med arabiska som modersmål före lansering.
+
 Förarkartan i appen (ombyggd 2026-09-21, för förare med begränsad svenska):
 
 * **En sanning för typ och styrka: `lib/signal_kinds.dart`.** Kategori (Tåg & buss, Väg, Flyg,

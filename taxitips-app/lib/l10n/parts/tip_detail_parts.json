@@ -1,0 +1,32 @@
+{
+  "tipDetailPartsChipCancelled": {
+    "sv": "INSTÄLLD",
+    "en": "CANCELLED",
+    "ar": "ملغاة"
+  },
+  "tipDetailPartsChipDelayed": {
+    "sv": "FÖRSENAD",
+    "en": "DELAYED",
+    "ar": "متأخرة"
+  },
+  "tipDetailPartsChipDelayedBy": {
+    "sv": "FÖRSENAD {delay}",
+    "en": "DELAYED {delay}",
+    "ar": "متأخرة {delay}",
+    "placeholders": {
+      "delay": {
+        "type": "String"
+      }
+    }
+  },
+  "tipDetailPartsNewClock": {
+    "sv": "→ {clock}",
+    "en": "→ {clock}",
+    "ar": "← {clock}",
+    "placeholders": {
+      "clock": {
+        "type": "String"
+      }
+    }
+  }
+}

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../signal_kinds.dart';
 import '../theme.dart';
 import 'guided_tour.dart';
@@ -39,67 +40,46 @@ List<TourStep> driverTourSteps({
   return [
     TourStep(
       id: 'list',
-      title: 'Tipslistan',
-      text:
-          'Här är tipsen nära dig. Det starkaste ligger överst. '
-          'Dra listan uppåt för att se fler.',
+      title: tr.driverTourListTitle,
+      text: tr.driverTourListText,
       keys: [keys.list],
     ),
     TourStep(
       id: 'strength',
-      title: 'Färgen visar styrkan',
-      text:
-          'Varje tips har en färg och ett ord. Längst ner i listan finns '
-          '"Övrigt": meddelanden från trafikbolag. Det är information, '
-          'inte tips.',
+      title: tr.driverTourStrengthTitle,
+      text: tr.driverTourStrengthText,
       keys: [keys.firstCard, keys.list],
       extra: const _StrengthLegend(),
     ),
     TourStep(
       id: 'map',
-      title: 'Kartan och nålarna',
-      text:
-          'Varje nål är ett tips. Nålen har samma färg som tipset. Tryck på '
-          'en nål för att öppna tipset. Överst förklarar frågetecknet '
-          'symbolerna, och klockan i vänstra hörnet är Historik: tipsen '
-          'från det senaste dygnet.',
+      title: tr.driverTourMapTitle,
+      text: tr.driverTourMapText,
       area: mapArea,
     ),
     TourStep(
       id: 'tip',
-      title: 'Tryck på ett tips',
-      text:
-          'Då öppnas ett blad med mer om tipset. Där kan du köra dit, spara '
-          'tipset och svara hur det gick. Svaren gör tipsen bättre.',
+      title: tr.driverTourTipTitle,
+      text: tr.driverTourTipText,
       keys: [keys.firstCard, keys.list],
       extra: const _TipSheetButtons(),
     ),
     TourStep(
       id: 'categories',
-      title: 'Kategorier',
-      text:
-          'Välj vad du vill se: tåg och buss, väg, flyg, färja eller event. '
-          'Siffran är antal tips. Sparat visar tipsen du har sparat.',
+      title: tr.driverTourCategoriesTitle,
+      text: tr.driverTourCategoriesText,
       keys: [keys.categories],
     ),
     TourStep(
       id: 'filter',
-      title: 'Filter och län',
-      text:
-          'Med Filter väljer du län, hur starka tips du vill se och vad som '
-          'ska döljas. Välj ditt län här så får du tips därifrån.',
+      title: tr.driverTourFilterTitle,
+      text: tr.driverTourFilterText,
       keys: [keys.filter],
     ),
     TourStep(
       id: 'settings',
-      title: 'Inställningar',
-      text: owner
-          ? 'Här väljer du län och slår på notiser. Förare bjuds in på webben. '
-                'Här väljer du också vilken plats du kör med. '
-                'Genomgången finns kvar under Hjälp.'
-          : 'Här slår du på notiser och väljer bilen du kör. Notiser säger '
-                'till när ett starkt tips dyker upp nära dig. Genomgången '
-                'finns kvar under Hjälp.',
+      title: tr.driverTourSettingsTitle,
+      text: owner ? tr.driverTourSettingsOwner : tr.driverTourSettingsDriver,
       keys: [keys.settings],
     ),
   ];
@@ -174,9 +154,9 @@ class _TipSheetButtons extends StatelessWidget {
         spacing: 8,
         runSpacing: 8,
         children: [
-          chip(Icons.navigation_rounded, 'Kör dit'),
-          chip(Icons.star_outline_rounded, 'Spara'),
-          chip(Icons.thumbs_up_down_rounded, 'Hur gick det?'),
+          chip(Icons.navigation_rounded, tr.driverTourDrive),
+          chip(Icons.star_outline_rounded, tr.driverTourSave),
+          chip(Icons.thumbs_up_down_rounded, tr.driverTourHowWasIt),
         ],
       ),
     );

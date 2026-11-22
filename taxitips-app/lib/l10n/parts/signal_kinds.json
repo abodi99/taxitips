@@ -1,0 +1,220 @@
+{
+  "signalKindsCategoryTransit": {
+    "sv": "Tåg & buss",
+    "en": "Train & bus",
+    "ar": "قطار وحافلة"
+  },
+  "signalKindsCategoryRoad": {
+    "sv": "Väg",
+    "en": "Road",
+    "ar": "طريق"
+  },
+  "signalKindsCategoryFlight": {
+    "sv": "Flyg",
+    "en": "Flights",
+    "ar": "طيران"
+  },
+  "signalKindsCategoryFerry": {
+    "sv": "Färja",
+    "en": "Ferry",
+    "ar": "عبّارة"
+  },
+  "signalKindsCategoryEvent": {
+    "sv": "Event",
+    "en": "Event",
+    "ar": "فعالية"
+  },
+  "signalKindsExplainTransit": {
+    "sv": "Tåg, buss eller tunnelbana står still eller är sen. Folk behöver taxi.",
+    "en": "Train, bus or metro is stopped or late. People need a taxi.",
+    "ar": "القطار أو الحافلة أو المترو متوقف أو متأخر. الناس يحتاجون إلى تاكسي."
+  },
+  "signalKindsExplainRoad": {
+    "sv": "Trafikolycka. Räkna med kö, eller kör en annan väg.",
+    "en": "Traffic accident. Expect queues, or take another road.",
+    "ar": "حادث مروري. توقع ازدحاماً، أو اسلك طريقاً آخر."
+  },
+  "signalKindsExplainFlight": {
+    "sv": "Många flyg landar, eller sista flyget. Folk behöver taxi från flygplatsen.",
+    "en": "Many flights landing, or the last flight. People need a taxi from the airport.",
+    "ar": "طائرات كثيرة تهبط، أو آخر رحلة. الناس يحتاجون إلى تاكسي من المطار."
+  },
+  "signalKindsExplainFerry": {
+    "sv": "Färja på väg in. Folk kliver av i hamnen.",
+    "en": "Ferry coming in. People get off at the port.",
+    "ar": "عبّارة في طريقها إلى الميناء. الركاب ينزلون في الميناء."
+  },
+  "signalKindsExplainEvent": {
+    "sv": "Match, konsert eller annat. Publiken går hem samtidigt.",
+    "en": "Match, concert or something else. The crowd goes home at the same time.",
+    "ar": "مباراة أو حفلة أو غيرها. الجمهور يعود إلى منازله في وقت واحد."
+  },
+  "signalKindsWordAccident": {
+    "sv": "Olycka",
+    "en": "Accident",
+    "ar": "حادث"
+  },
+  "signalKindsWordQueue": {
+    "sv": "Kö",
+    "en": "Queue",
+    "ar": "ازدحام"
+  },
+  "signalKindsWordWork": {
+    "sv": "Arbete",
+    "en": "Roadwork",
+    "ar": "أعمال"
+  },
+  "signalKindsWordBig": {
+    "sv": "Stort",
+    "en": "Big",
+    "ar": "كبيرة"
+  },
+  "signalKindsWordMiddle": {
+    "sv": "Mellan",
+    "en": "Medium",
+    "ar": "متوسطة"
+  },
+  "signalKindsWordSmall": {
+    "sv": "Litet",
+    "en": "Small",
+    "ar": "صغيرة"
+  },
+  "signalKindsWordStrong": {
+    "sv": "Stark",
+    "en": "Strong",
+    "ar": "قوية"
+  },
+  "signalKindsWordMedium": {
+    "sv": "Medel",
+    "en": "Medium",
+    "ar": "متوسطة"
+  },
+  "signalKindsWordWeak": {
+    "sv": "Svag",
+    "en": "Weak",
+    "ar": "ضعيفة"
+  },
+  "signalKindsMeaningHigh": {
+    "sv": "Troligt att folk behöver taxi här.",
+    "en": "Likely that people need a taxi here.",
+    "ar": "من المرجح أن الناس يحتاجون إلى تاكسي هنا."
+  },
+  "signalKindsMeaningMedium": {
+    "sv": "Kan vara värt att följa. Håll koll.",
+    "en": "May be worth watching. Keep an eye on it.",
+    "ar": "قد يستحق المتابعة. ابقَ منتبهاً."
+  },
+  "signalKindsMeaningLow": {
+    "sv": "Troligen få som behöver taxi här.",
+    "en": "Probably few need a taxi here.",
+    "ar": "على الأرجح قلة يحتاجون إلى تاكسي هنا."
+  },
+  "signalKindsRoadClosed": {
+    "sv": "Vägen avstängd",
+    "en": "Road closed",
+    "ar": "الطريق مغلق"
+  },
+  "signalKindsRoadHazard": {
+    "sv": "Hinder på vägen",
+    "en": "Obstacle on the road",
+    "ar": "عائق على الطريق"
+  },
+  "signalKindsRoadMajor": {
+    "sv": "Stor störning",
+    "en": "Major disruption",
+    "ar": "اضطراب كبير"
+  },
+  "signalKindsDistanceMeters": {
+    "sv": "{meters} m",
+    "en": "{meters} m",
+    "ar": "{meters} م",
+    "placeholders": {
+      "meters": {
+        "type": "int"
+      }
+    }
+  },
+  "signalKindsDistanceKm": {
+    "sv": "{km} km",
+    "en": "{km} km",
+    "ar": "{km} كم",
+    "placeholders": {
+      "km": {
+        "type": "String"
+      }
+    }
+  },
+  "signalKindsWeekdayShort": {
+    "sv": "{d, select, d1{mån} d2{tis} d3{ons} d4{tor} d5{fre} d6{lör} d7{sön} other{}}",
+    "en": "{d, select, d1{mon} d2{tue} d3{wed} d4{thu} d5{fri} d6{sat} d7{sun} other{}}",
+    "ar": "{d, select, d1{الإثنين} d2{الثلاثاء} d3{الأربعاء} d4{الخميس} d5{الجمعة} d6{السبت} d7{الأحد} other{}}",
+    "placeholders": {
+      "d": {
+        "type": "String"
+      }
+    }
+  },
+  "signalKindsWeekdayLong": {
+    "sv": "{d, select, d1{måndag} d2{tisdag} d3{onsdag} d4{torsdag} d5{fredag} d6{lördag} d7{söndag} other{}}",
+    "en": "{d, select, d1{monday} d2{tuesday} d3{wednesday} d4{thursday} d5{friday} d6{saturday} d7{sunday} other{}}",
+    "ar": "{d, select, d1{الإثنين} d2{الثلاثاء} d3{الأربعاء} d4{الخميس} d5{الجمعة} d6{السبت} d7{الأحد} other{}}",
+    "placeholders": {
+      "d": {
+        "type": "String"
+      }
+    }
+  },
+  "signalKindsMonthLong": {
+    "sv": "{m, select, m1{januari} m2{februari} m3{mars} m4{april} m5{maj} m6{juni} m7{juli} m8{augusti} m9{september} m10{oktober} m11{november} m12{december} other{}}",
+    "en": "{m, select, m1{January} m2{February} m3{March} m4{April} m5{May} m6{June} m7{July} m8{August} m9{September} m10{October} m11{November} m12{December} other{}}",
+    "ar": "{m, select, m1{يناير} m2{فبراير} m3{مارس} m4{أبريل} m5{مايو} m6{يونيو} m7{يوليو} m8{أغسطس} m9{سبتمبر} m10{أكتوبر} m11{نوفمبر} m12{ديسمبر} other{}}",
+    "placeholders": {
+      "m": {
+        "type": "String"
+      }
+    }
+  },
+  "signalKindsToday": {
+    "sv": "I dag",
+    "en": "Today",
+    "ar": "اليوم"
+  },
+  "signalKindsYesterday": {
+    "sv": "I går",
+    "en": "Yesterday",
+    "ar": "أمس"
+  },
+  "signalKindsTomorrow": {
+    "sv": "I morgon",
+    "en": "Tomorrow",
+    "ar": "غداً"
+  },
+  "signalKindsLongDayRelative": {
+    "sv": "{relative}, {weekday}",
+    "en": "{relative}, {weekday}",
+    "ar": "{relative}، {weekday}",
+    "placeholders": {
+      "relative": {
+        "type": "String"
+      },
+      "weekday": {
+        "type": "String"
+      }
+    }
+  },
+  "signalKindsAgoNow": {
+    "sv": "Nu",
+    "en": "Now",
+    "ar": "الآن"
+  },
+  "signalKindsAgoDays": {
+    "sv": "{days} d",
+    "en": "{days} d",
+    "ar": "{days} يوم",
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  }
+}

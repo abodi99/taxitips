@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../l10n/l10n.dart';
 import '../net_status.dart';
 import '../theme.dart';
 
@@ -74,11 +75,10 @@ class _NotificationLogSheetState extends State<NotificationLogSheet> {
     final dt = DateTime.tryParse(iso)?.toLocal();
     if (dt == null) return '';
     final age = DateTime.now().difference(dt);
-    if (age.inMinutes < 1) return 'Just nu';
-    if (age.inMinutes < 60) return 'För ${age.inMinutes} min sedan';
-    if (age.inHours < 24) return 'För ${age.inHours} tim sedan';
-    return '${dt.day}/${dt.month} ${dt.hour.toString().padLeft(2, '0')}:'
-        '${dt.minute.toString().padLeft(2, '0')}';
+    if (age.inMinutes < 1) return tr.notificationLogSheetNow;
+    if (age.inMinutes < 60) return tr.notificationLogSheetMinAgo(age.inMinutes);
+    if (age.inHours < 24) return tr.notificationLogSheetHoursAgo(age.inHours);
+    return '${dt.day}/${dt.month} ${formatTime(dt)}';
   }
 
   @override
@@ -109,9 +109,9 @@ class _NotificationLogSheetState extends State<NotificationLogSheet> {
                 ),
               ),
             ),
-            const Text(
-              'Mina notiser',
-              style: TextStyle(
+            Text(
+              tr.notificationLogSheetTitle,
+              style: const TextStyle(
                 fontSize: 26,
                 fontWeight: FontWeight.w700,
                 color: TbColors.ink,
@@ -119,9 +119,7 @@ class _NotificationLogSheetState extends State<NotificationLogSheet> {
             ),
             const SizedBox(height: 6),
             Text(
-              'Notiser som skickats till den här telefonen. '
-              'Vill du spara ett tips? Gör det med stjärnan i tipslistan '
-              '— då ligger det under Sparat i sju dagar.',
+              tr.notificationLogSheetIntro,
               style: TextStyle(
                 fontSize: 14,
                 height: 1.4,
@@ -146,20 +144,14 @@ class _NotificationLogSheetState extends State<NotificationLogSheet> {
             if (_reason == 'no_device' || _reason == 'no_backend')
               _EmptyNote(
                 title: _reason == 'no_backend'
-                    ? 'Notishistorik kräver backend'
-                    : 'Ingen parad telefon',
-                body:
-                    _hint ??
-                    'Notiser skickas till en parad enhet. Den här '
-                        'inloggningen har ingen.',
+                    ? tr.notificationLogSheetNeedsBackend
+                    : tr.notificationLogSheetNoPhone,
+                body: _hint ?? tr.notificationLogSheetNoPhoneBody,
               )
             else if (_rows.isEmpty)
-              const _EmptyNote(
-                title: 'Inga notiser än',
-                body:
-                    'Notiser skickas bara för störningar som är värda att '
-                    'avbryta för. Är det lugnt i dina län hör du inget — '
-                    'och det är meningen.',
+              _EmptyNote(
+                title: tr.notificationLogSheetEmptyTitle,
+                body: tr.notificationLogSheetEmptyBody,
               )
             else
               for (final row in _rows) ...[
@@ -252,7 +244,7 @@ class _NotificationTile extends StatelessWidget {
                   if (purged) ...[
                     const SizedBox(width: 8),
                     Text(
-                      '· arkiverad',
+                      tr.notificationLogSheetArchived,
                       style: TextStyle(
                         fontSize: 12,
                         color: Colors.grey.shade500,

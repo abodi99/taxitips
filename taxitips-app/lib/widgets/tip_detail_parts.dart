@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../severity_labels.dart';
 import '../theme.dart';
 import 'brand_icons.dart';
@@ -57,11 +58,13 @@ class _DepartureBoardState extends State<DepartureBoard> {
         travel.hasAlternative &&
         (travel.alternative ?? '').isNotEmpty;
     final (chip, chipBg, chipFg) = dep.cancelled
-        ? ('INSTÄLLD', TbColors.danger, TbColors.vit)
+        ? (tr.tipDetailPartsChipCancelled, TbColors.danger, TbColors.vit)
         : (
             dep.delayMinutes == null
-                ? 'FÖRSENAD'
-                : 'FÖRSENAD ${humanMinutes(dep.delayMinutes!).toUpperCase()}',
+                ? tr.tipDetailPartsChipDelayed
+                : tr.tipDetailPartsChipDelayedBy(
+                    humanMinutes(dep.delayMinutes!).toUpperCase(),
+                  ),
             TbColors.guld,
             TbColors.midnatt,
           );
@@ -124,7 +127,7 @@ class _DepartureBoardState extends State<DepartureBoard> {
               ),
               if (!dep.cancelled && dep.newClock != null)
                 Text(
-                  '→ ${dep.newClock}',
+                  tr.tipDetailPartsNewClock(dep.newClock!),
                   style: const TextStyle(
                     fontFamily: kDisplayFont,
                     fontSize: 34,
@@ -138,7 +141,7 @@ class _DepartureBoardState extends State<DepartureBoard> {
           if (dep.destination != null) ...[
             const SizedBox(height: 4),
             Text(
-              'mot ${dep.destination}',
+              tr.severityLabelsTowards(dep.destination!),
               style: const TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w700,

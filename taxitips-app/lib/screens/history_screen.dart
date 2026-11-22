@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../analytics.dart';
 import '../api_client.dart';
+import '../l10n/l10n.dart';
 import '../membership_copy.dart';
 import '../net_status.dart';
 import '../signal_kinds.dart';
@@ -112,8 +113,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             : membershipNotice(
                 body['reason']?.toString(),
                 serverMessage: body['message']?.toString(),
-                fallback:
-                    'Historiken visas när telefonen har åtkomst till tips.',
+                fallback: tr.historyScreenNoAccess,
               );
         _loading = false;
       });
@@ -121,9 +121,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
       if (!mounted || seq != _seq) return;
       final net = netFailureOf(e);
       setState(() {
-        _error = net != null
-            ? netMessage(net)
-            : 'Kunde inte hämta historiken. Försök igen.';
+        _error = net != null ? netMessage(net) : tr.historyScreenLoadError;
         _loading = false;
       });
     }
@@ -175,9 +173,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Historik',
-              style: TextStyle(fontWeight: FontWeight.w800),
+            Text(
+              tr.historyScreenTitle,
+              style: const TextStyle(fontWeight: FontWeight.w800),
             ),
             if (widget.areaLabel.isNotEmpty)
               Text(
@@ -223,7 +221,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         ),
         segments: [
           for (final h in kHistoryHourOptions)
-            ButtonSegment(value: h, label: Text('$h tim')),
+            ButtonSegment(value: h, label: Text(tr.historyScreenHours(h))),
         ],
         selected: {_hours},
         onSelectionChanged: (s) => _setHours(s.first),
@@ -247,16 +245,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
         _Message(
           icon: Icons.cloud_off_rounded,
           text: _error!,
-          action: 'Försök igen',
+          action: tr.historyScreenRetry,
           onAction: _load,
         ),
       ];
     }
     if (_unavailable) {
-      return const [
+      return [
         _Message(
           icon: Icons.history_rounded,
-          text: 'Historiken finns inte i den här versionen.',
+          text: tr.historyScreenUnavailable,
         ),
       ];
     }
@@ -264,11 +262,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
       return [_Message(icon: Icons.lock_outline_rounded, text: _blocked!)];
     }
     if (_needsArea) {
-      return const [
-        _Message(
-          icon: Icons.map_outlined,
-          text: 'Välj ditt körområde för att se historiken.',
-        ),
+      return [
+        _Message(icon: Icons.map_outlined, text: tr.historyScreenNeedsArea),
       ];
     }
 
@@ -276,8 +271,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
     final out = <Widget>[
       Text(
         _rows.isEmpty
-            ? 'Inga tips de senaste $_hours timmarna.'
-            : '${_rows.length} tips de senaste $_hours timmarna · $active pågår',
+            ? tr.historyScreenNone(_hours)
+            : tr.historyScreenSummary(_rows.length, _hours, active),
         style: const TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w700,
@@ -296,7 +291,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         ..add(const SizedBox(height: 8))
         ..add(
           Text(
-            'Visar de ${_rows.length} senaste.',
+            tr.historyScreenShowingLatest(_rows.length),
             style: const TextStyle(fontSize: 14, color: TbColors.skiffer),
           ),
         );
@@ -345,7 +340,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
       if (c != null) labels.add(c.label);
     });
     if (count == 0) return null;
-    final where = labels.isEmpty ? '' : ' i ${labels.join(' och ')}';
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -360,7 +354,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              '$count tips$where visas inte. '
+              '${labels.isEmpty ? tr.historyScreenHidden(count) : tr.historyScreenHiddenIn(count, labels.join(tr.historyScreenAnd))} '
               '${lockedNoteFor(_features?['plan'])}',
               style: const TextStyle(
                 fontSize: 14,
@@ -402,7 +396,7 @@ class HistoryGroup {
   /// "I dag 9 okt · 14:00–15:00", eller "Började tidigare".
   String label(DateTime now) {
     final s = start;
-    if (s == null) return 'Började tidigare';
+    if (s == null) return tr.historyScreenEarlier;
     final end = (s.hour + 1) % 24;
     return '${dateText(s, now: now)}–${end.toString().padLeft(2, '0')}:00';
   }
@@ -460,10 +454,7 @@ class HistoryRow extends StatelessWidget {
         ? TbColors.skiffer
         : strengthColor(strength, category: category);
     final time = historyTime(shown);
-    final clock = time == null
-        ? ''
-        : '${time.hour.toString().padLeft(2, '0')}:'
-              '${time.minute.toString().padLeft(2, '0')}';
+    final clock = time == null ? '' : formatTime(time);
     // Linje och station ("Buss 725 · Tumba station") när de finns.
     final place = tipLineStation(shown) ?? tipPlace(shown);
     final county = shown['countyName']?.toString() ?? '';
@@ -484,7 +475,7 @@ class HistoryRow extends StatelessWidget {
             borderRadius: BorderRadius.circular(14),
             border: Border.all(color: TbColors.line),
           ),
-          padding: const EdgeInsets.fromLTRB(10, 10, 4, 10),
+          padding: const EdgeInsetsDirectional.fromSTEB(10, 10, 4, 10),
           child: Row(
             children: [
               SizedBox(
@@ -585,7 +576,7 @@ class _StatusTag extends StatelessWidget {
         ),
         const SizedBox(width: 4),
         Text(
-          ended ? 'Slut' : 'Pågår',
+          ended ? tr.historyScreenEnded : tr.historyScreenOngoing,
           style: TextStyle(
             fontSize: 14,
             fontWeight: FontWeight.w700,

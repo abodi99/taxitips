@@ -3,6 +3,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../api_client.dart';
 import '../followed_events.dart';
+import '../l10n/l10n.dart';
 import '../membership_copy.dart';
 import '../signal_kinds.dart' show countyShort;
 import '../net_status.dart';
@@ -20,7 +21,7 @@ String eventKindOf(Map e) {
 String eventKindLabelOf(Map e) {
   final sport = e['sportLabel']?.toString() ?? '';
   if (sport.isNotEmpty) return sport;
-  return e['categoryLabel']?.toString() ?? 'Övrigt';
+  return e['categoryLabel']?.toString() ?? tr.eventsScreenOtherKind;
 }
 
 /// Alla evenemang i förarens område, med datumet i centrum: en dag, helgen, en vecka,
@@ -49,12 +50,23 @@ class EventsScreen extends StatefulWidget {
 }
 
 class _Period {
-  const _Period(this.key, this.label, this.from, this.to);
+  const _Period(this.key, this.from, this.to);
 
   final String key;
-  final String label;
   final DateTime from;
   final DateTime to;
+
+  /// Räknas vid visning så att texten följer språket när det byts.
+  String get label => switch (key) {
+    'today' => tr.eventsScreenToday,
+    'tomorrow' => tr.eventsScreenTomorrow,
+    'weekend' => tr.eventsScreenWeekend,
+    'week' => tr.eventsScreenWeek,
+    'quarter' => tr.eventsScreenQuarter,
+    'day' => dayHeading(from),
+    'range' => '${shortDate(from)}–${shortDate(to)}',
+    _ => tr.eventsScreenMonth,
+  };
 
   bool get singleDay => _sameDay(from, to);
 }
@@ -127,9 +139,7 @@ class _EventsScreenState extends State<EventsScreen> {
       ..showSnackBar(
         SnackBar(
           content: Text(
-            follow
-                ? 'Du följer eventet. Det finns under ⭐ Sparat på kartan.'
-                : 'Du följer det inte längre.',
+            follow ? tr.eventsScreenFollowing : tr.eventsScreenUnfollowed,
           ),
         ),
       );
@@ -156,23 +166,23 @@ class _EventsScreenState extends State<EventsScreen> {
     final t = _today;
     switch (key) {
       case 'today':
-        return _Period(key, 'I dag', t, t);
+        return _Period(key, t, t);
       case 'tomorrow':
         final d = t.add(const Duration(days: 1));
-        return _Period(key, 'I morgon', d, d);
+        return _Period(key, d, d);
       case 'weekend':
         // Fredag–söndag den här veckan; på lördag och söndag resten av helgen.
         final friday = t.weekday <= DateTime.friday
             ? t.add(Duration(days: DateTime.friday - t.weekday))
             : t;
         final sunday = t.add(Duration(days: DateTime.sunday - t.weekday));
-        return _Period(key, 'Helgen', friday, sunday);
+        return _Period(key, friday, sunday);
       case 'week':
-        return _Period(key, '7 dagar', t, t.add(const Duration(days: 6)));
+        return _Period(key, t, t.add(const Duration(days: 6)));
       case 'quarter':
-        return _Period(key, '3 månader', t, t.add(const Duration(days: 91)));
+        return _Period(key, t, t.add(const Duration(days: 91)));
       default:
-        return _Period('month', '30 dagar', t, t.add(const Duration(days: 29)));
+        return _Period('month', t, t.add(const Duration(days: 29)));
     }
   }
 
@@ -236,11 +246,11 @@ class _EventsScreenState extends State<EventsScreen> {
       initialDate: initial.isAfter(_lastDay) ? _lastDay : initial,
       firstDate: _today,
       lastDate: _lastDay,
-      helpText: 'Välj dag',
+      helpText: tr.eventsScreenPickDay,
     );
     if (picked != null) {
       final d = _day(picked);
-      _select(_Period('day', dayHeading(d), d, d));
+      _select(_Period('day', d, d));
     }
   }
 
@@ -251,14 +261,12 @@ class _EventsScreenState extends State<EventsScreen> {
       firstDate: _today,
       lastDate: _lastDay,
       initialDateRange: DateTimeRange(start: _period.from, end: end),
-      helpText: 'Välj period',
+      helpText: tr.eventsScreenPickPeriod,
     );
     if (picked != null) {
       final from = _day(picked.start);
       final to = _day(picked.end);
-      _select(
-        _Period('range', '${shortDate(from)}–${shortDate(to)}', from, to),
-      );
+      _select(_Period('range', from, to));
     }
   }
 
@@ -317,7 +325,7 @@ class _EventsScreenState extends State<EventsScreen> {
       VoidCallback onTap, {
       IconData? icon,
     }) => Padding(
-      padding: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsetsDirectional.only(end: 8),
       child: ChoiceChip(
         avatar: icon == null
             ? null
@@ -339,11 +347,11 @@ class _EventsScreenState extends State<EventsScreen> {
       children: [
         if (widget.lat != null && widget.lon != null)
           row([
-            for (final (km, label) in const <(double?, String)>[
-              (null, 'Hela området'),
-              (10, '10 km'),
-              (25, '25 km'),
-              (50, '50 km'),
+            for (final (km, label) in <(double?, String)>[
+              (null, tr.eventsScreenWholeArea),
+              (10, tr.signalKindsDistanceKm('10')),
+              (25, tr.signalKindsDistanceKm('25')),
+              (50, tr.signalKindsDistanceKm('50')),
             ])
               chip(
                 label,
@@ -355,7 +363,7 @@ class _EventsScreenState extends State<EventsScreen> {
         if (counties.length > 1)
           row([
             chip(
-              'Alla län',
+              tr.eventsScreenAllCounties,
               _county == null,
               () => setState(() => _county = null),
               icon: Icons.place_rounded,
@@ -369,20 +377,20 @@ class _EventsScreenState extends State<EventsScreen> {
           ]),
         row([
           chip(
-            'Tid',
+            tr.eventsScreenSortTime,
             _sort == 'time',
             () => setState(() => _sort = 'time'),
             icon: Icons.schedule_rounded,
           ),
           if (widget.lat != null)
             chip(
-              'Närmast',
+              tr.eventsScreenSortNearest,
               _sort == 'distance',
               () => setState(() => _sort = 'distance'),
               icon: Icons.near_me_rounded,
             ),
           chip(
-            'Störst',
+            tr.eventsScreenSortLargest,
             _sort == 'size',
             () => setState(() => _sort = 'size'),
             icon: Icons.groups_rounded,
@@ -453,9 +461,9 @@ class _EventsScreenState extends State<EventsScreen> {
       runSpacing: 6,
       children: [
         FilterChip(
-          label: const Text(
-            'Alla sorter',
-            style: TextStyle(fontWeight: FontWeight.w700),
+          label: Text(
+            tr.eventsScreenAllKinds,
+            style: const TextStyle(fontWeight: FontWeight.w700),
           ),
           selected: allOn,
           selectedColor: TbColors.taxi,
@@ -518,7 +526,7 @@ class _EventsScreenState extends State<EventsScreen> {
         ActionChip(
           avatar: const Icon(Icons.today, size: 18),
           label: Text(
-            _period.key == 'day' ? _period.label : 'Välj dag',
+            _period.key == 'day' ? _period.label : tr.eventsScreenPickDay,
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
           backgroundColor: _period.key == 'day' ? TbColors.taxi : null,
@@ -527,7 +535,7 @@ class _EventsScreenState extends State<EventsScreen> {
         ActionChip(
           avatar: const Icon(Icons.date_range, size: 18),
           label: Text(
-            _period.key == 'range' ? _period.label : 'Välj period',
+            _period.key == 'range' ? _period.label : tr.eventsScreenPickPeriod,
             style: const TextStyle(fontWeight: FontWeight.w700),
           ),
           backgroundColor: _period.key == 'range' ? TbColors.taxi : null,
@@ -552,7 +560,7 @@ class _EventsScreenState extends State<EventsScreen> {
           final fg = selected ? TbColors.vit : TbColors.ink;
           return InkWell(
             borderRadius: BorderRadius.circular(14),
-            onTap: () => _select(_Period('day', dayHeading(date), date, date)),
+            onTap: () => _select(_Period('day', date, date)),
             child: Container(
               width: 60,
               padding: const EdgeInsets.symmetric(vertical: 8),
@@ -647,8 +655,8 @@ class _EventsScreenState extends State<EventsScreen> {
       }
       final events = groups[day]!;
       final prefix = day == today
-          ? 'I dag · '
-          : (day == tomorrow ? 'I morgon · ' : '');
+          ? tr.eventsScreenTodayPrefix
+          : (day == tomorrow ? tr.eventsScreenTomorrowPrefix : '');
       out.add(
         Padding(
           padding: const EdgeInsets.fromLTRB(2, 14, 2, 8),
@@ -665,7 +673,7 @@ class _EventsScreenState extends State<EventsScreen> {
                 ),
               ),
               Text(
-                '${events.length} ${events.length == 1 ? 'evenemang' : 'evenemang'}',
+                tr.eventsScreenCount(events.length),
                 style: TextStyle(
                   fontSize: 13,
                   color: Colors.grey.shade700,
@@ -704,9 +712,9 @@ class _EventsScreenState extends State<EventsScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Evenemang',
-              style: TextStyle(fontWeight: FontWeight.w800),
+            Text(
+              tr.eventsScreenTitle,
+              style: const TextStyle(fontWeight: FontWeight.w800),
             ),
             if (widget.areaLabel.isNotEmpty)
               Text(
@@ -747,10 +755,17 @@ class _EventsScreenState extends State<EventsScreen> {
             const SizedBox(height: 14),
             Text(
               _loading
-                  ? 'Hämtar $_periodText…'
+                  ? tr.eventsScreenLoading(_periodText)
                   : _visibleEvents.length == _events.length
-                  ? '${_events.length} evenemang · $_periodText'
-                  : '${_visibleEvents.length} av ${_events.length} evenemang · $_periodText',
+                  ? tr.eventsScreenSummary(
+                      tr.eventsScreenCount(_events.length),
+                      _periodText,
+                    )
+                  : tr.eventsScreenSummaryFiltered(
+                      _visibleEvents.length,
+                      _events.length,
+                      _periodText,
+                    ),
               style: const TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w700,
@@ -793,7 +808,7 @@ class _EventsScreenState extends State<EventsScreen> {
               Padding(
                 padding: const EdgeInsets.only(top: 24),
                 child: Text(
-                  'Kunde inte hämta evenemangen: $_error',
+                  tr.eventsScreenError('$_error'),
                   style: const TextStyle(color: TbColors.danger),
                 ),
               )
@@ -809,7 +824,7 @@ class _EventsScreenState extends State<EventsScreen> {
                     ),
                     const SizedBox(height: 10),
                     Text(
-                      'Inga evenemang $_periodText i ditt område.',
+                      tr.eventsScreenNone(_periodText),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 16,
@@ -820,8 +835,8 @@ class _EventsScreenState extends State<EventsScreen> {
                     const SizedBox(height: 6),
                     Text(
                       _dayCounts.isEmpty
-                          ? 'Utbudet är tunt utanför storstäderna. Prova ett annat län.'
-                          : 'Dagarna ovan har evenemang — tryck på en av dem, eller välj en längre period.',
+                          ? tr.eventsScreenNoneThin
+                          : tr.eventsScreenNoneHint,
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         fontSize: 13.5,

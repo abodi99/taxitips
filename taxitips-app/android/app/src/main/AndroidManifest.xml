@@ -25,6 +25,7 @@
          (nyckeln i Android Keystore följer inte med) eller gett en ny telefon
          en gammal telefons åtkomst. En ny telefon kopplas in på nytt. -->
     <application
+        android:localeConfig="@xml/locales_config"
         android:label="Taxitips"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher"

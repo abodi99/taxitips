@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import '../l10n/l10n.dart';
 import '../severity_labels.dart';
 import '../signal_kinds.dart';
 import '../theme.dart';
@@ -88,11 +89,11 @@ class SignalCard extends StatelessWidget {
     // Rad 3: slut > serverns beslut > dagens avgångsrad > ingenting.
     Widget? row3;
     if (!active) {
-      row3 = const Text(
-        'Slut',
+      row3 = Text(
+        tr.signalCardOver,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
-        style: TextStyle(
+        style: const TextStyle(
           fontSize: 15,
           fontWeight: FontWeight.w700,
           color: TbColors.skiffer,
@@ -175,7 +176,7 @@ class SignalCard extends StatelessWidget {
                             children: [
                               TextSpan(text: headline),
                               if (!active)
-                                const TextSpan(text: ' · Slut')
+                                TextSpan(text: ' · ${tr.signalCardOver}')
                               else if (decision.isNotEmpty) ...[
                                 const TextSpan(text: ' · '),
                                 TextSpan(
@@ -247,7 +248,12 @@ class SignalCard extends StatelessWidget {
                 Container(width: 4, color: edge),
                 Expanded(
                   child: Padding(
-                    padding: const EdgeInsets.fromLTRB(10, 10, 4, 10),
+                    padding: const EdgeInsetsDirectional.fromSTEB(
+                      10,
+                      10,
+                      4,
+                      10,
+                    ),
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -323,11 +329,11 @@ class SignalCard extends StatelessWidget {
                                   children: [
                                     Expanded(child: row3 ?? const SizedBox()),
                                     if (pays)
-                                      const Icon(
+                                      Icon(
                                         Icons.payments_rounded,
                                         size: 20,
                                         color: TbColors.live,
-                                        semanticLabel: 'Taxi betalas',
+                                        semanticLabel: tr.signalCardTaxiPays,
                                       ),
                                   ],
                                 ),
@@ -338,19 +344,22 @@ class SignalCard extends StatelessWidget {
                         if (canDrive)
                           // Ett tryck till navigeringen, utan att öppna tipset.
                           Padding(
-                            padding: const EdgeInsets.only(left: 8, right: 6),
+                            padding: const EdgeInsetsDirectional.only(
+                              start: 8,
+                              end: 6,
+                            ),
                             child: Center(
                               child: IconButton.filled(
                                 onPressed: onDrive,
-                                tooltip: 'Kör dit',
+                                tooltip: tr.signalCardDrive,
                                 style: IconButton.styleFrom(
                                   backgroundColor: TbColors.taxi,
                                   foregroundColor: TbColors.ink,
                                   minimumSize: const Size(48, 48),
                                 ),
-                                icon: const Icon(
+                                icon: Icon(
                                   Icons.navigation_rounded,
-                                  semanticLabel: 'Kör dit',
+                                  semanticLabel: tr.signalCardDrive,
                                 ),
                               ),
                             ),
@@ -558,11 +567,11 @@ class FollowButton extends StatelessWidget {
       onPressed: () => onChanged(!followed),
       iconSize: 28,
       constraints: const BoxConstraints(minWidth: 48, minHeight: 48),
-      tooltip: followed ? 'Ta bort sparat' : 'Spara tipset',
+      tooltip: followed ? tr.signalCardUnsave : tr.signalCardSave,
       icon: Icon(
         followed ? Icons.star_rounded : Icons.star_outline_rounded,
         color: followed ? TbColors.guldDjup : TbColors.skiffer,
-        semanticLabel: followed ? 'Ta bort sparat' : 'Spara tipset',
+        semanticLabel: followed ? tr.signalCardUnsave : tr.signalCardSave,
       ),
     );
   }
@@ -624,48 +633,49 @@ class _LiveTravelTextState extends State<LiveTravelText> {
 class TipsNotPromisesNote extends StatelessWidget {
   const TipsNotPromisesNote({super.key});
 
-  static const title = 'Tips, inte beställningar';
-  static const body =
-      'Vi läser av trafiken och visar var folk kan behöva taxi. Du avgör '
-      'själv om det är värt att åka.';
+  static String get title => tr.signalCardNoteTitle;
+  static String get body => tr.signalCardNoteBody;
 
   @override
   Widget build(BuildContext context) {
     return Semantics(
       button: true,
-      label: '$title. Visa mer',
+      label: tr.signalCardNoteMore(title),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),
         onTap: () => showDialog<void>(
           context: context,
           builder: (ctx) => AlertDialog(
-            title: const Text(title),
-            content: const Text(body),
+            title: Text(title),
+            content: Text(body),
             actions: [
               FilledButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('Uppfattat'),
+                child: Text(tr.signalCardNoteOk),
               ),
             ],
           ),
         ),
-        child: const Padding(
-          padding: EdgeInsets.symmetric(vertical: 8),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(
+              const Icon(
                 Icons.info_outline_rounded,
                 size: 15,
                 color: TbColors.skiffer,
               ),
-              SizedBox(width: 6),
+              const SizedBox(width: 6),
               Flexible(
                 child: Text(
-                  'Tips från trafikläget, ingen garanti för körning',
+                  tr.signalCardNoteLine,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: TextStyle(fontSize: 12.5, color: TbColors.skiffer),
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    color: TbColors.skiffer,
+                  ),
                 ),
               ),
             ],

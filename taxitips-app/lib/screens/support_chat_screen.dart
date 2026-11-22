@@ -1,8 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../api_client.dart';
+import '../l10n/l10n.dart';
 import '../theme.dart';
 
 /// Supportchatten: användaren skriver, TaxiTips svarar från adminwebben.
@@ -91,7 +93,7 @@ class _SupportChatScreenState extends State<SupportChatScreen>
       if (!silent || _messages.isEmpty) {
         setState(() {
           _loading = false;
-          _error = 'Kunde inte hämta chatten. Kontrollera nätet.';
+          _error = tr.supportChatLoadFailed;
         });
       }
     }
@@ -128,7 +130,7 @@ class _SupportChatScreenState extends State<SupportChatScreen>
     } on ApiException catch (e) {
       if (mounted) _snack(e.message);
     } catch (_) {
-      if (mounted) _snack('Meddelandet skickades inte. Försök igen.');
+      if (mounted) _snack(tr.supportChatSendFailed);
     } finally {
       if (mounted) setState(() => _sending = false);
     }
@@ -147,13 +149,16 @@ class _SupportChatScreenState extends State<SupportChatScreen>
       appBar: AppBar(
         backgroundColor: TbColors.navy,
         foregroundColor: Colors.white,
-        title: const Column(
+        title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Support', style: TextStyle(fontWeight: FontWeight.w800)),
             Text(
-              'Vi svarar så snart vi kan',
-              style: TextStyle(fontSize: 12, color: Colors.white70),
+              tr.supportChatTitle,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+            Text(
+              tr.supportChatSubtitle,
+              style: const TextStyle(fontSize: 12, color: Colors.white70),
             ),
           ],
         ),
@@ -193,7 +198,7 @@ class _SupportChatScreenState extends State<SupportChatScreen>
                   setState(() => _loading = true);
                   _load();
                 },
-                child: const Text('Försök igen'),
+                child: Text(tr.supportChatRetry),
               ),
             ],
           ),
@@ -201,23 +206,30 @@ class _SupportChatScreenState extends State<SupportChatScreen>
       );
     }
     if (_messages.isEmpty) {
-      return const Center(
+      return Center(
         child: Padding(
-          padding: EdgeInsets.all(32),
+          padding: const EdgeInsets.all(32),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.support_agent, size: 56, color: TbColors.taxiDeep),
-              SizedBox(height: 16),
-              Text(
-                'Hur kan vi hjälpa till?',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+              const Icon(
+                Icons.support_agent,
+                size: 56,
+                color: TbColors.taxiDeep,
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 16),
               Text(
-                'Skriv din fråga nedan. Du får en notis när vi svarat.',
+                tr.supportChatEmptyTitle,
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                tr.supportChatEmptyBody,
                 textAlign: TextAlign.center,
-                style: TextStyle(color: TbColors.muted, height: 1.35),
+                style: const TextStyle(color: TbColors.muted, height: 1.35),
               ),
             ],
           ),
@@ -243,7 +255,7 @@ class _SupportChatScreenState extends State<SupportChatScreen>
 
   Widget _composer() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+      padding: const EdgeInsetsDirectional.fromSTEB(12, 8, 8, 8),
       decoration: const BoxDecoration(
         color: Colors.white,
         border: Border(top: BorderSide(color: TbColors.line)),
@@ -258,8 +270,8 @@ class _SupportChatScreenState extends State<SupportChatScreen>
               maxLines: 5,
               maxLength: _maxLength,
               textCapitalization: TextCapitalization.sentences,
-              decoration: const InputDecoration(
-                hintText: 'Skriv ett meddelande',
+              decoration: InputDecoration(
+                hintText: tr.supportChatHint,
                 counterText: '',
                 border: InputBorder.none,
               ),
@@ -267,7 +279,7 @@ class _SupportChatScreenState extends State<SupportChatScreen>
             ),
           ),
           IconButton.filled(
-            tooltip: 'Skicka',
+            tooltip: tr.supportChatSend,
             style: IconButton.styleFrom(
               backgroundColor: TbColors.taxi,
               foregroundColor: TbColors.ink,
@@ -301,7 +313,9 @@ class _Bubble extends StatelessWidget {
       message['createdAt']?.toString() ?? '',
     )?.toLocal();
     return Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+      alignment: mine
+          ? AlignmentDirectional.centerEnd
+          : AlignmentDirectional.centerStart,
       child: ConstrainedBox(
         constraints: BoxConstraints(
           maxWidth: MediaQuery.of(context).size.width * 0.8,
@@ -313,7 +327,11 @@ class _Bubble extends StatelessWidget {
           children: [
             if (showAuthor)
               Padding(
-                padding: const EdgeInsets.only(left: 4, bottom: 2, top: 6),
+                padding: const EdgeInsetsDirectional.only(
+                  start: 4,
+                  bottom: 2,
+                  top: 6,
+                ),
                 child: Text(
                   message['author']?.toString() ?? 'TaxiTips',
                   style: const TextStyle(
@@ -328,11 +346,13 @@ class _Bubble extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: mine ? TbColors.navy : Colors.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: const Radius.circular(16),
-                  topRight: const Radius.circular(16),
-                  bottomLeft: Radius.circular(mine ? 16 : 4),
-                  bottomRight: Radius.circular(mine ? 4 : 16),
+                // Egna meddelanden ligger på slutsidan (höger på svenska,
+                // vänster på arabiska); den lilla hörnan pekar mot kanten.
+                borderRadius: BorderRadiusDirectional.only(
+                  topStart: const Radius.circular(16),
+                  topEnd: const Radius.circular(16),
+                  bottomStart: Radius.circular(mine ? 16 : 4),
+                  bottomEnd: Radius.circular(mine ? 4 : 16),
                 ),
                 border: mine ? null : Border.all(color: TbColors.line),
               ),
@@ -360,11 +380,13 @@ class _Bubble extends StatelessWidget {
 
   static String _time(DateTime d) {
     final now = DateTime.now();
-    final hm =
-        '${d.hour.toString().padLeft(2, '0')}:${d.minute.toString().padLeft(2, '0')}';
+    final hm = formatTime(d);
     if (d.year == now.year && d.month == now.month && d.day == now.day) {
       return hm;
     }
-    return '${d.day}/${d.month} $hm';
+    // Svenska: "5/3 14:05" som förut. Övriga språk skriver månaden med
+    // bokstäver, så att 5/3 inte läses som 3 maj.
+    if (currentLanguage == 'sv') return '${d.day}/${d.month} $hm';
+    return '${DateFormat.MMMd(currentLanguage).format(d)} $hm';
   }
 }

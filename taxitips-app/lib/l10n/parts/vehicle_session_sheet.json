@@ -1,0 +1,102 @@
+{
+  "vehicleSessionTheCar": {
+    "sv": "bilen",
+    "en": "the car",
+    "ar": "السيارة"
+  },
+  "vehicleSessionTakeOverTitle": {
+    "sv": "Ta över {plate}?",
+    "en": "Take over {plate}?",
+    "ar": "هل تريد تولّي {plate}؟",
+    "placeholders": {
+      "plate": {
+        "type": "String"
+      }
+    }
+  },
+  "vehicleSessionTakeOverBody": {
+    "sv": "{message}\n\nDen andra telefonen slutar visa tips för den här bilen direkt.",
+    "en": "{message}\n\nThe other phone stops showing tips for this car right away.",
+    "ar": "{message}\n\nسيتوقف الهاتف الآخر عن عرض التنبيهات لهذه السيارة فورًا.",
+    "placeholders": {
+      "message": {
+        "type": "String"
+      }
+    }
+  },
+  "vehicleSessionCancel": {
+    "sv": "Avbryt",
+    "en": "Cancel",
+    "ar": "إلغاء"
+  },
+  "vehicleSessionTakeOverCar": {
+    "sv": "Ta över bilen",
+    "en": "Take over the car",
+    "ar": "تولّي السيارة"
+  },
+  "vehicleSessionTitle": {
+    "sv": "Vilken bil kör du?",
+    "en": "Which car are you driving?",
+    "ar": "أي سيارة تقود؟"
+  },
+  "vehicleSessionSubtitle": {
+    "sv": "Tipsen gäller bilens län. En bil kan bara ha en telefon åt gången.",
+    "en": "Tips apply to the car's counties. A car can only have one phone at a time.",
+    "ar": "التنبيهات خاصة بمقاطعات السيارة. يمكن أن يكون للسيارة هاتف واحد فقط في كل مرة."
+  },
+  "vehicleSessionNoVehicles": {
+    "sv": "Telefonen är inte kopplad till någon bil. Be din chef bjuda in dig med din e-post, och logga in som förare.",
+    "en": "The phone is not connected to any car. Ask your manager to invite you with your email, and log in as a driver.",
+    "ar": "الهاتف غير مرتبط بأي سيارة. اطلب من مديرك دعوتك عبر بريدك الإلكتروني، ثم سجّل الدخول كسائق."
+  },
+  "vehicleSessionLeave": {
+    "sv": "Lämna bilen",
+    "en": "Leave the car",
+    "ar": "مغادرة السيارة"
+  },
+  "vehicleSessionCar": {
+    "sv": "Bil",
+    "en": "Car",
+    "ar": "سيارة"
+  },
+  "vehicleSessionCountiesCount": {
+    "sv": "{count} län",
+    "en": "{count, plural, =1{1 county} other{{count} counties}}",
+    "ar": "{count, plural, zero{لا مقاطعات} one{مقاطعة واحدة} two{مقاطعتان} few{{count} مقاطعات} many{{count} مقاطعة} other{{count} مقاطعة}}",
+    "placeholders": {
+      "count": {
+        "type": "int"
+      }
+    }
+  },
+  "vehicleSessionUsedBy": {
+    "sv": "Används av {name}",
+    "en": "Used by {name}",
+    "ar": "تستخدمها {name}",
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "vehicleSessionAnotherPhone": {
+    "sv": "en annan telefon",
+    "en": "another phone",
+    "ar": "هاتف آخر"
+  },
+  "vehicleSessionYouDriveThis": {
+    "sv": "Du kör den här",
+    "en": "You are driving this one",
+    "ar": "أنت تقود هذه السيارة"
+  },
+  "vehicleSessionTakeOver": {
+    "sv": "Ta över",
+    "en": "Take over",
+    "ar": "تولّي"
+  },
+  "vehicleSessionDrive": {
+    "sv": "Kör",
+    "en": "Drive",
+    "ar": "قُد"
+  }
+}

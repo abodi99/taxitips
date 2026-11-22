@@ -1,0 +1,57 @@
+{
+  "signalCardOver": {
+    "sv": "Slut",
+    "en": "Over",
+    "ar": "انتهى"
+  },
+  "signalCardTaxiPays": {
+    "sv": "Taxi betalas",
+    "en": "Taxi is paid for",
+    "ar": "سيارة الأجرة مدفوعة"
+  },
+  "signalCardDrive": {
+    "sv": "Kör dit",
+    "en": "Drive there",
+    "ar": "اذهب إلى هناك"
+  },
+  "signalCardUnsave": {
+    "sv": "Ta bort sparat",
+    "en": "Remove from saved",
+    "ar": "إزالة من المحفوظ"
+  },
+  "signalCardSave": {
+    "sv": "Spara tipset",
+    "en": "Save this tip",
+    "ar": "احفظ النصيحة"
+  },
+  "signalCardNoteTitle": {
+    "sv": "Tips, inte beställningar",
+    "en": "Tips, not bookings",
+    "ar": "نصائح وليست طلبات"
+  },
+  "signalCardNoteBody": {
+    "sv": "Vi läser av trafiken och visar var folk kan behöva taxi. Du avgör själv om det är värt att åka.",
+    "en": "We read the traffic and show where people may need a taxi. You decide if it is worth going.",
+    "ar": "نقرأ حركة المرور ونعرض أين قد يحتاج الناس إلى سيارة أجرة. أنت تقرر إن كان الذهاب يستحق."
+  },
+  "signalCardNoteMore": {
+    "sv": "{title}. Visa mer",
+    "en": "{title}. Show more",
+    "ar": "{title}. عرض المزيد",
+    "placeholders": {
+      "title": {
+        "type": "String"
+      }
+    }
+  },
+  "signalCardNoteOk": {
+    "sv": "Uppfattat",
+    "en": "Got it",
+    "ar": "فهمت"
+  },
+  "signalCardNoteLine": {
+    "sv": "Tips från trafikläget, ingen garanti för körning",
+    "en": "Tips from the traffic situation, no guarantee of a fare",
+    "ar": "نصائح من وضع حركة المرور، دون ضمان لوجود رحلة"
+  }
+}

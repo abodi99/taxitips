@@ -1,0 +1,67 @@
+{
+  "notificationLogSheetNow": {
+    "sv": "Just nu",
+    "en": "Just now",
+    "ar": "الآن"
+  },
+  "notificationLogSheetMinAgo": {
+    "sv": "För {minutes} min sedan",
+    "en": "{minutes} min ago",
+    "ar": "قبل {minutes} دقيقة",
+    "placeholders": {
+      "minutes": {
+        "type": "int"
+      }
+    }
+  },
+  "notificationLogSheetHoursAgo": {
+    "sv": "För {hours} tim sedan",
+    "en": "{hours} h ago",
+    "ar": "قبل {hours} ساعة",
+    "placeholders": {
+      "hours": {
+        "type": "int"
+      }
+    }
+  },
+  "notificationLogSheetTitle": {
+    "sv": "Mina notiser",
+    "en": "My notifications",
+    "ar": "إشعاراتي"
+  },
+  "notificationLogSheetIntro": {
+    "sv": "Notiser som skickats till den här telefonen. Vill du spara ett tips? Gör det med stjärnan i tipslistan — då ligger det under Sparat i sju dagar.",
+    "en": "Notifications sent to this phone. Want to save a tip? Use the star in the tip list — it then stays under Saved for seven days.",
+    "ar": "الإشعارات التي أُرسلت إلى هذا الهاتف. تريد حفظ نصيحة؟ استخدم النجمة في قائمة النصائح — ثم تبقى ضمن المحفوظ لمدة سبعة أيام."
+  },
+  "notificationLogSheetNeedsBackend": {
+    "sv": "Notishistorik kräver backend",
+    "en": "Notification history needs a backend",
+    "ar": "سجل الإشعارات يتطلب الخادم"
+  },
+  "notificationLogSheetNoPhone": {
+    "sv": "Ingen parad telefon",
+    "en": "No paired phone",
+    "ar": "لا يوجد هاتف مقترن"
+  },
+  "notificationLogSheetNoPhoneBody": {
+    "sv": "Notiser skickas till en parad enhet. Den här inloggningen har ingen.",
+    "en": "Notifications are sent to a paired device. This login has none.",
+    "ar": "تُرسل الإشعارات إلى جهاز مقترن. هذا الحساب ليس لديه جهاز."
+  },
+  "notificationLogSheetEmptyTitle": {
+    "sv": "Inga notiser än",
+    "en": "No notifications yet",
+    "ar": "لا توجد إشعارات بعد"
+  },
+  "notificationLogSheetEmptyBody": {
+    "sv": "Notiser skickas bara för störningar som är värda att avbryta för. Är det lugnt i dina län hör du inget — och det är meningen.",
+    "en": "Notifications are only sent for disruptions worth interrupting you for. If it is calm in your counties you hear nothing — and that is intended.",
+    "ar": "تُرسل الإشعارات فقط للاضطرابات التي تستحق مقاطعتك. إذا كان الوضع هادئًا في مقاطعاتك فلن يصلك شيء — وهذا مقصود."
+  },
+  "notificationLogSheetArchived": {
+    "sv": "· arkiverad",
+    "en": "· archived",
+    "ar": "· مؤرشف"
+  }
+}

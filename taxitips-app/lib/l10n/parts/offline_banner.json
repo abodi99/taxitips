@@ -1,0 +1,37 @@
+{
+  "offlineBannerOffline": {
+    "sv": "Offline – visar senaste tips från {at}",
+    "en": "Offline – showing latest tips from {at}",
+    "ar": "غير متصل – عرض آخر النصائح من {at}",
+    "placeholders": {
+      "at": {
+        "type": "String"
+      }
+    }
+  },
+  "offlineBannerUnreachable": {
+    "sv": "Servern svarar inte – visar tips från {at}",
+    "en": "Server not responding – showing tips from {at}",
+    "ar": "الخادم لا يستجيب – عرض النصائح من {at}",
+    "placeholders": {
+      "at": {
+        "type": "String"
+      }
+    }
+  },
+  "offlineBannerTimeout": {
+    "sv": "Dålig uppkoppling – visar tips från {at}",
+    "en": "Poor connection – showing tips from {at}",
+    "ar": "الاتصال ضعيف – عرض النصائح من {at}",
+    "placeholders": {
+      "at": {
+        "type": "String"
+      }
+    }
+  },
+  "offlineBannerRetry": {
+    "sv": "Försök igen",
+    "en": "Try again",
+    "ar": "حاول مرة أخرى"
+  }
+}

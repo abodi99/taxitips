@@ -1,0 +1,36 @@
+{
+  "languageTitle": {
+    "sv": "Språk",
+    "en": "Language",
+    "ar": "اللغة",
+    "description": "Rubrik för språkvalet i inställningarna och i väljaren"
+  },
+  "languageSectionDescription": {
+    "sv": "Appen följer telefonens språk om den finns på det.",
+    "en": "The app follows your phone's language when it is available.",
+    "ar": "يتبع التطبيق لغة هاتفك إذا كانت متوفرة."
+  },
+  "languageFollowPhone": {
+    "sv": "Telefonens språk",
+    "en": "Phone language",
+    "ar": "لغة الهاتف"
+  },
+  "languageFollowPhoneDetail": {
+    "sv": "Nu: {language}",
+    "en": "Now: {language}",
+    "ar": "الآن: {language}",
+    "placeholders": {"language": {"type": "String"}}
+  },
+  "languageCurrentAuto": {
+    "sv": "{language} (telefonens språk)",
+    "en": "{language} (phone language)",
+    "ar": "{language} (لغة الهاتف)",
+    "placeholders": {"language": {"type": "String"}}
+  },
+  "languageButtonLabel": {
+    "sv": "Byt språk",
+    "en": "Change language",
+    "ar": "تغيير اللغة",
+    "description": "Tillgänglighetsetikett för språkknappen på välkomstskärmen"
+  }
+}
