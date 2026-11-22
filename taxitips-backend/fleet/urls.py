@@ -54,6 +54,7 @@ urlpatterns = [
     # "Fortsätt här"-länken i provslutsmejlet: ingen inloggning, signerad biljett.
     path("continue/offer", api.continue_offer),
     path("continue/org-number", api.continue_org_number),
+    path("continue/private", api.continue_private),
     path("continue/checkout", api.continue_checkout),
     path("bankid/start", api.bankid_start),
     path("bankid/collect", api.bankid_collect),
@@ -78,6 +79,7 @@ urlpatterns = [
     # Radera mitt konto (Apple 5.1.1(v)): inloggat konto ELLER förarens telefon.
     path("account/delete", api.delete_own_account),
     path("company/details", api.update_company_details),
+    path("company/private", api.set_company_private),
     path("company/org-number", api.set_company_org_number),
     path("company/contracting-party", api.change_contracting_party),
     # Plattformens granskning

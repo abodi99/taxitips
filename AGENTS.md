@@ -83,7 +83,9 @@ Kundlivscykeln i `taxitips-backend/fleet/`:
 |---|---|
 | `access.py` | **Åtkomstkontrollen.** Sex frågor per begäran, svaret bär alltid skälet. Spärrar prövas först. |
 | `accounts.py` | Spärrar (företag, konto, e-post) och kontokatalogen. |
-| `registration.py` | Självregistrering från appen: företag + kortfritt prov, ingen betalning. |
+| `registration.py` | Självregistrering från appen: BankID + kortfritt prov, ingen betalning. `accountKind: private` = förare utan eget företag (kontot får BankID-namnet, inget företagsnamn eller org.nr). |
+| `company_details.py` | Kundens uppgifter, organisationsnumret första gången, och **kundtypen**: `customer_kind=private` = BankID-legitimerad privatperson utan företag. Inget org.nr, bara kort, pris inkl. moms, 14 dagars ångerrätt (`startNow` krävs före betalning, `angerratt.html`). |
+| `stripe_sync.py` (kassan) | Inga låsta betalsätt: Stripe visar det som är påslaget i kontot (kort med Apple Pay/Google Pay, Klarna om det slås på; Swish går inte för abonnemang). `checkout_texts` = svenska + pris/uppsägning ovanför knappen. Betalsätten i klartext för mejl/sms/betalsida: `FLEET_PAYMENT_METHODS_TEXT`. |
 | `pricing.py` | **Enda prismotorn.** Heltal ören, volymnivå, introduktion, proportionering, moms. |
 | `pairing.py` | Engångskod -> godkänd telefon. Hashade hemligheter. Spärr. `approve_device` är det enda stället en telefon godkänns. |
 | `driver_invites.py` | E-postinbjudan -> förarens inloggning -> samma godkännande. `auth_admin.py` tar fram länken via Supabase Auths admin-API. |

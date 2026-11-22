@@ -141,11 +141,11 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
     // inloggning som redan finns, en inbjudan, en registreringslänk) är
     // introduktionen avklarad: den ska inte dyka upp först när föraren loggat
     // ut och startar om. Huvudskärmens guidade genomgång tar över.
-    if (_route == AppRoute.welcome) {
-      if (!await OnboardingScreen.seen()) _route = AppRoute.onboarding;
-    } else {
-      unawaited(OnboardingScreen.markSeen());
-    }
+    // Ingen introduktion före välkomstskärmen längre (2026-11-22): den var
+    // sidor att ta sig igenom innan man kunde göra något. Rundturen i appen
+    // visar det viktiga där det syns, och introduktionen finns kvar i
+    // Inställningar ("Så fungerar Taxi Tips").
+    unawaited(OnboardingScreen.markSeen());
     if (mounted) setState(() => _booting = false);
   }
 

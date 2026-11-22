@@ -40,7 +40,9 @@ void main() {
   Future<List<String>> pump(
     WidgetTester tester,
     ApiClient api, {
-    bool replay = false,
+    // Sidtesterna går igenom alla fyra sidor, som finns i Inställningar.
+    // Första gången (replay: false) är det en enda sida.
+    bool replay = true,
   }) async {
     final done = <String>[];
     tester.view.physicalSize = const Size(1170, 2532);
@@ -93,7 +95,10 @@ void main() {
       find.textContaining('Provet startar när första föraren loggar in'),
       findsOneWidget,
     );
-    expect(find.text('Du kan ha 1 plats i provet, med ett län.'), findsOneWidget);
+    expect(
+      find.text('Du kan ha 1 plats i provet, med ett län.'),
+      findsOneWidget,
+    );
   });
 
   testWidgets('sida 2: pågående prov visar slutdatum, längd räknas ur datum', (
@@ -134,12 +139,10 @@ void main() {
     await pump(tester, _FakeApi(features: _trialFeatures));
     await next(tester);
     await next(tester);
-    expect(find.text('Välj län för din plats'), findsOneWidget);
-    expect(
-      find.textContaining('Kör själv med den här telefonen'),
-      findsOneWidget,
-    );
-    expect(find.text('Bjud in förare på webben'), findsOneWidget);
+    expect(find.text('Byt län'), findsOneWidget);
+    // Platsen är kontots egen: inget "Kör själv" att leta efter.
+    expect(find.textContaining('Kör själv'), findsNothing);
+    expect(find.textContaining('Bjud in förare på webben'), findsOneWidget);
     expect(find.textContaining('bolagskod'), findsNothing);
     expect(find.textContaining('läs upp'), findsNothing);
   });
@@ -197,24 +200,44 @@ void main() {
     expect(find.text(kNotInTrial), findsNothing);
   });
 
-  testWidgets('hoppa över sparar att den är sedd; Klar avslutar', (
-    tester,
-  ) async {
+  testWidgets('första gången: en sida, Klart! Du är igång', (tester) async {
     expect(await TrialWelcomeScreen.seen(), isFalse);
-    final done = await pump(tester, _FakeApi());
+    final done = await pump(
+      tester,
+      _FakeApi(
+        company: {
+          'trial': {
+            'status': 'active',
+            'plannedDays': 30,
+            'endsAt': '2026-12-22T12:00:00Z',
+          },
+        },
+      ),
+      replay: false,
+    );
     // Sedd redan när den visas.
     expect(await TrialWelcomeScreen.seen(), isTrue);
-    await tester.tap(find.text('Hoppa över'));
+    expect(find.text('Klart! Du är igång'), findsOneWidget);
+    // En rad, inget om betalning: den visas först när provet är slut.
+    expect(find.text('Gratis till 22 december.'), findsOneWidget);
+    expect(find.textContaining('betal'), findsNothing);
+    expect(find.text('Hoppa över'), findsNothing);
+    expect(find.text('Nästa'), findsNothing);
+    await tester.tap(find.widgetWithText(FilledButton, 'Visa tipsen'));
     await tester.pumpAndSettle();
     expect(done, ['done']);
+  });
 
-    final done2 = await pump(tester, _FakeApi());
+  testWidgets('från Inställningar: alla sidor och Klar avslutar', (
+    tester,
+  ) async {
+    final done = await pump(tester, _FakeApi());
     for (var i = 0; i < 3; i++) {
       await next(tester);
     }
     await tester.tap(find.widgetWithText(FilledButton, 'Klar'));
     await tester.pumpAndSettle();
-    expect(done2, ['done']);
+    expect(done, ['done']);
   });
 
   test('resetSeen nollställer flaggan så att välkomsten visas igen', () async {

@@ -360,7 +360,8 @@ class FullCustomerChainTests(ChainBase):
             self.assertNotIn(PORTAL_CONTINUE, row.body)
             # Platsen från appen har ingen bil, men mejlet har ändå ett pris
             # (förut: trial_offer None och mejl utan pris).
-            self.assertIn("kr/mån (exkl. moms)", row.body)
+            self.assertIn("kr/mån exkl. moms", row.body)
+            self.assertIn("Betala med", row.body)
             self.assertGreater(row.payload["offer"]["monthly_ore"], 0)
         last_day = next(r for r in reminders if r.payload["stage"] == "card_missing_1d")
         self.assertIn("Provet slutar i morgon", last_day.body)
@@ -393,7 +394,7 @@ class FullCustomerChainTests(ChainBase):
         self.assertEqual(ended[0].to_address, OWNER_EMAIL)
         self.assertIn(CONTINUE_LINK, ended[0].body)
         self.assertNotIn(PORTAL_CONTINUE, ended[0].body)
-        self.assertIn("kr/mån (exkl. moms)", ended[0].body)
+        self.assertIn("kr/mån exkl. moms", ended[0].body)
 
         # ------------------------------------------------------------------
         # 6. Betalning i portalen: beställ, betala, allt öppnas
@@ -919,17 +920,18 @@ class TrialSeatContinuationTests(ChainBase):
 
         seen = {}
 
-        def collect(order, *, collection_method="charge_automatically", days_until_due=14,
-                    success_url="", cancel_url=""):
-            # Betalning direkt i kassan, inget Stripe-prov (ägarens beslut 2026-10-11).
-            seen.update(collection_method=collection_method, success_url=success_url)
+        def collect(order, *, trial_end, success_url="", cancel_url=""):
+            # Under provet sparas betalsättet; första dragningen på provets
+            # slutdag (ägarens beslut 2026-11-22, kassan i läget setup).
+            seen.update(trial_end=trial_end, success_url=success_url)
             url = f"https://checkout.stripe.com/c/{order.id}"
             Order.objects.filter(id=order.id).update(
                 stripe_payment_url=url, stripe_checkout_session_id=f"cs_{order.id.hex[:8]}",
             )
             return url
 
-        self._patch("fleet.stripe_sync.collect_order", side_effect=collect)
+        self._patch("fleet.stripe_sync.available", return_value=True)
+        self._patch("fleet.stripe_sync.collect_trial_commit", side_effect=collect)
         owner = str(uuid.uuid4())
         company_id, seat = self.start_app_trial(owner)
         change = {"addVehicles": [{
@@ -940,14 +942,14 @@ class TrialSeatContinuationTests(ChainBase):
             "post", "/api/fleet/trial/commit", {**change, "accepted": True}, user=owner, email=OWNER_EMAIL,
         ))
         self.assertTrue(committed["paymentUrl"].startswith("https://checkout.stripe.com/"))
-        self.assertEqual(seen["collection_method"], "charge_automatically")
+        trial = Trial.objects.get(company_id=company_id)
+        self.assertEqual(seen["trial_end"], trial.ends_at)
         self.assertTrue(seen["success_url"])
-        self.assertIsNone(committed["firstChargeAt"])
         order = Order.objects.get(id=committed["orderId"])
-        self.assertFalse((order.request or {}).get("trial_commit"))
+        self.assertTrue((order.request or {}).get("trial_commit"))
         self.assertEqual(order.request["addVehicles"][0]["continueLicenseId"], seat["licenseId"])
 
-        # Kunden betalar i kassan: beställningen verkställs och provet övergår.
+        # Första fakturan betalas på slutdagen: beställningen verkställs och provet övergår.
         orders.mark_order_paid(order)
         license = License.objects.get(id=seat["licenseId"])
         self.assertEqual(license.status, License.Status.ACTIVE)

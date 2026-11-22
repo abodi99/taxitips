@@ -5,7 +5,7 @@ import 'package:taxitips_app/api_client.dart';
 import 'package:taxitips_app/bankid_flow.dart';
 import 'package:taxitips_app/screens/signup_screen.dart';
 
-/// Registreringen har ett lösenordsfält, och det har ett öga: samma knapp och
+/// Registreringens sista steg har ett lösenordsfält, och det har ett öga: samma knapp och
 /// samma texter som i inloggningen. Inget här pratar med servern.
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
@@ -29,6 +29,18 @@ void main() {
       ),
     );
     await tester.pump();
+    // Fram till lösenordssteget: kör själv, mobil, e-post.
+    Future<void> tap(String text) async {
+      await tester.ensureVisible(find.text(text));
+      await tester.tap(find.text(text));
+      await tester.pump();
+    }
+
+    await tap('Jag kör själv');
+    await tester.enterText(find.byType(TextField), '070 812 34 91');
+    await tap('Nästa');
+    await tester.enterText(find.byType(TextField), 'anna@gmail.com');
+    await tap('Nästa');
   }
 
   TextField passwordField(WidgetTester tester) =>
@@ -62,6 +74,20 @@ void main() {
     await tester.tap(find.byTooltip('Visa lösenord'));
     await tester.pump();
     expect(find.text('hemligt-123'), findsOneWidget);
+  });
+
+  testWidgets('kravet "Minst 8 tecken" bockas av medan man skriver', (
+    tester,
+  ) async {
+    await pump(tester);
+    expect(find.byIcon(Icons.radio_button_unchecked), findsOneWidget);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Lösenord'),
+      'hemligt-123',
+    );
+    await tester.pump();
+    expect(find.byIcon(Icons.radio_button_unchecked), findsNothing);
+    expect(find.text('Minst 8 tecken'), findsOneWidget);
   });
 
   testWidgets('stegen säger inget om en kod att läsa upp', (tester) async {

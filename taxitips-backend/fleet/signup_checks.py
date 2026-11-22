@@ -277,7 +277,14 @@ def flags(profile) -> list[dict]:
         return out
     registry = profile.registry or {}
     kind = org_kind(profile.org_number) if profile.country == "SE" else "organisation"
-    if not profile.org_number:
+    if getattr(profile, "customer_kind", "company") == "private":
+        out.append({
+            "code": "private_customer",
+            "level": "info",
+            "text": "Privatperson, legitimerad med BankID. Inget organisationsnummer; "
+                    "betalar med kort, konsumentavtal med 14 dagars ångerrätt.",
+        })
+    elif not profile.org_number:
         # BankID-registreringen (fleet/registration.register_with_bankid):
         # personen är legitimerad, bolaget anges först vid beställningen.
         out.append({

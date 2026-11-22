@@ -1,7 +1,8 @@
 """
 Prov → kort i portalen → auto-förnyelse (trial_commit).
 
-Kort sparas via Checkout under Django-provet; debitering sker vid trial_end.
+Betalsättet sparas i Checkout (läget setup) under provet; servern skapar
+abonnemanget och första dragningen sker på provets slutdag.
 """
 
 from __future__ import annotations
@@ -115,28 +116,83 @@ class TrialCommitTests(FleetTestCase):
         stripe.Subscription = SubscriptionAPI
         return stripe, sessions, creates
 
-    def test_commit_pays_now_in_checkout_without_a_stripe_trial(self):
-        """Ägarens beslut 2026-10-11: en betalning via Stripe är aldrig ett prov."""
-        stripe, sessions, creates = self._fake_checkout()
+    def _commit(self, stripe):
         with mock.patch("fleet.stripe_sync._client", return_value=stripe):
-            order, info = commerce.commit_trial_continuation(
+            return commerce.commit_trial_continuation(
                 self.company.id, self._plan(),
                 created_by=self.owner.user_id,
                 success_url="https://taxitips.se/portal?ok=1",
                 cancel_url="https://taxitips.se/portal?cancel=1",
             )
+
+    def test_during_the_trial_the_card_is_saved_and_nothing_is_charged_now(self):
+        """
+        Ägarens beslut 2026-11-22: under provet sparas betalsättet och första
+        dragningen sker på provets slutdag. Kassan sparar bara kortet (läget
+        setup): inget belopp och inget "N dagar gratis" (beslutet 2026-10-11).
+        """
+        stripe, sessions, creates = self._fake_checkout()
+        order, info = self._commit(stripe)
         order.refresh_from_db()
         self.assertEqual(order.status, Order.Status.PENDING_PAYMENT)
-        self.assertFalse((order.request or {}).get("trial_commit"))
+        self.assertTrue((order.request or {}).get("trial_commit"))
         self.assertTrue(info["paymentUrl"].startswith("https://checkout.stripe.test/"))
+        self.assertEqual(info["firstChargeAt"], self.trial.ends_at.isoformat())
+        created = creates[0]
+        self.assertEqual(created["mode"], "setup")
+        self.assertNotIn("line_items", created)
+        self.assertNotIn("subscription_data", created)
+        self.assertNotIn("payment_method_types", created)  # betalsätten ur Stripe-kontot
+        self.assertEqual(created["currency"], "sek")
+        self.assertEqual(created["locale"], "sv")
+        message = created["custom_text"]["submit"]["message"]
+        self.assertIn("Inget dras nu. Första dragningen", message)
+        self.assertIn("kr/mån exkl. moms", message)
+        self.assertEqual(created["metadata"]["kind"], "trial_commit")
+        self.assertEqual(int(created["metadata"]["trial_end"]), int(self.trial.ends_at.timestamp()))
+
+    def test_close_to_the_end_the_first_month_is_paid_now(self):
+        Trial.objects.filter(id=self.trial.id).update(ends_at=timezone.now() + timedelta(hours=1))
+        stripe, sessions, creates = self._fake_checkout()
+        order, info = self._commit(stripe)
+        order.refresh_from_db()
+        self.assertFalse((order.request or {}).get("trial_commit"))
         self.assertIsNone(info["firstChargeAt"])
-        session = list(sessions.values())[0]
-        self.assertEqual(session["metadata"]["kind"], "subscription")
-        self.assertTrue(order.stripe_checkout_session_id)
-        sub_data = creates[0].get("subscription_data") or {}
-        self.assertNotIn("trial_end", sub_data)
-        # Kassan visar "Lägg till kampanjkod".
+        self.assertEqual(creates[0]["mode"], "subscription")
+        self.assertNotIn("trial_end", creates[0].get("subscription_data") or {})
         self.assertIs(creates[0].get("allow_promotion_codes"), True)
+
+    def test_saving_the_card_creates_the_subscription_charged_on_the_last_day(self):
+        stripe, sessions, creates = self._fake_checkout()
+        order, _info = self._commit(stripe)
+        subs, modified = [], []
+        stripe.SetupIntent = mock.Mock()
+        stripe.SetupIntent.retrieve = mock.Mock(return_value=Obj(id="seti_1", payment_method="pm_1"))
+        stripe.Customer.modify = staticmethod(lambda *a, **kw: modified.append((a, kw)) or Obj(id="cus_commit"))
+        stripe.Subscription.create = staticmethod(lambda **kw: subs.append(kw) or Obj(id="sub_saved_1"))
+        session = {
+            "object": "checkout.session", "id": order.stripe_checkout_session_id or "cs_1",
+            "mode": "setup", "payment_status": "no_payment_required",
+            "customer": "cus_commit", "subscription": None, "setup_intent": "seti_1",
+            "metadata": creates[0]["metadata"],
+        }
+        with mock.patch("fleet.stripe_sync._client", return_value=stripe):
+            result = webhook_events.handle("checkout.session.completed", session)
+            again = webhook_events.handle("checkout.session.completed", session)
+        self.assertEqual(result["action"], "trial_commit_card_saved")
+        self.assertEqual(again["action"], "trial_commit_card_saved")
+        self.assertEqual(len(subs), 1)  # en gång, även när Stripe skickar igen
+        self.assertEqual(subs[0]["trial_end"], int(self.trial.ends_at.timestamp()))
+        self.assertEqual(subs[0]["default_payment_method"], "pm_1")
+        self.assertEqual(subs[0]["metadata"]["order_id"], str(order.id))
+        self.assertEqual(modified[0][1]["invoice_settings"], {"default_payment_method": "pm_1"})
+        order.refresh_from_db()
+        self.assertEqual(order.status, Order.Status.PENDING_PAYMENT)
+        sub = Subscription.objects.get(company_id=self.company.id)
+        self.assertEqual((sub.stripe_subscription_id, sub.status), ("sub_saved_1", SubscriptionStatus.TRIALING))
+        self.assertIsNotNone(CompanyProfile.objects.get(company_id=self.company.id).payment_method_verified_at)
+        # Provet hålls öppet till dragningen.
+        self.assertTrue(commerce.has_active_trial_commit(self.company.id))
 
     def test_an_old_unpaid_card_saving_checkout_is_replaced(self):
         stripe, sessions, creates = self._fake_checkout()

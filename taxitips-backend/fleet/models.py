@@ -41,6 +41,11 @@ class VerificationStatus(models.TextChoices):
     REJECTED = "rejected", "Avvisad"
 
 
+class CustomerKind(models.TextChoices):
+    COMPANY = "company", "Företag"
+    PRIVATE = "private", "Privatperson"
+
+
 class CompanyProfile(models.Model):
     """
     Avtalsuppgifterna om företaget, vid sidan av Supabases `companies`.
@@ -100,6 +105,17 @@ class CompanyProfile(models.Model):
     # längre ska synas i listorna. Raden finns kvar; NULL = syns som vanligt.
     archived_at = models.DateTimeField(null=True, blank=True)
     archived_by = models.UUIDField(null=True, blank=True)
+
+    # Vem avtalsparten är (fleet/company_details.py). "private" = en
+    # BankID-legitimerad privatperson utan företag: betalar med kort, inget
+    # organisationsnummer, priser inklusive moms och 14 dagars ångerrätt.
+    # db_default: standardvärdet ligger kvar i databasen, så att kod som inte
+    # känner till kolumnen (en äldre container under utrullningen) kan skriva.
+    customer_kind = models.CharField(
+        max_length=12, choices=CustomerKind.choices, default=CustomerKind.COMPANY,
+        db_default=CustomerKind.COMPANY,
+    )
+    customer_kind_set_at = models.DateTimeField(null=True, blank=True)
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

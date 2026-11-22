@@ -1152,7 +1152,9 @@ export function foretag(data, members = null) {
       <h2>Företaget</h2>
       <dl class="kv-list">
         <div><dt>Namn</dt><dd>${esc(company.name)}</dd></div>
-        <div><dt>Organisationsnummer</dt><dd>${esc(company.orgNumber || "—")}</dd></div>
+        ${company.details?.customerKind === "private"
+          ? `<div><dt>Kundtyp</dt><dd>Privatperson (BankID)</dd></div>`
+          : `<div><dt>Organisationsnummer</dt><dd>${esc(company.orgNumber || "—")}</dd></div>`}
         <div><dt>Verifiering</dt><dd>${esc(verification(company.verificationStatus))}</dd></div>
         <div><dt>Din roll</dt><dd>${esc(roleName(data.role))}</dd></div>
       </dl>

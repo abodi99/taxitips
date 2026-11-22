@@ -32,6 +32,7 @@ import hashlib
 import hmac
 import logging
 import re
+import time
 from dataclasses import dataclass
 
 import requests
@@ -39,6 +40,7 @@ from django.conf import settings
 from datetime import timedelta
 
 from django.core import signing
+from django.core.cache import cache
 from django.utils import timezone
 
 log = logging.getLogger(__name__)
@@ -166,12 +168,34 @@ def start(*, purpose: str, end_user_ip: str) -> dict:
     # BankID ger en ny orderRef varje gång; en gammal rad med samma ref ska inte ärvas.
     BankIdOrder.objects.filter(order_ref=order_ref[:64]).delete()
     BankIdOrder.objects.create(order_ref=order_ref[:64], purpose=purpose)
+    # QR-hemligheten stannar på servern (BankID:s riktlinjer): appen får bara
+    # den färdiga, tidsstämplade koden, både här och i varje collect.
+    token, secret = data.get("qrStartToken"), data.get("qrStartSecret")
+    if token and secret:
+        cache.set(_qr_key(order_ref), {"token": str(token), "secret": str(secret), "t": time.time()}, ORDER_TTL)
     return {
         "orderRef": order_ref,
         "autoStartToken": auto_start,
-        "qrStartToken": data.get("qrStartToken") or None,
-        "qrStartSecret": data.get("qrStartSecret") or None,
+        "qrData": qr_data(order_ref),
     }
+
+
+def _qr_key(order_ref: str) -> str:
+    return f"bankid:qr:{(order_ref or '')[:64]}"
+
+
+def qr_data(order_ref: str, *, now: float | None = None) -> str | None:
+    """
+    Den animerade QR-koden för "BankID på en annan enhet":
+    `bankid.<qrStartToken>.<sekunder sedan start>.<HMAC-SHA256(qrStartSecret, sekunder)>`.
+    None när ordern saknar QR-uppgifter (t.ex. gått ut).
+    """
+    info = cache.get(_qr_key(order_ref))
+    if not info:
+        return None
+    seconds = max(0, int((now if now is not None else time.time()) - info["t"]))
+    code = hmac.new(info["secret"].encode(), str(seconds).encode(), hashlib.sha256).hexdigest()
+    return f"bankid.{info['token']}.{seconds}.{code}"
 
 
 def _known_order(order_ref: str):
@@ -199,8 +223,9 @@ def collect(order_ref: str) -> dict:
         return {
             "status": "pending", "hintCode": hint,
             "message": HINT_TEXT.get(hint, "Fortsätt i BankID-appen."),
-            "qrData": data.get("qrData") or None,
+            "qrData": qr_data(order_ref) or data.get("qrData") or None,
         }
+    cache.delete(_qr_key(order_ref))
     if status == "failed":
         order.delete()
         return {
@@ -241,6 +266,7 @@ def collect(order_ref: str) -> dict:
 def cancel(order_ref: str) -> None:
     from fleet.models import BankIdOrder
 
+    cache.delete(_qr_key(order_ref))
     deleted, _ = BankIdOrder.objects.filter(
         order_ref=(order_ref or "")[:64], collected_at__isnull=True
     ).delete()

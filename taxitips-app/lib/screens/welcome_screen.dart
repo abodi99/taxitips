@@ -7,9 +7,9 @@ import '../config.dart';
 import '../theme.dart';
 import '../widgets/language_picker.dart';
 
-/// Välkomstskärmen: två val, inget mer. Logga in (förare, ägare och kontor
-/// har samma inloggning) eller registrera ett nytt företag. Knapparna ligger
-/// nere, där tummen når dem.
+/// Välkomstskärmen: loggan, en rad och två knappar -- "Skapa konto gratis"
+/// och "Logga in". Så lite text som möjligt: den som inte läser mycket ska
+/// ändå se vad som går att göra. Knapparna ligger nere, där tummen når dem.
 class WelcomeScreen extends StatelessWidget {
   const WelcomeScreen({
     super.key,
@@ -91,16 +91,6 @@ class WelcomeScreen extends StatelessWidget {
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
-                              const SizedBox(height: 12),
-                              const Text(
-                                'Vi visar var körningarna finns — innan kön växer.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 17,
-                                  height: 1.4,
-                                ),
-                              ),
                             ],
                           ),
                           Padding(
@@ -111,12 +101,38 @@ class WelcomeScreen extends StatelessWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
+                                // Två knappar, inga förklaringar: "Skapa konto"
+                                // för den som är ny (förare utan bolag och
+                                // taxibolag, samma väg), "Logga in" för alla med
+                                // konto -- också den inbjudna föraren.
                                 FilledButton(
-                                  onPressed: onLogin,
+                                  onPressed: onSignup,
                                   style: FilledButton.styleFrom(
                                     backgroundColor: TbColors.taxi,
                                     foregroundColor: TbColors.ink,
-                                    minimumSize: const Size.fromHeight(56),
+                                    minimumSize: const Size.fromHeight(60),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(14),
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'Skapa konto gratis',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w800,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                                OutlinedButton(
+                                  onPressed: onLogin,
+                                  style: OutlinedButton.styleFrom(
+                                    foregroundColor: TbColors.foam,
+                                    side: const BorderSide(
+                                      color: TbColors.foam,
+                                      width: 1.5,
+                                    ),
+                                    minimumSize: const Size.fromHeight(60),
                                     shape: RoundedRectangleBorder(
                                       borderRadius: BorderRadius.circular(14),
                                     ),
@@ -124,47 +140,12 @@ class WelcomeScreen extends StatelessWidget {
                                   child: const Text(
                                     'Logga in',
                                     style: TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: FontWeight.w800,
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
                                     ),
                                   ),
                                 ),
                                 const SizedBox(height: 8),
-                                const Text(
-                                  'För förare, ägare och kontor. Förare: '
-                                  'använd e-posten från inbjudan och lösenordet du valde.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: Colors.white70,
-                                    fontSize: 14,
-                                    height: 1.35,
-                                  ),
-                                ),
-                                const SizedBox(height: 12),
-                                TextButton(
-                                  onPressed: onSignup,
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: TbColors.foam,
-                                    minimumSize: const Size.fromHeight(52),
-                                  ),
-                                  child: const Text(
-                                    'Registrera företag',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w700,
-                                      decoration: TextDecoration.underline,
-                                      decorationColor: TbColors.foam,
-                                    ),
-                                  ),
-                                ),
-                                const Text(
-                                  'Gratis i en månad. Allt ingår. Inget kort.',
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(
-                                    color: Colors.white60,
-                                    fontSize: 13.5,
-                                  ),
-                                ),
                                 if (!kIsWeb)
                                   TextButton(
                                     onPressed: () => _openDemo(context),

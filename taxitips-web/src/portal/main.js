@@ -52,6 +52,7 @@ const el = {
   detailsOrg: document.getElementById("companyOrgNumber"),
   detailsLegal: document.getElementById("companyLegalName"),
   detailsLegalField: document.querySelector(".company-legal-field"),
+  detailsPrivate: document.getElementById("companyPrivate"),
   detailsBilling: document.getElementById("companyBillingEmail"),
   detailsError: document.getElementById("companyDetailsError"),
   detailsSave: document.getElementById("companyDetailsSave"),
@@ -813,14 +814,16 @@ async function commitTrial(change) {
   const quote = await api.quote(change);
   const summary = document.createElement("div");
   summary.innerHTML = quoteHtml(quote);
+  const priv = isPrivate();
   const accepted = confirm(
     `${summary.textContent}\n\n` +
-      "Godkänner du? Du betalar första månaden nu hos Stripe, och provet " +
-      "övergår till betalda platser.",
+      "Godkänner du? Du sparar kortet hos Stripe nu. Inget dras förrän " +
+      "provet slutar, sedan varje månad. Säg upp när du vill." +
+      (priv ? CONSUMER_START_NOW : ""),
   );
   if (!accepted) return;
 
-  const result = await api.trialCommit(change);
+  const result = await api.trialCommit(change, { startNow: priv });
   if (result.cardOnFile) {
     alert(
       "Kortet är redan sparat. Första dragningen sker när provet tar slut.",
@@ -878,6 +881,20 @@ function setAddBusy(busy) {
   el.addBuy.setAttribute("aria-busy", busy ? "true" : "false");
 }
 
+/** Kontot betalar som privatperson (konsumentavtal, inget organisationsnummer). */
+function isPrivate() {
+  return state.data?.company?.details?.customerKind === "private";
+}
+
+/**
+ * Det en privatperson godkänner med samma ja: att medlemskapet börjar direkt,
+ * och att ångerrätten finns (fleet/company_details.require_consumer_terms).
+ */
+const CONSUMER_START_NOW =
+  "\n\nDu betalar som privatperson. Medlemskapet börjar direkt när du " +
+  "godkänner. Du har 14 dagars ångerrätt: ångrar du dig betalar du bara för " +
+  "dagarna du hann använda. Läs mer på taxitips.se/angerratt";
+
 /**
  * Ett konto som registrerats med BankID har inget organisationsnummer. Innan
  * första beställningen frågar vi efter det (och fakturamejlen) i en ruta.
@@ -892,8 +909,25 @@ function ensureCompanyDetails() {
   if (el.detailsLegalField) el.detailsLegalField.hidden = true;
   el.detailsError.hidden = true;
   el.detailsBilling.value = details.billingEmail || details.contactEmail || "";
+  if (el.detailsPrivate) el.detailsPrivate.hidden = !details.canChoosePrivate;
   return new Promise((resolve) => {
     let saved = false;
+    // Inget företag: betala som privatperson. Inget organisationsnummer.
+    const onPrivate = async () => {
+      el.detailsPrivate.disabled = true;
+      el.detailsError.hidden = true;
+      try {
+        await api.setPrivate();
+        saved = true;
+        el.detailsDialog.close();
+      } catch (error) {
+        el.detailsError.textContent =
+          error instanceof ApiError ? error.message : "Det gick inte att spara. Försök igen.";
+        el.detailsError.hidden = false;
+      } finally {
+        el.detailsPrivate.disabled = false;
+      }
+    };
     const onSubmit = async (event) => {
       event.preventDefault();
       const orgNumber = el.detailsOrg.value.trim();
@@ -926,11 +960,13 @@ function ensureCompanyDetails() {
       if (event.target.closest("[data-close-details]")) el.detailsDialog.close();
     };
     el.detailsForm.addEventListener("submit", onSubmit);
+    el.detailsPrivate?.addEventListener("click", onPrivate);
     el.detailsDialog.addEventListener("click", onCancel);
     el.detailsDialog.addEventListener(
       "close",
       async () => {
         el.detailsForm.removeEventListener("submit", onSubmit);
+        el.detailsPrivate?.removeEventListener("click", onPrivate);
         el.detailsDialog.removeEventListener("click", onCancel);
         if (saved) await refresh();
         resolve(saved);
@@ -1068,12 +1104,14 @@ async function buy(change) {
   const summary = document.createElement("div");
   summary.innerHTML = quoteHtml(quote);
 
+  const priv = isPrivate();
   const accepted = confirm(
-    `${summary.textContent}\n\nGodkänner du beställningen?`,
+    `${summary.textContent}\n\nGodkänner du beställningen?` +
+      (priv ? CONSUMER_START_NOW : ""),
   );
   if (!accepted) return;
 
-  const order = await api.order(change);
+  const order = await api.order(change, { startNow: priv });
   if (order.status === "pending_payment" && order.paymentUrl) {
     // Beställningen är lagd och beloppet är godkänt. Rakt till betalsidan i
     // samma flik -- reservlänken ligger kvar i rutan bakom.

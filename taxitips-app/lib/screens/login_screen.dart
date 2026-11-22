@@ -125,7 +125,11 @@ class _LoginScreenState extends State<LoginScreen> {
       await widget.onOwner();
     } on ApiException catch (e) {
       if (!mounted) return;
-      setState(() => _error = e.message);
+      setState(
+        () => _error = e.reason == 'no_bankid_account'
+            ? kNoBankIdAccountHelp
+            : e.message,
+      );
     } catch (e) {
       if (!mounted) return;
       setState(() => _error = _friendly(e));
@@ -166,8 +170,8 @@ class _LoginScreenState extends State<LoginScreen> {
     }
     if (e is ApiException) {
       if (e.reason == 'no_invite') {
-        return 'Kontot är inte kopplat till något företag. Be din chef bjuda '
-            'in dig, eller registrera ditt företag nedan.';
+        return 'Kontot är inte kopplat till något taxibolag. Be din chef '
+            'bjuda in dig, eller tryck på Skapa konto gratis nedan.';
       }
       if (e.reason == 'device_swap_limit') {
         return e.message.isNotEmpty
@@ -392,7 +396,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 28),
                 _LinkRow(
                   lead: 'Inget konto?',
-                  action: 'Registrera ditt företag',
+                  action: 'Skapa konto gratis',
                   onTap: _busy ? null : widget.onSignup,
                 ),
               ],

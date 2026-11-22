@@ -1325,6 +1325,9 @@ def create_order(request):
     principal = _principal(request, Perm.PURCHASE)
     company_details.require_company_details(principal.company_id)
     body = _body(request)
+    company_details.require_consumer_terms(
+        principal.company_id, body, actor_user_id=principal.user_id,
+    )
     plan = _plan_from_body(principal.company_id, body)
 
     if not body.get("accepted"):
@@ -1411,6 +1414,9 @@ def trial_commit(request):
     principal = _principal(request, Perm.PURCHASE)
     company_details.require_company_details(principal.company_id)
     body = _body(request)
+    company_details.require_consumer_terms(
+        principal.company_id, body, actor_user_id=principal.user_id,
+    )
     plan = _plan_from_body(principal.company_id, body)
     if not body.get("accepted"):
         raise orders.OrderError(
@@ -1763,8 +1769,10 @@ def bankid_cancel(request):
 def bankid_register(request):
     """
     POST /api/fleet/bankid/register
-        {"ticket", "email", "password", "contactPhone", "companyName"}
+        {"ticket", "email", "password", "contactPhone", "companyName",
+         "accountKind": "private" | "company"}
 
+    `accountKind` "private" = kör själv utan företag: inget företagsnamn behövs.
     Skapar kontot (bekräftat, ingen länk i mejlet), företaget och provet.
     Appen loggar sedan in med e-post och lösenord som vanligt.
     """
@@ -1778,6 +1786,7 @@ def bankid_register(request):
         password=str(body.get("password") or ""),
         contact_phone=str(body.get("contactPhone") or ""),
         company_name=str(body.get("companyName") or ""),
+        account_kind=str(body.get("accountKind") or ""),
     )
     trial = result.trial
     return _json(request, {
@@ -2133,6 +2142,20 @@ def accept_ownership(request, transfer_id):
 @csrf_exempt
 @require_POST
 @handle
+def set_company_private(request):
+    """
+    POST /api/fleet/company/private -- kontot betalar som privatperson.
+
+    Bara utan organisationsnummer och när ägaren legitimerat sig med BankID
+    (company_details.mark_private).
+    """
+    principal = _principal(request, Perm.PURCHASE)
+    return _json(request, {"ok": True, **company_details.set_private(principal)})
+
+
+@csrf_exempt
+@require_POST
+@handle
 def set_company_org_number(request):
     """
     POST /api/fleet/company/org-number {"orgNumber", "legalName"?}
@@ -2339,6 +2362,15 @@ def continue_org_number(request):
     ratelimit.enforce(ratelimit.REGISTRY_LOOKUP, _bankid_ip(request))
     result = continue_link.set_org_number(company_id, body)
     return _json(request, {"ok": True, **result})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def continue_private(request):
+    """POST /api/fleet/continue/private {token} -- betala som privatperson (BankID-konto)."""
+    company_id, _body_ = _continue_company(request, ratelimit.CONTINUE_ORG)
+    return _json(request, {"ok": True, **continue_link.choose_private(company_id)})
 
 
 @csrf_exempt

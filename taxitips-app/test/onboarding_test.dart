@@ -36,7 +36,7 @@ void main() {
     expect(await OnboardingScreen.seen(), isTrue);
   });
 
-  testWidgets('nästa går igenom alla sidor till Kom igång', (tester) async {
+  testWidgets('första starten: två sidor, sedan Kom igång', (tester) async {
     final done = await pump(tester);
     // liquid_swipe animerar med timers: låt tiden gå mellan trycken.
     Future<void> settle() async {
@@ -45,13 +45,10 @@ void main() {
       }
     }
 
+    expect(find.textContaining('inte beställningar'), findsWidgets);
     await tester.tap(find.text('Nästa'));
     await settle();
-    expect(find.text('Stark'), findsWidgets);
-    for (var i = 0; i < 2; i++) {
-      await tester.tap(find.text('Nästa'));
-      await settle();
-    }
+    expect(find.textContaining('Skapa ett konto gratis'), findsWidgets);
     await tester.tap(find.widgetWithText(FilledButton, 'Kom igång'));
     await settle();
     expect(done, ['done']);

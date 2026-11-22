@@ -110,4 +110,8 @@ SignalCategory? signalCategoryFromFeatureKey(Object? key) =>
 /// BankID vid registreringen: tre korta löften, inga långa meningar. Många
 /// förare läser inte mycket svenska. "Ingen bindning" måste stå kvar: BankID
 /// är inget avtal, och det ska synas direkt.
-const kBankIdPromises = ['Gratis', 'Inget kort', 'Ingen bindning'];
+const kBankIdPromises = [
+  'Inget kort',
+  'Ingen bindning',
+  'Inget företag behövs',
+];

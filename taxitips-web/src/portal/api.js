@@ -82,6 +82,8 @@ export const api = {
   updateDetails: (details) =>
     request("/api/fleet/company/details", { method: "POST", body: details }),
   register: (company) => request("/api/fleet/register", { method: "POST", body: company }),
+  // Inget företag: kontot betalar som privatperson (kräver BankID).
+  setPrivate: () => request("/api/fleet/company/private", { method: "POST", body: {} }),
   setOrgNumber: (orgNumber, legalName) =>
     request("/api/fleet/company/org-number", {
       method: "POST",
@@ -148,12 +150,17 @@ export const api = {
       body: payload,
     }),
   quote: (change) => request("/api/fleet/quote", { method: "POST", body: change }),
-  order: (change) =>
-    request("/api/fleet/orders", { method: "POST", body: { ...change, accepted: true } }),
-  trialCommit: (change) =>
+  // `startNow`: en privatperson har bett att medlemskapet börjar direkt och
+  // fått veta om ångerrätten (fleet/company_details.require_consumer_terms).
+  order: (change, { startNow = false } = {}) =>
+    request("/api/fleet/orders", {
+      method: "POST",
+      body: { ...change, accepted: true, ...(startNow ? { startNow: true } : {}) },
+    }),
+  trialCommit: (change, { startNow = false } = {}) =>
     request("/api/fleet/trial/commit", {
       method: "POST",
-      body: { ...change, accepted: true },
+      body: { ...change, accepted: true, ...(startNow ? { startNow: true } : {}) },
     }),
   trialCommitCancel: () =>
     request("/api/fleet/trial/commit/cancel", { method: "POST", body: {} }),

@@ -26,6 +26,7 @@ abonnemang kunden sagt upp.
 from __future__ import annotations
 
 import logging
+from datetime import timedelta
 
 from django.db import transaction
 from django.utils import timezone
@@ -101,6 +102,12 @@ def place_order(
     """
     if payment not in PAYMENT_CHOICES:
         raise orders.OrderError("invalid_payment", "Välj kort eller faktura via Stripe.")
+    from fleet import company_details
+
+    if payment == PAYMENT_INVOICE and company_details.is_private(company_id):
+        # Ingen faktura till privatpersoner: det skulle kräva kreditprövning
+        # och påminnelserutiner för konsumenter som vi inte har.
+        raise orders.OrderError("invoice_not_for_private", "Privatpersoner betalar med kort.")
     if plan.immediate and plan.quote.now.total_ore > 0 and not stripe_sync.available():
         raise _stripe_failure(stripe_sync.StripeUnavailable(stripe_sync.status()["reason"]))
     order = orders.create_order(
@@ -392,6 +399,12 @@ def has_active_trial_commit(company_id) -> bool:
     )
 
 
+# Så länge före provets slut som kortet sparas till slutdagen. Närmare slutet
+# än så betalar kunden första månaden direkt (Stripe vill ha första dragningen
+# i framtiden, och en timme räcker inte för att det ska kännas som "senare").
+TRIAL_COMMIT_MIN_LEFT = timedelta(hours=2)
+
+
 def commit_trial_continuation(
     company_id,
     plan: orders.ChangePlan,
@@ -402,50 +415,94 @@ def commit_trial_continuation(
     idempotency: str | None = None,
 ) -> tuple[Order, dict]:
     """
-    Kunden fortsätter efter (eller under) provet: betalar första perioden
-    direkt i Stripe Checkout, och provet övergår i medlemskapet när betalningen
-    gått igenom (orders.apply_order: converted_by_order).
+    Kunden fortsätter under provet: sparar betalsättet nu, och första
+    dragningen sker på provets slutdag (ägarens beslut 2026-11-22). Kassan
+    sparar bara kortet (Stripe Checkout `setup`) -- inget belopp och inget
+    "N dagar gratis" i kassan, vilket var skälet att den gamla vägen togs bort
+    2026-10-11. Servern skapar abonnemanget när kortet är sparat
+    (stripe_sync.start_trial_commit_subscription), och provet övergår i
+    medlemskapet när första fakturan är betald.
 
-    Förut sparades kortet med Stripe `trial_end` = provets slut, och kassan
-    visade "N dagar gratis" -- ett prov ovanpå provet. Ägarens beslut
-    2026-10-11: en betalning via Stripe är aldrig ett prov.
-
-    En gammal obetald fortsättning från den vägen (kort ännu inte sparat)
-    makuleras, så att kunden inte skickas till den gamla kassan.
+    Är provet slut, eller slutar det inom `TRIAL_COMMIT_MIN_LEFT`, betalar
+    kunden första perioden direkt som förut.
     """
     if not plan.request.get("addVehicles"):
         raise orders.OrderError(
             "vehicles_required", "Välj vilka platser som ska fortsätta.", status=400,
         )
+    trial = trials.active_trial(company_id)
+    save_card = (
+        trial is not None and trial.status == Trial.Status.ACTIVE and trial.ends_at is not None
+        and trial.ends_at > timezone.now() + TRIAL_COMMIT_MIN_LEFT
+    )
     old = pending_trial_commit_order(company_id)
     if old is not None:
         profile = CompanyProfile.objects.filter(company_id=company_id).first()
         if profile and profile.payment_method_verified_at:
-            # Kortet är redan sparat i den gamla vägen: den tar vid av sig själv.
+            # Betalsättet är redan sparat: dragningen sker av sig själv.
             return old, {
                 "requested": False, "paymentUrl": None,
                 "alreadyCommitted": True, "cardOnFile": True,
+                "firstChargeAt": trial.ends_at.isoformat() if trial and trial.ends_at else None,
             }
         stripe_sync.expire_checkout(old)
         orders.mark_order_canceled(
-            old, reason="ersatt: betalning direkt i stället för kort till provets slut",
+            old, reason="ersatt av en ny kassa för att spara kortet",
             actor_kind="system", actor_user_id=created_by,
         )
-    order, info = place_order(
-        company_id, plan, created_by=created_by, actor_kind="customer",
-        payment=PAYMENT_CARD, idempotency=idempotency,
-        success_url=success_url, cancel_url=cancel_url,
-    )
-    if info.get("stripeError"):
-        raise orders.OrderError(
-            info["stripeError"]["reason"], info["stripeError"]["message"], status=502,
+
+    if not save_card:
+        order, info = place_order(
+            company_id, plan, created_by=created_by, actor_kind="customer",
+            payment=PAYMENT_CARD, idempotency=idempotency,
+            success_url=success_url, cancel_url=cancel_url,
         )
+        if info.get("stripeError"):
+            raise orders.OrderError(
+                info["stripeError"]["reason"], info["stripeError"]["message"], status=502,
+            )
+        return order, {
+            "requested": bool(info.get("paymentUrl")),
+            "paymentUrl": info.get("paymentUrl"),
+            "alreadyCommitted": False,
+            "cardOnFile": False,
+            "firstChargeAt": None,
+        }
+
+    if not stripe_sync.available():
+        raise _stripe_failure(stripe_sync.StripeUnavailable(stripe_sync.status()["reason"]))
+    # Märkt, så att webhooken inte verkställer ordern när kortet sparas (0 kr)
+    # utan först vid första riktiga fakturan.
+    plan.request = {**(plan.request or {}), "trial_commit": True}
+    key = idempotency or (orders.idempotency_key(company_id, plan) + ":trial_commit")[:64]
+    order = orders.create_order(
+        company_id, plan, created_by=created_by, idempotency=key, actor_kind="customer",
+    )
+    request = dict(order.request or {})
+    if not request.get("trial_commit"):
+        request["trial_commit"] = True
+        Order.objects.filter(id=order.id).update(request=request)
+        order.refresh_from_db()
+    if order.status != Order.Status.PENDING_PAYMENT:
+        raise orders.OrderError(
+            "nothing_to_commit", "Det finns inget att betala för de här platserna.", status=409,
+        )
+    try:
+        url = stripe_sync.collect_trial_commit(
+            order, trial_end=trial.ends_at, success_url=success_url, cancel_url=cancel_url,
+        )
+    except ValueError as exc:
+        raise orders.OrderError("trial_commit_failed", str(exc), status=409) from exc
+    except Exception as exc:
+        log.exception("fleet.commerce: kunde inte öppna kassan för att spara kort (%s)", company_id)
+        raise _stripe_failure(exc) from exc
+    order.refresh_from_db()
     return order, {
-        "requested": bool(info.get("paymentUrl")),
-        "paymentUrl": info.get("paymentUrl"),
+        "requested": True,
+        "paymentUrl": url or order.stripe_payment_url or None,
         "alreadyCommitted": False,
         "cardOnFile": False,
-        "firstChargeAt": None,
+        "firstChargeAt": trial.ends_at.isoformat(),
     }
 
 
