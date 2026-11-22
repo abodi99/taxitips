@@ -11,9 +11,9 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
 from core.api import _json
-from fleet import crm, crm_tasks
+from fleet import crm, crm_tasks, outreach
 from fleet.admin_api import _body, _company_or_404, _record, _staff, handle
-from fleet.models import CrmDeal, CrmDealStage
+from fleet.models import CrmCampaign, CrmCampaignRecipient, CrmDeal, CrmDealStage, OutboxMessage
 from fleet.roles import Perm
 
 # ValueError-skäl från crm/crm_tasks → begripligt fel i UI:t.
@@ -147,7 +147,23 @@ def deal_detail(request, deal_id):
         "tasks": crm_tasks.tasks_for(deal=deal, company_id=deal.company_id),
         "staff": crm_tasks.staff_options(),
         "me": str(principal.user_id) if principal.user_id else None,
+        "mail": _deal_mail(deal),
     })
+
+
+def _deal_mail(deal) -> dict:
+    """Säljmejlen till affären och var i serien bolaget är (fleet/outreach.py)."""
+    recipient = (
+        CrmCampaignRecipient.objects.filter(deal_id=deal.id)
+        .select_related("campaign").order_by("-created_at").first()
+    )
+    return {
+        "state": recipient.state if recipient else None,
+        "stateLabel": recipient.get_state_display() if recipient else None,
+        "campaign": recipient.campaign.name if recipient else None,
+        "nextSendAt": recipient.next_send_at.isoformat() if recipient and recipient.next_send_at else None,
+        "messages": outreach.messages(deal_id=deal.id, limit=20)["rows"],
+    }
 
 
 @csrf_exempt
@@ -587,3 +603,80 @@ def task_delete(request, task_id):
     )
     task.delete()
     return _json(request, {"ok": True})
+
+
+# --- Säljutskick (fleet/outreach.py) ---------------------------------------
+
+
+@require_GET
+@handle
+def outreach_overview(request):
+    """GET /api/admin/crm/outreach — kampanjer, siffror och de senaste mejlen."""
+    _staff(request, Perm.ADMIN_VIEW)
+    from fleet import mailer, outreach_templates
+
+    campaign_id = request.GET.get("campaign") or None
+    offset = max(0, _int_param(request, "offset", 0))
+    # Texterna för ett exempelbolag, i alla tre tilltal (bolagets storlek).
+    templates = []
+    for size in outreach_templates.SIZES:
+        sample = outreach_templates.Context(
+            company="Exempel Taxi AB", place="Malmö", first_name="Anna",
+            unsubscribe_url="https://taxitips.se/avregistrera?t=exempel", size=size,
+        )
+        for step in range(1, outreach_templates.STEP_COUNT + 1):
+            subject, body = outreach_templates.render(step, sample)
+            score = outreach_templates.lix(outreach_templates.prose(body))
+            templates.append({
+                "step": step, "size": size, "sizeLabel": outreach_templates.SIZE_LABEL[size],
+                "subject": subject, "body": body,
+                "lix": score, "lixLabel": outreach_templates.lix_label(score),
+            })
+    return _json(request, {
+        "ok": True,
+        "enabled": outreach.enabled(),
+        "configured": mailer.outreach_configured(),
+        "mailbox": mailer.outreach_address(),
+        "campaigns": [
+            outreach.stats(c) for c in CrmCampaign.objects.order_by("-created_at")
+        ],
+        "messages": outreach.messages(campaign_id=campaign_id, limit=50, offset=offset),
+        "offset": offset,
+        "templates": templates,
+    })
+
+
+@require_GET
+@handle
+def outreach_message(request, message_id):
+    """GET /api/admin/crm/outreach/messages/<id> — ett skickat mejl i sin helhet."""
+    _staff(request, Perm.ADMIN_VIEW)
+    row = OutboxMessage.objects.filter(
+        id=message_id, category__startswith=outreach.CATEGORY_PREFIX,
+    ).first()
+    if row is None:
+        return _not_found(request, "Mejlet")
+    return _json(request, {"ok": True, "message": outreach.message_row(row, with_body=True)})
+
+
+@csrf_exempt
+@require_POST
+@handle
+def outreach_campaign_action(request, campaign_id):
+    """POST /api/admin/crm/outreach/campaigns/<id> {"action": "start"|"pause"|"resume"}"""
+    principal = _staff(request, Perm.ADMIN_SELL)
+    campaign = CrmCampaign.objects.filter(id=campaign_id).first()
+    if campaign is None:
+        return _not_found(request, "Kampanjen")
+    action = str(_body(request).get("action") or "")
+    if action in ("start", "resume"):
+        outreach.resume(campaign)
+    elif action == "pause":
+        outreach.pause(campaign, f"pausad av {_author(principal)}", alert=False)
+    else:
+        return _bad(request, "invalid_action")
+    _record(
+        principal, "crm_outreach_campaign", subject_type="crm_campaign",
+        subject_id=str(campaign.id), detail={"action": action, "slug": campaign.slug},
+    )
+    return _json(request, {"ok": True, "campaign": outreach.stats(campaign)})

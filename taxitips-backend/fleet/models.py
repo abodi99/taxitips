@@ -1872,6 +1872,128 @@ class CrmTagging(models.Model):
         ]
 
 
+class CrmEmailSuppression(models.Model):
+    """
+    Adresser som aldrig får marknadsföring (fleet/outreach.py).
+
+    Gäller bara säljmejl. Tjänstemeddelanden (`notifications.SERVICE_CATEGORIES`)
+    går alltid fram: en avregistrering får inte tysta en faktura som misslyckats.
+    Raden tas aldrig bort av en omimport; en avregistrering är slutgiltig tills
+    en människa häver den.
+    """
+
+    class Reason(models.TextChoices):
+        UNSUBSCRIBED = "unsubscribed", "Avregistrerad"
+        BOUNCED = "bounced", "Studs"
+        COMPLAINT = "complaint", "Klagomål"
+        BLOCKLIST = "blocklist", "Reklamspärr eller ring ej"
+        MANUAL = "manual", "Manuell"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    # Alltid gemener och utan mellanslag (outreach.normalize_email).
+    email = models.CharField(max_length=254, unique=True)
+    reason = models.CharField(max_length=16, choices=Reason.choices)
+    detail = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "fleet_crm_email_suppression"
+
+
+class CrmCampaign(models.Model):
+    """En mejlserie till prospekt i CRM. Texterna ligger i fleet/outreach_templates.py."""
+
+    class Status(models.TextChoices):
+        DRAFT = "draft", "Utkast"
+        ACTIVE = "active", "Aktiv"
+        PAUSED = "paused", "Pausad"
+        DONE = "done", "Klar"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    slug = models.CharField(max_length=64, unique=True)
+    name = models.CharField(max_length=200)
+    status = models.CharField(max_length=10, choices=Status.choices, default=Status.DRAFT)
+    # Tak när uppvärmningen är klar. Det faktiska dagstaket räknas i outreach.daily_cap.
+    daily_cap = models.PositiveSmallIntegerField(default=80)
+    # Varför kampanjen pausades (automatisk broms eller av en människa).
+    paused_reason = models.TextField(blank=True, default="")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "fleet_crm_campaign"
+
+
+class CrmCampaignRecipient(models.Model):
+    """
+    Ett bolag i en kampanj: vilket steg som skickats och varför serien stannade.
+
+    `step` är antalet mejl som köats. Själva mejlen är rader i utkorgen
+    (`OutboxMessage`, kategori `outreach_<steg>`), så "skickat" finns på ett ställe.
+    """
+
+    class State(models.TextChoices):
+        QUEUED = "queued", "Väntar"
+        ACTIVE = "active", "Pågår"
+        FINISHED = "finished", "Klar"
+        REPLIED = "replied", "Svarat"
+        UNSUBSCRIBED = "unsubscribed", "Avregistrerad"
+        BOUNCED = "bounced", "Studs"
+        CONVERTED = "converted", "Startat prov"
+        STOPPED = "stopped", "Stoppad"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    campaign = models.ForeignKey(CrmCampaign, on_delete=models.CASCADE, related_name="recipients")
+    account = models.ForeignKey(
+        CrmAccount, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+    )
+    person = models.ForeignKey(
+        CrmPerson, null=True, blank=True, on_delete=models.SET_NULL, related_name="+",
+    )
+    deal_id = models.UUIDField(null=True, blank=True)
+    email = models.CharField(max_length=254)
+    state = models.CharField(max_length=14, choices=State.choices, default=State.QUEUED)
+    step = models.PositiveSmallIntegerField(default=0)
+    # Lägre = tidigare i kön (segment A först, sedan ringordning).
+    priority = models.IntegerField(default=0)
+    next_send_at = models.DateTimeField(null=True, blank=True)
+    last_sent_at = models.DateTimeField(null=True, blank=True)
+    # Message-ID för första mejlet, så att uppföljningarna hamnar i samma tråd
+    # och ett svar går att känna igen på References.
+    thread_message_id = models.CharField(max_length=255, blank=True, default="")
+    stopped_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "fleet_crm_campaign_recipient"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["campaign", "email"], name="fleet_crm_campaign_recipient_unique",
+            ),
+        ]
+        indexes = [
+            models.Index(
+                fields=["campaign", "state", "next_send_at"],
+                name="fleet_crm_camp_rcpt_due_idx",
+            ),
+            models.Index(fields=["email"], name="fleet_crm_camp_rcpt_email_idx"),
+            models.Index(fields=["deal_id"], name="fleet_crm_camp_rcpt_deal_idx"),
+        ]
+
+
+class CrmMailboxState(models.Model):
+    """Hur långt inkorgen är läst (fleet/outreach_inbox.py), per brevlåda."""
+
+    mailbox = models.CharField(max_length=254, primary_key=True)
+    uid_validity = models.BigIntegerField(default=0)
+    last_uid = models.BigIntegerField(default=0)
+    checked_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        db_table = "fleet_crm_mailbox_state"
+
+
 class SalesFollowUp(models.Model):
     """
     Säljarens anteckning i uppföljningskön: har vi ringt, vad sa de, när

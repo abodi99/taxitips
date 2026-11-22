@@ -48,6 +48,7 @@ urlpatterns = [
     # adminwebbens fellista. Se fleet/client_log_api.py och docs/loggning.md.
     path("api/client-log", client_log_api.client_log),
     path("api/crm/lead", crm_ingest.web_lead),
+    path("api/crm/avregistrera/<str:token>", crm_ingest.unsubscribe),
     # DEBUG-only: lista enheter + skicka test-FCM (pipeline-viz).
     path("api/dev/devices", api.push_devices),
     path("api/dev/push", api.push_send),

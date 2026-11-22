@@ -491,6 +491,35 @@ Pipelinen (`GET /api/admin/crm/pipeline`) AND:ar `stage`, `q`, upprepade
 `sv-x-icu`) och pagineras med `limit`/`offset`. Svaret har `stageCounts`
 för samma filter (flikarna) och kontots taggar per rad.
 
+Säljutskick ur CRM (`fleet/outreach.py`, texterna i `fleet/outreach_templates.py`,
+inkorgen i `fleet/outreach_inbox.py`): tre mejl i samma tråd till **juridiska
+personer** med e-post. Enskilda firmor och okänd bolagsform kommer aldrig med
+(marknadsföringslagen 19 §). Varje mejl är en rad i utkorgen med kategori
+`outreach_1..3`; `CrmCampaignRecipient` håller steget och `CrmEmailSuppression`
+spärrlistan (avregistrerad, studs, reklamspärr). Spärren gäller bara säljmejl,
+aldrig `SERVICE_CATEGORIES`. Skickas från en egen brevlåda (`OUTREACH_SMTP_USER`/
+`OUTREACH_SMTP_PASSWORD`, `OUTREACH_SENDER_NAME`) och bara med `OUTREACH_ENABLED=1`.
+Takt: 15/dag, +10 var tredje sändningsdag upp till kampanjens tak, vardagar
+08.30–15.30, högst tre per körning (beat `outreach-tick` var tionde minut).
+Serien stannar på svar, avregistrering (`POST /api/crm/avregistrera/<token>`,
+GET avregistrerar inte), studs, startat prov eller flyttad affär; kampanjen
+pausar sig själv över 5 % studsar eller 3 % avregistreringar. `enroll` slår upp
+mottagarens domän (MX, `dnspython`) och stryker dem som inte tar emot mejl.
+HTML-versionen har knapp, tipskort och signatur men inga bilder, och mejl 1
+har tre öppningsbilder som väljs per mottagare. Tilltalet följer segmentet
+(C = "du", B/D = "ni", A = "ni" + visning på tio minuter); hälsningen är
+förnamn bara vid exakt för- och efternamn, annars bolagsnamnet. Språket gissas
+aldrig ur namnet: alla får samma lätta svenska, och testerna håller varje mejl
+under LIX 25, 14 ord per mening och 90 ord totalt. Adminwebben: CRM → Utskick,
+och kortet Mejl på affären.
+
+```bash
+cd taxitips-backend && ./.venv/bin/python manage.py outreach preview
+./.venv/bin/python manage.py outreach enroll --campaign <slug> --segments a --dry-run
+./.venv/bin/python manage.py outreach test-send --to <din adress>
+./.venv/bin/python manage.py outreach start --campaign <slug>   # status | pause | tick
+```
+
 CRM-uppgifter (`CrmTask`, `fleet/crm_tasks.py`): att göra med status
 todo/doing/done, datum och ansvarig ur `StaffRole` (säljare/plattformsadmin),
 kopplat till affär/konto/kontakt/TaxiTips-kund eller fristående. Översikten

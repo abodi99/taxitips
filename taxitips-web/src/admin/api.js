@@ -53,6 +53,12 @@ export const admin = {
     return request(`/api/admin/crm/pipeline${qs ? `?${qs}` : ""}`);
   },
   crmDeal: (id) => request(`/api/admin/crm/deals/${id}`),
+  // Säljutskick: kampanjer, siffror, skickade mejl och texterna.
+  crmOutreach: ({ offset = 0 } = {}) =>
+    request(`/api/admin/crm/outreach${offset ? `?offset=${offset}` : ""}`),
+  crmOutreachMessage: (id) => request(`/api/admin/crm/outreach/messages/${id}`),
+  crmOutreachAction: (id, action) =>
+    request(`/api/admin/crm/outreach/campaigns/${id}`, { method: "POST", body: { action } }),
   crmNoteUpdate: (id, body) =>
     request(`/api/admin/crm/notes/${id}/update`, { method: "POST", body }),
   crmPeopleSearch: (q, excludeAccount = "") => {

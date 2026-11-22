@@ -17,7 +17,9 @@ import * as tipReports from "./tip_reports.js";
 import {
   EMPTY_PIPELINE_FILTERS,
   crmSubnav,
+  mailDialog,
   nextSort,
+  outreachView,
   pipelineNewLeadPrompt,
   pipelineTags,
   pipelineView,
@@ -130,6 +132,9 @@ const state = {
   // Sökning efter befintlig kontakt att koppla i affärsvyn: { q, hits }.
   crmPeople: null,
   crmDealId: null,
+  // Fliken Utskick: sida i listan över skickade mejl och ett öppnat mejl.
+  outreachOffset: 0,
+  outreachOpen: null,
 };
 
 function showError(error) {
@@ -225,7 +230,7 @@ function stateFromUrl() {
   state.accountRecovery = null;
   state.crmDealId = state.view === "pipeline" ? params.get("affar") || null : null;
   const flik = params.get("flik");
-  state.crmTab = state.view === "pipeline" && ["tasks", "uppfoljning"].includes(flik) ? flik : "pipeline";
+  state.crmTab = state.view === "pipeline" && ["tasks", "uppfoljning", "utskick"].includes(flik) ? flik : "pipeline";
 }
 
 let firstUrlSync = true;
@@ -433,6 +438,12 @@ async function renderView(seq) {
             state.config,
             { peopleQuery: state.crmPeople?.q, peopleHits: state.crmPeople?.hits },
             await admin.crmDeal(state.crmDealId),
+          ) + (state.outreachOpen ? mailDialog(state.outreachOpen) : ""));
+        } else if (state.crmTab === "utskick") {
+          paint(outreachView(
+            await admin.crmOutreach({ offset: state.outreachOffset }),
+            state.config,
+            state.outreachOpen,
           ));
         } else if (state.crmTab === "uppfoljning") {
           paint(uppfoljning(await admin.followUps(), state.fuFilter, {
@@ -1708,9 +1719,36 @@ async function act(action, ds) {
       return render();
 
     case "crm-tab":
-      state.crmTab = ["tasks", "uppfoljning"].includes(ds.tab) ? ds.tab : "pipeline";
+      state.crmTab = ["tasks", "uppfoljning", "utskick"].includes(ds.tab) ? ds.tab : "pipeline";
       state.crmDealId = null;
+      state.outreachOpen = null;
+      state.outreachOffset = 0;
       return render();
+
+    case "outreach-open": {
+      const res = await admin.crmOutreachMessage(ds.id);
+      state.outreachOpen = res.message ?? null;
+      await render();
+      document.getElementById("crmMailView")?.scrollIntoView({ block: "nearest" });
+      return;
+    }
+
+    case "outreach-close":
+      state.outreachOpen = null;
+      return render();
+
+    case "outreach-page":
+      state.outreachOffset = Math.max(0, Number(ds.offset) || 0);
+      state.outreachOpen = null;
+      return render();
+
+    case "outreach-campaign": {
+      if (ds.op === "start" && !(await sure(
+        `Starta utskicket «${ds.name}»?\n\n${ds.waiting} bolag står i kö. Mejlen går i låg takt på vardagar, och du kan pausa när som helst.`,
+      ))) return;
+      await admin.crmOutreachAction(ds.id, ds.op);
+      return render();
+    }
 
     case "crm-tasks-status":
       state.taskFilters = { ...state.taskFilters, status: ds.status || "open" };
@@ -1744,6 +1782,7 @@ async function act(action, ds) {
 
     case "crm-open-deal":
       state.crmPeople = null;
+      state.outreachOpen = null;
       state.crmDealId = ds.deal;
       state.view = "pipeline";
       state.companyId = null;
@@ -1753,6 +1792,7 @@ async function act(action, ds) {
     case "crm-back":
       state.crmPeople = null;
       state.crmDealId = null;
+      state.outreachOpen = null;
       return render();
 
     case "pipeline-new-lead": {

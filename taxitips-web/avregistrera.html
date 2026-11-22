@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Avregistrera — Taxi Tips</title>
+  <meta name="robots" content="noindex" />
+  <meta name="referrer" content="no-referrer" />
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/brand.css" />
+  <link rel="stylesheet" href="/src/portal.css" />
+  <style>
+    .unsub {
+      max-width: 440px;
+      margin: 3rem auto;
+      text-align: center;
+    }
+    .unsub h1 {
+      font-size: 1.6rem;
+    }
+    .unsub .btn {
+      min-height: 48px;
+      margin-top: 1rem;
+    }
+    .unsub [role="alert"] {
+      margin-top: 1rem;
+    }
+  </style>
+</head>
+<body class="portal">
+  <header class="portal-nav">
+    <a class="brand-logo" href="/"><img src="/brand/logo-on-dark.svg" alt="Taxi Tips" height="26" /></a>
+  </header>
+
+  <!--
+    Hit leder länken i säljmejlens sidfot (fleet/outreach.py). Sidan
+    avregistrerar först när besökaren trycker på knappen: skräppostfilter
+    öppnar länkar i mejl, och en sida som avregistrerade vid laddning hade
+    spärrat mottagare som aldrig bett om det.
+  -->
+  <main class="portal-main">
+    <section id="ask" class="card unsub">
+      <h1>Inga fler mejl från oss?</h1>
+      <p class="muted">Tryck på knappen, så skickar vi inga fler säljmejl till den här adressen.</p>
+      <button id="confirm" type="button" class="btn btn-primary btn-block btn-lg">Avregistrera</button>
+      <p id="error" class="muted" role="alert" hidden></p>
+    </section>
+    <section id="done" class="card unsub" hidden>
+      <h1>Du är avregistrerad</h1>
+      <p class="muted">Vi skickar inga fler säljmejl till den här adressen. Ett mejl som redan är på väg kan hinna komma fram.</p>
+      <p class="muted">Är du kund hos oss får du fortfarande mejl som gäller ditt konto, till exempel kvitton.</p>
+    </section>
+    <section id="invalid" class="card unsub" hidden>
+      <h1>Länken fungerar inte</h1>
+      <p class="muted">Svara på mejlet du fick och skriv "nej tack", så tar vi bort adressen.</p>
+    </section>
+  </main>
+
+  <script type="module" src="/src/unsubscribe.js"></script>
+</body>
+</html>

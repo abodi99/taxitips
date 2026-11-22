@@ -4811,3 +4811,82 @@ button.dash-stat:hover {
   transition: opacity 0.15s ease 0.15s;
   pointer-events: none;
 }
+
+/* ---- CRM: säljutskick --------------------------------------------------- */
+.crm-outreach-state {
+  margin: 0 0 1rem;
+  font-size: 0.9rem;
+  color: var(--ink-soft);
+}
+.crm-outreach-off,
+.crm-campaign-reason {
+  padding: 0.6rem 0.8rem;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--guld) 16%, var(--vit));
+  color: var(--ink);
+  font-size: 0.9rem;
+}
+.crm-campaign .card-head h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+.crm-campaign-active { background: color-mix(in srgb, var(--ok) 18%, var(--vit)); }
+.crm-campaign-paused { background: color-mix(in srgb, var(--guld) 24%, var(--vit)); }
+.crm-mail-list {
+  list-style: none;
+  margin: 0.4rem 0 0;
+  padding: 0;
+}
+.crm-mail-list li {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.75rem;
+  padding: 0.55rem 0;
+  border-top: 1px solid var(--line);
+}
+.crm-mail-open,
+.crm-link {
+  appearance: none;
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--ink);
+  font-weight: 600;
+  text-align: left;
+  cursor: pointer;
+}
+.crm-mail-open:hover .crm-mail-subject,
+.crm-link:hover {
+  text-decoration: underline;
+}
+.crm-mail-subject { display: block; }
+.crm-mail-status {
+  flex: none;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.crm-mail-status-ok { color: var(--ok); }
+.crm-mail-status-warn { color: var(--guld-djup); }
+.crm-mail-status-danger { color: var(--danger); }
+.crm-mail-table .crm-sub { display: block; }
+.crm-mail-body {
+  margin: 0.6rem 0 0;
+  padding: 0.9rem 1rem;
+  border-radius: 10px;
+  background: var(--ljusgra-djup);
+  font: inherit;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.crm-pager {
+  align-items: center;
+  justify-content: flex-end;
+  margin-top: 0.75rem;
+}
