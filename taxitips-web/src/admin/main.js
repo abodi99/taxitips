@@ -24,6 +24,8 @@ import {
   tasksView,
 } from "./crm.js";
 import * as views from "./views.js";
+import { mountNav, navItem } from "./nav.js";
+import { setupPalette } from "./palette.js";
 
 /**
  * Adminwebbens sammanhållning.
@@ -56,6 +58,9 @@ function showAuthHashError() {
 /** Rader per sida i CRM-tabellen; "Visa fler" hämtar nästa portion. */
 const PIPELINE_PAGE = 200;
 
+// Menyn ritas ur nav.js innan knapparna letas upp nedan.
+mountNav(document.getElementById("adminNav"), document.getElementById("adminNavFoot"));
+
 const el = {
   login: document.getElementById("login"),
   loginForm: document.getElementById("loginForm"),
@@ -71,14 +76,6 @@ const el = {
   codeFor: document.getElementById("codeFor"),
   codeTimer: document.getElementById("codeTimer"),
 };
-
-/** Vyer som ligger under Mer — sidomenyn öppnas så aktiv flik syns. */
-const MORE_VIEWS = new Set([
-  "pipeline", "uppfoljning", "dashboard", "webbstatistik", "granskning", "evenemang",
-  "kuponger", "konton", "personal",
-]);
-/** Vyer som ligger under Drift. */
-const DRIFT_VIEWS = new Set(["status", "aktivitet", "notiser", "tipprapporter"]);
 
 const state = {
   // Hem först: det som kräver åtgärd, inte dashboardens siffror.
@@ -138,6 +135,8 @@ function showError(error) {
   const message = error instanceof ApiError ? error.message : "Något gick fel. Prova igen.";
   el.globalError.textContent = message;
   el.globalError.hidden = false;
+  // Överst på sidan syns felet inte om man har scrollat ner (i telefonen nästan alltid).
+  if (window.scrollY > 120) showToast(message, "error");
 }
 
 function clearError() {
@@ -145,24 +144,112 @@ function clearError() {
 }
 
 function setTab(view) {
-  // Uppföljning bor under CRM — markera CRM i primärnavet.
-  const highlight = view === "uppfoljning" ? "pipeline" : view;
+  // Undervyer (Ny kund, Uppföljning) markerar sin menypunkt.
+  const item = navItem(view);
   for (const tab of el.tabs) {
-    if (tab.dataset.view === highlight) tab.setAttribute("aria-current", "page");
+    if (tab.dataset.view === item?.view) tab.setAttribute("aria-current", "page");
     else tab.removeAttribute("aria-current");
   }
-  for (const [id, views] of [["adminMore", MORE_VIEWS], ["adminDrift", DRIFT_VIEWS]]) {
-    const group = document.getElementById(id);
-    if (!group) continue;
-    // Öppna gruppen när aktiv vy ligger där. På mobil stängs dropdownen annars.
-    if (views.has(view)) group.open = true;
-    else if (window.matchMedia("(max-width: 900px)").matches) group.open = false;
-    group.querySelector(".side-more-toggle")?.classList.toggle("is-active", views.has(view));
+  // Raden ovanför rubriken: vilken del av adminwebben man är i.
+  const crumb = document.getElementById("crumb");
+  if (crumb) {
+    crumb.textContent = item?.group ?? "";
+    crumb.hidden = !item?.group;
   }
+  closeNav();
 }
+
+/* --- Mobilmenyn ----------------------------------------------------------- */
+
+const navOpenBtn = document.getElementById("navOpen");
+const navBackdrop = document.getElementById("navBackdrop");
+
+function openNav() {
+  document.body.classList.add("nav-open");
+  navBackdrop.hidden = false;
+  navOpenBtn?.setAttribute("aria-expanded", "true");
+  (document.querySelector('.admin-side .tab[aria-current="page"]') ?? document.querySelector(".admin-side .tab"))?.focus();
+}
+
+function closeNav() {
+  if (!document.body.classList.contains("nav-open")) return;
+  document.body.classList.remove("nav-open");
+  if (navBackdrop) navBackdrop.hidden = true;
+  navOpenBtn?.setAttribute("aria-expanded", "false");
+}
+
+navOpenBtn?.addEventListener("click", openNav);
+navBackdrop?.addEventListener("click", closeNav);
+document.getElementById("navClose")?.addEventListener("click", () => {
+  closeNav();
+  navOpenBtn?.focus();
+});
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape") closeNav();
+});
+
+/* --- Adressen -------------------------------------------------------------
+   Vyn, kunden och kontot står i adressen (?vy=kunder&kund=…), så att
+   webbläsarens bakåtknapp fungerar, en sida kan laddas om utan att man
+   hamnar på Hem, och en länk kan skickas till en kollega. */
+
+const URL_KEYS = ["vy", "kund", "konto", "affar", "flik"];
+
+function urlFromState() {
+  const params = new URLSearchParams(window.location.search);
+  for (const key of URL_KEYS) params.delete(key);
+  if (state.companyId) {
+    params.set("kund", state.companyId);
+    const tab = views.kundTab(state.companyTab);
+    if (tab !== "oversikt") params.set("flik", tab);
+  } else {
+    if (state.view && state.view !== "oversikt") params.set("vy", state.view);
+    if (state.view === "konton" && state.accountUserId) params.set("konto", state.accountUserId);
+    if (state.view === "pipeline") {
+      if (state.crmDealId) params.set("affar", state.crmDealId);
+      else if (state.crmTab && state.crmTab !== "pipeline") params.set("flik", state.crmTab);
+    }
+  }
+  const qs = params.toString();
+  return window.location.pathname + (qs ? `?${qs}` : "");
+}
+
+function stateFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const view = params.get("vy");
+  state.companyId = params.get("kund") || null;
+  state.companyTab = state.companyId ? params.get("flik") || "" : "";
+  state.view = state.companyId ? "kunder" : (view && (navItem(view) || view === "nykund") ? view : "oversikt");
+  state.accountUserId = state.view === "konton" ? params.get("konto") || null : null;
+  state.accountRecovery = null;
+  state.crmDealId = state.view === "pipeline" ? params.get("affar") || null : null;
+  const flik = params.get("flik");
+  state.crmTab = state.view === "pipeline" && ["tasks", "uppfoljning"].includes(flik) ? flik : "pipeline";
+}
+
+let firstUrlSync = true;
+function syncUrl() {
+  const next = urlFromState();
+  const current = window.location.pathname + window.location.search;
+  if (next === current) return;
+  // Första ritningen ersätter (inloggningen har redan lagt en rad i historiken).
+  if (firstUrlSync) history.replaceState(null, "", next);
+  else history.pushState(null, "", next);
+}
+
+window.addEventListener("popstate", () => {
+  if (el.app.hidden) return;
+  stateFromUrl();
+  state.pending = null;
+  state.companyLoginLink = null;
+  setTab(state.view);
+  render();
+});
 
 async function render() {
   const seq = ++renderSeq;
+  syncUrl();
+  firstUrlSync = false;
   clearError();
   el.view.innerHTML = '<p class="muted">Laddar …</p>';
   const note = state.flash;
@@ -170,11 +257,36 @@ async function render() {
   try {
     await renderView(seq);
   } finally {
-    if (note && seq === renderSeq) {
-      el.view.insertAdjacentHTML("afterbegin", `<p class="ok flash" role="status">${sales.esc(note)}</p>`);
-    }
+    if (note && seq === renderSeq) showToast(note);
   }
 }
+
+/**
+ * Kvittot efter en åtgärd ("Uppgifterna är sparade."): en ruta längst ner på
+ * skärmen i stället för överst på sidan, så att den syns även när man har
+ * scrollat ner -- i telefonen nästan alltid. Försvinner efter en stund.
+ */
+let toastTimer = null;
+function showToast(message, kind = "ok") {
+  const toast = document.getElementById("toast");
+  if (!toast) return;
+  toast.querySelector("[data-toast-text]").textContent = message;
+  toast.hidden = false;
+  toast.classList.remove("is-leaving");
+  toast.classList.toggle("is-error", kind === "error");
+  toast.setAttribute("role", kind === "error" ? "alert" : "status");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(hideToast, Math.min(14000, 5000 + message.length * 40));
+}
+function hideToast() {
+  const toast = document.getElementById("toast");
+  if (!toast || toast.hidden) return;
+  toast.classList.add("is-leaving");
+  setTimeout(() => {
+    if (toast.classList.contains("is-leaving")) toast.hidden = true;
+  }, 200);
+}
+document.getElementById("toastClose")?.addEventListener("click", hideToast);
 
 /**
  * Varje navigering får ett nummer, och bara den senaste får rita. Utan det
@@ -204,10 +316,18 @@ async function renderView(seq) {
         state.secOpen = {};
         state.secOpenFor = state.companyId;
       }
+      // Kundsidan har egen "← Alla kunder"; gruppraden ovanför blir dubbel.
+      if (current()) document.getElementById("crumb").hidden = true;
       paint(views.kund(
         detail, state.config, state.companyTab, state.pending, crm, state.companyLoginLink,
         state.secOpen,
       ));
+      // Vald flik synlig i flikraden (i telefonen kan den ligga utanför kanten).
+      const bar = current() ? el.view.querySelector(".kt-bar") : null;
+      const sel = bar?.querySelector('.kt-tab[aria-selected="true"]');
+      if (bar && sel && sel.offsetLeft + sel.offsetWidth > bar.clientWidth) {
+        bar.scrollLeft = sel.offsetLeft - 12;
+      }
       // Under Historik: företagets appar och fel (activity.js), hämtas när rutan öppnas.
       if (current()) {
         activity.companyPanel(
@@ -454,6 +574,7 @@ function setSupportCount(n) {
   if (!badge) return;
   badge.textContent = String(n);
   badge.hidden = !n;
+  refreshNavDot();
 }
 
 function setTipReportCount(n) {
@@ -462,8 +583,7 @@ function setTipReportCount(n) {
     badge.textContent = String(n);
     badge.hidden = !n;
   }
-  // Tipprapporter ligger under Drift, granskningar under Mer.
-  refreshMoreBadge();
+  refreshNavDot();
 }
 
 function setReviewsCount(n) {
@@ -472,21 +592,17 @@ function setReviewsCount(n) {
     badge.textContent = String(n);
     badge.hidden = !n;
   }
-  refreshMoreBadge();
+  refreshNavDot();
 }
 
-function refreshMoreBadge() {
-  const count = (id) => {
+/** Mobil: en prick på menyknappen när något i menyn väntar. */
+function refreshNavDot() {
+  const waiting = ["supportCount", "tipReportCount", "granskningCount"].some((id) => {
     const node = document.getElementById(id);
-    return node && !node.hidden ? Number(node.textContent) || 0 : 0;
-  };
-  for (const [id, n] of [["moreBadge", count("granskningCount")], ["driftBadge", count("tipReportCount")]]) {
-    const badge = document.getElementById(id);
-    if (badge) {
-      badge.textContent = String(n);
-      badge.hidden = !n;
-    }
-  }
+    return node && !node.hidden;
+  });
+  const dot = document.getElementById("navOpenBadge");
+  if (dot) dot.hidden = !waiting;
 }
 
 async function refreshSupportCount() {
@@ -519,13 +635,6 @@ function setStatus(report) {
   dot.className = `st-dot st-nav st-${report.overall}`;
   dot.setAttribute("aria-label", LEVEL[report.overall]?.[0] ?? "");
   dot.hidden = false;
-  // Samma prick på Drift, så att den syns även när gruppen är hopfälld.
-  const driftDot = document.getElementById("driftDot");
-  if (driftDot) {
-    driftDot.className = `st-dot st-nav st-${report.overall}`;
-    driftDot.setAttribute("aria-label", LEVEL[report.overall]?.[0] ?? "");
-    driftDot.hidden = false;
-  }
 }
 
 async function refreshStatus() {
@@ -548,6 +657,8 @@ async function enterApp(session) {
   setInterval(refreshStatus, 120_000);
   el.login.hidden = true;
   el.app.hidden = false;
+  document.body.classList.add("in-app");
+  stateFromUrl();
   el.logout.hidden = false;
   document.getElementById("changePassword").hidden = false;
   el.whoami.textContent = session.user?.email ?? "";
@@ -740,19 +851,33 @@ el.logout?.addEventListener("click", async () => {
 
 /* --- Navigering ------------------------------------------------------- */
 
-for (const tab of el.tabs) {
-  tab.addEventListener("click", () => {
-    state.view = tab.dataset.view;
-    state.companyId = null;
-    state.companyTab = "";
-    if (state.view === "konton") {
-      state.accountUserId = null;
-      state.accountRecovery = null;
-    }
-    setTab(state.view);
-    render();
-  });
+function gotoView(view) {
+  state.view = view;
+  state.companyId = null;
+  state.companyTab = "";
+  state.pending = null;
+  state.companyLoginLink = null;
+  if (view === "konton") {
+    state.accountUserId = null;
+    state.accountRecovery = null;
+  }
+  if (view === "pipeline") state.crmDealId = null;
+  setTab(view);
+  render();
+  window.scrollTo({ top: 0 });
 }
+
+for (const tab of el.tabs) {
+  tab.addEventListener("click", () => gotoView(tab.dataset.view));
+}
+
+const palette = setupPalette({
+  onView: gotoView,
+  onCompany: (id) => act("open-company", { id }).catch(showError),
+  onAccount: (user) => act("open-account", { user }).catch(showError),
+  searchCompanies: (q) => admin.companies(q),
+  searchAccounts: (q) => admin.accounts(q),
+});
 
 bindAppVersionForm(el.view);
 bindTooltips(el.view);
@@ -1104,6 +1229,54 @@ function toggleFollowUp(companyId, open) {
 
 /* --- Åtgärder --------------------------------------------------------- */
 
+/**
+ * Visa en flik på kundsidan utan att hämta om kunden. Fliken minns i
+ * `state.companyTab` (så att den står kvar när sidan ritas om efter en
+ * åtgärd) och i adressen. Returnerar panelen, eller null.
+ */
+function showKundTab(name) {
+  const tab = views.kundTab(name);
+  const panel = el.view.querySelector(`[data-tab-panel="${tab}"]`);
+  if (!panel) return null;
+  for (const node of el.view.querySelectorAll("[data-tab-panel]")) node.hidden = node !== panel;
+  for (const btn of el.view.querySelectorAll(".kt-tab")) {
+    btn.setAttribute("aria-selected", String(btn.dataset.tab === tab));
+  }
+  const bar = el.view.querySelector(".kt-bar");
+  const btn = el.view.querySelector(`.kt-tab[data-tab="${tab}"]`);
+  if (bar && btn) {
+    if (btn.offsetLeft < bar.scrollLeft) bar.scrollLeft = btn.offsetLeft - 12;
+    else if (btn.offsetLeft + btn.offsetWidth > bar.scrollLeft + bar.clientWidth) {
+      bar.scrollLeft = btn.offsetLeft + btn.offsetWidth - bar.clientWidth + 12;
+    }
+  }
+  state.companyTab = tab;
+  history.replaceState(null, "", urlFromState());
+  return panel;
+}
+
+// Flikraden i mobilen: tona inte ut kanten när man redan svept till slutet.
+el.view.addEventListener("scroll", (event) => {
+  const bar = event.target;
+  if (!(bar instanceof HTMLElement) || !bar.classList.contains("kt-bar")) return;
+  bar.classList.toggle("is-end", bar.scrollLeft + bar.clientWidth >= bar.scrollWidth - 4);
+}, true);
+
+/**
+ * Efter ett flikbyte: har man scrollat förbi flikraden, rulla så att den nya
+ * panelen börjar precis under raden (som står kvar överst). Annars hamnar man
+ * mitt i den nya fliken på samma höjd som man var i den förra.
+ */
+function scrollToKundTabs() {
+  const wrap = el.view.querySelector(".kt-bar-wrap");
+  const panel = el.view.querySelector("[data-tab-panel]:not([hidden])");
+  if (!wrap || !panel) return;
+  const topbar = document.querySelector(".admin-topbar");
+  const offset = (topbar && topbar.offsetParent ? topbar.offsetHeight : 0) + wrap.offsetHeight;
+  const y = panel.getBoundingClientRect().top + window.scrollY - offset;
+  if (window.scrollY > y) window.scrollTo({ top: y });
+}
+
 /** Dashboardens siffror öppnar listan bakom sig med samma urval (dashboard.js). */
 function gotoFilter(view, filter) {
   if (view === "kunder") state.kundFilter = filter;
@@ -1134,11 +1307,14 @@ async function act(action, ds) {
       return render();
 
     case "sec-open": {
-      // Öppna en del av kundsidan (och dem den ligger i) och rulla dit.
-      const sec = el.view.querySelector(`details[data-sec="${ds.sec}"]`);
-      if (!sec) return;
-      sec.open = true;
-      const target = (ds.target && document.getElementById(ds.target)) || sec;
+      // Byt till fliken där delen bor, öppna det som är hopfällt och rulla dit.
+      const panel = showKundTab(ds.sec);
+      if (!panel) return;
+      const target = (ds.target && document.getElementById(ds.target)) || null;
+      if (!target) {
+        scrollToKundTabs();
+        return;
+      }
       for (let node = target.parentElement?.closest("details"); node; node = node.parentElement?.closest("details")) {
         node.open = true;
       }
@@ -1148,11 +1324,8 @@ async function act(action, ds) {
     }
 
     case "kund-tab":
-      state.companyTab = ds.tab;
-      state.pending = null;
-      state.companyLoginLink = null;
-      await render();
-      window.scrollTo({ top: 0 });
+      // Flikarna ritas alla på en gång; att byta är bara att visa en annan.
+      if (showKundTab(ds.tab)) scrollToKundTabs();
       return;
 
     case "kund-filter":
@@ -1467,6 +1640,10 @@ async function act(action, ds) {
       return render();
     case "wa-csv":
       return downloadCsv(state.web.source);
+
+    case "palette":
+      palette.open();
+      return;
 
     case "goto":
       state.view = ds.view;

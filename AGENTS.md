@@ -326,16 +326,20 @@ och ensam det som ger åtkomst utan betalning (kuponger, avsluta direkt). **All
 betalning går genom Stripe** (kort eller Stripe-faktura); "betalas senare" och
 "markera betald utanför Stripe" är borttagna 2026-09-26. Säljflödet: `docs/fleet-abonnemang.md` §9b. Spärrar av
 företag, konton och e-postadresser, personalroller och egna evenemang
-(manuellt eller CSV/JSON): §9d. Adminwebben är byggd som en cykel: **Hem** är en
-att-göra-lista (en rad per kund som behöver något), **Kunder** en lista med filter,
-och kundsidan (2026-10-03) är byggd för ett supportsamtal: **Översikt** först (om
-förarna får tips, "Att åtgärda", nyckeltal, "Kunden ringer om …"-genvägar, CRM),
-sedan en flik per ämne -- Bilar och förare, Inloggningar, Betalning, Företag,
-Historik (läsbar händelselogg + appar och fel). Supportåtgärder per bil: förarkod,
-förarinbjudan med e-post (skicka igen/återkalla), frigör bilen, byt namn på
-telefon, spärra; per telefon extra telefonbyte; per inloggning inloggningslänk och
-roll. Reglerna för vad som är klart bor på ett ställe (`src/admin/views.js`,
-`STEPS`/`attention`/`issues`); Hem och Kunder länkar stegen till rätt flik (`kundTab`). Grundaren
+(manuellt eller CSV/JSON): §9d. Adminwebben (omgjord 2026-11-22): menyn är EN
+lista i `src/admin/nav.js` -- grupperna Kunder, Sälj, Support, Appen, Statistik,
+Drift och Personal längst ner, inget hopfällt "Mer" -- och samma lista driver
+snabbsökningen (⌘K/Ctrl+K, `src/admin/palette.js`: sidor, kunder och konton).
+Vyn står i adressen (`?vy=…`, `?kund=…&flik=…`, `?vy=konton&konto=…`), så
+bakåtknapp, omladdning och delade länkar fungerar. **Hem** är att-göra-listan
+plus genvägar och nyckeltal. Kundsidan har sex flikar som byts utan omhämtning:
+**Översikt** (tidslinje, Nästa steg, läget i fyra rutor, CRM), Platser,
+Betalning (ovanliga åtgärder under "Särskilda åtgärder"), Inloggningar,
+Företaget (behörighet, uppgifter, Bolagsverket, stäng av/arkivera/radera) och
+Historik. Gamla del-/fliknamn översätts av `kundTab`; Hem och Kunder länkar till
+rätt flik. Kvitton och fel visas som en ruta längst ner (syns i telefonen).
+Under 900 px fälls menyn ut från vänster och kundsidans flikrad står kvar överst. Reglerna för vad som är klart bor
+på ett ställe (`src/admin/views.js`, `attention`/`issues`/`nextStep`). Grundaren
 (`bbf6ca6c-…`) är platform_admin. Konton skapade med Google har inget lösenord
 och Google-inloggning är inte konfigurerad i produktionens Supabase Auth, så
 adminwebben loggar in med en e-postlänk.

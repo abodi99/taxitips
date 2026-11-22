@@ -593,7 +593,7 @@ export function dashboard(d) {
   const now = d.generatedAt;
   return `
     <div class="page-head">
-      <div><h1>Dashboard</h1>
+      <div><h1>Rapport</h1>
         <p class="muted">Hela tjänsten på en sida. Tryck på en siffra för att öppna listan bakom den.</p></div>
       <button class="btn btn-quiet" type="button" data-action="goto" data-view="dashboard">Uppdatera</button>
     </div>

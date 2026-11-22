@@ -541,6 +541,10 @@ export function kuponger(list, config) {
   const rows = list.coupons ?? [];
   const canManage = !!config?.canManage;
   return `
+    <div class="page-head">
+      <div><h1>Kuponger</h1>
+        <p class="muted">Rabattkoder som ger gratisdagar. Ett bolag kan använda samma kupong en gång.</p></div>
+    </div>
     ${canManage ? `
     <form id="couponForm" class="card form-grid">
       <h2 class="span-2">Ny kupong</h2>
