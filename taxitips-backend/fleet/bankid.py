@@ -48,14 +48,14 @@ TICKET_MAX_AGE = 15 * 60
 ORDER_TTL = 10 * 60
 HTTP_TIMEOUT = 12
 
-# Det här ser användaren i BankID-appen innan hen godkänner.
+# Det här ser användaren i BankID-appen innan hen godkänner. Bara namnet
+# (ägarens beslut 2026-11-23): BankID-appen säger själv vad som händer, och en
+# svensk mening hjälper inte den som inte läser svenska. Nycklarna behövs
+# ändå -- de är syftena som `start` godtar.
 USER_VISIBLE_TEXT = {
-    "register": (
-        "Du legitimerar dig för att starta ett gratis prov hos TaxiTips. "
-        "Det binder dig inte till något och kostar inget."
-    ),
-    "recover": "Du legitimerar dig för att komma åt ditt TaxiTips-konto.",
-    "login": "Du loggar in i TaxiTips.",
+    "register": "Taxitips",
+    "recover": "Taxitips",
+    "login": "Taxitips",
 }
 PURPOSES = tuple(USER_VISIBLE_TEXT)
 
