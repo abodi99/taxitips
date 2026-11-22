@@ -12,7 +12,8 @@ import re
 
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
-from django.views.decorators.http import require_POST
+from django.http import HttpResponseRedirect
+from django.views.decorators.http import require_http_methods, require_POST
 
 from core.api import _json
 from fleet import crm, ratelimit, reach
@@ -118,3 +119,39 @@ def web_lead(request):
         }),
         request,
     )
+
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+@handle
+def unsubscribe(request, token: str):
+    """
+    /api/crm/avregistrera/<token> -- avregistrering från säljmejl.
+
+    POST avregistrerar. Det är adressen i `List-Unsubscribe` (ett klick i
+    mejlklienten, RFC 8058) och den som sidan taxitips.se/avregistrera anropar.
+
+    GET avregistrerar INTE, utan skickar vidare till sidan. Skräppostfilter och
+    förhandsvisningar öppnar länkar i mejl; en GET som avregistrerade hade
+    spärrat mottagare som aldrig bett om det.
+    """
+    from fleet import outreach
+
+    if request.method == "GET":
+        site = (getattr(settings, "OUTREACH_SITE_BASE", "") or "https://taxitips.se").rstrip("/")
+        return HttpResponseRedirect(f"{site}/avregistrera?t={token}")
+    try:
+        ratelimit.enforce(ratelimit.UNSUBSCRIBE, _client_ip(request) or "unknown")
+    except ratelimit.RateLimited:
+        return _json(
+            request,
+            {"ok": False, "reason": "rate_limited", "message": "För många försök. Vänta en stund."},
+            status=429,
+        )
+    if not outreach.unsubscribe(token):
+        return _json(
+            request,
+            {"ok": False, "reason": "invalid_link", "message": "Länken gäller inte."},
+            status=404,
+        )
+    return _json(request, {"ok": True})

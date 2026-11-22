@@ -228,13 +228,14 @@ export function taskList(tasks, opts) {
   return `<ul class="crm-tasks">${tasks.map((t) => taskRow(t, opts)).join("")}</ul>`;
 }
 
-/** Underflikar i CRM: pipeline, uppgifter och uppföljning. */
+/** Underflikar i CRM: pipeline, uppgifter, uppföljning och säljutskick. */
 export function crmSubnav(active) {
   const tab = (id, label) => `
     <button type="button" role="tab" class="crm-subtab" aria-selected="${active === id}"
       data-action="crm-tab" data-tab="${id}">${label}</button>`;
   return `<div class="crm-subnav" role="tablist" aria-label="CRM">${
-    tab("pipeline", "Pipeline")}${tab("tasks", "Uppgifter")}${tab("uppfoljning", "Uppföljning")
+    tab("pipeline", "Pipeline")}${tab("tasks", "Uppgifter")}${tab("uppfoljning", "Uppföljning")}${
+    tab("utskick", "Utskick")
   }</div>`;
 }
 
@@ -715,6 +716,7 @@ export function dealDetailView(data, config, opts = {}) {
           ${canSell ? taskNewForm({ dealId: d.id, companyId: d.companyId }, staff, me) : ""}
           ${taskList(tasks, { staff, me, canEdit: canSell, empty: "Inga uppgifter på affären." })}
         </div>
+        ${dealMailCard(data.mail)}
         <div class="card">
           <div class="card-head"><h2>Anteckningar <span class="crm-tab-n">${num(notes.length)}</span></h2></div>
           ${noteForm}
@@ -736,4 +738,155 @@ export function pipelineNewLeadPrompt() {
     companyName: companyName.trim(),
     source: "admin",
   };
+}
+
+// ---- Säljutskick (fleet/outreach.py) --------------------------------------
+
+const MAIL_STATUS = {
+  pending: "Väntar",
+  sent: "Skickat",
+  failed: "Misslyckat",
+  suppressed: "Stoppat",
+};
+
+const CAMPAIGN_STATUS = { draft: "Utkast", active: "Aktiv", paused: "Pausad", done: "Klar" };
+
+function mailStatus(m) {
+  const tone = m.status === "sent" ? "ok" : m.status === "pending" ? "warn" : "danger";
+  return `<span class="crm-mail-status crm-mail-status-${tone}"${m.error ? ` title="${esc(m.error)}"` : ""}>${esc(MAIL_STATUS[m.status] ?? m.status)}</span>`;
+}
+
+/** Kortet "Mejl" på en affär: vad som har skickats och var i serien bolaget är. */
+function dealMailCard(mail) {
+  const messages = mail?.messages ?? [];
+  if (!mail?.state && !messages.length) return "";
+  const next = mail.nextSendAt ? ` · nästa mejl ${esc(shortDate(mail.nextSendAt))}` : "";
+  return `
+    <div class="card">
+      <div class="card-head"><h2>Mejl <span class="crm-tab-n">${num(messages.length)}</span></h2></div>
+      ${mail.state ? `<p class="muted small">${esc(mail.campaign || "Säljutskick")}: ${esc(mail.stateLabel || mail.state)}${next}</p>` : ""}
+      ${messages.length ? `<ul class="crm-mail-list">${messages.map((m) => `
+        <li>
+          <button type="button" class="crm-mail-open" data-action="outreach-open" data-id="${esc(m.id)}">
+            <span class="crm-mail-subject">${esc(m.subject)}</span>
+            <span class="crm-sub">Mejl ${esc(m.step ?? "")} · ${esc(m.sentAt ? dateTime(m.sentAt) : dateTime(m.createdAt))} · till ${esc(m.to)}</span>
+          </button>
+          ${mailStatus(m)}
+        </li>`).join("")}</ul>` : `<p class="muted">Inget mejl har gått ännu.</p>`}
+    </div>`;
+}
+
+function campaignCard(c, canSell) {
+  const tile = (label, n, tone = "") => `
+    <div class="crm-tile${tone && n ? ` crm-tile-${tone}` : ""}">
+      <span class="crm-tile-n">${num(n)}</span>
+      <span class="crm-tile-label">${esc(label)}</span>
+    </div>`;
+  const button = (action, label, primary = false) => `
+    <button type="button" class="btn ${primary ? "btn-primary" : "btn-quiet"} btn-small"
+      data-action="outreach-campaign" data-id="${esc(c.id)}" data-op="${action}"
+      data-name="${esc(c.name)}" data-waiting="${esc(c.waiting)}">${label}</button>`;
+  const actions = !canSell ? ""
+    : c.status === "active" ? button("pause", "Pausa")
+    : c.status === "paused" ? button("resume", "Fortsätt", true)
+    : c.status === "draft" ? button("start", "Starta utskicket", true)
+    : "";
+  const steps = c.sentPerStep ?? {};
+  return `
+    <div class="card crm-campaign">
+      <div class="card-head">
+        <h2>${esc(c.name)} <span class="crm-badge crm-campaign-${esc(c.status)}">${esc(CAMPAIGN_STATUS[c.status] ?? c.status)}</span></h2>
+        <div class="btn-row">${actions}</div>
+      </div>
+      ${c.pausedReason ? `<p class="crm-campaign-reason">Pausad: ${esc(c.pausedReason)}</p>` : ""}
+      <p class="muted small">Idag: ${num(c.usedToday)} av högst ${num(c.capToday)} mejl.
+        Första mejlet ${num(steps["1"])}, påminnelse ${num(steps["2"])}, sista ${num(steps["3"])}.</p>
+      <div class="crm-tiles">
+        ${tile("Väntar på första mejlet", c.waiting)}
+        ${tile("Mitt i serien", c.inSequence)}
+        ${tile("Svar", c.replied, "ok")}
+        ${tile("Startade prov", c.converted, "ok")}
+        ${tile("Avregistrerade", c.unsubscribed, "warn")}
+        ${tile("Studsar", c.bounced, "danger")}
+      </div>
+    </div>`;
+}
+
+/**
+ * Fliken Utskick. data = GET /crm/outreach; open = ett öppnat mejl
+ * (GET /crm/outreach/messages/<id>) eller null.
+ */
+export function outreachView(data, config, open = null) {
+  const canSell = !!config?.canSell;
+  const campaigns = data.campaigns ?? [];
+  const messages = data.messages ?? { rows: [], total: 0 };
+  const offset = data.offset ?? 0;
+  const state = !data.configured
+    ? `<p class="crm-outreach-state crm-outreach-off">Säljbrevlådan är inte inlagd på servern, så inga säljmejl kan gå.</p>`
+    : !data.enabled
+      ? `<p class="crm-outreach-state crm-outreach-off">Utskicken är avstängda på servern (OUTREACH_ENABLED). Brevlåda: ${esc(data.mailbox)}.</p>`
+      : `<p class="crm-outreach-state">Säljmejlen går från ${esc(data.mailbox)}, vardagar 08.30–15.30.</p>`;
+
+  const rows = messages.rows.map((m) => `
+    <tr>
+      <td class="crm-col-date muted">${esc(shortDate(m.sentAt || m.createdAt))}</td>
+      <td>${m.dealId
+        ? `<button type="button" class="crm-link" data-action="crm-open-deal" data-deal="${esc(m.dealId)}">${esc(m.accountName || m.to)}</button>`
+        : esc(m.accountName || m.to)}<span class="crm-sub">${esc(m.to)}</span></td>
+      <td><button type="button" class="crm-link" data-action="outreach-open" data-id="${esc(m.id)}">${esc(m.subject)}</button>
+        <span class="crm-sub">Mejl ${esc(m.step ?? "")}</span></td>
+      <td>${mailStatus(m)}</td>
+    </tr>`).join("");
+  const pager = messages.total > 50 ? `
+    <div class="btn-row crm-pager">
+      ${offset > 0 ? `<button type="button" class="btn btn-quiet btn-small" data-action="outreach-page" data-offset="${Math.max(0, offset - 50)}">← Nyare</button>` : ""}
+      <span class="muted small">${num(offset + 1)}–${num(Math.min(offset + 50, messages.total))} av ${num(messages.total)}</span>
+      ${offset + 50 < messages.total ? `<button type="button" class="btn btn-quiet btn-small" data-action="outreach-page" data-offset="${offset + 50}">Äldre →</button>` : ""}
+    </div>` : "";
+
+  const templates = (data.templates ?? []).map((t) => `
+    <details class="crm-more">
+      <summary>Mejl ${esc(t.step)}, ${esc(t.sizeLabel || "")}: ${esc(t.subject)}
+        <span class="crm-sub">Läsbarhet ${esc(t.lix ?? "")} (${esc(t.lixLabel || "")})</span></summary>
+      <pre class="crm-mail-body">${esc(t.body)}</pre>
+    </details>`).join("");
+
+  return `
+    <div class="page-head">
+      <div>
+        <h1>CRM</h1>
+        ${crmSubnav("utskick")}
+      </div>
+    </div>
+    ${state}
+    ${campaigns.length ? campaigns.map((c) => campaignCard(c, canSell)).join("")
+      : `<div class="crm-empty"><p>Ingen kampanj är upplagd ännu.</p></div>`}
+    ${open ? mailDialog(open) : ""}
+    <div class="card">
+      <div class="card-head"><h2>Skickat <span class="crm-tab-n">${num(messages.total)}</span></h2></div>
+      ${messages.rows.length ? `<div class="table-scroll"><table class="crm-table crm-mail-table">
+        <thead><tr><th scope="col">När</th><th scope="col">Bolag</th><th scope="col">Mejl</th><th scope="col">Status</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table></div>${pager}` : `<p class="muted">Inga säljmejl har skickats ännu.</p>`}
+    </div>
+    <div class="card">
+      <div class="card-head"><h2>Texterna</h2></div>
+      <p class="muted small">Så ser de tre mejlen ut för ett exempelbolag, i de tre tilltalen: bolag med 1–2 bilar får "du", större bolag "ni", och de största erbjuds en visning. Namn, ort och avregistreringslänk byts ut per mottagare.</p>
+      ${templates}
+    </div>`;
+}
+
+/** Ett skickat mejl i sin helhet, som det gick ut. */
+export function mailDialog(m) {
+  return `
+    <div class="card crm-mail-view" id="crmMailView">
+      <div class="card-head">
+        <h2>${esc(m.subject)}</h2>
+        <button type="button" class="btn btn-quiet btn-small" data-action="outreach-close">Stäng</button>
+      </div>
+      <p class="muted small">Till ${esc(m.to)}${m.accountName ? ` (${esc(m.accountName)})` : ""} ·
+        ${esc(m.sentAt ? `skickat ${dateTime(m.sentAt)}` : `köat ${dateTime(m.createdAt)}`)} · ${mailStatus(m)}</p>
+      ${m.error ? `<p class="crm-campaign-reason">${esc(m.error)}</p>` : ""}
+      <pre class="crm-mail-body">${esc(m.body || "")}</pre>
+    </div>`;
 }

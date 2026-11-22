@@ -367,6 +367,9 @@ CELERY_BEAT_SCHEDULE = {
     # Utkorgen oftare än en gång i timmen: ett "provet har startat" ska komma
     # medan kunden fortfarande sitter med appen, inte en timme senare.
     "fleet-outbox": {"task": "fleet.tasks.send_outbox", "schedule": 120},
+    # Säljutskicken: några mejl åt gången under kontorstid, och inkorgen läses
+    # efter svar och studsar. Gör ingenting utan OUTREACH_ENABLED=1.
+    "outreach-tick": {"task": "fleet.tasks.outreach_tick", "schedule": 10 * 60},
     # Avstämning mot Stripe. Rapporterar avvikelser, rättar inget.
     "fleet-reconcile-stripe": {
         "task": "fleet.tasks.reconcile_stripe", "schedule": 6 * 60 * 60
@@ -518,6 +521,25 @@ FLEET_MAIL_REPLY_TO = os.environ.get("FLEET_MAIL_REPLY_TO", "hej@taxitips.se")
 FORTYSIXELKS_USERNAME = os.environ.get("FORTYSIXELKS_USERNAME", "")
 FORTYSIXELKS_PASSWORD = os.environ.get("FORTYSIXELKS_PASSWORD", "")
 FLEET_SMS_SENDER = os.environ.get("FLEET_SMS_SENDER", "TaxiTips")
+# Säljutskick ur CRM (fleet/outreach.py). En egen brevlåda, så att säljmejl och
+# tjänstemejl (inloggningskoder, betalningsfel) inte delar avsändare. Utan
+# OUTREACH_ENABLED=1 och brevlådans uppgifter köas och skickas ingenting.
+OUTREACH_ENABLED = os.environ.get("OUTREACH_ENABLED", "") == "1"
+OUTREACH_SMTP_USER = os.environ.get("OUTREACH_SMTP_USER", "")
+OUTREACH_SMTP_PASSWORD = os.environ.get("OUTREACH_SMTP_PASSWORD", "")
+OUTREACH_IMAP_HOST = os.environ.get("OUTREACH_IMAP_HOST", "imap.hostinger.com")
+OUTREACH_IMAP_PORT = int(os.environ.get("OUTREACH_IMAP_PORT", "993") or 993)
+# Avsändarnamnet i inkorgen ("Abbe från Taxi Tips") och signaturen under mejlet.
+OUTREACH_FROM_NAME = os.environ.get("OUTREACH_FROM_NAME", "")
+OUTREACH_SENDER_NAME = os.environ.get("OUTREACH_SENDER_NAME", "")
+OUTREACH_SENDER_TITLE = os.environ.get("OUTREACH_SENDER_TITLE", "")
+OUTREACH_SENDER_PHONE = os.environ.get("OUTREACH_SENDER_PHONE", "")
+# Vem som står bakom utskicket (marknadsföringslagen: avsändaren ska framgå).
+OUTREACH_COMPANY_LINE = os.environ.get("OUTREACH_COMPANY_LINE", "A2M Tech AB, Malmö")
+# Enklicks-avregistreringen (List-Unsubscribe) går till servern; länken i
+# texten går till sidan på taxitips.se, som anropar samma adress.
+OUTREACH_API_BASE = os.environ.get("OUTREACH_API_BASE", "https://backend.taxitips.se")
+OUTREACH_SITE_BASE = os.environ.get("OUTREACH_SITE_BASE", "https://taxitips.se")
 # Driftlarm (core/ops_alerts.py). Tom = inga mejl. Sätt i Coolify, inte i git.
 OPS_ALERT_EMAIL = os.environ.get("OPS_ALERT_EMAIL", "")
 # Kundportalen, som mejlen länkar till. Betalning sker där, aldrig i appen (§9c).

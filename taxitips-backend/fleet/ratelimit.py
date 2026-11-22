@@ -76,6 +76,11 @@ CLIENT_LOG_ALL = Limit("client_log_all", limit=3000, window_seconds=3600)
 # så att ett formulär utan inloggning inte kan fylla CRM.
 WEB_LEAD = Limit("web_lead", limit=8, window_seconds=3600)
 WEB_LEAD_ALL = Limit("web_lead_all", limit=200, window_seconds=3600)
+# Avregistrering från säljmejl (fleet/crm_ingest.py). Länken är signerad; taket
+# finns för att sidan inte ska gå att hamra på. Högt satt: mejltjänsternas
+# enklicks-avregistrering kommer från få adresser, och en avregistrering som
+# nekas är värre än några onödiga anrop.
+UNSUBSCRIBE = Limit("crm_unsubscribe", limit=600, window_seconds=3600)
 
 # "Fortsätt här"-länken (fleet/continue_link.py): ingen inloggning, så bromsen
 # är per nät. Länken är signerad och går inte att gissa; gränserna finns för

@@ -115,3 +115,23 @@ def send_outbox() -> dict:
     from fleet import notifications
 
     return notifications.send_pending()
+
+
+@shared_task(name="fleet.tasks.outreach_tick")
+def outreach_tick() -> dict:
+    """
+    Säljutskicken (fleet/outreach.py): läser inkorgen efter svar och studsar,
+    och skickar sedan några mejl om det är kontorstid. Inkorgen läses först,
+    så att den som svarade i går kväll inte får en påminnelse i dag.
+    Gör ingenting utan OUTREACH_ENABLED=1 och brevlådans uppgifter.
+    """
+    from fleet import outreach, outreach_inbox
+
+    if not outreach.enabled():
+        return {"skipped": "disabled"}
+    try:
+        inbox = outreach_inbox.poll()
+    except Exception as exc:
+        log.warning("fleet.tasks: kunde inte läsa säljbrevlådan: %s", exc)
+        inbox = {"error": str(exc)[:200]}
+    return {"inbox": inbox, "outreach": outreach.tick()}

@@ -109,8 +109,6 @@ def send_pending(limit: int = 50, sender=None) -> dict:
     if sender is None:
         return {"sent": 0, "skipped": "no_sender"}
 
-    from fleet.mailer import PermanentMailError
-
     sent = failed = retry = 0
     now = timezone.now()
     # Gamla rader skickas aldrig. Utkorgen fylldes i månader utan avsändare,
@@ -122,27 +120,81 @@ def send_pending(limit: int = 50, sender=None) -> dict:
     rows = OutboxMessage.objects.filter(status=OutboxMessage.Status.PENDING).order_by(
         "created_at"
     )[:limit]
+    suppressed = 0
     for row in rows:
-        try:
-            sender(row)
-        except Exception as exc:
-            permanent = isinstance(exc, PermanentMailError) or (
-                row.created_at and now - row.created_at > RETRY_WINDOW
+        outcome = deliver(row, sender=sender, now=now)
+        if outcome == "sent":
+            sent += 1
+        elif outcome == "failed":
+            failed += 1
+        elif outcome == "suppressed":
+            suppressed += 1
+        else:
+            retry += 1
+    report = {"sent": sent, "failed": failed, "retry": retry, "stale": stale}
+    if suppressed:
+        report["suppressed"] = suppressed
+    return report
+
+
+# Marknadsföring ur CRM (fleet/outreach.py). Allt annat i utkorgen är
+# tjänstemeddelanden och går alltid fram.
+MARKETING_PREFIX = "outreach_"
+
+
+def is_marketing(category: str) -> bool:
+    return (category or "").startswith(MARKETING_PREFIX) and category not in SERVICE_CATEGORIES
+
+
+def deliver(row, *, sender=None, now=None) -> str:
+    """
+    Skickar en rad och skriver utfallet: "sent", "failed", "retry" eller
+    "suppressed".
+
+    Säljmejl kontrolleras mot spärrlistan här, i sändögonblicket: en mottagare
+    som avregistrerade sig efter att raden köades får inte mejlet ändå.
+    """
+    sender = sender or _configured_sender()
+    if sender is None:
+        return "retry"
+    now = now or timezone.now()
+    marketing = is_marketing(row.category)
+    if marketing:
+        from fleet import outreach
+
+        if outreach.is_suppressed(row.to_address):
+            OutboxMessage.objects.filter(id=row.id).update(
+                status=OutboxMessage.Status.SUPPRESSED, error="mottagaren är spärrad",
             )
-            if permanent:
-                failed += 1
-                OutboxMessage.objects.filter(id=row.id).update(
-                    status=OutboxMessage.Status.FAILED, error=str(exc)[:500]
-                )
-            else:
-                retry += 1
-                OutboxMessage.objects.filter(id=row.id).update(error=str(exc)[:500])
-            continue
-        sent += 1
-        OutboxMessage.objects.filter(id=row.id).update(
-            status=OutboxMessage.Status.SENT, sent_at=timezone.now(), error=""
+            return "suppressed"
+
+    from fleet.mailer import PermanentMailError
+
+    try:
+        sender(row)
+    except Exception as exc:
+        permanent = isinstance(exc, PermanentMailError) or (
+            row.created_at and now - row.created_at > RETRY_WINDOW
         )
-    return {"sent": sent, "failed": failed, "retry": retry, "stale": stale}
+        if not permanent:
+            OutboxMessage.objects.filter(id=row.id).update(error=str(exc)[:500])
+            return "retry"
+        OutboxMessage.objects.filter(id=row.id).update(
+            status=OutboxMessage.Status.FAILED, error=str(exc)[:500]
+        )
+        if marketing:
+            from fleet import outreach
+
+            outreach.on_failed(row, exc)
+        return "failed"
+    OutboxMessage.objects.filter(id=row.id).update(
+        status=OutboxMessage.Status.SENT, sent_at=timezone.now(), error=""
+    )
+    if marketing:
+        from fleet import outreach
+
+        outreach.on_sent(row)
+    return "sent"
 
 
 RETRY_WINDOW = timedelta(days=2)

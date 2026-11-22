@@ -38,6 +38,7 @@ export default defineConfig({
         demo: resolve(__dirname, "demo.html"),
         privacy: resolve(__dirname, "privacy.html"),
         raderaKonto: resolve(__dirname, "radera-konto.html"),
+        avregistrera: resolve(__dirname, "avregistrera.html"),
       },
     },
   },

@@ -442,6 +442,9 @@ const OUTBOX_LABEL = {
   driver_login_code: "Förarens inloggningskod",
   member_invite: "Inbjudan till portalen",
   device_blocked: "Telefon spärrad",
+  outreach_1: "Säljmejl 1",
+  outreach_2: "Säljmejl 2 (påminnelse)",
+  outreach_3: "Säljmejl 3 (sista)",
 };
 
 const LEVEL_TEXT = { ok: "fungerar", warn: "varning", down: "nere", off: "av" };

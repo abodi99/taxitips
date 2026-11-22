@@ -27,6 +27,8 @@ from fleet import crm
 from fleet.models import CrmDeal, CrmDealStage, CrmNote
 
 _ORG_RE = re.compile(r"\D")
+# Flaggor i sales_list.json (ops/crm/enrich_merge.py) som betyder "mejla inte".
+_NO_MAIL = re.compile(r"reklamspärr|avslutad|offentlig beställare", re.I)
 
 # sales_list segment → taggar + startsteg
 SEGMENT_MAP = {
@@ -239,6 +241,17 @@ class Command(BaseCommand):
                         "phone": phone or person.phone,
                         "title": person_title or person.title,
                     })
+
+        # Reklamspärr, nedlagt bolag eller offentlig beställare: adressen får
+        # aldrig säljmejl (fleet/outreach.py). Spärren ligger på adressen och
+        # tas inte bort av en senare import.
+        blocked = [f for f in (row.get("flags") or []) if _NO_MAIL.search(str(f))]
+        if email and blocked:
+            from fleet import outreach
+
+            outreach.suppress(
+                email, outreach.Reason.BLOCKLIST, "; ".join(str(f) for f in blocked)[:500],
+            )
 
         letter = _segment_letter(row.get("segment") or "")
         seg_slug, icp_slug, stage = SEGMENT_MAP.get(
