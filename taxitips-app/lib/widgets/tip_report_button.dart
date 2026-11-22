@@ -48,6 +48,7 @@ class _TipReportDialogState extends State<_TipReportDialog> {
           TextField(
             controller: _controller,
             maxLines: 3,
+            textCapitalization: TextCapitalization.sentences,
             textInputAction: TextInputAction.done,
             decoration: InputDecoration(
               hintText: tr.tipReportHint,

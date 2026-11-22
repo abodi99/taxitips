@@ -555,6 +555,15 @@ class _RecoverDialogState extends State<_RecoverDialog> {
               textDirection: kLtrInputDirection,
               textAlign: ltrInputAlign(context),
               obscureText: _hide,
+              // Lösenordstangentbordet, utan ordförslag; telefonens
+              // lösenordshanterare får föreslå och spara det nya lösenordet.
+              keyboardType: TextInputType.visiblePassword,
+              autocorrect: false,
+              enableSuggestions: false,
+              autofillHints: const [AutofillHints.newPassword],
+              textInputAction: _changeEmail
+                  ? TextInputAction.next
+                  : TextInputAction.done,
               decoration: InputDecoration(
                 labelText: tr.bankIdFlowNewPasswordTitle,
                 helperText: tr.bankIdFlowPasswordHelper,
@@ -585,6 +594,9 @@ class _RecoverDialogState extends State<_RecoverDialog> {
                 textAlign: ltrInputAlign(context),
                 keyboardType: TextInputType.emailAddress,
                 autocorrect: false,
+                enableSuggestions: false,
+                autofillHints: const [AutofillHints.email],
+                textInputAction: TextInputAction.done,
                 decoration: InputDecoration(
                   labelText: tr.bankIdFlowNewEmail,
                   border: const OutlineInputBorder(),

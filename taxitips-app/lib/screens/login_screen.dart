@@ -317,6 +317,10 @@ class _LoginScreenState extends State<LoginScreen> {
                   focusNode: _passwordFocus,
                   enabled: !_busy,
                   obscureText: _hidePassword,
+                  // Lösenordstangentbordet: inga ordförslag eller rättningar.
+                  keyboardType: TextInputType.visiblePassword,
+                  autocorrect: false,
+                  enableSuggestions: false,
                   autofillHints: const [AutofillHints.password],
                   textInputAction: TextInputAction.done,
                   onSubmitted: (_) => _busy ? null : _submit(),

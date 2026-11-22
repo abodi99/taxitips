@@ -530,7 +530,10 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
         content: TextField(
           controller: ctrl,
           autofocus: true,
+          keyboardType: TextInputType.name,
           textCapitalization: TextCapitalization.words,
+          autocorrect: false,
+          textInputAction: TextInputAction.done,
           decoration: InputDecoration(hintText: tr.companySettingsNameHint),
           onSubmitted: (v) => Navigator.pop(ctx, v.trim()),
         ),
@@ -1082,6 +1085,7 @@ class _InviteDriverDialogState extends State<_InviteDriverDialog> {
             autofocus: true,
             keyboardType: TextInputType.emailAddress,
             autocorrect: false,
+            enableSuggestions: false,
             textInputAction: TextInputAction.next,
             decoration: InputDecoration(
               labelText: tr.companySettingsDriverEmail,
@@ -1091,7 +1095,10 @@ class _InviteDriverDialogState extends State<_InviteDriverDialog> {
           const SizedBox(height: 8),
           TextField(
             controller: _name,
+            keyboardType: TextInputType.name,
             textCapitalization: TextCapitalization.words,
+            autocorrect: false,
+            textInputAction: TextInputAction.done,
             onSubmitted: (_) => _send(),
             decoration: InputDecoration(
               labelText: tr.companySettingsDriverNameOptional,
@@ -1146,7 +1153,13 @@ class _AddCarDialogState extends State<_AddCarDialog> {
           TextField(
             controller: _plate,
             autofocus: true,
+            // Registreringsnummer: versaler och siffror, inga ordförslag som
+            // gör "ABC123" till ett ord.
+            keyboardType: TextInputType.text,
             textCapitalization: TextCapitalization.characters,
+            autocorrect: false,
+            enableSuggestions: false,
+            textInputAction: TextInputAction.done,
             onChanged: (_) => setState(() {}),
             decoration: InputDecoration(
               labelText: tr.companySettingsPlateLabel,

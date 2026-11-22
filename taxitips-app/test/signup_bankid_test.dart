@@ -108,6 +108,56 @@ void main() {
     expect(find.text('anna@gmail.com'), findsOneWidget);
   });
 
+  testWidgets('varje fråga får sitt eget tangentbord, och fokus följer med', (
+    tester,
+  ) async {
+    // Förut byttes bara tangentbordstypen på ett och samma fält, och telefonen
+    // behöll det gamla tangentbordet (siffror på e-postfrågan). Nu är varje
+    // fråga ett nytt fält som får fokus direkt.
+    TextField field() => tester.widget<TextField>(find.byType(TextField));
+    Future<void> next() async {
+      await tester.tap(find.text('Nästa'));
+      await tester.pump();
+      await tester.pump();
+    }
+
+    await pump(tester, identity: anna);
+    await tapText(tester, 'Jag äger ett taxibolag');
+    await tester.pump();
+    var f = field();
+    expect(f.keyboardType, TextInputType.text);
+    expect(f.textCapitalization, TextCapitalization.words);
+    expect(f.focusNode!.hasFocus, isTrue);
+    final companyKey = f.key;
+
+    await tester.enterText(find.byType(TextField), 'Annas Taxi');
+    await next();
+    f = field();
+    expect(f.key, isNot(companyKey), reason: 'ett nytt fält per fråga');
+    expect(f.keyboardType, TextInputType.phone);
+    expect(f.autofillHints, contains(AutofillHints.telephoneNumber));
+    expect(f.focusNode!.hasFocus, isTrue);
+    expect(f.scrollPadding.bottom, greaterThanOrEqualTo(200));
+
+    await tester.enterText(find.byType(TextField), '070 812 34 91');
+    await next();
+    f = field();
+    expect(f.keyboardType, TextInputType.emailAddress);
+    expect(f.autocorrect, isFalse);
+    expect(f.enableSuggestions, isFalse);
+    expect(f.focusNode!.hasFocus, isTrue);
+
+    await tester.enterText(find.byType(TextField), 'anna@gmail.com');
+    await next();
+    f = field();
+    expect(f.keyboardType, TextInputType.visiblePassword);
+    expect(f.obscureText, isTrue);
+    expect(f.enableSuggestions, isFalse);
+    expect(f.autofillHints, contains(AutofillHints.newPassword));
+    expect(f.textInputAction, TextInputAction.done);
+    expect(f.focusNode!.hasFocus, isTrue);
+  });
+
   testWidgets('taxibolag: ett steg till, företagets namn', (tester) async {
     await pump(tester, identity: anna);
     await tapText(tester, 'Jag äger ett taxibolag');

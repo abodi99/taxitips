@@ -53,9 +53,10 @@ class SignupScreenState extends State<SignupScreen> {
   final _password = TextEditingController();
   final _phone = TextEditingController();
 
-  /// Ett fält i taget, så en fokusnod räcker. Markören ska stå kvar i fältet
-  /// efter ett fel och flytta in i nästa fält av sig själv.
-  final _fieldFocus = FocusNode();
+  /// En fokusnod per fråga. Markören ska stå kvar i fältet efter ett fel och
+  /// flytta in i nästa fält av sig själv -- med nästa frågas tangentbord.
+  final _focus = {for (final s in SignupStep.values) s: FocusNode()};
+  FocusNode get _fieldFocus => _focus[_step]!;
   BankIdResult? _identity;
 
   /// null = inte valt än, true = kör själv utan företag.
@@ -87,7 +88,9 @@ class SignupScreenState extends State<SignupScreen> {
     _email.dispose();
     _password.dispose();
     _phone.dispose();
-    _fieldFocus.dispose();
+    for (final node in _focus.values) {
+      node.dispose();
+    }
     super.dispose();
   }
 
@@ -439,13 +442,18 @@ class SignupScreenState extends State<SignupScreen> {
     bool obscure = false,
     Widget? suffix,
     TextCapitalization capitalization = TextCapitalization.none,
+    bool suggestions = false,
     bool last = false,
     // Mobil, e-post, lösenord: vänster till höger även på arabiska.
     bool ltr = false,
   }) => TextField(
-    // Samma fält genom alla steg (ingen nyckel per steg): bara innehåll och
-    // tangentbord byts, så markören och tangentbordet följer med till nästa
-    // fråga i stället för att tappas mellan två fält.
+    // Ett nytt fält per fråga (nyckel och fokusnod per steg). Förut byttes
+    // bara tangentbordstypen på ETT fält som behöll fokus, och telefonens
+    // tangentbord (Samsung, Gboard, iOS) byter då inte: siffror stod kvar på
+    // e-postfrågan och bokstäver på mobilfrågan. Ett nytt fält kopplar upp
+    // tangentbordet på nytt med rätt typ; Flutter håller det uppe under bytet,
+    // så det blinkar inte bort mellan frågorna.
+    key: ValueKey(_step),
     controller: controller,
     focusNode: _fieldFocus,
     autofocus: true,
@@ -453,6 +461,11 @@ class SignupScreenState extends State<SignupScreen> {
     keyboardType: keyboard,
     autofillHints: autofill,
     autocorrect: false,
+    enableSuggestions: suggestions,
+    // Fältet, felet under det och Nästa-knappen ska synas ovanför
+    // tangentbordet: iPhones siffertangentbord (mobilfrågan) har ingen
+    // Nästa-tangent, så knappen är enda vägen vidare där.
+    scrollPadding: const EdgeInsets.only(bottom: 220),
     obscureText: obscure,
     textCapitalization: capitalization,
     textDirection: ltr ? kLtrInputDirection : null,
@@ -620,8 +633,11 @@ class SignupScreenState extends State<SignupScreen> {
           label: tr.signupScreenCompanyLabel,
           hint: tr.signupScreenCompanyHint,
           icon: Icons.business_outlined,
+          keyboard: TextInputType.text,
           autofill: const [AutofillHints.organizationName],
           capitalization: TextCapitalization.words,
+          // Ett firmanamn är vanliga ord: förslagen hjälper.
+          suggestions: true,
         ),
       ],
       SignupStep.phone => [
@@ -659,6 +675,9 @@ class SignupScreenState extends State<SignupScreen> {
           label: tr.signupScreenPasswordLabel,
           icon: Icons.lock_outline,
           obscure: _hidePassword,
+          // Lösenordstangentbordet: inga ordförslag, ingen autokorrigering,
+          // och telefonens lösenordshanterare kan föreslå ett starkt lösenord.
+          keyboard: TextInputType.visiblePassword,
           autofill: const [AutofillHints.newPassword],
           last: true,
           suffix: PasswordVisibilityButton(
