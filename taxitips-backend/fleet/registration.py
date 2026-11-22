@@ -22,8 +22,8 @@ enskild firma -- eller inte svarar. Ett avregistrerat bolag får inget konto.
 **Vad som INTE bevisas.** Ett organisationsnummer och en e-post är inte bevis
 på att personen får företräda bolaget (§7). Profilen börjar därför som
 obekräftad och syns så i adminwebben; provet har samma gränser som annars
-(en bil, 7 dagar, ett prov per organisationsnummer och 24 månader), och
-provet visar bara tåg och buss (fleet/features.py).
+(en bil, 30 dagar, ett prov per organisationsnummer och 24 månader), och
+provet visar alla kategorier (fleet/features.py).
 """
 
 from __future__ import annotations

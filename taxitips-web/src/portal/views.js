@@ -667,15 +667,15 @@ const CATEGORY_TEXT = {
   road: ["Trafikolyckor", ""],
 };
 const ALL_CATEGORIES = ["transit", "flight", "ferry", "events", "road"];
-const TRIAL_CATEGORIES = ["transit"];
+// Provmånaden visar allt sedan 2026-11-22 (var bara "transit").
+const TRIAL_CATEGORIES = ALL_CATEGORIES;
 
 const inTrial = (trial) => Boolean(trial && ["pending", "active"].includes(trial.status));
 
 /**
  * Vad bolaget ser i appen just nu. Servern avgör (fleet/features.py). Skickar
  * GET /api/fleet/company med `features` används det rakt av; annars läses det
- * ur provets läge med samma regel: ett pågående prov utan sparat kort ser tåg
- * och buss, allt annat ser allt.
+ * ur provets läge med samma regel (TRIAL_CATEGORIES, i dag allt).
  */
 function membershipPlan(data) {
   const f = data.features;
@@ -730,6 +730,7 @@ function featuresSection(data, stage) {
     </div>`;
   }
   const heading = {
+    trial: "Allt ingår i provmånaden",
     trial_committed: "Allt är upplåst redan nu",
     member: "Det här ingår",
   }[stage] ?? "Det här ingår i platsen";

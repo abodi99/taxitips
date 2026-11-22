@@ -705,14 +705,23 @@ def _access_summary(company_id, now) -> dict:
     }
 
 
+def _trial_days(trial) -> int:
+    if trial.started_at and trial.ends_at:
+        seconds = (trial.ends_at - trial.started_at).total_seconds()
+        # Avrundat: ett prov som förlängts mitt på dygnet är fortfarande "30 dagar".
+        return max(1, round(seconds / 86400))
+    return trial.planned_days or trials.TRIAL_DAYS
+
+
 def _trial_payload(trial, company_id) -> dict:
     commit = commerce.trial_commit_status(company_id)
     return {
         "status": trial.status,
-        # Provets längd i dagar, för välkomsten i appen innan klockan startat.
-        # Tomt betyder standardlängden -- samma regel som när provet startar
-        # (fleet/trials.py: `trial.planned_days or TRIAL_DAYS`).
-        "plannedDays": trial.planned_days or trials.TRIAL_DAYS,
+        # Provets längd i dagar. Innan klockan startat: samma regel som när
+        # provet startar (fleet/trials.py: `trial.planned_days or TRIAL_DAYS`).
+        # Ett pågående prov räknas från start och slut, så att ett förlängt prov
+        # (extend_trial flyttar bara ends_at) visar sin verkliga längd.
+        "plannedDays": _trial_days(trial),
         "startedAt": trial.started_at.isoformat() if trial.started_at else None,
         "endsAt": trial.ends_at.isoformat() if trial.ends_at else None,
         "vehicleLimit": trial.vehicle_limit,

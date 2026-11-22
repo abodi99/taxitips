@@ -298,7 +298,7 @@ class SalesInvite(models.Model):
 
 class Trial(models.Model):
     """
-    Provperioden. 7 dagar, en provbil (tre när en säljare lagt upp det), högst
+    Provperioden. 30 dagar (TRIAL_DAYS), en provbil (tre när en säljare lagt upp det), högst
     en per företag per 24 månader.
 
     `org_key` är land+organisationsnummer och är det som spärren räknar på.
@@ -337,7 +337,7 @@ class Trial(models.Model):
     status = models.CharField(max_length=16, choices=Status.choices, default=Status.PENDING)
     # En bil (fleet/trials.TRIAL_VEHICLE_LIMIT). Fler bara manuellt i admin.
     vehicle_limit = models.IntegerField(default=1)
-    # Säljaren kan sätta längre prov än standard (7 dagar). Gäller när klockan
+    # Säljaren kan sätta längre prov än standard (TRIAL_DAYS, 30 dagar). Gäller när klockan
     # startar (`fleet.trials.start_trial`), inte vid självregistrering.
     planned_days = models.IntegerField(null=True, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)

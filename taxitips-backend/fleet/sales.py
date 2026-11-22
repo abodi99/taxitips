@@ -6,7 +6,7 @@ Säljflödet: det en säljare gör i adminwebben under ett samtal med ett taxibo
    (Luhn) och får bara finnas en gång -- ett andra konto för samma bolag hade
    gett ett andra gratisprov och två sanningar om vem som betalar.
 2. **Starten** blir ett av tre:
-   * ett kortfritt prov i 7 dagar med högst tre platser (en vid självregistrering) (`start_trial`), under
+   * ett kortfritt prov i 30 dagar med högst tre platser (en vid självregistrering) (`start_trial`), under
      samma regler som självregistreringen: ett prov per organisationsnummer
      och 24 månader;
    * en kupong (`redeem_coupon`), se `fleet.models.Coupon`;
@@ -438,7 +438,7 @@ def start_trial(
     now=None,
 ) -> Trial:
     """
-    Kortfritt prov i 7 dagar (trials.TRIAL_DAYS, samma för alla), eller fler
+    Kortfritt prov i 30 dagar (trials.TRIAL_DAYS, samma för alla), eller fler
     provbilar i ett pågående prov. Mer tid ges som förlängning (extend_trial).
 
     Samma regler som självregistreringen: ett prov per organisationsnummer och

@@ -1,11 +1,14 @@
 """
-Vad ett företag får SE: provet visar bara tåg och buss, betalningen öppnar resten.
+Vad ett företag får SE: provet och en betald period visar allt; ett manuellt
+beviljande kan välja kategorier.
 
-**Varför provet är smalt.** Provet ska ge en smak av appen -- nog för att
-föraren ser att tipsen stämmer -- men inte hela produkten gratis i sju
-dagar. Tåg & buss är kärnan (inställda tåg, sista avgången) och det som
-säljer; väg, flyg, färjor och evenemang syns som låsta kategorier med antal,
-så att föraren ser vad som finns bakom.
+**Provet visar allt** (ägarens beslut 2026-11-22). Förut visade provet bara tåg
+och buss i sju dagar, med väg, flyg, färjor och evenemang som låsta kategorier.
+Nu är provet en månad med alla kategorier: föraren ska hinna se vad hela
+produkten ger innan hen bestämmer sig. Planen heter fortfarande "trial", så
+att appens provvy och flödets ETag skiljer provet från en betald period, men
+`TRIAL_CATEGORIES` är alla kategorier och låser ingenting. Vill man smalna av
+provet igen räcker det att ändra `TRIAL_CATEGORIES`; låset sitter kvar.
 
 **Vad som öppnar allt.** En betald period i vilken form som helst: ett
 abonnemang, betalningsfristen, en kupongs gratisdagar, och ett prov där
@@ -41,7 +44,8 @@ from django.utils import timezone
 # notisinställningarna (core/notify.CATEGORY_CATALOG), plus evenemangen, som
 # har en egen vy och inte är tips.
 ALL_CATEGORIES = ("transit", "road", "flight", "ferry", "events")
-TRIAL_CATEGORIES = ("transit",)
+# Allt sedan 2026-11-22 (var bara "transit").
+TRIAL_CATEGORIES = ALL_CATEGORIES
 
 LOCKED_REASON = "feature_locked"
 # Visas i appen: neutral, utan pris eller väg till köp (App Store 3.1.1,
@@ -128,8 +132,7 @@ def _for_grant(company_id, now) -> Features:
     ta något ifrån ett bolag som ändå har en period: ett betalande bolag som
     ger en extra person "bara tåg och buss" ska inte tappa resten för alla
     sina förare. Perioden bakom beviljandet prövas därför, och dess
-    kategorier läggs till (FULL för en betald period, tåg och buss för ett
-    pågående prov).
+    kategorier läggs till (FULL för en betald period, allt för ett pågående prov sedan 2026-11-22).
     """
     from fleet import grants
 

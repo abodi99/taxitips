@@ -266,7 +266,7 @@ class SignupScreenState extends State<SignupScreen> {
   );
 
   List<Widget> _bankIdStep() => [
-    _title('Prova gratis i 7 dagar'),
+    _title('Prova gratis i en månad'),
     const SizedBox(height: 20),
     _promises(),
     const SizedBox(height: 24),

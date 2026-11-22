@@ -867,7 +867,15 @@ class _CompanySettingsPanelState extends State<CompanySettingsPanel> {
         ],
         if (_trialOpen && trial?['cardOnFile'] != true) ...[
           const SizedBox(height: 12),
-          _TrialIncludesNote(endsAt: trial?['endsAt']?.toString()),
+          _TrialIncludesNote(
+            endsAt: trial?['endsAt']?.toString(),
+            // Provmånaden låser inget (2026-11-22). Saknas listan (äldre
+            // server) gäller den gamla texten om lås.
+            anyLocked: switch (_data?['features']?['locked']) {
+              final List<dynamic> l => l.isNotEmpty,
+              _ => true,
+            },
+          ),
         ],
         const SizedBox(height: 20),
         const SettingsGroupLabel('Bilar'),
@@ -1152,9 +1160,10 @@ class _AddCarDialogState extends State<_AddCarDialog> {
 /// som ingår står inte här -- det är serverns (`features`), och i appen syns
 /// det som ett lås.
 class _TrialIncludesNote extends StatelessWidget {
-  const _TrialIncludesNote({this.endsAt});
+  const _TrialIncludesNote({this.endsAt, this.anyLocked = true});
 
   final String? endsAt;
+  final bool anyLocked;
 
   @override
   Widget build(BuildContext context) {
@@ -1165,6 +1174,12 @@ class _TrialIncludesNote extends StatelessWidget {
               '${until.year}-'
               '${until.month.toString().padLeft(2, '0')}-'
               '${until.day.toString().padLeft(2, '0')}. ';
+    if (!anyLocked) {
+      return _InfoNote(
+        icon: Icons.info_outline,
+        text: '${date}Allt i appen ingår under provet. $kMembershipOnWeb',
+      );
+    }
     return _InfoNote(
       icon: Icons.lock_outline,
       text:

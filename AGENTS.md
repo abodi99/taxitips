@@ -379,9 +379,10 @@ ett spärrat konto får inte. Svaret blir en notis (`send_support_reply_push`,
 förbi förarens notisfilter). Olästa räknas mot `customer_read_at`/`staff_read_at`,
 inga räknare. Tabellerna är stängda för PostgREST (migration 0006).
 
-**Provet** (2026-09-29): självregistrering ger EN bil och visar bara tåg och
-buss (`fleet/features.py`, låset sitter på servern i varje väg som lämnar ut
-data). Registreringen stoppar påhittade uppgifter (`fleet/signup_checks.py`:
+**Provet** (2026-11-22): en månad (`trials.TRIAL_DAYS = 30`), EN bil, ett
+län, och allt syns (`fleet/features.TRIAL_CATEGORIES = ALL_CATEGORIES`; låset
+sitter kvar på servern i varje väg som lämnar ut data, om provet smalnas av
+igen). Mellan 2026-09-29 och 2026-11-22 var provet 7 dagar och bara tåg och buss. Registreringen stoppar påhittade uppgifter (`fleet/signup_checks.py`:
 svenskt mobilnummer, ett prov per nummer, riktigt personnummer, bolag som
 Bolagsverket känner till) och flaggar resten för säljaren under **Uppföljning**
 i adminwebben (`fleet/admin_followup.py`). Detaljer: `docs/fleet-abonnemang.md` §7, §9c.

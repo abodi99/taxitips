@@ -77,7 +77,7 @@ def can_receive(device, snapshot: dict | None = None, *, now=None) -> Verdict:
                 False, "account_paused" if stop == AccountBlock.Kind.USER_PAUSE else "account_blocked"
             )
     if window.reason in ("trial", "free_grant") and snapshot:
-        # Provet ser bara tåg och buss, och ett beviljande kan ha valda
+        # Provet ser allt sedan 2026-11-22 (TRIAL_CATEGORIES), och ett beviljande kan ha valda
         # kategorier (fleet/features.py). En notis om ett låst tips hade
         # lämnat ut just det som perioden inte omfattar.
         from fleet import features

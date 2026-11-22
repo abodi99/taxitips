@@ -11,10 +11,11 @@ from fleet.tests.test_sales import SalesTestCase
 
 
 class TrialExtendTests(SalesTestCase):
-    def test_a_trial_is_always_seven_days_when_it_starts(self):
+    def test_a_trial_is_always_trial_days_when_it_starts(self):
         """
-        Ägarens beslut 2026-10-03: provet är 7 dagar för alla. Ett säljarprov
-        hade fått 14; mer tid är en förlängning med skäl, inte en annan start.
+        Ägarens beslut 2026-10-03: provet är lika långt för alla (TRIAL_DAYS,
+        30 dagar sedan 2026-11-22). Ett säljarprov hade fått 14; mer tid är en
+        förlängning med skäl, inte en annan start.
         """
         company = self.new_company()
         refused = self.post(

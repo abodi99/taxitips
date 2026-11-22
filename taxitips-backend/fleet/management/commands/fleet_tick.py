@@ -106,14 +106,13 @@ class Command(BaseCommand):
                 )
             report["trials_warned"] += 1
 
-        # 3b) Tidig påminnelse om saknat kort (~dag 3 av provet).
-        card_nudge_from = now - timedelta(days=4)
-        card_nudge_to = now - timedelta(days=2)
+        # 3b) Tidig påminnelse om saknat kort, en vecka före provslut. Förut
+        # "~dag 3 av provet", när provet var sju dagar; med en provmånad
+        # (2026-11-22) hade den kommit 27 dagar för tidigt.
         for trial in Trial.objects.filter(
             status=Trial.Status.ACTIVE,
-            started_at__lte=card_nudge_to,
-            started_at__gte=card_nudge_from,
             ends_at__gt=now + timedelta(days=3),
+            ends_at__lte=now + timedelta(days=7),
         ):
             if not dry:
                 status = commerce.trial_commit_status(trial.company_id)

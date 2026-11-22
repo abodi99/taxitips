@@ -328,7 +328,7 @@ def order_cancel(request, order_id):
 @require_POST
 @handle
 def start_trial(request, company_id):
-    """POST /api/admin/companies/<id>/trial {"vehicles": [...]} -- alltid 7 dagar (fleet/trials.py)."""
+    """POST /api/admin/companies/<id>/trial {"vehicles": [...]} -- alltid TRIAL_DAYS, 30 dagar (fleet/trials.py)."""
     principal = _staff(request, Perm.ADMIN_SELL)
     body = _body(request)
     company = _company_or_404(company_id)

@@ -153,7 +153,7 @@ class WelcomeScreen extends StatelessWidget {
                               ),
                             ),
                             const Text(
-                              'Gratis i 7 dagar. Inget kort.',
+                              'Gratis i en månad. Allt ingår. Inget kort.',
                               textAlign: TextAlign.center,
                               style: TextStyle(
                                 color: Colors.white60,

@@ -50,7 +50,7 @@ from billing.models import Device, ProcessedWebhookEvent
 from core import notify
 from core.models import PushDelivery, SeverityTier
 from core.test_notify import opportunity
-from fleet import access, auth_admin, bolagsverket, push_gate
+from fleet import access, auth_admin, bolagsverket, features, push_gate
 from fleet.models import (
     DriverInvite,
     License,
@@ -285,7 +285,7 @@ class FullCustomerChainTests(ChainBase):
         self.assertEqual(trial.status, Trial.Status.ACTIVE)
         self.assertEqual(trial.vehicle_limit, 1)
         self.assertAlmostEqual(
-            (trial.ends_at - trial.started_at).total_seconds(), timedelta(days=7).total_seconds(), delta=5,
+            (trial.ends_at - trial.started_at).total_seconds(), timedelta(days=30).total_seconds(), delta=5,
         )
         # Välkomstmejlet med vägen till portalen.
         welcome = self.outbox("trial_started")
@@ -301,8 +301,9 @@ class FullCustomerChainTests(ChainBase):
         self.assertTrue(seat["trial"])
         overview = self.ok(self.call("get", "/api/fleet/company", user=owner, email=OWNER_EMAIL))
         self.assertEqual(overview["features"]["plan"], "trial")
-        self.assertEqual(overview["features"]["categories"], ["transit"])
-        self.assertNotIn("betal", overview["features"]["lockedMessage"].lower())
+        # Provmånaden visar allt (2026-11-22).
+        self.assertEqual(overview["features"]["categories"], list(features.ALL_CATEGORIES))
+        self.assertEqual(overview["features"]["locked"], [])
 
         # ------------------------------------------------------------------
         # 2. Inloggning: JWT-vägen och telefonens enhetsnyckel
@@ -326,19 +327,18 @@ class FullCustomerChainTests(ChainBase):
         self.assertFalse(self.ok(self.call("get", "/api/alerts"))["entitled"])
 
         # ------------------------------------------------------------------
-        # 4. Notiser under provet: länet, inget utanför, bara tåg och buss
+        # 4. Notiser under provet: länet, inget utanför, alla kategorier
         # ------------------------------------------------------------------
         skane = self.tip("12")
         self.tip("01")  # Stockholm: utanför platsens län
-        self.tip("12", kind="ferry", mode="ferry")
-        self.tip("12", kind="flight", mode="flight")
+        ferry = self.tip("12", kind="ferry", mode="ferry")
+        flight = self.tip("12", kind="flight", mode="flight")
         self.push_cycle()
-        self.assertEqual(self.pushed(owner_device), {str(skane.id)})
+        self.assertEqual(self.pushed(owner_device), {str(skane.id), str(ferry.id), str(flight.id)})
         locked = PushDelivery.objects.filter(
             device_id=owner_device.id, status=PushDelivery.Status.SUPPRESSED,
         ).values_list("error", flat=True)
-        self.assertTrue(any("trial_category_locked:ferry" in e for e in locked), list(locked))
-        self.assertTrue(any("trial_category_locked:flight" in e for e in locked), list(locked))
+        self.assertFalse(any("trial_category_locked" in e for e in locked), list(locked))
 
         # ------------------------------------------------------------------
         # 5. Provet tar slut

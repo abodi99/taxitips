@@ -223,10 +223,9 @@ def _offer_lines(offer: dict | None) -> str:
 # Vad provet visar och vad abonnemanget lägger till (fleet/features.py). Står i
 # mejlen och aldrig som köpknapp i appen (docs/fleet-abonnemang.md §9c).
 _TRIAL_SCOPE = (
-    "Under provet visar appen tåg och buss i platsens län: inställda tåg, sista "
-    "avgången och ersättningstrafik. Med abonnemang får förarna också flyg (ankomster), "
-    "färjor, evenemang (när publiken går hem) och trafikolyckor, och platserna kan ha "
-    "fler län.\n"
+    "Under provmånaden ingår allt i platsens län: tåg och buss (inställda tåg, sista "
+    "avgången, ersättningstrafik), flyg (ankomster), färjor, evenemang (när publiken "
+    "går hem) och trafikolyckor. Med abonnemang kan platserna också ha fler län.\n"
 )
 
 
@@ -277,10 +276,9 @@ def trial_started(company_id, to_address: str, trial) -> OutboxMessage | None:
             "under Platser i kundportalen. Föraren får ett mejl, väljer ett lösenord och "
             "loggar in i appen med e-post och lösenord -- platsen och länet har ni redan valt.\n"
             "2. Kör ni själva: \"Kör bilen själv med den här telefonen\".\n\n"
-            "För att fortsätta efter provet: bekräfta platserna och spara kort i kundportalen. "
-            "Då dras första betalningen automatiskt när provet tar slut. Utan sparat kort "
-            "stängs åtkomsten utan debitering.\n\n"
-            f"Spara kort här: {portal_url('fortsatt')}\n"
+            "För att fortsätta efter provet: bekräfta platserna och betala med kort i "
+            "kundportalen. Gör ni inget stängs tipsen när provet slutar, och inget dras.\n\n"
+            f"Fortsätt här: {portal_url('fortsatt')}\n"
             + _SIGNATURE
         ),
         key_parts=(company_id, trial.id),
@@ -307,7 +305,7 @@ def _continue_sms(company_id, trial, stage: str, text: str, link: str) -> bool:
         phone = signup_checks.normalize_phone(getattr(profile, "contact_phone", ""))
         if not phone:
             return False
-        key = f"fleet:sms:{dedupe_key('continue_sms', company_id, trial.id, stage)}"
+        key = f"fleet:sms:{dedupe_key('continue_sms', company_id, trial.id, stage, _ends_key(trial))}"
         if not cache.add(key, 1, 60 * 24 * 3600):
             return False
         if sms.send(phone, f"{text} {link}"):
@@ -316,6 +314,26 @@ def _continue_sms(company_id, trial, stage: str, text: str, link: str) -> bool:
     except Exception:
         log.exception("fleet.notifications: SMS-påminnelsen fallerade")
     return False
+
+
+def _ends_key(trial) -> str:
+    return f"{trial.ends_at:%Y%m%d}" if trial.ends_at else ""
+
+
+def _legacy_reminder(company_id, trial, stage: str) -> OutboxMessage | None:
+    """
+    En påminnelse köad med den gamla nyckeln (utan slutdatum, före 2026-11-22)
+    för SAMMA slut. Utan den kollen hade varje prov nära sitt slut fått samma
+    påminnelse en gång till dagen nyckeln byttes. En gammal rad som köades
+    långt före det nuvarande slutet gällde ett tidigare slutdatum (provet har
+    förlängts) och stoppar inget.
+    """
+    row = OutboxMessage.objects.filter(
+        dedupe_key=dedupe_key("trial_ending", company_id, trial.id, stage)
+    ).first()
+    if row is None or not trial.ends_at:
+        return None
+    return row if row.created_at > trial.ends_at - timedelta(days=8) else None
 
 
 def trial_ending(company_id, to_address: str, trial, *, stage: str = "3d") -> OutboxMessage | None:
@@ -355,16 +373,21 @@ def trial_ending(company_id, to_address: str, trial, *, stage: str = "3d") -> Ou
             + _SHORT_SIGNATURE
         )
     # Mejlets dubblettnyckel är det hållbara skyddet mot dubbla SMS: cachen
-    # kan vara processlokal, och fleet_tick körs varje timme.
+    # kan vara processlokal, och fleet_tick körs varje timme. Slutdatumet ingår
+    # i nyckeln: ett förlängt prov får sina påminnelser igen före det nya slutet.
+    key_parts = (company_id, trial.id, stage, _ends_key(trial))
+    legacy = _legacy_reminder(company_id, trial, stage)
+    if legacy is not None:
+        return legacy
     fresh = not OutboxMessage.objects.filter(
-        dedupe_key=dedupe_key("trial_ending", company_id, trial.id, stage)
+        dedupe_key=dedupe_key("trial_ending", *key_parts)
     ).exists()
     row = queue(
         category="trial_ending", company_id=company_id, to_address=to_address,
         subject=subject,
         body=body,
         payload={"stage": stage, "offer": offer or {}},
-        key_parts=(company_id, trial.id, stage),
+        key_parts=key_parts,
     )
     # Bara sista dygnet för den som inte sparat kort: med sparat kort ("1d")
     # fortsätter abonnemanget av sig självt, och "Fortsätt här" vore missvisande.

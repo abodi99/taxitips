@@ -259,15 +259,20 @@ avtal i efterhand, och `seed_pricing` varnar om den saknas.
 
 ## 7. Prov
 
-* 7 dagar, **en provbil** vid självregistrering (tre när en säljare lagt upp
-  provet, `trials.vehicle_limit_for`), ett län per provbil vid
-  självregistrering, högst **en gratisperiod per företag per 24 månader**.
-* **Provet visar bara tåg och buss** (`fleet/features.py`, beslut 2026-09-29).
-  Väg, flyg, färjor och evenemang syns som låsta kategorier med antal tips,
-  men lämnas aldrig ut: flödet, detaljvyn, favoriterna, `/api/ferries`,
-  `/api/events` och notiserna (`push_gate`) filtrerar på servern. Allt öppnas
-  av en betald period, av ett prov där kunden sparat kort
-  (`commerce.has_active_trial_commit`) och av en kupong.
+* **30 dagar** (en månad, ägarens beslut 2026-11-22; var 7), **en provbil**
+  (`trials.vehicle_limit_for`), ett län per provbil vid självregistrering,
+  högst **en gratisperiod per företag per 24 månader**. Prov som pågick
+  2026-11-22 förlängdes till start + 30 dagar med
+  `manage.py extend_running_trials --apply`.
+* **Provet visar allt** (`fleet/features.py`, `TRIAL_CATEGORIES =
+  ALL_CATEGORIES` sedan 2026-11-22; 2026-09-29 -- 2026-11-22 bara tåg och
+  buss). Låset finns kvar: ändras `TRIAL_CATEGORIES` syns resten som låsta
+  kategorier med antal tips och lämnas aldrig ut (flödet, detaljvyn,
+  favoriterna, `/api/ferries`, `/api/events` och notiserna via `push_gate`).
+  Ett manuellt beviljande med valda kategorier låser fortfarande.
+* Påminnelser: en vecka före slut om kort saknas, tre dagar före och sista
+  dygnet (`fleet_tick`). Utkorgens nyckel bär slutdatumet, så ett förlängt prov
+  påminns igen före sitt nya slut.
 * Spärren räknar på `land + normaliserat organisationsnummer`, inte på
   company_id, e-post, telefon, Stripe-kund eller administratör — alla fem går
   att byta på en eftermiddag.
@@ -401,7 +406,7 @@ i `taxitips-web/src/admin/sales.js`. Testat i `fleet/tests/test_sales.py`.
 | Steg | Vem | Regel |
 |---|---|---|
 | Lägga upp företag | säljare | Namn, kontakt, e-post och telefon räcker; **orgnr är valfritt** (2026-11-10). Med orgnr: Luhn, Bolagsverket, en gång per orgnr och dokumenterad kontroll av kontaktpersonen (`verification_note`). Utan: orgnr krävs före första beställningen (`company_details.require_company_details`, även i admin) och sätts med `POST /api/admin/companies/<id>/org-number`. `companies.status = inactive` — den nya modellen styr. |
-| Prov | säljare | 7 dagar, antal platser väljs av säljaren (utan regnr går bra), ett per orgnr och 24 månader (utan orgnr: ett per kontaktens e-post, plus mobilnumret mot andra bolags prov), startar vid första telefonen. Extra län ingår inte. Bara tåg och buss syns (§7). |
+| Prov | säljare | 30 dagar (TRIAL_DAYS), antal platser väljs av säljaren (utan regnr går bra), ett per orgnr och 24 månader (utan orgnr: ett per kontaktens e-post, plus mobilnumret mot andra bolags prov), startar vid första telefonen. Extra län ingår inte. Allt syns (§7). |
 | Kupong | admin skapar, säljare löser in | Utan betalande abonnemang: tillfällig åtkomst (`Trial.source = coupon`, startar direkt). Med abonnemang i Stripe: nästa debitering flyttas (`trial_end`). Betalt utanför Stripe: perioden förlängs. En gång per bolag och kupong. |
 | Beställning | säljare | Offert först, kundens godkännande intygat. Betalning **bara via Stripe**: kort (betallänk) eller Stripe-faktura. Utan Stripe i miljön vägras beställningen innan något sparas. |
 | ~~Markera betald utanför Stripe~~ | -- | **Borttaget 2026-09-26.** All betalning går genom Stripe, så att varje betalning som gett åtkomst har en faktura att stämma av mot. |

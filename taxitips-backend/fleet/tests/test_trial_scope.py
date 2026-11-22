@@ -1,6 +1,7 @@
 """
 Provet: kontrollerna vid registreringen (fleet/signup_checks.py), att provet
-bara visar tåg och buss (fleet/features.py), och säljarens uppföljning
+visar allt (fleet/features.py, sedan 2026-11-22) men att låset fortfarande
+fungerar om provet smalnas av igen, och säljarens uppföljning
 (fleet/admin_followup.py).
 """
 
@@ -182,7 +183,11 @@ class RegistrationRulesTests(FleetTestCase):
 
 
 class TrialScopeTests(FleetTestCase):
-    """Ett prov visar tåg och buss. Resten syns som låst, och lämnas aldrig ut."""
+    """
+    Provmånaden visar allt (2026-11-22). Låset finns kvar: smalnas provet av
+    igen (`TRIAL_CATEGORIES`) syns resten som låst och lämnas aldrig ut. De
+    testerna kör med ett avsmalnat prov, `narrowed()`.
+    """
 
     def setUp(self):
         super().setUp()
@@ -212,18 +217,44 @@ class TrialScopeTests(FleetTestCase):
     def get(self, path, **params):
         return self.client.get(path, params, headers={"x-device-token": self.secret})
 
-    def test_the_feed_shows_train_and_bus_and_counts_the_rest(self):
+    def test_the_trial_month_shows_everything(self):
+        self.assertEqual(set(features.TRIAL_CATEGORIES), set(features.ALL_CATEGORIES))
+        self.assertEqual(trials.TRIAL_DAYS, 30)
         body = self.get("/api/alerts", **MALMO).json()
+        self.assertEqual(
+            {a["title"] for a in body["alerts"]},
+            {"Inställt tåg", "Tre plan landar", "Färjan lägger till"},
+        )
+        self.assertEqual(body["features"]["plan"], "trial")
+        self.assertEqual(body["features"]["locked"], [])
+        self.assertEqual(self.get(f"/api/opportunities/{self.flight.id}").status_code, 200)
+        self.assertNotEqual(self.get("/api/ferries", **MALMO).json().get("reason"), features.LOCKED_REASON)
+        self.assertNotEqual(self.get("/api/events", **MALMO).json().get("reason"), features.LOCKED_REASON)
+
+    def test_the_trial_month_gets_notifications_for_every_category(self):
+        from core import notify
+
+        self.assertTrue(can_receive(self.device, notify.snapshot_of(self.flight)).ok)
+        self.assertTrue(can_receive(self.device, notify.snapshot_of(self.ferry)).ok)
+
+    def narrowed(self):
+        """Ett prov som bara visar tåg och buss, som före 2026-11-22."""
+        return mock.patch.object(features, "TRIAL", features.Features(("transit",), "trial"))
+
+    def test_a_narrowed_feed_shows_train_and_bus_and_counts_the_rest(self):
+        with self.narrowed():
+            body = self.get("/api/alerts", **MALMO).json()
         self.assertEqual([a["title"] for a in body["alerts"]], ["Inställt tåg"])
         self.assertEqual(body["features"]["plan"], "trial")
         self.assertEqual(body["features"]["hiddenCounts"], {"flight": 1, "ferry": 1})
         self.assertIn("events", body["features"]["locked"])
 
-    def test_the_history_shows_train_and_bus_and_counts_the_rest(self):
+    def test_a_narrowed_history_shows_train_and_bus_and_counts_the_rest(self):
         ended = timezone.now() - timedelta(hours=2)
         tip(kind="flight", mode="flight", title="Planen som landade", end_time=ended)
         tip(title="Tåget som ställdes in", end_time=ended)
-        body = self.get("/api/alerts/history", **MALMO).json()
+        with self.narrowed():
+            body = self.get("/api/alerts/history", **MALMO).json()
         self.assertEqual(
             {a["title"] for a in body["alerts"]}, {"Inställt tåg", "Tåget som ställdes in"},
         )
@@ -231,21 +262,24 @@ class TrialScopeTests(FleetTestCase):
         self.assertEqual(body["features"]["hiddenCounts"], {"flight": 2, "ferry": 1})
 
     def test_a_direct_link_to_a_locked_tip_is_refused(self):
-        response = self.get(f"/api/opportunities/{self.flight.id}")
-        self.assertEqual(response.status_code, 403)
-        self.assertEqual(response.json()["error"], features.LOCKED_REASON)
-        self.assertEqual(self.get(f"/api/opportunities/{self.train.id}").status_code, 200)
+        with self.narrowed():
+            response = self.get(f"/api/opportunities/{self.flight.id}")
+            self.assertEqual(response.status_code, 403)
+            self.assertEqual(response.json()["error"], features.LOCKED_REASON)
+            self.assertEqual(self.get(f"/api/opportunities/{self.train.id}").status_code, 200)
 
-    def test_ferries_and_events_are_locked(self):
-        self.assertEqual(self.get("/api/ferries", **MALMO).json()["reason"], features.LOCKED_REASON)
-        self.assertEqual(self.get("/api/events", **MALMO).json()["reason"], features.LOCKED_REASON)
+    def test_narrowed_ferries_and_events_are_locked(self):
+        with self.narrowed():
+            self.assertEqual(self.get("/api/ferries", **MALMO).json()["reason"], features.LOCKED_REASON)
+            self.assertEqual(self.get("/api/events", **MALMO).json()["reason"], features.LOCKED_REASON)
 
     def test_no_notification_about_a_locked_tip(self):
         from core import notify
 
-        verdict = can_receive(self.device, notify.snapshot_of(self.flight))
-        self.assertEqual(verdict.reason, "trial_category_locked:flight")
-        self.assertTrue(can_receive(self.device, notify.snapshot_of(self.train)).ok)
+        with self.narrowed():
+            verdict = can_receive(self.device, notify.snapshot_of(self.flight))
+            self.assertEqual(verdict.reason, "trial_category_locked:flight")
+            self.assertTrue(can_receive(self.device, notify.snapshot_of(self.train)).ok)
 
     def test_a_customer_who_committed_during_the_trial_sees_everything(self):
         with mock.patch.object(commerce, "has_active_trial_commit", return_value=True):
@@ -265,7 +299,8 @@ class TrialScopeTests(FleetTestCase):
         self.assertTrue(features.for_company(self.company.id).full)
 
     def test_the_trial_and_the_paid_feed_never_share_an_etag(self):
-        trial_etag = self.get("/api/alerts", **MALMO)["ETag"]
+        with self.narrowed():
+            trial_etag = self.get("/api/alerts", **MALMO)["ETag"]
         with mock.patch.object(commerce, "has_active_trial_commit", return_value=True):
             full = self.client.get(
                 "/api/alerts", MALMO, headers={"x-device-token": self.secret, "if-none-match": trial_etag},

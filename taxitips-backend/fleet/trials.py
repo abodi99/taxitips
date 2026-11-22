@@ -1,11 +1,10 @@
 """
-Provperioden: 7 dagar, EN provbil vid självregistrering (tre när en säljare
-lagt upp provet), högst en gratisperiod per företag under 24 månader.
+Provperioden: 30 dagar (en månad, ägarens beslut 2026-11-22; var 7), EN
+provbil, högst en gratisperiod per företag under 24 månader.
 
-**Varför en bil.** Provet ska ge en smak, inte driva en hel bilpark gratis i
-två veckor. En säljare som pratat med kunden får ge fler -- det är en
-människa som bedömt att bolaget är riktigt. Vad provet får SE står i
-fleet/features.py (bara tåg och buss).
+**Varför en bil.** Provet ska låta en förare prova allt, inte driva en hel
+bilpark gratis. Fler bilar är ett manuellt beslut av personalen i admin. Vad
+provet får SE står i fleet/features.py (allt, sedan 2026-11-22).
 
 **Vad spärren räknar på.** `Trial.org_key` = land + normaliserat
 organisationsnummer. Inte company_id: ett nytt bolagskonto med samma
@@ -37,7 +36,7 @@ from django.utils import timezone
 from fleet import audit, orgnr
 from fleet.models import License, SalesInvite, Trial
 
-TRIAL_DAYS = 7
+TRIAL_DAYS = 30
 TRIAL_VEHICLE_LIMIT = 1
 # Prov som en säljare lagt upp efter ett samtal (Trial.Source.SALES/SALES_INVITE).
 # En bil, som alla andra prov (ägarens beslut 2026-10-03; var tre). Fler bilar
@@ -48,8 +47,8 @@ SALES_TRIAL_VEHICLE_LIMIT = TRIAL_VEHICLE_LIMIT
 TRIAL_COOLDOWN_MONTHS = 24
 INVITE_VALID_DAYS = 7
 # Fler bilar i ett prov är ett manuellt beslut av personalen i admin (ägarens
-# beslut 2026-10-04: ny registrering får 1 bil, 7 dagar, ett län och tåg & buss;
-# mer delas ut för hand). Aldrig formulärets eller kundens val.
+# beslut 2026-10-04: ny registrering får 1 bil och ett län; sedan 2026-11-22
+# 30 dagar och alla kategorier; mer delas ut för hand). Aldrig formulärets eller kundens val.
 TRIAL_MANUAL_MAX_VEHICLES = 25
 # Säljaren/admin kan förlänga eller sätta längre prov, men inte obegränsat.
 TRIAL_MAX_PLANNED_DAYS = 365
