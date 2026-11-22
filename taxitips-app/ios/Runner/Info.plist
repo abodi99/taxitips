@@ -81,7 +81,11 @@
 		<true/>
 		<key>UIViewControllerBasedStatusBarAppearance</key>
 		<false/>
-		<key>CFBundleURLTypes</key>
+		<key>LSApplicationQueriesSchemes</key>
+	<array>
+		<string>bankid</string>
+	</array>
+	<key>CFBundleURLTypes</key>
 		<array>
 			<dict>
 				<key>CFBundleURLName</key>

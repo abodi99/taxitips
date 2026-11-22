@@ -262,6 +262,30 @@ def _short_price(offer: dict | None) -> str:
     return f"{amount} kr/mån (exkl. moms)"
 
 
+def _full_price(offer: dict | None) -> str:
+    """"399 kr/mån exkl. moms (498,75 kr inkl. moms)". Tom utan pris."""
+    if not offer or not offer.get("monthly_ore"):
+        return ""
+    text = _short_price(offer).replace(" (exkl. moms)", " exkl. moms")
+    total = int(offer.get("monthly_total_ore") or 0)
+    if total and total != int(offer["monthly_ore"]):
+        text += f" ({_money(total)} inkl. moms)"
+    return text
+
+
+def _payment_facts() -> str:
+    """
+    Det kunden behöver veta om betalningen, i tre korta rader under länken --
+    så att mejlet räcker för att betala utan att leta. Betalsätten är
+    inställningen FLEET_PAYMENT_METHODS_TEXT (det som är påslaget i Stripe).
+    """
+    methods = (getattr(settings, "FLEET_PAYMENT_METHODS_TEXT", "") or "kort").strip()
+    return (
+        f"- Betala med {methods}.\n"
+        "- Dras varje månad. Säg upp när du vill.\n"
+    )
+
+
 def trial_started(company_id, to_address: str, trial) -> OutboxMessage | None:
     return queue(
         category="trial_started", company_id=company_id, to_address=to_address,
@@ -316,6 +340,12 @@ def _continue_sms(company_id, trial, stage: str, text: str, link: str) -> bool:
     return False
 
 
+def _sms_text(what: str, price: str) -> str:
+    """"Taxi Tips: Provet slutar i morgon. Fortsätt för 399 kr/mån exkl. moms:"."""
+    price = price.replace(" (exkl. moms)", " exkl. moms")
+    return f"Taxi Tips: {what} " + (f"Fortsätt för {price}:" if price else "Fortsätt här:")
+
+
 def _ends_key(trial) -> str:
     return f"{trial.ends_at:%Y%m%d}" if trial.ends_at else ""
 
@@ -353,13 +383,24 @@ def trial_ending(company_id, to_address: str, trial, *, stage: str = "3d") -> Ou
     day = "i morgon" if last_day else _swedish_day(ends)
     price = _short_price(offer)
     if stage.startswith("card_missing"):
-        subject = f"Provet slutar {day}"
+        # Spara kortet nu, första dragningen på slutdagen (2026-11-22). Allt
+        # som behövs på ett ställe: när, vad det kostar (med och utan moms),
+        # länken, hur man betalar och hur man säger upp.
+        full = _full_price(offer)
+        first = f"{ends.day} {_MONTHS[ends.month - 1]}"
+        methods = (getattr(settings, "FLEET_PAYMENT_METHODS_TEXT", "") or "kort").strip()
+        subject = f"Provet slutar {day} – spara kortet så fortsätter tipsen"
         body = (
             "Hej!\n\n"
             f"Provet slutar {day}.\n\n"
-            + (f"Fortsätt för {price}:\n" if price else "Fortsätt här:\n")
-            + f"{link}\n\n"
-            "Gör du inget stängs tipsen. Inget dras.\n"
+            "Spara kortet så fortsätter tipsen:\n"
+            f"{link}\n\n"
+            f"- Inget dras förrän {first}."
+            + (f" Sedan {full}." if full else "")
+            + "\n"
+            f"- Betala med {methods}.\n"
+            "- Säg upp när du vill.\n"
+            "- Gör du inget stängs tipsen. Inget dras.\n"
             + _SHORT_SIGNATURE
         )
     else:
@@ -391,8 +432,15 @@ def trial_ending(company_id, to_address: str, trial, *, stage: str = "3d") -> Ou
     )
     # Bara sista dygnet för den som inte sparat kort: med sparat kort ("1d")
     # fortsätter abonnemanget av sig självt, och "Fortsätt här" vore missvisande.
-    if fresh and stage == "card_missing_1d":
-        _continue_sms(company_id, trial, "1d", "Taxi Tips: Provet slutar i morgon. Fortsätt här:", link)
+    # Sms en vecka före och sista dygnet, bara till den som inte sparat kort.
+    if fresh and stage in ("card_missing", "card_missing_1d"):
+        first = f"{ends.day} {_MONTHS[ends.month - 1]}"
+        what = "Provet slutar i morgon." if stage == "card_missing_1d" else f"Provet slutar {first}."
+        _continue_sms(
+            company_id, trial, "1d" if stage == "card_missing_1d" else "7d",
+            f"Taxi Tips: {what} Spara kortet så fortsätter tipsen. Inget dras förrän {first}:",
+            link,
+        )
     return row
 
 
@@ -405,15 +453,17 @@ def trial_ended(company_id, to_address: str, trial) -> OutboxMessage | None:
         dedupe_key=dedupe_key("trial_ended", company_id, trial.id)
     ).exists()
     if fresh:
-        _continue_sms(company_id, trial, "ended", "Taxi Tips: Provet är slut. Fortsätt här:", link)
+        _continue_sms(company_id, trial, "ended", _sms_text("Provet är slut.", price), link)
+    full = _full_price(offer)
     return queue(
         category="trial_ended", company_id=company_id, to_address=to_address,
         subject="Provet är slut",
         body=(
             "Hej!\n\n"
             "Provet är slut. Inget har dragits.\n\n"
-            + (f"Fortsätt för {price}:\n" if price else "Fortsätt här:\n")
-            + f"{link}\n"
+            + (f"Fortsätt för {full}:\n" if full else "Fortsätt här:\n")
+            + f"{link}\n\n"
+            + _payment_facts()
             + _SHORT_SIGNATURE
         ),
         payload={"offer": offer or {}},

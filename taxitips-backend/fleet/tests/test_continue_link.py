@@ -100,6 +100,25 @@ class OfferTests(Fixture):
         # Biljetten kommer aldrig tillbaka i svaret.
         self.assertNotIn(self.token(company), res.content.decode())
 
+    def test_during_the_trial_the_page_saves_the_card_then_says_when_it_is_charged(self):
+        from fleet import orders
+
+        company, trial = self.one_seat()
+        data = self.post("offer", {"token": self.token(company)}).json()
+        self.assertTrue(data["saveCardOnly"])
+        # Kortet sparat: en väntande fortsättning och betalsättet på profilen.
+        plan = orders.plan_change(
+            company.id, add_vehicles=trials.continue_specs(trials.continue_vehicles(company.id, trial)),
+        )
+        plan.request = {**plan.request, "trial_commit": True}
+        order = orders.create_order(company.id, plan, created_by=None, actor_kind="customer")
+        Order.objects.filter(id=order.id).update(request={**order.request, "trial_commit": True})
+        CompanyProfile.objects.filter(company_id=company.id).update(payment_method_verified_at=timezone.now())
+        data = self.post("offer", {"token": self.token(company)}).json()
+        self.assertEqual(data["state"], "saved")
+        self.assertEqual(data["firstChargeAt"], trial.ends_at.isoformat())
+        self.assertNotIn("monthlyOre", data)
+
     def test_account_seats_are_grouped_by_county(self):
         company, trial = self.one_seat()
         License.objects.filter(trial=trial).update(status=License.Status.CANCELED)
@@ -244,6 +263,13 @@ class CheckoutTests(Fixture):
         self.assertEqual(creates[0]["cancel_url"], "https://taxitips.se/fortsatt?betalning=avbruten")
         self.assertNotIn("#t=", creates[0]["success_url"] + creates[0]["cancel_url"])
         self.assertEqual(str(order.created_by), str(self.owner_id(company)))
+        # Kassan: svenska, allt om betalningen ovanför knappen, och betalsätten
+        # ur Stripe-kontot (Apple Pay, Google Pay, Klarna ...), inte låsta här.
+        self.assertEqual(creates[0]["locale"], "sv")
+        message = creates[0]["custom_text"]["submit"]["message"]
+        self.assertIn("399 kr/mån exkl. moms (498,75 kr inkl. moms)", message)
+        self.assertIn("Säg upp när du vill", message)
+        self.assertNotIn("payment_method_types", creates[0])
 
     def owner_id(self, company):
         return CompanyMember.objects.filter(company_id=company.id, role="company_owner").first().user_id
@@ -291,6 +317,123 @@ class CheckoutTests(Fixture):
         self.assertEqual((res.status_code, res.json()["reason"]), (409, "nothing_to_continue"))
 
 
+@STRIPE
+class PrivateCustomerTests(CheckoutTests):
+    """
+    En förare utan företag betalar som privatperson: bara med BankID, utan
+    organisationsnummer, med kort, och först efter att ha bett om att
+    medlemskapet börjar direkt (ångerrätten).
+    """
+
+    def no_org_number(self, company):
+        CompanyProfile.objects.filter(company_id=company.id).update(org_number="")
+        Company.objects.filter(id=company.id).update(org_number="")
+
+    def with_bankid(self, company):
+        from fleet.models import BankIdIdentity
+
+        BankIdIdentity.objects.create(
+            user_id=self.owner_id(company), pnr_key=f"k{company.id.hex[:20]}", full_name="Anna Andersson",
+            verified_at=timezone.now(),
+        )
+
+    def test_offer_says_whether_private_is_possible(self):
+        company, _ = self.ready()
+        self.no_org_number(company)
+        data = self.post("offer", {"token": self.token(company)}).json()
+        self.assertEqual((data["customerKind"], data["canChoosePrivate"]), ("company", False))
+        self.with_bankid(company)
+        data = self.post("offer", {"token": self.token(company)}).json()
+        self.assertTrue(data["needsOrgNumber"])
+        self.assertTrue(data["canChoosePrivate"])
+
+    def test_private_needs_bankid_and_no_org_number(self):
+        company, _ = self.ready()  # har organisationsnummer
+        self.with_bankid(company)
+        res = self.post("private", {"token": self.token(company)})
+        self.assertEqual((res.status_code, res.json()["reason"]), (409, "org_number_set"))
+
+        self.no_org_number(company)
+        CompanyMember.objects.filter(company_id=company.id).update(role="company_admin")
+        res = self.post("private", {"token": self.token(company)})
+        self.assertEqual(res.json()["reason"], "bankid_required")
+
+    def test_private_pays_without_org_number_after_asking_to_start_now(self):
+        company, _ = self.ready()
+        self.no_org_number(company)
+        self.with_bankid(company)
+        res = self.post("private", {"token": self.token(company)})
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertEqual(CompanyProfile.objects.get(company_id=company.id).customer_kind, "private")
+        data = self.post("offer", {"token": self.token(company)}).json()
+        self.assertEqual((data["customerKind"], data["needsOrgNumber"]), ("private", False))
+
+        # Utan begäran om att börja direkt (ångerrätten) startar ingen betalning.
+        res = self.post("checkout", {"token": self.token(company), "accepted": True})
+        self.assertEqual((res.status_code, res.json()["reason"]), (400, "consumer_terms_required"))
+        self.assertFalse(Order.objects.filter(company_id=company.id).exists())
+
+        stripe, creates = self.fake_stripe()
+        with mock.patch("fleet.stripe_sync._client", return_value=stripe):
+            res = self.post("checkout", {"token": self.token(company), "accepted": True, "startNow": True})
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertTrue(res.json()["paymentUrl"].startswith("https://checkout.stripe.test/"))
+        from fleet.models import AuditEvent
+
+        self.assertTrue(AuditEvent.objects.filter(
+            company_id=company.id, action="consumer_start_now_accepted").exists())
+
+    def test_companies_do_not_need_the_consumer_box(self):
+        company, _ = self.ready()
+        stripe, _creates = self.fake_stripe()
+        with mock.patch("fleet.stripe_sync._client", return_value=stripe):
+            res = self.post("checkout", {"token": self.token(company), "accepted": True})
+        self.assertEqual(res.status_code, 200, res.content)
+
+    def test_private_customers_cannot_pay_by_invoice(self):
+        from fleet import commerce, company_details, orders
+
+        company, trial = self.ready()
+        self.no_org_number(company)
+        self.with_bankid(company)
+        company_details.mark_private(company.id)
+        plan = orders.plan_change(
+            company.id, add_vehicles=trials.continue_specs(trials.continue_vehicles(company.id, trial)),
+        )
+        with self.assertRaises(orders.OrderError) as ctx:
+            commerce.place_order(
+                company.id, plan, created_by=self.owner_id(company), actor_kind="customer",
+                payment=commerce.PAYMENT_INVOICE,
+            )
+        self.assertEqual(ctx.exception.reason, "invoice_not_for_private")
+
+    def test_adding_an_org_number_makes_the_customer_a_company(self):
+        from fleet import company_details
+
+        company, _ = self.ready()
+        self.no_org_number(company)
+        self.with_bankid(company)
+        company_details.mark_private(company.id)
+        with mock.patch("fleet.bolagsverket.try_lookup", return_value=None):
+            company_details.add_org_number(
+                company.id, {"orgNumber": "556036-0793", "legalName": "Annas Taxi AB"},
+                actor_user_id=None,
+            )
+        self.assertEqual(CompanyProfile.objects.get(company_id=company.id).customer_kind, "company")
+
+    def test_stripe_customer_is_the_person(self):
+        from fleet import company_details, stripe_sync
+
+        company, _ = self.ready()
+        self.no_org_number(company)
+        self.with_bankid(company)
+        CompanyProfile.objects.filter(company_id=company.id).update(contact_name="Anna Andersson")
+        company_details.mark_private(company.id)
+        fields = stripe_sync._customer_fields(Company.objects.get(id=company.id))
+        self.assertEqual(fields["name"], "Anna Andersson")
+        self.assertEqual(fields["metadata"]["customer_kind"], "private")
+
+
 class MailLinkTests(Fixture):
     def test_reminders_and_ended_mail_link_to_the_page(self):
         company, trial = self.one_seat()
@@ -301,11 +444,26 @@ class MailLinkTests(Fixture):
         rows.append(notifications.trial_ended(company.id, "a@b.test", trial))
         for row in rows:
             self.assertIn("https://taxitips.se/fortsatt#t=", row.body)
-            # Kort mejl: några rader, inget om vad som ingår.
-            self.assertLessEqual(len(row.body.splitlines()), 12)
+            # Kort mejl: några rader, inget om vad som ingår -- men allt om
+            # betalningen (pris med och utan moms, betalsätt, uppsägning).
+            self.assertLessEqual(len(row.body.splitlines()), 15)
             self.assertNotIn("portal#fortsatt", row.body)
             token = row.body.split("#t=")[1].split()[0]
             self.assertEqual(continue_link.read(token), str(company.id))
+
+    def test_payment_mails_carry_everything_needed_to_pay(self):
+        company, trial = self.one_seat()
+        row = notifications.trial_ending(company.id, "a@b.test", trial, stage="card_missing_1d")
+        self.assertIn("399 kr/mån exkl. moms (498,75 kr inkl. moms)", row.body)
+        self.assertIn("Betala med kort, Apple Pay eller Google Pay.", row.body)
+        self.assertIn("Säg upp när du vill.", row.body)
+        with override_settings(FLEET_PAYMENT_METHODS_TEXT="kort, Apple Pay, Google Pay eller Klarna"):
+            Trial.objects.filter(id=trial.id).update(status=Trial.Status.ENDED)
+            trial.refresh_from_db()
+            ended = notifications.trial_ended(company.id, "a@b.test", trial)
+            self.assertIn("eller Klarna.", ended.body)
+            data = self.post("offer", {"token": self.token(company)}).json()
+            self.assertEqual(data["paymentMethods"], "kort, Apple Pay, Google Pay eller Klarna")
 
     def test_the_welcome_mail_keeps_the_portal_link(self):
         company, trial = self.one_seat()
@@ -338,7 +496,18 @@ class SmsTests(Fixture):
         self.assertEqual(kwargs["timeout"], 10)
         data = kwargs["data"]
         self.assertEqual((data["from"], data["to"]), ("TaxiTips", "+46708123491"))
-        self.assertTrue(data["message"].startswith("Taxi Tips: Provet slutar i morgon. Fortsätt här: https://taxitips.se/fortsatt#t="))
+        self.assertTrue(data["message"].startswith("Taxi Tips: Provet slutar i morgon. Spara kortet så fortsätter tipsen. Inget dras förrän "), data["message"])
+        self.assertIn(": https://taxitips.se/fortsatt#t=", data["message"])
+
+    @SMS_ON
+    def test_sms_a_week_before_for_those_without_a_card(self):
+        company, trial = self.phone_company()
+        ok = mock.Mock(status_code=201)
+        with mock.patch("fleet.sms.requests.post", return_value=ok) as post:
+            notifications.trial_ending(company.id, "a@b.test", trial, stage="card_missing")
+            notifications.trial_ending(company.id, "a@b.test", trial, stage="card_missing")
+        self.assertEqual(post.call_count, 1)
+        self.assertIn("Spara kortet så fortsätter tipsen", post.call_args.kwargs["data"]["message"])
 
     @SMS_ON
     def test_no_sms_for_the_early_reminder_or_when_a_card_is_saved(self):

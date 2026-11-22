@@ -200,6 +200,11 @@
         <button class="btn btn-primary btn-block" type="submit" id="companyDetailsSave">
           <span class="btn-spinner" aria-hidden="true"></span><span class="btn-label">Spara och fortsätt</span>
         </button>
+        <!-- Bara för konton med BankID och utan organisationsnummer
+             (details.canChoosePrivate, fleet/company_details.py). -->
+        <button class="btn btn-outline btn-block" type="button" id="companyPrivate" hidden>
+          Jag har inget företag – betala som privatperson
+        </button>
         <button class="btn btn-quiet btn-block" type="button" data-close-details>Avbryt</button>
       </div>
     </form>

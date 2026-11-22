@@ -100,5 +100,11 @@
             <action android:name="android.intent.action.VIEW"/>
             <data android:scheme="https"/>
         </intent>
+        <!-- BankID-appen (lib/bankid_flow.dart): öppnas direkt, aldrig via
+             webbläsaren. -->
+        <intent>
+            <action android:name="android.intent.action.VIEW"/>
+            <data android:scheme="bankid"/>
+        </intent>
     </queries>
 </manifest>

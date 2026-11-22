@@ -163,7 +163,8 @@ def _state(company_id) -> tuple[str, object | None]:
     if licensing.active_licenses(company_id).exists():
         return "paid", None
     if commerce.trial_commit_status(company_id)["committed"]:
-        return "paid", None
+        # Betalsättet är sparat; första dragningen på provets slutdag.
+        return "saved", trials.active_trial(company_id)
     running = trials.active_trial(company_id)
     if running is not None:
         return ("trial", running) if trials.continue_vehicles(company_id, running) else ("nothing", None)
@@ -183,13 +184,21 @@ def offer(company_id) -> dict:
     Stripe aldrig visar olika belopp. Går priset inte att räkna visas hellre
     inget än fel pris.
     """
-    from fleet import company_details, trials
+    from fleet import commerce, company_details, trials
 
     state, trial = _state(company_id)
     out = {
         "ok": True, "companyName": _company_name(company_id), "state": state,
         "needsOrgNumber": company_details.needs_org_number(company_id),
+        # Privatperson: priset visas inklusive moms och ångerrätten förklaras.
+        "customerKind": "private" if company_details.is_private(company_id) else "company",
+        # Betalsätten i klartext (det som är påslaget i Stripe), för sidan.
+        "paymentMethods": _payment_methods_text(),
+        "canChoosePrivate": company_details.can_choose_private(company_id),
     }
+    if state == "saved":
+        out["firstChargeAt"] = trial.ends_at.isoformat() if trial and trial.ends_at else None
+        return out
     if state in ("paid", "nothing"):
         return out
     rows = trials.continue_vehicles(company_id, trial)
@@ -207,6 +216,12 @@ def offer(company_id) -> dict:
         # Momssatsen räknas ur samma offert, inte ur en egen konstant.
         "vatPercent": round((total - amount) * 100 / amount) if amount else 25,
         "trialEndsAt": trial.ends_at.isoformat() if trial and trial.ends_at else None,
+        # Under provet sparas kortet och första dragningen sker på slutdagen
+        # (commerce.commit_trial_continuation); nära slutet betalar man direkt.
+        "saveCardOnly": bool(
+            state == "trial" and trial and trial.ends_at
+            and trial.ends_at > timezone.now() + commerce.TRIAL_COMMIT_MIN_LEFT
+        ),
     })
     return out
 
@@ -221,6 +236,19 @@ def set_org_number(company_id, body: dict) -> dict:
     from fleet import company_details
 
     return company_details.set_org_number_for_link(company_id, body)
+
+
+def _payment_methods_text() -> str:
+    from django.conf import settings
+
+    return (getattr(settings, "FLEET_PAYMENT_METHODS_TEXT", "") or "kort").strip()
+
+
+def choose_private(company_id) -> dict:
+    """Kunden har inget företag: betala som privatperson (BankID-legitimerad)."""
+    from fleet import company_details
+
+    return company_details.mark_private(company_id, actor_kind="customer")
 
 
 def _owner_user_id(company_id):
@@ -253,11 +281,12 @@ def checkout(company_id, body: dict) -> dict:
             "acceptance_required", "Godkänn priset och villkoren för att betala.",
         )
     state, trial = _state(company_id)
-    if state == "paid":
+    if state in ("paid", "saved"):
         return {"ok": True, "paymentUrl": None, "alreadyCommitted": True, "cardOnFile": True}
     if state == "nothing":
         raise ContinueLinkError("nothing_to_continue", "Det finns inget att betala.", status=409)
     company_details.require_company_details(company_id)
+    company_details.require_consumer_terms(company_id, body)
 
     plan = orders.plan_change(
         company_id, add_vehicles=trials.continue_specs(trials.continue_vehicles(company_id, trial)),

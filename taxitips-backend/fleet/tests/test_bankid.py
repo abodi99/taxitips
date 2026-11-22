@@ -136,6 +136,28 @@ class BankIdTests(FleetTestCase):
         self.assertEqual(headers["Authorization"], "Bearer proxy-secret")
         self.assertEqual(res.json()["autoStartToken"], "auto")
 
+    def test_qr_code_is_made_on_the_server_and_the_secret_never_leaves_it(self):
+        import hashlib
+        import hmac
+
+        from fleet import bankid as bankid_module
+
+        fake, _calls = proxy(collect_status="pending")
+        with mock.patch("fleet.bankid.requests.post", side_effect=fake):
+            start = self.post("/api/fleet/bankid/start", {"purpose": "register"}).json()
+            self.assertNotIn("qrStartSecret", start)
+            self.assertNotIn("qrStartToken", start)
+            self.assertTrue(start["qrData"].startswith("bankid.q.0."))
+            collect = self.post("/api/fleet/bankid/collect", {"orderRef": start["orderRef"]}).json()
+        self.assertTrue(collect["qrData"].startswith("bankid.q."))
+        # Koden är BankID:s: HMAC-SHA256 av sekunderna med qrStartSecret.
+        info = bankid_module.cache.get(bankid_module._qr_key(start["orderRef"]))
+        later = bankid_module.qr_data(start["orderRef"], now=info["t"] + 5)
+        expected = hmac.new(b"s", b"5", hashlib.sha256).hexdigest()
+        self.assertEqual(later, f"bankid.q.5.{expected}")
+        self.post("/api/fleet/bankid/cancel", {"orderRef": start["orderRef"]})
+        self.assertIsNone(bankid_module.qr_data(start["orderRef"]))
+
     def test_pending_returns_swedish_hint_and_no_ticket(self):
         fake, _ = proxy(collect_status="pending")
         with mock.patch("fleet.bankid.requests.post", side_effect=fake):
@@ -223,6 +245,51 @@ class BankIdTests(FleetTestCase):
         from fleet import signup_checks
 
         self.assertIn("org_number_later", [f["code"] for f in signup_checks.flags(profile)])
+
+    def test_private_person_registers_without_a_company_name(self):
+        # En förare utan eget företag: inget företagsnamn, kontot får namnet
+        # från BankID och provet startar som för ett företag.
+        res = self.register(accountKind="private", companyName="")
+        self.assertEqual(res.status_code, 201, res.content)
+        company = Company.objects.get(id=res.json()["companyId"])
+        self.assertEqual(company.name, "Anna Andersson")
+        profile = CompanyProfile.objects.get(company_id=company.id)
+        self.assertIn("privatperson", profile.verification_note)
+        self.assertEqual(Trial.objects.get(company_id=company.id).status, Trial.Status.ACTIVE)
+        event = AuditEvent.objects.get(action="self_registered", company_id=company.id)
+        self.assertEqual(event.detail["accountKind"], "private")
+        self.assertEqual(profile.customer_kind, "private")
+
+        # Ingen spärr för organisationsnummer: privatpersonen har inget.
+        owner = self.created_users[0][0]
+        overview = self.client.get(
+            "/api/fleet/company", headers={"authorization": f"Bearer {jwt(owner)}"},
+        ).json()
+        self.assertFalse(overview["company"]["details"]["needsOrgNumber"])
+        self.assertEqual(overview["company"]["details"]["customerKind"], "private")
+        res = self.post("/api/fleet/orders", {"accepted": True}, user=owner)
+        self.assertEqual(res.json()["reason"], "consumer_terms_required")
+
+    def test_bankid_company_can_switch_to_private_in_the_portal(self):
+        company_id = self.register().json()["companyId"]
+        owner = self.created_users[0][0]
+        res = self.post("/api/fleet/company/private", {}, user=owner)
+        self.assertEqual(res.status_code, 200, res.content)
+        self.assertEqual(CompanyProfile.objects.get(company_id=company_id).customer_kind, "private")
+
+    def test_private_person_ignores_a_typed_company_name(self):
+        res = self.register(accountKind="private", companyName="Något AB")
+        self.assertEqual(res.status_code, 201, res.content)
+        self.assertEqual(Company.objects.get(id=res.json()["companyId"]).name, "Anna Andersson")
+
+    def test_company_still_needs_a_name_and_unknown_kind_is_refused(self):
+        res = self.register(accountKind="company", companyName="  ")
+        self.assertEqual(res.status_code, 400)
+        self.assertEqual(res.json()["reason"], "name_required")
+        # Äldre appar skickar ingen sort: samma krav som förut.
+        self.assertEqual(self.register(companyName="").json()["reason"], "name_required")
+        self.assertEqual(self.register(accountKind="annat").json()["reason"], "invalid_account_kind")
+        self.assertEqual(self.created_users, [])
 
     def test_same_person_cannot_register_twice(self):
         self.assertEqual(self.register().status_code, 201)

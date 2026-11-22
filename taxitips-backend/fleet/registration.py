@@ -314,6 +314,11 @@ PERSON_HAS_ACCOUNT_MESSAGE = (
     "Du har redan ett konto hos TaxiTips. Logga in, eller välj "
     "\"Glömt lösenord\" och legitimera dig med BankID för att komma in igen."
 )
+# Vem som registrerar sig (register_with_bankid). Privatperson = kör själv,
+# utan eget företag. Bokförs i granskningsnoten och i audit-händelsen.
+ACCOUNT_PRIVATE = "private"
+ACCOUNT_COMPANY = "company"
+
 EMAIL_TAKEN_MESSAGE = (
     "E-postadressen har redan ett konto. Logga in, eller använd en annan adress."
 )
@@ -333,8 +338,18 @@ def register_with_bankid(
     password: str,
     contact_phone: str,
     company_name: str,
+    account_kind: str = "",
     now=None,
 ) -> Registration:
+    """
+    Kontot, "företaget" och provet i ett svep, efter BankID.
+
+    `account_kind` är "private" för den som kör själv utan eget företag (en
+    anställd förare, eller någon som inte vet vad hen ska skriva): då behövs
+    inget företagsnamn, kontot får personens namn från BankID. "company" (eller
+    tomt, som äldre appar skickar) kräver företagsnamnet som förut. Internt är
+    båda ett företag med en plats -- resten av livscykeln är densamma.
+    """
     from fleet import auth_admin, bankid, notifications
     from fleet.models import BankIdIdentity
 
@@ -349,9 +364,15 @@ def register_with_bankid(
     except signup_checks.CheckError as exc:
         raise sales.SalesError(exc.reason, exc.message) from exc
     _check_password(password)
-    name = sales._clean(company_name, 200)
+    kind = str(account_kind or "").strip().lower()
+    if kind not in ("", ACCOUNT_PRIVATE, ACCOUNT_COMPANY):
+        raise sales.SalesError("invalid_account_kind", "Välj om du kör själv eller har ett företag.")
+    private = kind == ACCOUNT_PRIVATE
+    name = sales._clean(identity.full_name, 200) if private else sales._clean(company_name, 200)
+    if private and not name:
+        name = "Privatperson"
     if not name:
-        raise sales.SalesError("name_required", "Skriv namnet på företaget du kör för.")
+        raise sales.SalesError("name_required", "Skriv företagets namn.")
     try:
         phone = signup_checks.check_phone(contact_phone)
     except signup_checks.CheckError as exc:
@@ -385,7 +406,7 @@ def register_with_bankid(
         with transaction.atomic():
             company, trial = _create_bankid_company(
                 user_id=user_id, email=email, name=name, phone=phone,
-                identity=identity, key=key, eligible=check.ok, now=now,
+                identity=identity, key=key, eligible=check.ok, private=private, now=now,
             )
     except Exception:
         try:
@@ -403,7 +424,7 @@ def register_with_bankid(
     return Registration(company, trial, message, created=True)
 
 
-def _create_bankid_company(*, user_id, email, name, phone, identity, key, eligible, now):
+def _create_bankid_company(*, user_id, email, name, phone, identity, key, eligible, now, private=False):
     from fleet.models import BankIdIdentity, KnownAccount
 
     # Kontot har ingen token hos oss än; adminwebben och återställningen
@@ -423,7 +444,13 @@ def _create_bankid_company(*, user_id, email, name, phone, identity, key, eligib
         company_id=company.id, country="SE", org_number="", legal_name="",
         contact_name=identity.full_name[:200], contact_email=email,
         contact_phone=phone, billing_email=email,
+        # Privatperson: betalar utan organisationsnummer (company_details).
+        customer_kind="private" if private else "company",
+        customer_kind_set_at=now if private else None,
         verification_note=(
+            "Självregistrering i appen med BankID som privatperson (kör själv, "
+            "inget företag angivet). Personen är legitimerad."
+            if private else
             "Självregistrering i appen med BankID. Personen är legitimerad; "
             "företaget och behörigheten är inte kontrollerade. Organisationsnummer "
             "anges vid beställning."
@@ -447,7 +474,10 @@ def _create_bankid_company(*, user_id, email, name, phone, identity, key, eligib
     audit.record(
         "self_registered", company_id=company.id, actor_user_id=user_id,
         actor_kind="customer", subject_type="company", subject_id=company.id,
-        detail={"name": name, "trial": bool(trial), "kind": "bankid"},
+        detail={
+            "name": name, "trial": bool(trial), "kind": "bankid",
+            "accountKind": ACCOUNT_PRIVATE if private else ACCOUNT_COMPANY,
+        },
     )
     return company, trial
 

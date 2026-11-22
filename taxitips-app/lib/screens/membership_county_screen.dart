@@ -176,10 +176,11 @@ class _MembershipCountyScreenState extends State<MembershipCountyScreen> {
                 final entry = _counties[i];
                 final selected = entry.key == _picked;
                 return ListTile(
+                  minTileHeight: 56,
                   title: Text(
                     entry.value,
                     style: const TextStyle(
-                      fontSize: 16,
+                      fontSize: 18,
                       fontWeight: FontWeight.w600,
                       color: TbColors.ink,
                     ),
@@ -266,9 +267,8 @@ class _Header extends StatelessWidget {
           ),
           SizedBox(height: 8),
           Text(
-            'Välj länet där du kör mest. Du får ett län i provet, och kan byta '
-            'senare. Provet börjar när du öppnar appen.',
-            style: TextStyle(color: TbColors.foam, fontSize: 15, height: 1.4),
+            'Välj länet där du kör mest. Du kan byta senare.',
+            style: TextStyle(color: TbColors.foam, fontSize: 17, height: 1.4),
           ),
         ],
       ),

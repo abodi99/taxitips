@@ -81,8 +81,14 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (!widget.replay) unawaited(OnboardingScreen.markSeen());
   }
 
-  List<_PageData> get _pages =>
-      widget.replay ? [..._firstPages.take(3), _replayLast] : _firstPages;
+  /// Första starten: två sidor -- vad appen gör och hur man kommer igång.
+  /// Färgerna och hur man svarar på ett tips visar rundturen på huvudskärmen,
+  /// där föraren ser det på riktigt (driver_tour.dart); att läsa om dem före
+  /// inloggningen var mest text att ta sig igenom. Från Inställningar visas
+  /// allt.
+  List<_PageData> get _pages => widget.replay
+      ? [_traffic, _colors, _feedback, _replayLast]
+      : [_traffic, _start];
 
   /// Sista sidan när introduktionen öppnas igen från Inställningar: föraren är
   /// redan inloggad, så här står det som återstår.
@@ -97,49 +103,50 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         'starkt tips dyker upp nära dig.',
   );
 
-  static const _firstPages = <_PageData>[
-    _PageData(
-      background: TbColors.navy,
-      foreground: TbColors.foam,
-      accent: TbColors.taxi,
-      icon: Icons.location_on_rounded,
-      title: 'Tips från trafiken',
-      body:
-          'Inställda tåg, sena flyg, färjor och event som slutar. Vi visar '
-          'var folk kan behöva taxi.',
-    ),
-    _PageData(
-      background: Colors.white,
-      foreground: TbColors.ink,
-      accent: TbColors.navy,
-      icon: Icons.traffic_rounded,
-      title: 'Färgen visar hur starkt tipset är',
-      body:
-          'Det är tips, inte beställningar. Du avgör själv om det är värt '
-          'att åka.',
-      levels: true,
-    ),
-    _PageData(
-      background: TbColors.taxi,
-      foreground: TbColors.ink,
-      accent: TbColors.navy,
-      icon: Icons.thumbs_up_down_rounded,
-      title: 'Säg hur det gick',
-      body:
-          'Tryck på ett tips och välj Fick körning eller Ingen kund. Då blir '
-          'tipsen bättre för alla.',
-    ),
-    _PageData(
-      background: TbColors.navyDeep,
-      foreground: TbColors.foam,
-      accent: TbColors.taxi,
-      icon: Icons.local_taxi_rounded,
-      title: 'Kom igång',
-      body:
-          'Logga in med din e-post. Sedan visar vi dig runt i appen. Slå på '
-          'notiser så säger vi till när ett starkt tips dyker upp nära dig.',
-    ),
-  ];
+  static const _traffic = _PageData(
+    background: TbColors.navy,
+    foreground: TbColors.foam,
+    accent: TbColors.taxi,
+    icon: Icons.location_on_rounded,
+    title: 'Tips från trafiken',
+    body:
+        'Inställda tåg, sena flyg, färjor och event som slutar. Vi visar '
+        'var folk kan behöva taxi. Det är tips, inte beställningar.',
+  );
+
+  static const _colors = _PageData(
+    background: Colors.white,
+    foreground: TbColors.ink,
+    accent: TbColors.navy,
+    icon: Icons.traffic_rounded,
+    title: 'Färgen visar hur starkt tipset är',
+    body:
+        'Det är tips, inte beställningar. Du avgör själv om det är värt '
+        'att åka.',
+    levels: true,
+  );
+
+  static const _feedback = _PageData(
+    background: TbColors.taxi,
+    foreground: TbColors.ink,
+    accent: TbColors.navy,
+    icon: Icons.thumbs_up_down_rounded,
+    title: 'Säg hur det gick',
+    body:
+        'Tryck på ett tips och välj Fick körning eller Ingen kund. Då blir '
+        'tipsen bättre för alla.',
+  );
+
+  static const _start = _PageData(
+    background: TbColors.navyDeep,
+    foreground: TbColors.foam,
+    accent: TbColors.taxi,
+    icon: Icons.local_taxi_rounded,
+    title: 'Kom igång',
+    body:
+        'Skapa ett konto gratis, eller logga in om du redan har ett. '
+        'Sedan visar vi dig runt i appen.',
+  );
 
   bool get _last => _page == _pages.length - 1;
 

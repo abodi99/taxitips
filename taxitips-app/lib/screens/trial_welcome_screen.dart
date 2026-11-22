@@ -137,7 +137,11 @@ class TrialWelcomeInfo {
 }
 
 class _TrialWelcomeScreenState extends State<TrialWelcomeScreen> {
-  static const _pageCount = 4;
+  /// Första gången: EN sida -- "Klart! Du är igång" -- och sedan rakt till
+  /// rundturen i appen. Fyra sidor text mellan registreringen och första tipset
+  /// var för mycket för den som inte är van vid appar. Allt finns kvar från
+  /// Inställningar ([replay]).
+  int get _pageCount => widget.replay ? 4 : 1;
 
   final _pages = PageController();
   int _page = 0;
@@ -216,91 +220,103 @@ class _TrialWelcomeScreenState extends State<TrialWelcomeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final single = _pageCount == 1;
     return Scaffold(
       backgroundColor: TbColors.foam,
       body: SafeArea(
         child: Column(
           children: [
-            Align(
-              alignment: Alignment.centerRight,
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
-                child: TextButton(
-                  onPressed: () => _finish(skipped: true),
-                  style: TextButton.styleFrom(
-                    foregroundColor: TbColors.ink,
-                    minimumSize: const Size(48, 48),
-                  ),
-                  child: Text(
-                    widget.replay ? 'Stäng' : 'Hoppa över',
-                    style: const TextStyle(fontWeight: FontWeight.w700),
+            if (single)
+              const SizedBox(height: 48)
+            else
+              Align(
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+                  child: TextButton(
+                    onPressed: () => _finish(skipped: true),
+                    style: TextButton.styleFrom(
+                      foregroundColor: TbColors.ink,
+                      minimumSize: const Size(48, 48),
+                    ),
+                    child: Text(
+                      widget.replay ? 'Stäng' : 'Hoppa över',
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   ),
                 ),
               ),
-            ),
             Expanded(
               child: PageView(
                 controller: _pages,
                 onPageChanged: (i) => setState(() => _page = i),
-                children: [
-                  const _WhatPage(),
-                  _TrialPage(info: _info),
-                  const _StepsPage(),
-                  _IncludedPage(info: _info),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Semantics(
-                    label: 'Sida ${_page + 1} av $_pageCount',
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        for (var i = 0; i < _pageCount; i++)
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 250),
-                            margin: const EdgeInsets.symmetric(horizontal: 4),
-                            width: i == _page ? 24 : 8,
-                            height: 8,
-                            decoration: BoxDecoration(
-                              color: TbColors.ink.withValues(
-                                alpha: i == _page ? 0.9 : 0.25,
-                              ),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                          ),
+                children: single
+                    ? [_ReadyPage(info: _info, onDone: _next)]
+                    : [
+                        const _WhatPage(),
+                        _TrialPage(info: _info),
+                        const _StepsPage(),
+                        _IncludedPage(info: _info),
                       ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: _next,
-                      style: FilledButton.styleFrom(
-                        backgroundColor: TbColors.taxi,
-                        foregroundColor: TbColors.ink,
-                        minimumSize: const Size.fromHeight(56),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                      ),
-                      child: Text(
-                        _last ? 'Klar' : 'Nästa',
-                        style: const TextStyle(
-                          fontSize: 17,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
               ),
             ),
+            // En sida: knappen ligger i sidan och rullar med texten.
+            if (!single)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (!single) ...[
+                      Semantics(
+                        label: 'Sida ${_page + 1} av $_pageCount',
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            for (var i = 0; i < _pageCount; i++)
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 250),
+                                margin: const EdgeInsets.symmetric(
+                                  horizontal: 4,
+                                ),
+                                width: i == _page ? 24 : 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: TbColors.ink.withValues(
+                                    alpha: i == _page ? 0.9 : 0.25,
+                                  ),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                    ],
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton(
+                        onPressed: _next,
+                        style: FilledButton.styleFrom(
+                          backgroundColor: TbColors.taxi,
+                          foregroundColor: TbColors.ink,
+                          minimumSize: const Size.fromHeight(56),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                        ),
+                        child: Text(
+                          _last ? 'Klar' : 'Nästa',
+                          style: const TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
@@ -357,6 +373,72 @@ class _PageFrame extends StatelessWidget {
 }
 
 const _bodyStyle = TextStyle(fontSize: 18, height: 1.45, color: TbColors.ink);
+
+/// Första gången: allt är klart, en sida. Provets längd och slut ur servern;
+/// saknas de sägs inget om dem.
+class _ReadyPage extends StatelessWidget {
+  const _ReadyPage({required this.info, required this.onDone});
+
+  final TrialWelcomeInfo info;
+  final VoidCallback onDone;
+
+  static const _months = [
+    'januari',
+    'februari',
+    'mars',
+    'april',
+    'maj',
+    'juni',
+    'juli',
+    'augusti',
+    'september',
+    'oktober',
+    'november',
+    'december',
+  ];
+
+  /// "29 december" -- lättare att läsa än 2026-12-29.
+  static String date(DateTime d) => '${d.day} ${_months[d.month - 1]}';
+
+  @override
+  Widget build(BuildContext context) {
+    final days = info.days;
+    final ends = info.status == 'active' ? info.endsAt : null;
+    return _PageFrame(
+      icon: Icons.check_circle_rounded,
+      title: 'Klart! Du är igång',
+      children: [
+        // En rad: hur länge det är gratis. Betalning visas först när provet
+        // är slut (ägarens beslut 2026-11-22).
+        Text(
+          ends != null
+              ? 'Gratis till ${date(ends)}.'
+              : (days == null ? 'Gratis att prova.' : 'Gratis i $days dagar.'),
+          style: _bodyStyle,
+        ),
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton(
+            onPressed: onDone,
+            style: FilledButton.styleFrom(
+              backgroundColor: TbColors.taxi,
+              foregroundColor: TbColors.ink,
+              minimumSize: const Size.fromHeight(56),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(14),
+              ),
+            ),
+            child: const Text(
+              'Visa tipsen',
+              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
 
 /// Sida 1: vad Taxi Tips gör, med kategorierna som finns i appen.
 class _WhatPage extends StatelessWidget {
@@ -532,22 +614,18 @@ class _StepsPage extends StatelessWidget {
       icon: Icons.flag_rounded,
       title: 'Så kommer du igång',
       children: [
+        // Länet valdes redan i registreringen och platsen är kontots egen:
+        // inget "Kör själv" att trycka på för att se tipsen.
         _Step(
           n: 1,
-          title: 'Välj län för din plats',
+          title: 'Byt län',
           text:
-              'Öppna Inställningar och välj vilket län platsen ska gälla. '
+              'Öppna Inställningar och tryck på Dina län. '
               'Länet styr vilka tips du får.',
         ),
         _Step(
           n: 2,
-          title: 'Kör själv?',
-          text:
-              'Öppna Inställningar och tryck på "Kör själv med den här telefonen".',
-        ),
-        _Step(
-          n: 3,
-          title: 'Bjud in förare på webben',
+          title: 'Har du ett taxibolag? Bjud in förare på webben',
           text:
               'Inbjudan skickas av företagets administratör på webben, inte från appen. '
               'Föraren får ett mejl, väljer ett lösenord och loggar in i '

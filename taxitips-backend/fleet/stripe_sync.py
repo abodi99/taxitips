@@ -113,11 +113,19 @@ def _customer_fields(company: Company) -> dict:
     from fleet.models import CompanyProfile
 
     profile = CompanyProfile.objects.filter(company_id=company.id).first()
+    private = bool(profile and profile.customer_kind == "private")
     fields = {
-        "name": (profile.legal_name if profile and profile.legal_name else company.name),
+        # Privatperson: kvittot ställs till personen (namnet från BankID).
+        "name": (
+            (profile.contact_name or company.name) if private
+            else (profile.legal_name if profile and profile.legal_name else company.name)
+        ),
         "email": ((profile.billing_email if profile else "") or company.email or None),
         "preferred_locales": ["sv"],
-        "metadata": {"company_id": str(company.id), "org_number": company.org_number or ""},
+        "metadata": {
+            "company_id": str(company.id), "org_number": company.org_number or "",
+            "customer_kind": "private" if private else "company",
+        },
     }
     if profile and profile.contact_phone:
         fields["phone"] = profile.contact_phone
@@ -359,15 +367,15 @@ def collect_trial_commit(
     cancel_url: str,
 ) -> str:
     """
-    Sparar kort under Django-provet utan att debitera nu.
+    Sparar betalsättet under provet utan att dra något (2026-11-22).
 
-    Skapar (eller återanvänder) en Stripe Checkout-session i läget
-    `subscription` med `trial_end` = Django-provets slut. Kunden lägger in
-    kortet; första fakturan skapas när Stripe-provet tar slut. Rättigheter
-    ges först av `invoice.paid` med belopp > 0 (fleet/webhook_events.py).
-
-    Abonnemangsbeloppet är nästa periods belopp (ej den proportionerade
-    "betala nu"-summan) -- det är det som ska dras månadsvis efter konvertering.
+    Stripe Checkout i läget `setup`: kassan sparar kort, Apple Pay, Google Pay
+    eller Klarna och visar INGET belopp och inget "N dagar gratis" -- det var
+    skälet till att den gamla vägen (abonnemang med `trial_end` i kassan) togs
+    bort 2026-10-11. Ovanför knappen står när första dragningen sker och vad
+    den kostar. När kassan är klar skapar servern abonnemanget med första
+    dragningen på provets slutdag (`start_trial_commit_subscription`, från
+    webhooken). Rättigheterna ges som förut av första riktiga `invoice.paid`.
     """
     stripe = _client()
     order.refresh_from_db()
@@ -376,61 +384,34 @@ def collect_trial_commit(
     if order.stripe_checkout_session_id and order.stripe_payment_url:
         return order.stripe_payment_url
 
-    from datetime import datetime, timezone as dt_timezone
+    from datetime import timezone as dt_timezone
 
     if trial_end.tzinfo is None:
         trial_end = trial_end.replace(tzinfo=dt_timezone.utc)
     trial_end_ts = int(trial_end.timestamp())
-    # Stripe kräver trial_end i framtiden.
-    if trial_end_ts <= int(timezone.now().timestamp()) + 60:
-        raise ValueError("provperioden tar slut för snart för deferred checkout")
+    # Stripe kräver att första dragningen ligger i framtiden.
+    if trial_end_ts <= int(timezone.now().timestamp()) + 60 * 60:
+        raise ValueError("provperioden tar slut för snart för att spara kort till slutet")
 
     subscription = Subscription.objects.get(company_id=order.company_id)
     company = Company.objects.get(id=order.company_id)
     customer_id = ensure_customer(company, subscription)
-
-    amount_ore = int(order.next_period_amount_ore or order.amount_now_ore or 0)
-    if amount_ore <= 0:
-        raise ValueError("ingen månadskostnad att prenumerera på")
-
-    recurring_lines = [
-        line for line in (order.lines or [])
-        if not str(line.get("key") or "").startswith("prorated_")
-    ] or (order.lines or [])
-    line_items = _checkout_line_items(
-        recurring_lines, currency=order.currency, amount_ore=amount_ore,
-    )
-    adding, add_counties = _pending_from_request(order.request)
-
+    meta = {
+        "company_id": str(order.company_id),
+        "order_id": str(order.id),
+        "kind": "trial_commit",
+        "trial_end": str(trial_end_ts),
+    }
     session = stripe.checkout.Session.create(
-        mode="subscription",
+        mode="setup",
         customer=customer_id,
-        line_items=line_items,
-        subscription_data={
-            "trial_end": trial_end_ts,
-            "description": package_summary(
-                order.company_id, adding=adding, add_counties=add_counties,
-            ),
-            "metadata": {
-                "company_id": str(order.company_id),
-                "order_id": str(order.id),
-                "kind": "trial_commit",
-                "licenses": str(order.quantity_after),
-                "extra_counties": str(_pending_extra_county_count(order.request)),
-                "price_version": subscription.price_version_id,
-            },
-        },
-        # Kort obligatoriskt även under Stripe-provet -- annars ingen auto-förnyelse.
-        payment_method_collection="always",
-        allow_promotion_codes=True,
+        currency=(order.currency or "SEK").lower(),
+        setup_intent_data={"metadata": meta},
         success_url=success_url,
         cancel_url=cancel_url,
-        metadata={
-            "company_id": str(order.company_id),
-            "order_id": str(order.id),
-            "kind": "trial_commit",
-        },
-        idempotency_key=f"trial_commit:{order.id}",
+        **checkout_texts(order, first_charge_at=trial_end),
+        metadata=meta,
+        idempotency_key=f"trial_commit_setup:{order.id}",
     )
     url = getattr(session, "url", "") or ""
     Order.objects.filter(id=order.id).update(
@@ -440,9 +421,70 @@ def collect_trial_commit(
     audit.record(
         "trial_commit_checkout_created", company_id=order.company_id, actor_kind="system",
         subject_type="order", subject_id=order.id,
-        detail={"session": session.id, "trial_end": trial_end.isoformat()},
+        detail={"session": session.id, "trial_end": trial_end.isoformat(), "mode": "setup"},
     )
     return url
+
+
+def start_trial_commit_subscription(order: Order, session: dict) -> str:
+    """
+    Kassan sparade betalsättet (läget `setup`): gör det till kundens standard
+    och skapa abonnemanget med första dragningen på provets slutdag. Anropas av
+    webhooken. Idempotent: samma order ger samma abonnemang, även om Stripe
+    skickar händelsen flera gånger. Returnerar abonnemangets id.
+    """
+    stripe = _client()
+    subscription = Subscription.objects.get(company_id=order.company_id)
+    if subscription.stripe_subscription_id:
+        return subscription.stripe_subscription_id
+    customer_id = session.get("customer") or subscription.stripe_customer_id
+    setup_intent = session.get("setup_intent")
+    if isinstance(setup_intent, str):
+        setup_intent = stripe.SetupIntent.retrieve(setup_intent)
+    payment_method = (setup_intent or {}).get("payment_method") if setup_intent else None
+    if isinstance(payment_method, dict):
+        payment_method = payment_method.get("id")
+    if not customer_id or not payment_method:
+        raise ValueError("kassan gav inget sparat betalsätt")
+    stripe.Customer.modify(
+        customer_id,
+        invoice_settings={"default_payment_method": payment_method},
+        idempotency_key=f"default_pm:{order.id}",
+    )
+    trial_end_ts = int((session.get("metadata") or {}).get("trial_end") or 0)
+    if trial_end_ts <= int(timezone.now().timestamp()) + 60:
+        raise ValueError("provets slut har redan passerats")
+    amount_ore = int(order.next_period_amount_ore or order.amount_now_ore or 0)
+    recurring_lines = [
+        line for line in (order.lines or [])
+        if not str(line.get("key") or "").startswith("prorated_")
+    ] or (order.lines or [])
+    adding, add_counties = _pending_from_request(order.request)
+    created = stripe.Subscription.create(
+        customer=customer_id,
+        items=_items_from_lines(recurring_lines, currency=order.currency, amount_ore=amount_ore),
+        default_payment_method=payment_method,
+        # Första dragningen på provets slutdag. Kunden har aldrig sett det
+        # här som ett "prov" i Stripe: kassan sparade bara betalsättet.
+        trial_end=trial_end_ts,
+        description=package_summary(order.company_id, adding=adding, add_counties=add_counties),
+        metadata={
+            "company_id": str(order.company_id),
+            "order_id": str(order.id),
+            "kind": "trial_commit",
+            "licenses": str(order.quantity_after),
+            "extra_counties": str(_pending_extra_county_count(order.request)),
+            "price_version": subscription.price_version_id,
+        },
+        idempotency_key=f"trial_commit_sub:{order.id}",
+    )
+    Subscription.objects.filter(id=subscription.id).update(stripe_subscription_id=created.id)
+    audit.record(
+        "trial_commit_subscription_created", company_id=order.company_id, actor_kind="system",
+        subject_type="order", subject_id=order.id,
+        detail={"subscription": created.id, "trial_end": trial_end_ts},
+    )
+    return created.id
 
 
 def _checkout_line_items(lines: list[dict], *, currency: str, amount_ore: int) -> list[dict]:
@@ -642,6 +684,57 @@ def collect_order(
     return url
 
 
+def _kr(ore: int) -> str:
+    """"399 kr" / "498,75 kr" -- svenska, mellanslag som tusentalsavgränsare."""
+    whole, cents = divmod(int(ore), 100)
+    kronor = f"{whole:,}".replace(",", " ")
+    return f"{kronor} kr" if not cents else f"{kronor},{cents:02d} kr"
+
+
+_MONTHS_SV = (
+    "januari", "februari", "mars", "april", "maj", "juni", "juli", "augusti",
+    "september", "oktober", "november", "december",
+)
+
+
+def checkout_texts(order: Order, *, first_charge_at=None) -> dict:
+    """
+    Det som står i Stripes kassa utöver beloppet: svenska, och ovanför
+    betalknappen allt kunden behöver veta på ett ställe -- månadspris med och
+    utan moms, när det dras och hur man säger upp. Betalsätten (kort, Apple
+    Pay, Google Pay, Klarna ...) väljer Stripe ur det som är påslaget i
+    kontot: inget `payment_method_types` här.
+
+    `first_charge_at`: kortet sparas nu och dras först då (provets slut).
+    """
+    amount = int(order.next_period_amount_ore or order.amount_now_ore or 0)
+    total = int(order.next_period_total_ore or order.total_now_ore or 0)
+    price = _kr(amount) + "/mån exkl. moms"
+    if total and total != amount:
+        price += f" ({_kr(total)} inkl. moms)"
+    if first_charge_at is not None:
+        when = timezone.localtime(first_charge_at)
+        day = f"{when.day} {_MONTHS_SV[when.month - 1]}"
+        submit = (
+            f"Inget dras nu. Första dragningen {day}: {price}. "
+            "Sedan varje månad. Säg upp när du vill, det gäller månaden ut."
+        )
+        after = f"Klart! Tipsen fortsätter. Inget dras förrän {day}."
+    else:
+        submit = (
+            f"{price}. Dras automatiskt varje månad. "
+            "Säg upp när du vill, det gäller månaden ut."
+        )
+        after = "Kvittot kommer till din e-post. Tipsen fortsätter i appen."
+    return {
+        "locale": "sv",
+        "custom_text": {
+            "submit": {"message": submit},
+            "after_submit": {"message": after},
+        },
+    }
+
+
 def checkout_first_subscription(order: Order, *, customer_id: str, success_url: str,
                                 cancel_url: str) -> str:
     """
@@ -682,6 +775,7 @@ def checkout_first_subscription(order: Order, *, customer_id: str, success_url: 
         allow_promotion_codes=True,
         success_url=success_url,
         cancel_url=cancel_url,
+        **checkout_texts(order),
         metadata={**meta, "kind": "subscription"},
         idempotency_key=f"checkout:{order.id}",
     )

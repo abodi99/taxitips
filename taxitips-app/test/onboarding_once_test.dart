@@ -23,20 +23,14 @@ void main() {
     }
   }
 
-  testWidgets('första starten: introduktionen, sedan aldrig mer', (
+  testWidgets('första starten: rakt till välkomstskärmen, ingen introduktion', (
     tester,
   ) async {
     await boot(tester, FakeDriverApi(device: null));
-    expect(find.byType(OnboardingScreen), findsOneWidget);
-    await tester.tap(find.text('Hoppa över'));
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(find.byType(WelcomeScreen), findsOneWidget);
-
-    // Appen startas om: välkomstskärmen, ingen introduktion.
-    await disposeScreen(tester);
-    await boot(tester, FakeDriverApi(device: null));
     expect(find.byType(OnboardingScreen), findsNothing);
     expect(find.byType(WelcomeScreen), findsOneWidget);
+    // Introduktionen räknas som sedd, så att den aldrig dyker upp senare.
+    expect(await OnboardingScreen.seen(), isTrue);
     await disposeScreen(tester);
   });
 

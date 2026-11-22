@@ -691,6 +691,19 @@ fleet/pricing.py som mejlen; bara med VIEW_BILLING). Beställningen bär
 samma län med samma innehavare. Provmejlen ("Provperioden slutar snart", "Spara
 kort ..." och "Provperioden är slut") har därmed prisraden även utan provbil.
 
+**Spara kortet nu, dra på provets slutdag** (ägarens beslut 2026-11-22, ersätter
+"betala första månaden direkt" från 2026-10-11). Under provet öppnar
+"Fortsätt" Stripe Checkout i läget `setup`: kassan sparar kort, Apple Pay,
+Google Pay eller Klarna (det som är påslaget i Stripe) och visar inget belopp
+och inget "N dagar gratis". När kassan är klar skapar servern abonnemanget med
+`trial_end` = provets slut (`stripe_sync.start_trial_commit_subscription`, från
+webhooken), och första fakturan verkställer ordern som förut. Slutar provet
+inom två timmar (`commerce.TRIAL_COMMIT_MIN_LEFT`), eller är det slut, betalar
+kunden första månaden direkt. Påminnelser utan sparat kort: mejl och sms en
+vecka före, mejl tre dagar före, mejl och sms sista dygnet, mejl och sms när
+provet är slut. Alla säger pris med och utan moms, betalsätt
+(`FLEET_PAYMENT_METHODS_TEXT`) och att man kan säga upp när man vill.
+
 Migreringen `fleet/0024` är EXPAND: bara nya kolumner och en ny tabell. Inga
 befintliga rader får en session, så åtkomsten beter sig exakt som förut tills
 appen börjar ta en session. Kolumnen backfillas från aktiva godkända telefoner

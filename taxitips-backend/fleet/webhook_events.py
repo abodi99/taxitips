@@ -229,8 +229,8 @@ def _trial_commit_checkout_completed(
     session: dict, *, subscription, order: Order, event_at, now
 ) -> dict:
     """
-    Kunden sparade kort under Django-provet. Ordern ligger kvar som
-    pending_payment tills Stripe drar vid trial_end.
+    Kunden sparade betalsättet under provet. Ordern ligger kvar som
+    pending_payment tills Stripe drar på provets slutdag.
     """
     from fleet.models import CompanyProfile
 
@@ -241,6 +241,15 @@ def _trial_commit_checkout_completed(
         return {"handled": False, "reason": "unknown_subscription"}
 
     sub_id = session.get("subscription")
+    if session.get("mode") == "setup":
+        # Kassan sparade bara betalsättet (2026-11-22): servern skapar
+        # abonnemanget med första dragningen på provets slutdag. Ett fel här
+        # ger ett fel tillbaka till Stripe, som skickar händelsen igen --
+        # skapandet är idempotent.
+        from fleet import stripe_sync
+
+        order.refresh_from_db()
+        sub_id = stripe_sync.start_trial_commit_subscription(order, session)
     updates = {"status": SubscriptionStatus.TRIALING}
     if isinstance(sub_id, str) and sub_id:
         updates["stripe_subscription_id"] = sub_id

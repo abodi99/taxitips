@@ -172,7 +172,22 @@ function viewPaid(title = "Klart! Öppna appen.") {
   );
 }
 
-function viewProcessing(text = "Betalningen behandlas …") {
+/** Betalsättet sparat under provet: inget dras förrän provets slutdag. */
+function viewSaved(firstChargeAt) {
+  const day = firstChargeAt ? longDate(firstChargeAt) : "";
+  show(
+    h("div", { class: "card center" },
+      h("div", { class: "mark", "aria-hidden": "true" }, "✓"),
+      h("h1", {}, "Klart! Tipsen fortsätter."),
+      h("p", { class: "muted" },
+        day ? `Inget dras förrän ${day}. Sedan varje månad. Säg upp när du vill.`
+            : "Inget dras förrän provet är slut. Säg upp när du vill."),
+      h("p", { class: "muted" }, "Du kan stänga den här sidan."),
+    ),
+  );
+}
+
+function viewProcessing(text = "Ett ögonblick …") {
   show(
     h("div", { class: "card center" },
       h("div", { class: "mark wait", "aria-hidden": "true" }, "…"),
@@ -184,12 +199,19 @@ function viewProcessing(text = "Betalningen behandlas …") {
 
 /**
  * Erbjudandet. `note` är ett lugnt meddelande överst (till exempel att
- * betalningen avbröts). Fälten för organisationsnummer visas bara när
- * servern säger att numret saknas, och namnet bara när registret inte
- * hittade bolaget -- samma beteende som portalens "Företagets uppgifter".
+ * betalningen avbröts).
+ *
+ * **Vem betalar?** Saknas organisationsnummer och ägaren är legitimerad med
+ * BankID (`canChoosePrivate`) väljer kunden mellan två stora alternativ:
+ * "Jag har ett företag" (organisationsnummer, som förut) eller "Jag har inget
+ * företag" (privatperson). Priset är detsamma för alla. En privatperson
+ * kryssar i att medlemskapet får börja direkt och att hen vet om ångerrätten
+ * (`startNow`, fleet/company_details.require_consumer_terms).
  */
 function viewOffer(token, offer, { note = "" } = {}) {
   let askName = false;
+  let kind = offer.customerKind === "private" ? "private" : offer.canChoosePrivate ? "" : "company";
+
   const orgInput = h("input", {
     id: "orgNumber", name: "orgNumber", inputmode: "numeric", autocomplete: "off",
     autocapitalize: "off", "aria-describedby": "orgHelp orgError",
@@ -203,9 +225,13 @@ function viewOffer(token, offer, { note = "" } = {}) {
     nameError,
   );
   const accept = h("input", { type: "checkbox", id: "accept" });
+  const acceptText = h("span", {});
   const acceptError = h("p", { class: "error field-error", role: "alert", hidden: true });
+  const kindError = h("p", { class: "error field-error", role: "alert", hidden: true });
   const formError = h("p", { class: "error", role: "alert", hidden: true });
-  const pay = h("button", { class: "btn btn-primary btn-block btn-lg", type: "button" }, "Betala");
+  // Under provet sparas bara kortet; dragningen sker på provets slutdag.
+  const payLabel = offer.saveCardOnly ? "Spara kort" : "Till betalning";
+  const pay = h("button", { class: "btn btn-primary btn-block btn-lg", type: "button" }, payLabel);
 
   const orgBlock = offer.needsOrgNumber
     ? h("div", { id: "orgBlock" },
@@ -217,18 +243,66 @@ function viewOffer(token, offer, { note = "" } = {}) {
       )
     : null;
 
+  // Ett pris för alla (ägarens beslut 2026-11-22): exklusive moms, med
+  // beloppet inklusive moms bredvid -- samma för företag och privatpersoner.
+  const priceMain = h("p", { class: "price" }, money(offer.monthlyOre, offer.currency), h("small", {}, " /mån"));
+  const priceVat = h("p", { class: "muted vat" },
+    offer.vatPercent
+      ? `exkl. moms (${money(offer.monthlyTotalOre, offer.currency)} inkl. moms)`
+      : "exkl. moms");
+  const consumerInfo = h("div", { class: "consumer", hidden: true },
+    h("p", {},
+      h("b", {}, "Du har 14 dagars ångerrätt. "),
+      "Ångrar du dig betalar du bara för dagarna du hann använda. ",
+      h("a", { href: "/angerratt", target: "_blank", rel: "noopener" }, "Så fungerar ångerrätten"),
+    ),
+  );
+
+  function choiceCard(value, title, text) {
+    const input = h("input", { type: "radio", name: "kind", value, id: `kind-${value}` });
+    input.addEventListener("change", () => setKind(value));
+    return h("label", { class: "choice", for: `kind-${value}` },
+      input,
+      h("span", {}, h("b", {}, title), h("small", {}, text)),
+    );
+  }
+  const choices = offer.canChoosePrivate && offer.customerKind !== "private"
+    ? h("fieldset", { class: "kind" },
+        h("legend", {}, "Vem betalar?"),
+        choiceCard("company", "Jag har ett företag", "Du skriver organisationsnumret."),
+        choiceCard("private", "Jag har inget företag", "Du betalar som privatperson."),
+        kindError,
+      )
+    : null;
+
+  function render() {
+    const priv = kind === "private";
+    consumerInfo.hidden = !priv;
+    if (orgBlock) orgBlock.hidden = kind !== "company";
+    acceptText.textContent = priv
+      ? (offer.saveCardOnly
+          ? "Jag godkänner priset. Medlemskapet börjar när provet slutar, och jag vet att jag har 14 dagars ångerrätt."
+          : "Jag godkänner priset. Jag vill att medlemskapet börjar direkt och vet att jag har 14 dagars ångerrätt.")
+      : "Jag godkänner priset och villkoren";
+  }
+  function setKind(value) {
+    kind = value;
+    setError(kindError, "");
+    render();
+  }
+
   function setError(el, message) {
     el.textContent = message || "";
     el.hidden = !message;
   }
   function clearErrors() {
-    [orgError, nameError, acceptError, formError].forEach((el) => setError(el, ""));
+    [orgError, nameError, acceptError, kindError, formError].forEach((el) => setError(el, ""));
     orgInput.removeAttribute("aria-invalid");
     nameInput.removeAttribute("aria-invalid");
   }
   function busy(on) {
     pay.disabled = on;
-    pay.textContent = on ? "Ett ögonblick …" : "Betala";
+    pay.textContent = on ? "Ett ögonblick …" : payLabel;
   }
   function showOrgField(message) {
     // Servern kan kräva numret även om sidan trodde att det fanns: då saknas
@@ -241,14 +315,25 @@ function viewOffer(token, offer, { note = "" } = {}) {
 
   async function submit() {
     clearErrors();
+    if (!kind) {
+      setError(kindError, "Välj om du har ett företag eller inte.");
+      choices?.querySelector("input")?.focus();
+      return;
+    }
     if (!accept.checked) {
-      setError(acceptError, "Godkänn priset och villkoren för att betala.");
+      setError(acceptError, kind === "private"
+        ? "Kryssa i rutan för att gå vidare till betalningen."
+        : "Godkänn priset och villkoren för att betala.");
       accept.focus();
       return;
     }
     busy(true);
     try {
-      if (offer.needsOrgNumber) {
+      if (kind === "private" && offer.customerKind !== "private") {
+        await call("private", token);
+        offer.customerKind = "private";
+        offer.needsOrgNumber = false;
+      } else if (kind === "company" && offer.needsOrgNumber) {
         try {
           await call("org-number", token, {
             orgNumber: orgInput.value.trim(),
@@ -278,20 +363,26 @@ function viewOffer(token, offer, { note = "" } = {}) {
           }
         }
       }
-      const result = await call("checkout", token, { accepted: true });
+      const result = await call("checkout", token, {
+        accepted: true,
+        ...(kind === "private" ? { startNow: true } : {}),
+      });
       if (result.paymentUrl) {
         // Samma flik: en ny flik efter ett await blockeras av mobilwebbläsaren.
         location.assign(result.paymentUrl);
         return;
       }
       if (result.alreadyCommitted) {
-        viewPaid("Klart! Ni fortsätter.");
+        if (offer.saveCardOnly) viewSaved(offer.trialEndsAt);
+        else viewPaid("Klart! Du fortsätter.");
         return;
       }
       throw new ApiError(0, { message: "Kunde inte öppna betalsidan. Försök igen om en stund." });
     } catch (error) {
       if (error.detail?.field === "orgNumber") {
         showOrgField(error.message);
+      } else if (error.detail?.field === "startNow") {
+        setError(acceptError, error.message);
       } else if (["invalid_link", "expired_link"].includes(error.reason)) {
         viewProblem(error.message);
         return;
@@ -302,27 +393,38 @@ function viewOffer(token, offer, { note = "" } = {}) {
     }
   }
   pay.addEventListener("click", submit);
+  render();
 
-  const vat = offer.vatPercent ? ` (${money(offer.monthlyTotalOre, offer.currency)} inkl. moms)` : "";
+  // Allt om betalningen på ett ställe, i korta rader med bock: vad som
+  // ingår, när det dras och hur man säger upp. Samma uppgifter som i mejlet
+  // och ovanför knappen i Stripes kassa (fleet/stripe_sync.checkout_texts).
+  const facts = [
+    ...offer.items.map((item) => item.label),
+    offer.state === "trial" && offer.trialEndsAt
+      ? (offer.saveCardOnly
+          ? `Gratis till ${longDate(offer.trialEndsAt)}. Inget dras förrän då.`
+          : `Provet gäller till ${longDate(offer.trialEndsAt)}. Första månaden dras nu.`)
+      : null,
+    "Dras varje månad. Säg upp när du vill.",
+  ].filter(Boolean);
   show(
     h("h1", {}, "Fortsätt med Taxi Tips"),
     h("p", { class: "muted company" }, offer.companyName),
     note ? h("p", { class: "notice", role: "status" }, note) : null,
     h("div", { class: "card" },
-      h("ul", { class: "items" }, offer.items.map((item) => h("li", {}, item.label))),
-      h("p", { class: "price" }, money(offer.monthlyOre, offer.currency), h("small", {}, " /mån")),
-      h("p", { class: "muted vat" }, `exkl. moms${vat}`),
-      offer.state === "trial" && offer.trialEndsAt
-        ? h("p", { class: "muted terms" }, `Provet gäller till ${longDate(offer.trialEndsAt)}. Du betalar första månaden nu.`)
-        : null,
-      // Samma löfte som kundportalens medlemskapsvy (src/portal/views.js).
-      h("p", { class: "muted terms" }, "Månadsvis. Säg upp när ni vill, allt fungerar perioden ut."),
+      priceMain,
+      priceVat,
+      h("ul", { class: "facts" }, facts.map((text) => h("li", {}, text))),
     ),
+    choices,
     orgBlock,
-    h("label", { class: "accept", for: "accept" }, accept, h("span", {}, "Jag godkänner priset och villkoren")),
+    consumerInfo,
+    h("label", { class: "accept", for: "accept" }, accept, acceptText),
     acceptError,
     formError,
     pay,
+    h("p", { class: "muted methods" },
+      `Fungerar med ${offer.paymentMethods || "kort"}. Säker betalning via Stripe.`),
   );
 }
 
@@ -338,6 +440,10 @@ async function afterPayment(token) {
   for (let i = 0; i < POLL_TIMES; i += 1) {
     try {
       const offer = await call("offer", token);
+      if (offer.state === "saved") {
+        viewSaved(offer.firstChargeAt);
+        return;
+      }
       if (offer.state === "paid") {
         viewPaid();
         return;
@@ -353,7 +459,7 @@ async function afterPayment(token) {
   show(
     h("div", { class: "card center" },
       h("div", { class: "mark wait", "aria-hidden": "true" }, "…"),
-      h("h1", {}, "Betalningen är mottagen"),
+      h("h1", {}, "Klart hos Stripe"),
       h("p", { class: "muted" }, "Det kan ta någon minut innan allt är klart. Öppna appen om en stund."),
       h("button", { class: "btn btn-outline btn-block", type: "button", onclick: () => afterPayment(token) }, "Kontrollera igen"),
     ),
@@ -373,6 +479,7 @@ async function start() {
   viewLoading();
   try {
     const offer = await call("offer", token);
+    if (offer.state === "saved") return viewSaved(offer.firstChargeAt);
     if (offer.state === "paid") return viewPaid();
     if (offer.state === "nothing") return viewNothing();
     viewOffer(token, offer, { note: outcome === "avbruten" ? "Betalningen avbröts." : "" });

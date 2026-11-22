@@ -88,7 +88,7 @@ void main() {
     expect(find.textContaining('bara e-post'), findsNothing);
   });
 
-  testWidgets('välkomstskärmen: logga in eller registrera, inget rollval', (
+  testWidgets('välkomstskärmen: två knappar och nästan ingen text', (
     tester,
   ) async {
     final taps = <String>[];
@@ -101,10 +101,18 @@ void main() {
       ),
     );
     expect(find.text('Jag är förare'), findsNothing);
-    expect(find.textContaining('För förare, ägare och kontor'), findsOneWidget);
+    // Ingen ska behöva ha ett företag för att komma igång.
+    expect(find.textContaining('Registrera företag'), findsNothing);
     await tester.tap(find.text('Logga in'));
-    await tester.tap(find.text('Registrera företag'));
+    await tester.tap(find.text('Skapa konto gratis'));
     expect(taps, ['login', 'signup']);
     expect(find.textContaining('kod'), findsNothing);
+    // Rubriken, två knappar och länken till demon -- inga förklaringstexter.
+    final texts = tester
+        .widgetList<Text>(find.byType(Text))
+        .map((t) => t.data ?? '')
+        .where((t) => t.isNotEmpty)
+        .toList();
+    expect(texts.length, lessThanOrEqualTo(4), reason: '$texts');
   });
 }

@@ -484,6 +484,14 @@ FLEET_SMTP_HOST = os.environ.get("FLEET_SMTP_HOST", "smtp.hostinger.com")
 FLEET_SMTP_PORT = int(os.environ.get("FLEET_SMTP_PORT", "465") or 465)
 FLEET_SMTP_USER = os.environ.get("FLEET_SMTP_USER", "")
 FLEET_SMTP_PASSWORD = os.environ.get("FLEET_SMTP_PASSWORD", "")
+# Betalsätten som kassan visar, i klartext för mejl, sms och betalsidan.
+# Stripe-kassan visar det som är påslaget i Stripe (dynamiska betalsätt);
+# Apple Pay och Google Pay följer med kort. Slås Klarna på i Stripe:
+# sätt "kort, Apple Pay, Google Pay eller Klarna". Swish går inte att
+# använda för månadsabonnemang i Stripe.
+FLEET_PAYMENT_METHODS_TEXT = os.environ.get(
+    "FLEET_PAYMENT_METHODS_TEXT", "kort, Apple Pay eller Google Pay",
+).strip()
 # Webbformulären på taxitips.se anropar POST /api/crm/lead direkt.
 # Origins som får göra det (CORS), utöver APP_API_ALLOWED_ORIGINS.
 WEB_FORM_ORIGINS = [

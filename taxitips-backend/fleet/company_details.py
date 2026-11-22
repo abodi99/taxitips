@@ -21,7 +21,7 @@ from __future__ import annotations
 import re
 
 from fleet import audit, roles, signup_checks
-from fleet.models import CompanyProfile
+from fleet.models import CompanyProfile, CustomerKind
 from fleet.roles import Perm
 from fleet.sales import SalesError
 
@@ -44,7 +44,8 @@ def view(profile: CompanyProfile | None) -> dict:
         return {
             "contactName": "", "contactPhone": "", "contactEmail": "",
             "billingEmail": "", "billingReference": "", "billingAddress": {},
-            "needsOrgNumber": True,
+            "needsOrgNumber": True, "customerKind": CustomerKind.COMPANY,
+            "canChoosePrivate": False,
         }
     address = profile.billing_address or {}
     return {
@@ -59,8 +60,11 @@ def view(profile: CompanyProfile | None) -> dict:
             "postalCode": address.get("postal_code", ""),
             "city": address.get("city", ""),
         },
-        # BankID-registreringen: numret anges före första beställningen.
-        "needsOrgNumber": not profile.org_number,
+        # BankID-registreringen: numret anges före första beställningen --
+        # utom för en privatperson, som inte har något.
+        "needsOrgNumber": needs_org_number(profile.company_id),
+        "customerKind": profile.customer_kind,
+        "canChoosePrivate": can_choose_private(profile.company_id),
     }
 
 
@@ -166,11 +170,14 @@ COMPANY_DETAILS_REQUIRED = (
 
 
 def needs_org_number(company_id) -> bool:
-    """Varken profilen eller företagsraden har ett organisationsnummer."""
+    """
+    Varken profilen eller företagsraden har ett organisationsnummer, och kunden
+    är inte en privatperson (som inte har något att ange).
+    """
     from billing.models import Company
 
     profile = CompanyProfile.objects.filter(company_id=company_id).first()
-    if profile is not None and profile.org_number:
+    if profile is not None and (profile.org_number or profile.customer_kind == CustomerKind.PRIVATE):
         return False
     return not Company.objects.filter(id=company_id).exclude(org_number__isnull=True).exclude(
         org_number=""
@@ -259,7 +266,10 @@ def add_org_number(company_id, body: dict, *, actor_user_id, actor_kind: str = "
             )
         profile.org_number = normalized
         profile.legal_name = legal_name
-        profile.save(update_fields=["org_number", "legal_name"])
+        # Ett organisationsnummer gör avtalsparten till ett företag, även om
+        # kunden började som privatperson.
+        profile.customer_kind = CustomerKind.COMPANY
+        profile.save(update_fields=["org_number", "legal_name", "customer_kind"])
         if registry is not None:
             bolagsverket.apply_to_profile(profile, registry)
         Company.objects.filter(id=company_id).update(org_number=normalized)
@@ -270,3 +280,110 @@ def add_org_number(company_id, body: dict, *, actor_user_id, actor_kind: str = "
                     "registry": (registry.status if registry else "unavailable")},
         )
     return {"orgNumber": normalized, "legalName": legal_name, "kind": kind}
+
+
+# ---------------------------------------------------------------------------
+# Privatperson: betala utan företag
+# ---------------------------------------------------------------------------
+#
+# En förare utan eget företag (anställd, eller som inte vet vad hen ska skriva)
+# ska kunna fortsätta efter provet. Det kräver att personen är legitimerad med
+# BankID -- då vet vi vem avtalsparten är utan organisationsnummer. Avtalet
+# blir då ett konsumentavtal: priset visas inklusive moms, betalning bara med
+# kort (ingen faktura till privatpersoner) och 14 dagars ångerrätt
+# (distansavtalslagen 2 kap.). Startar medlemskapet direkt på kundens
+# uttryckliga begäran betalar kunden för de dagar som hunnit gå om hen ångrar
+# sig (2 kap. 14 §) -- därför `startNow` nedan.
+
+CONSUMER_TERMS_REQUIRED = (
+    "Kryssa i att du vill att medlemskapet börjar direkt och att du vet om "
+    "ångerrätten."
+)
+
+
+def is_private(company_id) -> bool:
+    return CompanyProfile.objects.filter(
+        company_id=company_id, customer_kind=CustomerKind.PRIVATE,
+    ).exists()
+
+
+def _owner_has_bankid(company_id) -> bool:
+    from billing.models import CompanyMember
+    from fleet.models import BankIdIdentity
+
+    owners = CompanyMember.objects.filter(
+        company_id=company_id, role="company_owner", status="active",
+    ).values_list("user_id", flat=True)
+    return BankIdIdentity.objects.filter(user_id__in=list(owners)).exists()
+
+
+def can_choose_private(company_id) -> bool:
+    """Saknar organisationsnummer, är inte redan privat, och ägaren har BankID."""
+    profile = CompanyProfile.objects.filter(company_id=company_id).first()
+    if profile is None or profile.org_number or profile.customer_kind == CustomerKind.PRIVATE:
+        return False
+    return needs_org_number(company_id) and _owner_has_bankid(company_id)
+
+
+def mark_private(company_id, *, actor_user_id=None, actor_kind: str = "customer") -> dict:
+    """
+    Kunden betalar som privatperson. Bara utan organisationsnummer och bara när
+    ägaren är legitimerad med BankID. Upprepat anrop är ofarligt.
+    """
+    from django.db import transaction
+    from django.utils import timezone
+
+    with transaction.atomic():
+        profile = CompanyProfile.objects.select_for_update().filter(company_id=company_id).first()
+        if profile is None:
+            raise SalesError("no_company", "Kontot saknar uppgifter. Kontakta TaxiTips.", status=404)
+        if profile.customer_kind == CustomerKind.PRIVATE:
+            return {"customerKind": profile.customer_kind}
+        if profile.org_number:
+            raise SalesError(
+                "org_number_set",
+                "Kontot har ett organisationsnummer och betalar som företag.",
+                status=409,
+            )
+        if not _owner_has_bankid(company_id):
+            raise SalesError(
+                "bankid_required",
+                "Bara den som legitimerat sig med BankID kan betala som privatperson. "
+                "Skriv organisationsnumret, eller kontakta TaxiTips.",
+                status=409,
+            )
+        profile.customer_kind = CustomerKind.PRIVATE
+        profile.customer_kind_set_at = timezone.now()
+        profile.save(update_fields=["customer_kind", "customer_kind_set_at"])
+        audit.record(
+            "customer_kind_private", company_id=company_id, actor_user_id=actor_user_id,
+            actor_kind=actor_kind, subject_type="company", subject_id=company_id,
+            detail={"customerKind": CustomerKind.PRIVATE},
+        )
+    return {"customerKind": CustomerKind.PRIVATE}
+
+
+def set_private(principal: roles.Principal) -> dict:
+    """Kundportalen: samma sak som "Fortsätt här"-länken, för den inloggade."""
+    roles.require(principal, Perm.PURCHASE)
+    return mark_private(principal.company_id, actor_user_id=principal.user_id)
+
+
+def require_consumer_terms(company_id, body: dict, *, actor_user_id=None) -> None:
+    """
+    En privatperson måste uttryckligen be att medlemskapet börjar direkt, och
+    ha fått veta om ångerrätten, innan betalningen startar. Bokförs, så att det
+    går att visa vad kunden godkände och när. Företag påverkas inte.
+    """
+    if not is_private(company_id):
+        return
+    if body.get("startNow") is not True:
+        raise SalesError(
+            "consumer_terms_required", CONSUMER_TERMS_REQUIRED, status=400,
+            detail={"field": "startNow"},
+        )
+    audit.record(
+        "consumer_start_now_accepted", company_id=company_id, actor_user_id=actor_user_id,
+        actor_kind="customer", subject_type="company", subject_id=company_id,
+        detail={"withdrawalDays": 14},
+    )
