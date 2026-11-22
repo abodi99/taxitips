@@ -155,7 +155,11 @@ def start(*, purpose: str, end_user_ip: str) -> dict:
     text = USER_VISIBLE_TEXT[purpose]
     payload = {
         "endUserIp": end_user_ip or "127.0.0.1",
-        "userVisibleData": base64.b64encode(text.encode("utf-8")).decode("ascii"),
+        # Redan base64-kodad: därför `userVisibleDataBase64`. Proxyn kodar
+        # `userVisibleData` själv, så samma text där blev kodad två gånger och
+        # BankID-appen visade en rad obegripliga tecken och siffror i stället
+        # för texten (rättat 2026-11-23).
+        "userVisibleDataBase64": base64.b64encode(text.encode("utf-8")).decode("ascii"),
     }
     data = _proxy("/auth", payload)
     order_ref = str(data.get("orderRef") or data.get("sessionId") or "")
