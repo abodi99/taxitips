@@ -114,7 +114,7 @@
   "trialWelcomeWhatBody": {
     "sv": "Taxi Tips visar var folk kan behöva taxi just nu. Det är tips, inte löften. Du bestämmer själv om det är värt att åka.",
     "en": "Taxi Tips shows where people may need a taxi right now. These are tips, not promises. You decide if it is worth driving there.",
-    "ar": "يعرض Taxi Tips الأماكن التي قد يحتاج فيها الناس إلى سيارة أجرة الآن. هذه اقتراحات وليست وعودًا. أنت من يقرر إن كان الذهاب يستحق."
+    "ar": "يعرض Taxi Tips الأماكن التي قد يحتاج فيها الناس إلى تاكسي الآن. هذه اقتراحات وليست وعودًا. أنت من يقرر إن كان الذهاب يستحق."
   },
   "trialWelcomeWatching": {
     "sv": "Vi bevakar",
@@ -124,7 +124,7 @@
   "trialWelcomeColorNote": {
     "sv": "Färgen visar hur stark signalen är. En stark signal betyder att många sannolikt behöver taxi.",
     "en": "The colour shows how strong the signal is. A strong signal means many people likely need a taxi.",
-    "ar": "يدل اللون على قوة الإشارة. الإشارة القوية تعني أن كثيرين على الأرجح يحتاجون إلى سيارة أجرة."
+    "ar": "يدل اللون على قوة الإشارة. الإشارة القوية تعني أن كثيرين على الأرجح يحتاجون إلى تاكسي."
   },
   "trialWelcomeTrialTitleNoDays": {
     "sv": "Du provar gratis",
@@ -209,7 +209,7 @@
   "trialWelcomeStep2Title": {
     "sv": "Har du ett taxibolag? Bjud in förare på webben",
     "en": "Do you have a taxi company? Invite drivers on the web",
-    "ar": "هل لديك شركة سيارات أجرة؟ ادعُ السائقين عبر الويب"
+    "ar": "هل لديك شركة تاكسي؟ ادعُ السائقين عبر الويب"
   },
   "trialWelcomeStep2Text": {
     "sv": "Inbjudan skickas av företagets administratör på webben, inte från appen. Föraren får ett mejl, väljer ett lösenord och loggar in i appen med e-post och lösenord.",

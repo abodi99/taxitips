@@ -1705,7 +1705,7 @@
   "signupScreenCompanyLabel": "Företagets namn",
   "signupScreenCompanyQuestion": "Vad heter företaget?",
   "signupScreenCompanyText": "Med egna bilar eller förare.",
-  "signupScreenCompanyTitle": "Jag har ett taxibolag",
+  "signupScreenCompanyTitle": "Jag äger ett taxibolag",
   "signupScreenContinueBankId": "Fortsätt med BankID",
   "signupScreenCreateAccount": "Skapa kontot",
   "signupScreenDateInvalid": "Personnumret har ett datum som inte finns. Kontrollera numret.",
@@ -1713,8 +1713,8 @@
   "signupScreenEmailLabel": "E-post",
   "signupScreenEmailQuestion": "Din e-post",
   "signupScreenHaveAccount": "Har du redan ett konto? Logga in",
-  "signupScreenKindQuestion": "Hur kör du?",
-  "signupScreenKindQuestionNamed": "Hej {name}! Hur kör du?",
+  "signupScreenKindQuestion": "Är du förare eller ägare?",
+  "signupScreenKindQuestionNamed": "Hej {name}! Är du förare eller ägare?",
   "@signupScreenKindQuestionNamed": {
     "placeholders": {
       "name": {
@@ -1724,7 +1724,7 @@
   },
   "signupScreenLoginInstead": "Logga in i stället",
   "signupScreenNext": "Nästa",
-  "signupScreenNotSure": "Inte säker? Välj \"Jag kör själv\".",
+  "signupScreenNotSure": "Inte säker? Välj \"Jag är förare\".",
   "signupScreenPasswordLabel": "Lösenord",
   "signupScreenPasswordMin": "Minst 8 tecken",
   "signupScreenPasswordQuestion": "Välj ett lösenord",
@@ -1736,7 +1736,7 @@
   "signupScreenProblemPassword": "Lösenordet behöver minst 8 tecken.",
   "signupScreenProblemPhone": "Det ser inte ut som ett mobilnummer. Skriv till exempel 070 123 45 67.",
   "signupScreenSoloText": "Du behöver inget företag.",
-  "signupScreenSoloTitle": "Jag kör själv",
+  "signupScreenSoloTitle": "Jag är förare",
   "signupScreenSomethingWrong": "Något gick fel. Försök igen.",
   "signupScreenStepOf": "Steg {n} av {total}",
   "@signupScreenStepOf": {

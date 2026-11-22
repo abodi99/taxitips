@@ -7,6 +7,7 @@ import '../l10n/l10n.dart';
 import '../membership_copy.dart';
 import '../net_status.dart';
 import '../theme.dart';
+import '../widgets/ltr_input.dart';
 import '../widgets/password_visibility.dart';
 
 /// Ett steg i registreringen efter BankID. En fråga per skärm.
@@ -439,6 +440,8 @@ class SignupScreenState extends State<SignupScreen> {
     Widget? suffix,
     TextCapitalization capitalization = TextCapitalization.none,
     bool last = false,
+    // Mobil, e-post, lösenord: vänster till höger även på arabiska.
+    bool ltr = false,
   }) => TextField(
     // Samma fält genom alla steg (ingen nyckel per steg): bara innehåll och
     // tangentbord byts, så markören och tangentbordet följer med till nästa
@@ -452,6 +455,8 @@ class SignupScreenState extends State<SignupScreen> {
     autocorrect: false,
     obscureText: obscure,
     textCapitalization: capitalization,
+    textDirection: ltr ? kLtrInputDirection : null,
+    textAlign: ltr ? ltrInputAlign(context) : TextAlign.start,
     textInputAction: last ? TextInputAction.done : TextInputAction.next,
     // I stället för standardbeteendet, som flyttar markören till knappen
     // eller stänger tangentbordet: samma sak som att trycka på Nästa.
@@ -465,8 +470,9 @@ class SignupScreenState extends State<SignupScreen> {
     decoration: InputDecoration(
       labelText: label,
       hintText: hint,
+      hintTextDirection: ltr ? kLtrInputDirection : null,
       floatingLabelBehavior: FloatingLabelBehavior.always,
-      errorText: _error,
+      errorText: _error == null ? null : ltrRuns(_error!),
       errorMaxLines: 4,
       errorStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
       prefixIcon: Icon(icon),
@@ -623,6 +629,7 @@ class SignupScreenState extends State<SignupScreen> {
         const SizedBox(height: 20),
         _input(
           controller: _phone,
+          ltr: true,
           label: tr.signupScreenPhoneLabel,
           hint: '070 123 45 67',
           icon: Icons.phone_outlined,
@@ -635,6 +642,7 @@ class SignupScreenState extends State<SignupScreen> {
         const SizedBox(height: 20),
         _input(
           controller: _email,
+          ltr: true,
           label: tr.signupScreenEmailLabel,
           hint: 'namn@gmail.com',
           icon: Icons.email_outlined,
@@ -647,6 +655,7 @@ class SignupScreenState extends State<SignupScreen> {
         const SizedBox(height: 20),
         _input(
           controller: _password,
+          ltr: true,
           label: tr.signupScreenPasswordLabel,
           icon: Icons.lock_outline,
           obscure: _hidePassword,

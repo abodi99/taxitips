@@ -8,6 +8,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'api_client.dart';
 import 'l10n/l10n.dart';
 import 'theme.dart';
+import 'widgets/ltr_input.dart';
 
 /// Vad BankID gav: namnet att hälsa med och biljetten servern kräver i nästa
 /// steg. Personnumret når aldrig appen (fleet/bankid.py).
@@ -551,6 +552,8 @@ class _RecoverDialogState extends State<_RecoverDialog> {
             const SizedBox(height: 16),
             TextField(
               controller: _password,
+              textDirection: kLtrInputDirection,
+              textAlign: ltrInputAlign(context),
               obscureText: _hide,
               decoration: InputDecoration(
                 labelText: tr.bankIdFlowNewPasswordTitle,
@@ -578,6 +581,8 @@ class _RecoverDialogState extends State<_RecoverDialog> {
             if (_changeEmail)
               TextField(
                 controller: _email,
+                textDirection: kLtrInputDirection,
+                textAlign: ltrInputAlign(context),
                 keyboardType: TextInputType.emailAddress,
                 autocorrect: false,
                 decoration: InputDecoration(

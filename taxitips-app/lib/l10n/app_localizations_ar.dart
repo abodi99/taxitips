@@ -1696,7 +1696,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get loginScreenIntro =>
-      'للسائقين والملّاك والمكتب. سائق جديد؟ اختر أولاً كلمة مرور من الرابط الموجود في الدعوة.';
+      'للسائقين وأصحاب الشركات والمكاتب. سائق جديد؟ اختر أولاً كلمة مرور من الرابط في الدعوة.';
 
   @override
   String get loginScreenNoAccount => 'ليس لديك حساب؟';
@@ -1763,10 +1763,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get membershipCopyPortalTitle => 'إدارة حساب الشركة';
 
   @override
-  String get membershipCopyPromiseNoBinding => 'بلا التزام';
+  String get membershipCopyPromiseNoBinding => 'بدون التزام';
 
   @override
-  String get membershipCopyPromiseNoCard => 'بلا بطاقة';
+  String get membershipCopyPromiseNoCard => 'لا حاجة إلى بطاقة';
 
   @override
   String get membershipCopyPromiseNoCompany => 'لا حاجة إلى شركة';
@@ -2641,10 +2641,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get signupScreenBack => 'رجوع';
 
   @override
-  String get signupScreenCompanyHelp => 'لا حاجة إلى رقم المنظمة الآن.';
+  String get signupScreenCompanyHelp => 'لا حاجة إلى رقم تسجيل الشركة الآن.';
 
   @override
-  String get signupScreenCompanyHint => 'مثلاً Annas Taxi';
+  String get signupScreenCompanyHint => 'مثلاً: تاكسي أحمد';
 
   @override
   String get signupScreenCompanyLabel => 'اسم الشركة';
@@ -2653,10 +2653,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get signupScreenCompanyQuestion => 'ما اسم الشركة؟';
 
   @override
-  String get signupScreenCompanyText => 'بسيارات أو سائقين تابعين لي.';
+  String get signupScreenCompanyText => 'لديك سيارات أو سائقون.';
 
   @override
-  String get signupScreenCompanyTitle => 'لدي شركة تاكسي';
+  String get signupScreenCompanyTitle => 'أنا صاحب شركة تاكسي';
 
   @override
   String get signupScreenContinueBankId => 'تابع باستخدام BankID';
@@ -2681,11 +2681,11 @@ class AppLocalizationsAr extends AppLocalizations {
   String get signupScreenHaveAccount => 'هل لديك حساب بالفعل؟ سجّل الدخول';
 
   @override
-  String get signupScreenKindQuestion => 'كيف تعمل في القيادة؟';
+  String get signupScreenKindQuestion => 'هل أنت سائق أم صاحب شركة؟';
 
   @override
   String signupScreenKindQuestionNamed(String name) {
-    return 'مرحباً $name! كيف تعمل في القيادة؟';
+    return 'مرحباً $name! هل أنت سائق أم صاحب شركة؟';
   }
 
   @override
@@ -2695,7 +2695,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get signupScreenNext => 'التالي';
 
   @override
-  String get signupScreenNotSure => 'غير متأكد؟ اختر «أقود بمفردي».';
+  String get signupScreenNotSure => 'غير متأكد؟ اختر «أنا سائق».';
 
   @override
   String get signupScreenPasswordLabel => 'كلمة المرور';
@@ -2707,10 +2707,10 @@ class AppLocalizationsAr extends AppLocalizations {
   String get signupScreenPasswordQuestion => 'اختر كلمة مرور';
 
   @override
-  String get signupScreenPhoneLabel => 'الهاتف المحمول';
+  String get signupScreenPhoneLabel => 'رقم الجوال';
 
   @override
-  String get signupScreenPhoneQuestion => 'رقم هاتفك المحمول';
+  String get signupScreenPhoneQuestion => 'رقم جوالك';
 
   @override
   String get signupScreenProblemChoose => 'اختر أحد الخيارات.';
@@ -2734,7 +2734,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get signupScreenSoloText => 'لا تحتاج إلى شركة.';
 
   @override
-  String get signupScreenSoloTitle => 'أقود بمفردي';
+  String get signupScreenSoloTitle => 'أنا سائق';
 
   @override
   String get signupScreenSomethingWrong => 'حدث خطأ ما. حاول مرة أخرى.';
@@ -2969,7 +2969,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get trialWelcomeColorNote =>
-      'يدل اللون على قوة الإشارة. الإشارة القوية تعني أن كثيرين على الأرجح يحتاجون إلى سيارة أجرة.';
+      'يدل اللون على قوة الإشارة. الإشارة القوية تعني أن كثيرين على الأرجح يحتاجون إلى تاكسي.';
 
   @override
   String get trialWelcomeCostsNothing => 'التجربة لا تكلّف شيئًا.';
@@ -3101,7 +3101,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get trialWelcomeStep2Title =>
-      'هل لديك شركة سيارات أجرة؟ ادعُ السائقين عبر الويب';
+      'هل لديك شركة تاكسي؟ ادعُ السائقين عبر الويب';
 
   @override
   String get trialWelcomeStepsTitle => 'كيف تبدأ';
@@ -3147,7 +3147,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get trialWelcomeWhatBody =>
-      'يعرض Taxi Tips الأماكن التي قد يحتاج فيها الناس إلى سيارة أجرة الآن. هذه اقتراحات وليست وعودًا. أنت من يقرر إن كان الذهاب يستحق.';
+      'يعرض Taxi Tips الأماكن التي قد يحتاج فيها الناس إلى تاكسي الآن. هذه اقتراحات وليست وعودًا. أنت من يقرر إن كان الذهاب يستحق.';
 
   @override
   String get trialWelcomeWhatTitle => 'مرحبًا بك في Taxi Tips';

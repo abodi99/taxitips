@@ -52,12 +52,12 @@
   "membershipCopyPromiseNoCard": {
     "sv": "Inget kort",
     "en": "No card",
-    "ar": "بلا بطاقة"
+    "ar": "لا حاجة إلى بطاقة"
   },
   "membershipCopyPromiseNoBinding": {
     "sv": "Ingen bindning",
     "en": "No commitment",
-    "ar": "بلا التزام"
+    "ar": "بدون التزام"
   },
   "membershipCopyPromiseNoCompany": {
     "sv": "Inget företag behövs",

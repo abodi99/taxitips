@@ -36,7 +36,7 @@ void main() {
       await tester.pump();
     }
 
-    await tap('Jag kör själv');
+    await tap('Jag är förare');
     await tester.enterText(find.byType(TextField), '070 812 34 91');
     await tap('Nästa');
     await tester.enterText(find.byType(TextField), 'anna@gmail.com');

@@ -19,7 +19,7 @@
   "loginScreenIntro": {
     "sv": "För förare, ägare och kontor. Ny förare? Välj först ett lösenord med länken i inbjudan.",
     "en": "For drivers, owners and office staff. New driver? First choose a password with the link in your invitation.",
-    "ar": "للسائقين والملّاك والمكتب. سائق جديد؟ اختر أولاً كلمة مرور من الرابط الموجود في الدعوة."
+    "ar": "للسائقين وأصحاب الشركات والمكاتب. سائق جديد؟ اختر أولاً كلمة مرور من الرابط في الدعوة."
   },
   "loginScreenEmail": {
     "sv": "E-post",

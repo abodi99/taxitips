@@ -2629,10 +2629,10 @@ class AppLocalizationsEn extends AppLocalizations {
   String get signupScreenCompanyQuestion => 'What is the company called?';
 
   @override
-  String get signupScreenCompanyText => 'With my own cars or drivers.';
+  String get signupScreenCompanyText => 'With your own cars or drivers.';
 
   @override
-  String get signupScreenCompanyTitle => 'I have a taxi company';
+  String get signupScreenCompanyTitle => 'I own a taxi company';
 
   @override
   String get signupScreenContinueBankId => 'Continue with BankID';
@@ -2657,11 +2657,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get signupScreenHaveAccount => 'Already have an account? Log in';
 
   @override
-  String get signupScreenKindQuestion => 'How do you drive?';
+  String get signupScreenKindQuestion => 'Are you a driver or an owner?';
 
   @override
   String signupScreenKindQuestionNamed(String name) {
-    return 'Hi $name! How do you drive?';
+    return 'Hi $name! Are you a driver or an owner?';
   }
 
   @override
@@ -2671,7 +2671,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get signupScreenNext => 'Next';
 
   @override
-  String get signupScreenNotSure => 'Not sure? Choose \"I drive on my own\".';
+  String get signupScreenNotSure => 'Not sure? Choose \"I\'m a driver\".';
 
   @override
   String get signupScreenPasswordLabel => 'Password';
@@ -2707,10 +2707,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'That does not look like a mobile number. Write for example 070 123 45 67.';
 
   @override
-  String get signupScreenSoloText => 'You do not need a company.';
+  String get signupScreenSoloText => 'You don\'t need a company.';
 
   @override
-  String get signupScreenSoloTitle => 'I drive on my own';
+  String get signupScreenSoloTitle => 'I\'m a driver';
 
   @override
   String get signupScreenSomethingWrong => 'Something went wrong. Try again.';

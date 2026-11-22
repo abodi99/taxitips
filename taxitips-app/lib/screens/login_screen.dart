@@ -9,6 +9,7 @@ import '../bankid_flow.dart';
 import '../l10n/l10n.dart';
 import '../net_status.dart';
 import '../theme.dart';
+import '../widgets/ltr_input.dart';
 
 /// Inloggningen: EN för förare, ägare och kontor, bara e-post och lösenord.
 ///
@@ -293,6 +294,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 22),
                 TextField(
                   controller: _email,
+                  textDirection: kLtrInputDirection,
+                  textAlign: ltrInputAlign(context),
                   enabled: !_busy,
                   keyboardType: TextInputType.emailAddress,
                   autocorrect: false,
@@ -309,6 +312,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: 14),
                 TextField(
                   controller: _password,
+                  textDirection: kLtrInputDirection,
+                  textAlign: ltrInputAlign(context),
                   focusNode: _passwordFocus,
                   enabled: !_busy,
                   obscureText: _hidePassword,
@@ -348,7 +353,8 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 if (_error != null) _Message(text: _error!, error: true),
-                if (_notice != null) _Message(text: _notice!, error: false),
+                if (_notice != null)
+                  _Message(text: ltrRuns(_notice!), error: false),
                 const SizedBox(height: 8),
                 FilledButton(
                   onPressed: _busy ? null : _submit,

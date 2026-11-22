@@ -2585,7 +2585,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get signupScreenCompanyText => 'Med egna bilar eller förare.';
 
   @override
-  String get signupScreenCompanyTitle => 'Jag har ett taxibolag';
+  String get signupScreenCompanyTitle => 'Jag äger ett taxibolag';
 
   @override
   String get signupScreenContinueBankId => 'Fortsätt med BankID';
@@ -2610,11 +2610,11 @@ class AppLocalizationsSv extends AppLocalizations {
   String get signupScreenHaveAccount => 'Har du redan ett konto? Logga in';
 
   @override
-  String get signupScreenKindQuestion => 'Hur kör du?';
+  String get signupScreenKindQuestion => 'Är du förare eller ägare?';
 
   @override
   String signupScreenKindQuestionNamed(String name) {
-    return 'Hej $name! Hur kör du?';
+    return 'Hej $name! Är du förare eller ägare?';
   }
 
   @override
@@ -2624,7 +2624,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get signupScreenNext => 'Nästa';
 
   @override
-  String get signupScreenNotSure => 'Inte säker? Välj \"Jag kör själv\".';
+  String get signupScreenNotSure => 'Inte säker? Välj \"Jag är förare\".';
 
   @override
   String get signupScreenPasswordLabel => 'Lösenord';
@@ -2663,7 +2663,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get signupScreenSoloText => 'Du behöver inget företag.';
 
   @override
-  String get signupScreenSoloTitle => 'Jag kör själv';
+  String get signupScreenSoloTitle => 'Jag är förare';
 
   @override
   String get signupScreenSomethingWrong => 'Något gick fel. Försök igen.';

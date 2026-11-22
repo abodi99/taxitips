@@ -4303,7 +4303,7 @@ abstract class AppLocalizations {
   /// No description provided for @signupScreenCompanyTitle.
   ///
   /// In sv, this message translates to:
-  /// **'Jag har ett taxibolag'**
+  /// **'Jag äger ett taxibolag'**
   String get signupScreenCompanyTitle;
 
   /// No description provided for @signupScreenContinueBankId.
@@ -4351,13 +4351,13 @@ abstract class AppLocalizations {
   /// No description provided for @signupScreenKindQuestion.
   ///
   /// In sv, this message translates to:
-  /// **'Hur kör du?'**
+  /// **'Är du förare eller ägare?'**
   String get signupScreenKindQuestion;
 
   /// No description provided for @signupScreenKindQuestionNamed.
   ///
   /// In sv, this message translates to:
-  /// **'Hej {name}! Hur kör du?'**
+  /// **'Hej {name}! Är du förare eller ägare?'**
   String signupScreenKindQuestionNamed(String name);
 
   /// No description provided for @signupScreenLoginInstead.
@@ -4375,7 +4375,7 @@ abstract class AppLocalizations {
   /// No description provided for @signupScreenNotSure.
   ///
   /// In sv, this message translates to:
-  /// **'Inte säker? Välj \"Jag kör själv\".'**
+  /// **'Inte säker? Välj \"Jag är förare\".'**
   String get signupScreenNotSure;
 
   /// No description provided for @signupScreenPasswordLabel.
@@ -4447,7 +4447,7 @@ abstract class AppLocalizations {
   /// No description provided for @signupScreenSoloTitle.
   ///
   /// In sv, this message translates to:
-  /// **'Jag kör själv'**
+  /// **'Jag är förare'**
   String get signupScreenSoloTitle;
 
   /// No description provided for @signupScreenSomethingWrong.

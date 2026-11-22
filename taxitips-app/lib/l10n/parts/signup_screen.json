@@ -66,40 +66,40 @@
     "ar": "هل لديك حساب بالفعل؟ سجّل الدخول"
   },
   "signupScreenKindQuestion": {
-    "sv": "Hur kör du?",
-    "en": "How do you drive?",
-    "ar": "كيف تعمل في القيادة؟"
+    "sv": "Är du förare eller ägare?",
+    "en": "Are you a driver or an owner?",
+    "ar": "هل أنت سائق أم صاحب شركة؟"
   },
   "signupScreenKindQuestionNamed": {
-    "sv": "Hej {name}! Hur kör du?",
-    "en": "Hi {name}! How do you drive?",
-    "ar": "مرحباً {name}! كيف تعمل في القيادة؟",
+    "sv": "Hej {name}! Är du förare eller ägare?",
+    "en": "Hi {name}! Are you a driver or an owner?",
+    "ar": "مرحباً {name}! هل أنت سائق أم صاحب شركة؟",
     "placeholders": {"name": {"type": "String"}}
   },
   "signupScreenSoloTitle": {
-    "sv": "Jag kör själv",
-    "en": "I drive on my own",
-    "ar": "أقود بمفردي"
+    "sv": "Jag är förare",
+    "en": "I'm a driver",
+    "ar": "أنا سائق"
   },
   "signupScreenSoloText": {
     "sv": "Du behöver inget företag.",
-    "en": "You do not need a company.",
+    "en": "You don't need a company.",
     "ar": "لا تحتاج إلى شركة."
   },
   "signupScreenCompanyTitle": {
-    "sv": "Jag har ett taxibolag",
-    "en": "I have a taxi company",
-    "ar": "لدي شركة تاكسي"
+    "sv": "Jag äger ett taxibolag",
+    "en": "I own a taxi company",
+    "ar": "أنا صاحب شركة تاكسي"
   },
   "signupScreenCompanyText": {
     "sv": "Med egna bilar eller förare.",
-    "en": "With my own cars or drivers.",
-    "ar": "بسيارات أو سائقين تابعين لي."
+    "en": "With your own cars or drivers.",
+    "ar": "لديك سيارات أو سائقون."
   },
   "signupScreenNotSure": {
-    "sv": "Inte säker? Välj \"Jag kör själv\".",
-    "en": "Not sure? Choose \"I drive on my own\".",
-    "ar": "غير متأكد؟ اختر «أقود بمفردي»."
+    "sv": "Inte säker? Välj \"Jag är förare\".",
+    "en": "Not sure? Choose \"I'm a driver\".",
+    "ar": "غير متأكد؟ اختر «أنا سائق»."
   },
   "signupScreenCompanyQuestion": {
     "sv": "Vad heter företaget?",
@@ -109,7 +109,7 @@
   "signupScreenCompanyHelp": {
     "sv": "Organisationsnummer behövs inte nu.",
     "en": "You do not need an organisation number now.",
-    "ar": "لا حاجة إلى رقم المنظمة الآن."
+    "ar": "لا حاجة إلى رقم تسجيل الشركة الآن."
   },
   "signupScreenCompanyLabel": {
     "sv": "Företagets namn",
@@ -119,17 +119,17 @@
   "signupScreenCompanyHint": {
     "sv": "Till exempel Annas Taxi",
     "en": "For example Anna's Taxi",
-    "ar": "مثلاً Annas Taxi"
+    "ar": "مثلاً: تاكسي أحمد"
   },
   "signupScreenPhoneQuestion": {
     "sv": "Ditt mobilnummer",
     "en": "Your mobile number",
-    "ar": "رقم هاتفك المحمول"
+    "ar": "رقم جوالك"
   },
   "signupScreenPhoneLabel": {
     "sv": "Mobil",
     "en": "Mobile",
-    "ar": "الهاتف المحمول"
+    "ar": "رقم الجوال"
   },
   "signupScreenEmailQuestion": {
     "sv": "Din e-post",
