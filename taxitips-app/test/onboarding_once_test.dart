@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:taxitips_app/l10n/l10n.dart';
 import 'package:taxitips_app/main.dart';
 import 'package:taxitips_app/screens/onboarding_screen.dart';
 import 'package:taxitips_app/screens/welcome_screen.dart';
@@ -11,7 +12,12 @@ import 'driver_test_support.dart';
 /// efter utloggning, och inte när appen första gången startar inloggad.
 void main() {
   setUpAll(loadAppFonts);
-  setUp(() => SharedPreferences.setMockInitialValues({}));
+  setUp(() {
+    SharedPreferences.setMockInitialValues({});
+    // Hela appen väljer språk efter testtelefonen (engelska) när den startar;
+    // nästa test ska ändå börja på svenska.
+    setTrLocale(const Locale('sv'));
+  });
 
   Future<void> boot(WidgetTester tester, FakeDriverApi api) async {
     tester.view.physicalSize = const Size(360, 640);

@@ -6,6 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'api_client.dart';
+import 'l10n/l10n.dart';
 import 'theme.dart';
 
 /// Vad BankID gav: namnet att hälsa med och biljetten servern kräver i nästa
@@ -161,7 +162,7 @@ class _BankIdSheetState extends State<_BankIdSheet> {
       if (mounted) {
         setState(() {
           _starting = false;
-          _error = 'BankID svarar inte just nu. Försök igen.';
+          _error = tr.bankIdFlowNoResponse;
         });
       }
     }
@@ -174,9 +175,7 @@ class _BankIdSheetState extends State<_BankIdSheet> {
     if (!opened && mounted) {
       setState(() {
         _qr = true;
-        _notice =
-            'Vi hittar inte BankID-appen på den här telefonen. '
-            'Skanna koden med BankID på en annan telefon.';
+        _notice = tr.bankIdFlowAppNotFound;
       });
     }
   }
@@ -207,7 +206,7 @@ class _BankIdSheetState extends State<_BankIdSheet> {
       _timer?.cancel();
       await widget.api.bankIdCancel(ref);
       if (mounted) {
-        setState(() => _error = 'Det tog för lång tid. Försök igen.');
+        setState(() => _error = tr.bankIdFlowTooLong);
       }
       return;
     }
@@ -232,9 +231,7 @@ class _BankIdSheetState extends State<_BankIdSheet> {
       }
       if (status == 'failed') {
         _timer?.cancel();
-        setState(
-          () => _error = message ?? 'Legitimeringen misslyckades. Försök igen.',
-        );
+        setState(() => _error = message ?? tr.bankIdFlowFailed);
         return;
       }
       final hint = data['hintCode']?.toString();
@@ -290,7 +287,7 @@ class _BankIdSheetState extends State<_BankIdSheet> {
     FilledButton(
       onPressed: _start,
       style: _primary,
-      child: const Text('Försök igen', style: TextStyle(fontSize: 17)),
+      child: Text(tr.bankIdFlowTryAgain, style: const TextStyle(fontSize: 17)),
     ),
   ];
 
@@ -304,7 +301,7 @@ class _BankIdSheetState extends State<_BankIdSheet> {
     ),
     const SizedBox(height: 16),
     Text(
-      _status ?? 'Godkänn i BankID-appen. Kom sedan tillbaka hit.',
+      _status ?? tr.bankIdFlowApproveInApp,
       textAlign: TextAlign.center,
       style: _text,
     ),
@@ -313,15 +310,18 @@ class _BankIdSheetState extends State<_BankIdSheet> {
       onPressed: _autoStart == null ? null : _openApp,
       style: _primary,
       icon: const Icon(Icons.fingerprint),
-      label: const Text('Öppna BankID', style: TextStyle(fontSize: 17)),
+      label: Text(
+        tr.bankIdFlowOpenBankId,
+        style: const TextStyle(fontSize: 17),
+      ),
     ),
     const SizedBox(height: 4),
     TextButton(
       onPressed: _useOtherPhone,
       style: TextButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-      child: const Text(
-        'BankID på en annan telefon',
-        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+      child: Text(
+        tr.bankIdFlowOtherPhone,
+        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
       ),
     ),
   ];
@@ -335,11 +335,7 @@ class _BankIdSheetState extends State<_BankIdSheet> {
       ),
       const SizedBox(height: 12),
     ] else ...[
-      const Text(
-        'Öppna BankID på din andra telefon och skanna koden.',
-        textAlign: TextAlign.center,
-        style: _text,
-      ),
+      Text(tr.bankIdFlowScanOnOther, textAlign: TextAlign.center, style: _text),
       const SizedBox(height: 12),
     ],
     Center(
@@ -359,7 +355,7 @@ class _BankIdSheetState extends State<_BankIdSheet> {
                   data: _qrData!,
                   size: 200,
                   padding: EdgeInsets.zero,
-                  semanticsLabel: 'QR-kod för BankID',
+                  semanticsLabel: tr.bankIdFlowQrLabel,
                 ),
         ),
       ),
@@ -373,9 +369,9 @@ class _BankIdSheetState extends State<_BankIdSheet> {
       TextButton(
         onPressed: _useThisPhone,
         style: TextButton.styleFrom(minimumSize: const Size.fromHeight(48)),
-        child: const Text(
-          'BankID på den här telefonen',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+        child: Text(
+          tr.bankIdFlowThisPhone,
+          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
         ),
       ),
     ],
@@ -385,7 +381,7 @@ class _BankIdSheetState extends State<_BankIdSheet> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 24, 24, 16),
+        padding: const EdgeInsetsDirectional.fromSTEB(24, 24, 24, 16),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -421,7 +417,7 @@ class _BankIdSheetState extends State<_BankIdSheet> {
                 foregroundColor: TbColors.muted,
                 minimumSize: const Size.fromHeight(48),
               ),
-              child: const Text('Avbryt'),
+              child: Text(tr.bankIdFlowCancel),
             ),
           ],
         ),
@@ -433,11 +429,7 @@ class _BankIdSheetState extends State<_BankIdSheet> {
 /// Vad den gör som inte har något BankID-konto: oftast en förare som bjudits
 /// in med e-post (kontot skapades utan BankID). Ett tydligt nästa steg i
 /// stället för en återvändsgränd.
-const kNoBankIdAccountHelp =
-    'Ditt BankID har inget konto här.\n\n'
-    'Fick du en inbjudan från ditt taxibolag? Be dem skicka inbjudan igen. '
-    'Då får du ett mejl där du väljer ett nytt lösenord.\n\n'
-    'Har du inget konto? Tryck på Skapa konto.';
+String get kNoBankIdAccountHelp => tr.bankIdFlowNoAccountHelp;
 
 /// Glömt lösenord eller bytt e-post, för konton som skapats med BankID:
 /// legitimera, välj nytt lösenord (och ny e-post om du vill). Returnerar
@@ -449,12 +441,12 @@ Future<String?> recoverWithBankId(BuildContext context, ApiClient api) async {
     await showDialog<void>(
       context: context,
       builder: (dialog) => AlertDialog(
-        title: const Text('Vi hittar inget konto'),
-        content: const Text(kNoBankIdAccountHelp),
+        title: Text(tr.bankIdFlowNoAccountTitle),
+        content: Text(kNoBankIdAccountHelp),
         actions: [
           FilledButton(
             onPressed: () => Navigator.of(dialog).pop(),
-            child: const Text('OK'),
+            child: Text(tr.bankIdFlowOk),
           ),
         ],
       ),
@@ -495,11 +487,11 @@ class _RecoverDialogState extends State<_RecoverDialog> {
 
   Future<void> _save() async {
     if (_password.text.length < 8) {
-      setState(() => _error = 'Lösenordet: minst 8 tecken.');
+      setState(() => _error = tr.bankIdFlowPasswordMin);
       return;
     }
     if (_changeEmail && !_email.text.contains('@')) {
-      setState(() => _error = 'Fel e-post.');
+      setState(() => _error = tr.bankIdFlowBadEmail);
       return;
     }
     setState(() {
@@ -516,7 +508,7 @@ class _RecoverDialogState extends State<_RecoverDialog> {
     } on ApiException catch (e) {
       if (mounted) setState(() => _error = e.message);
     } catch (_) {
-      if (mounted) setState(() => _error = 'Något gick fel. Försök igen.');
+      if (mounted) setState(() => _error = tr.bankIdFlowSomethingWrong);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -526,13 +518,15 @@ class _RecoverDialogState extends State<_RecoverDialog> {
   Widget build(BuildContext context) {
     final name = widget.identity.givenName;
     return AlertDialog(
-      title: Text(name.isEmpty ? 'Nytt lösenord' : 'Hej $name!'),
+      title: Text(
+        name.isEmpty ? tr.bankIdFlowNewPasswordTitle : tr.bankIdFlowHello(name),
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('Ditt konto:'),
+            Text(tr.bankIdFlowYourAccount),
             const SizedBox(height: 4),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -559,11 +553,13 @@ class _RecoverDialogState extends State<_RecoverDialog> {
               controller: _password,
               obscureText: _hide,
               decoration: InputDecoration(
-                labelText: 'Nytt lösenord',
-                helperText: 'Minst 8 tecken',
+                labelText: tr.bankIdFlowNewPasswordTitle,
+                helperText: tr.bankIdFlowPasswordHelper,
                 border: const OutlineInputBorder(),
                 suffixIcon: IconButton(
-                  tooltip: _hide ? 'Visa lösenord' : 'Dölj lösenord',
+                  tooltip: _hide
+                      ? tr.bankIdFlowShowPassword
+                      : tr.bankIdFlowHidePassword,
                   onPressed: () => setState(() => _hide = !_hide),
                   icon: Icon(
                     _hide
@@ -577,16 +573,16 @@ class _RecoverDialogState extends State<_RecoverDialog> {
               contentPadding: EdgeInsets.zero,
               value: _changeEmail,
               onChanged: (v) => setState(() => _changeEmail = v ?? false),
-              title: const Text('Byt e-post också'),
+              title: Text(tr.bankIdFlowChangeEmail),
             ),
             if (_changeEmail)
               TextField(
                 controller: _email,
                 keyboardType: TextInputType.emailAddress,
                 autocorrect: false,
-                decoration: const InputDecoration(
-                  labelText: 'Ny e-post',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  labelText: tr.bankIdFlowNewEmail,
+                  border: const OutlineInputBorder(),
                 ),
               ),
             if (_error != null) ...[
@@ -605,7 +601,7 @@ class _RecoverDialogState extends State<_RecoverDialog> {
       actions: [
         TextButton(
           onPressed: _busy ? null : () => Navigator.of(context).pop(),
-          child: const Text('Avbryt'),
+          child: Text(tr.bankIdFlowCancel),
         ),
         FilledButton(
           onPressed: _busy ? null : _save,
@@ -615,7 +611,7 @@ class _RecoverDialogState extends State<_RecoverDialog> {
                   height: 18,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 )
-              : const Text('Spara'),
+              : Text(tr.bankIdFlowSave),
         ),
       ],
     );

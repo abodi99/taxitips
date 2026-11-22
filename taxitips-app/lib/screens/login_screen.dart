@@ -2,9 +2,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:supabase_flutter/supabase_flutter.dart' show AuthException;
 
 import '../api_client.dart';
 import '../bankid_flow.dart';
+import '../l10n/l10n.dart';
 import '../net_status.dart';
 import '../theme.dart';
 
@@ -85,7 +87,7 @@ class _LoginScreenState extends State<LoginScreen> {
     if (email.isEmpty || password.isEmpty) {
       setState(() {
         _notice = null;
-        _error = 'Skriv din e-post och ditt lösenord.';
+        _error = tr.loginScreenEnterCredentials;
       });
       return;
     }
@@ -151,39 +153,42 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() {
       _email.text = email;
       _password.clear();
-      _notice = 'Klart! Logga in med $email.';
+      _notice = tr.loginScreenRecovered(email);
     });
     _passwordFocus.requestFocus();
   }
 
   /// Supabase Auths engelska fel och serverns skäl, i enkel svenska.
   String _friendly(Object e) {
+    // Supabase Auths felkod först (stabil); texten bara som reserv för fel
+    // som inte bär någon kod.
+    final code = e is AuthException ? e.code : null;
     final text = e.toString();
-    if (text.contains('Invalid login credentials')) {
-      return 'Fel e-post eller lösenord.';
+    if (code == 'invalid_credentials' ||
+        text.contains('Invalid login credentials')) {
+      return tr.loginScreenWrongCredentials;
     }
-    if (text.contains('Email not confirmed')) {
-      return 'Bekräfta din e-post först. Tryck på länken i mejlet.';
+    if (code == 'email_not_confirmed' || text.contains('Email not confirmed')) {
+      return tr.loginScreenEmailNotConfirmed;
     }
-    if (text.contains('rate limit') || text.contains('security purposes')) {
-      return 'Vänta en minut och försök igen.';
+    if (code == 'over_request_rate_limit' ||
+        code == 'over_email_send_rate_limit' ||
+        text.contains('rate limit') ||
+        text.contains('security purposes')) {
+      return tr.loginScreenRateLimit;
     }
     if (e is ApiException) {
       if (e.reason == 'no_invite') {
-        return 'Kontot är inte kopplat till något taxibolag. Be din chef '
-            'bjuda in dig, eller tryck på Skapa konto gratis nedan.';
+        return tr.loginScreenNoInvite;
       }
       if (e.reason == 'device_swap_limit') {
-        return e.message.isNotEmpty
-            ? e.message
-            : 'Du har bytt telefon en gång den här månaden. '
-                  'Kontakta support så hjälper vi dig byta igen.';
+        return e.message.isNotEmpty ? e.message : tr.loginScreenDeviceSwapLimit;
       }
       return e.message;
     }
     final net = netFailureOf(e);
     if (net != null) return netMessage(net);
-    return 'Det gick inte att logga in. Försök igen.';
+    return tr.loginScreenFailed;
   }
 
   InputDecoration _field(String label, IconData icon, {Widget? suffix}) =>
@@ -232,7 +237,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     children: [
                       _Header(compact: constraints.maxHeight < 680),
                       IconButton(
-                        tooltip: 'Tillbaka',
+                        tooltip: tr.loginScreenBack,
                         onPressed: _busy ? null : widget.onBack,
                         icon: const Icon(
                           Icons.arrow_back,
@@ -257,7 +262,7 @@ class _LoginScreenState extends State<LoginScreen> {
         color: Colors.white,
         borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
       ),
-      padding: EdgeInsets.fromLTRB(
+      padding: EdgeInsetsDirectional.fromSTEB(
         24,
         28,
         24,
@@ -271,9 +276,9 @@ class _LoginScreenState extends State<LoginScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  'Logga in',
-                  style: TextStyle(
+                Text(
+                  tr.loginScreenTitle,
+                  style: const TextStyle(
                     fontFamily: kDisplayFont,
                     color: TbColors.ink,
                     fontSize: 26,
@@ -281,10 +286,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 const SizedBox(height: 4),
-                const Text(
-                  'För förare, ägare och kontor. Ny förare? Välj först ett '
-                  'lösenord med länken i inbjudan.',
-                  style: TextStyle(color: TbColors.muted, fontSize: 15),
+                Text(
+                  tr.loginScreenIntro,
+                  style: const TextStyle(color: TbColors.muted, fontSize: 15),
                 ),
                 const SizedBox(height: 22),
                 TextField(
@@ -300,7 +304,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   textInputAction: TextInputAction.next,
                   onSubmitted: (_) => _passwordFocus.requestFocus(),
                   style: const TextStyle(fontSize: 17),
-                  decoration: _field('E-post', Icons.mail_outline),
+                  decoration: _field(tr.loginScreenEmail, Icons.mail_outline),
                 ),
                 const SizedBox(height: 14),
                 TextField(
@@ -313,12 +317,12 @@ class _LoginScreenState extends State<LoginScreen> {
                   onSubmitted: (_) => _busy ? null : _submit(),
                   style: const TextStyle(fontSize: 17),
                   decoration: _field(
-                    'Lösenord',
+                    tr.loginScreenPassword,
                     Icons.lock_outline,
                     suffix: IconButton(
                       tooltip: _hidePassword
-                          ? 'Visa lösenord'
-                          : 'Dölj lösenord',
+                          ? tr.loginScreenShowPassword
+                          : tr.loginScreenHidePassword,
                       onPressed: () =>
                           setState(() => _hidePassword = !_hidePassword),
                       icon: Icon(
@@ -330,16 +334,16 @@ class _LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 Align(
-                  alignment: Alignment.centerRight,
+                  alignment: AlignmentDirectional.centerEnd,
                   child: TextButton(
                     onPressed: _busy ? null : _forgotWithBankId,
                     style: TextButton.styleFrom(
                       foregroundColor: TbColors.navy,
                       minimumSize: const Size(48, 44),
                     ),
-                    child: const Text(
-                      'Glömt lösenord?',
-                      style: TextStyle(fontWeight: FontWeight.w600),
+                    child: Text(
+                      tr.loginScreenForgotPassword,
+                      style: const TextStyle(fontWeight: FontWeight.w600),
                     ),
                   ),
                 ),
@@ -368,9 +372,9 @@ class _LoginScreenState extends State<LoginScreen> {
                             strokeWidth: 2.5,
                           ),
                         )
-                      : const Text(
-                          'Logga in',
-                          style: TextStyle(
+                      : Text(
+                          tr.loginScreenTitle,
+                          style: const TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w800,
                           ),
@@ -380,9 +384,12 @@ class _LoginScreenState extends State<LoginScreen> {
                 OutlinedButton.icon(
                   onPressed: _busy ? null : _loginWithBankId,
                   icon: const Icon(Icons.fingerprint),
-                  label: const Text(
-                    'Logga in med BankID',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  label: Text(
+                    tr.loginScreenWithBankId,
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   style: OutlinedButton.styleFrom(
                     foregroundColor: TbColors.ink,
@@ -395,8 +402,8 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: 28),
                 _LinkRow(
-                  lead: 'Inget konto?',
-                  action: 'Skapa konto gratis',
+                  lead: tr.loginScreenNoAccount,
+                  action: tr.loginScreenCreateAccount,
                   onTap: _busy ? null : widget.onSignup,
                 ),
               ],
@@ -418,7 +425,7 @@ class _Header extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(
+      padding: EdgeInsetsDirectional.fromSTEB(
         28,
         compact ? 16 : 48,
         28,
@@ -433,10 +440,14 @@ class _Header extends StatelessWidget {
             fit: BoxFit.contain,
           ),
           const SizedBox(height: 14),
-          const Text(
-            'Se var folk behöver taxi,\ninnan kön växer.',
+          Text(
+            tr.loginScreenTagline,
             textAlign: TextAlign.center,
-            style: TextStyle(color: TbColors.foam, fontSize: 16, height: 1.35),
+            style: const TextStyle(
+              color: TbColors.foam,
+              fontSize: 16,
+              height: 1.35,
+            ),
           ),
         ],
       ),

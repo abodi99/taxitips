@@ -1,0 +1,179 @@
+{
+  "signupScreenBack": {
+    "sv": "Tillbaka",
+    "en": "Back",
+    "ar": "رجوع"
+  },
+  "signupScreenDateInvalid": {
+    "sv": "Personnumret har ett datum som inte finns. Kontrollera numret.",
+    "en": "The personal ID number (personnummer) has a date that does not exist. Check the number.",
+    "ar": "الرقم الشخصي السويدي يحتوي على تاريخ غير موجود. تحقق من الرقم."
+  },
+  "signupScreenUnder18": {
+    "sv": "En enskild firma registreras av någon som fyllt 18. Kontrollera numret.",
+    "en": "A sole proprietorship must be registered by someone aged 18 or older. Check the number.",
+    "ar": "يجب أن يكون مسجّل الشركة الفردية قد بلغ 18 عاماً. تحقق من الرقم."
+  },
+  "signupScreenProblemChoose": {
+    "sv": "Välj ett av alternativen.",
+    "en": "Choose one of the options.",
+    "ar": "اختر أحد الخيارات."
+  },
+  "signupScreenProblemCompany": {
+    "sv": "Skriv företagets namn.",
+    "en": "Enter the company name.",
+    "ar": "اكتب اسم الشركة."
+  },
+  "signupScreenProblemPhone": {
+    "sv": "Det ser inte ut som ett mobilnummer. Skriv till exempel 070 123 45 67.",
+    "en": "That does not look like a mobile number. Write for example 070 123 45 67.",
+    "ar": "لا يبدو هذا رقم هاتف محمول. اكتب مثلاً 070 123 45 67."
+  },
+  "signupScreenProblemEmail": {
+    "sv": "Det ser inte ut som en e-postadress. Skriv till exempel namn@gmail.com.",
+    "en": "That does not look like an email address. Write for example name@gmail.com.",
+    "ar": "لا يبدو هذا عنوان بريد إلكتروني. اكتب مثلاً name@gmail.com."
+  },
+  "signupScreenProblemPassword": {
+    "sv": "Lösenordet behöver minst 8 tecken.",
+    "en": "The password needs at least 8 characters.",
+    "ar": "كلمة المرور تحتاج 8 أحرف على الأقل."
+  },
+  "signupScreenSomethingWrong": {
+    "sv": "Något gick fel. Försök igen.",
+    "en": "Something went wrong. Try again.",
+    "ar": "حدث خطأ ما. حاول مرة أخرى."
+  },
+  "signupScreenStepOf": {
+    "sv": "Steg {n} av {total}",
+    "en": "Step {n} of {total}",
+    "ar": "الخطوة {n} من {total}",
+    "placeholders": {"n": {"type": "int"}, "total": {"type": "int"}}
+  },
+  "signupScreenTitle": {
+    "sv": "Prova gratis i en månad",
+    "en": "Try free for one month",
+    "ar": "جرّب مجاناً لمدة شهر"
+  },
+  "signupScreenContinueBankId": {
+    "sv": "Fortsätt med BankID",
+    "en": "Continue with BankID",
+    "ar": "تابع باستخدام BankID"
+  },
+  "signupScreenHaveAccount": {
+    "sv": "Har du redan ett konto? Logga in",
+    "en": "Already have an account? Log in",
+    "ar": "هل لديك حساب بالفعل؟ سجّل الدخول"
+  },
+  "signupScreenKindQuestion": {
+    "sv": "Hur kör du?",
+    "en": "How do you drive?",
+    "ar": "كيف تعمل في القيادة؟"
+  },
+  "signupScreenKindQuestionNamed": {
+    "sv": "Hej {name}! Hur kör du?",
+    "en": "Hi {name}! How do you drive?",
+    "ar": "مرحباً {name}! كيف تعمل في القيادة؟",
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "signupScreenSoloTitle": {
+    "sv": "Jag kör själv",
+    "en": "I drive on my own",
+    "ar": "أقود بمفردي"
+  },
+  "signupScreenSoloText": {
+    "sv": "Du behöver inget företag.",
+    "en": "You do not need a company.",
+    "ar": "لا تحتاج إلى شركة."
+  },
+  "signupScreenCompanyTitle": {
+    "sv": "Jag har ett taxibolag",
+    "en": "I have a taxi company",
+    "ar": "لدي شركة تاكسي"
+  },
+  "signupScreenCompanyText": {
+    "sv": "Med egna bilar eller förare.",
+    "en": "With my own cars or drivers.",
+    "ar": "بسيارات أو سائقين تابعين لي."
+  },
+  "signupScreenNotSure": {
+    "sv": "Inte säker? Välj \"Jag kör själv\".",
+    "en": "Not sure? Choose \"I drive on my own\".",
+    "ar": "غير متأكد؟ اختر «أقود بمفردي»."
+  },
+  "signupScreenCompanyQuestion": {
+    "sv": "Vad heter företaget?",
+    "en": "What is the company called?",
+    "ar": "ما اسم الشركة؟"
+  },
+  "signupScreenCompanyHelp": {
+    "sv": "Organisationsnummer behövs inte nu.",
+    "en": "You do not need an organisation number now.",
+    "ar": "لا حاجة إلى رقم المنظمة الآن."
+  },
+  "signupScreenCompanyLabel": {
+    "sv": "Företagets namn",
+    "en": "Company name",
+    "ar": "اسم الشركة"
+  },
+  "signupScreenCompanyHint": {
+    "sv": "Till exempel Annas Taxi",
+    "en": "For example Anna's Taxi",
+    "ar": "مثلاً Annas Taxi"
+  },
+  "signupScreenPhoneQuestion": {
+    "sv": "Ditt mobilnummer",
+    "en": "Your mobile number",
+    "ar": "رقم هاتفك المحمول"
+  },
+  "signupScreenPhoneLabel": {
+    "sv": "Mobil",
+    "en": "Mobile",
+    "ar": "الهاتف المحمول"
+  },
+  "signupScreenEmailQuestion": {
+    "sv": "Din e-post",
+    "en": "Your email",
+    "ar": "بريدك الإلكتروني"
+  },
+  "signupScreenEmailHelp": {
+    "sv": "Du loggar in med den.",
+    "en": "You log in with it.",
+    "ar": "ستسجّل الدخول به."
+  },
+  "signupScreenEmailLabel": {
+    "sv": "E-post",
+    "en": "Email",
+    "ar": "البريد الإلكتروني"
+  },
+  "signupScreenPasswordQuestion": {
+    "sv": "Välj ett lösenord",
+    "en": "Choose a password",
+    "ar": "اختر كلمة مرور"
+  },
+  "signupScreenPasswordLabel": {
+    "sv": "Lösenord",
+    "en": "Password",
+    "ar": "كلمة المرور"
+  },
+  "signupScreenPasswordMin": {
+    "sv": "Minst 8 tecken",
+    "en": "At least 8 characters",
+    "ar": "8 أحرف على الأقل"
+  },
+  "signupScreenLoginInstead": {
+    "sv": "Logga in i stället",
+    "en": "Log in instead",
+    "ar": "سجّل الدخول بدلاً من ذلك"
+  },
+  "signupScreenCreateAccount": {
+    "sv": "Skapa kontot",
+    "en": "Create the account",
+    "ar": "أنشئ الحساب"
+  },
+  "signupScreenNext": {
+    "sv": "Nästa",
+    "en": "Next",
+    "ar": "التالي"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "appMainSomethingWrong": {
+    "sv": "Något gick fel.",
+    "en": "Something went wrong.",
+    "ar": "حدث خطأ ما."
+  },
+  "appMainTrialNotStarted": {
+    "sv": "Kontot är skapat men provet kunde inte starta. Kontakta TaxiTips.",
+    "en": "The account was created but the trial could not start. Contact TaxiTips.",
+    "ar": "تم إنشاء الحساب لكن تعذّر بدء الفترة التجريبية. تواصل مع TaxiTips."
+  },
+  "appMainTryAgain": {
+    "sv": "Försök igen",
+    "en": "Try again",
+    "ar": "حاول مرة أخرى"
+  },
+  "appMainLogout": {
+    "sv": "Logga ut",
+    "en": "Log out",
+    "ar": "تسجيل الخروج"
+  }
+}

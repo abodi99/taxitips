@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:taxitips_app/api_client.dart';
 import 'package:taxitips_app/screens/login_screen.dart';
 import 'package:taxitips_app/screens/welcome_screen.dart';
+import 'package:taxitips_app/widgets/language_picker.dart';
 
 /// EN inloggning med e-post och lösenord för förare, ägare och kontor --
 /// servern avgör rollen (ägarens beslut 2026-10-04). Ingen kod i mejlet, inget
@@ -107,9 +108,26 @@ void main() {
     await tester.tap(find.text('Skapa konto gratis'));
     expect(taps, ['login', 'signup']);
     expect(find.textContaining('kod'), findsNothing);
+    // Språkknappen syns före inloggningen (jordglob + språkets namn) och
+    // räknas inte som förklaringstext.
+    expect(find.byType(LanguageButton), findsOneWidget);
     // Rubriken, två knappar och länken till demon -- inga förklaringstexter.
     final texts = tester
-        .widgetList<Text>(find.byType(Text))
+        .widgetList<Text>(
+          find.descendant(
+            of: find.byType(WelcomeScreen),
+            matching: find.byType(Text),
+          ),
+        )
+        .where(
+          (t) => find
+              .ancestor(
+                of: find.byWidget(t),
+                matching: find.byType(LanguageButton),
+              )
+              .evaluate()
+              .isEmpty,
+        )
         .map((t) => t.data ?? '')
         .where((t) => t.isNotEmpty)
         .toList();

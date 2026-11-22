@@ -28,6 +28,239 @@ class AppLocalizationsEn extends AppLocalizations {
   String get alertFeedbackTitle => 'How did it go?';
 
   @override
+  String get apiClientAccountCreatedOffline =>
+      'The account is created, but we could not reach the server. Log in when you have a connection again.';
+
+  @override
+  String apiClientAuthError(String details) {
+    return 'Auth error: $details';
+  }
+
+  @override
+  String get apiClientBankIdUnavailable => 'BankID is not available right now.';
+
+  @override
+  String get apiClientBaseUrlMissing =>
+      'API_BASE_URL is not set. Pairing and car selection need the TaxiTips backend.';
+
+  @override
+  String get apiClientCannotDeleteAccount =>
+      'The account cannot be deleted right now. Try again later.';
+
+  @override
+  String get apiClientCouldNotCreateAccount => 'Could not create the account';
+
+  @override
+  String apiClientDatabaseError(String details) {
+    return 'Database error: $details';
+  }
+
+  @override
+  String get apiClientFavoritesNeedBackend =>
+      'Favorites need the Django backend';
+
+  @override
+  String get apiClientInvalidTransferCode => 'Invalid transfer code';
+
+  @override
+  String get apiClientInvalidVerificationCode =>
+      'The verification code is invalid';
+
+  @override
+  String get apiClientLoginFailed => 'Could not log in. Try again.';
+
+  @override
+  String get apiClientLoginRequired => 'Log in to continue.';
+
+  @override
+  String get apiClientNoCompany => 'No company';
+
+  @override
+  String get apiClientNoDevice => 'No device';
+
+  @override
+  String get apiClientNoDeviceKey => 'The server did not give a device key.';
+
+  @override
+  String get apiClientNoDevicePush =>
+      'No device — log in via the backend for push';
+
+  @override
+  String get apiClientNoDeviceToName => 'No device to name.';
+
+  @override
+  String get apiClientNoValidSession =>
+      'The login did not give a valid session.';
+
+  @override
+  String get apiClientNotLoggedIn => 'Not logged in';
+
+  @override
+  String get apiClientNotifyLineDelayedHelp =>
+      'Usually a weak signal -- off by default.';
+
+  @override
+  String get apiClientNotifyLineDelayedLabel => 'Delays';
+
+  @override
+  String get apiClientNotifyLineDelayedShort => 'The line runs, but is delayed';
+
+  @override
+  String get apiClientNotifyLinePausedHelp =>
+      'The best chance that people need a taxi.';
+
+  @override
+  String get apiClientNotifyLinePausedLabel =>
+      'The whole line is at a standstill';
+
+  @override
+  String get apiClientNotifyLinePausedShort => 'No traffic at all on the line';
+
+  @override
+  String get apiClientNotifyNeedsServer =>
+      'The notification settings need the TaxiTips server.';
+
+  @override
+  String get apiClientNotifyRoadAccidentHelp =>
+      'Mostly affects drivers already on the road, but good to know.';
+
+  @override
+  String get apiClientNotifyRoadAccidentLabel => 'Accident or closed road';
+
+  @override
+  String get apiClientNotifyRoadShort => 'Road traffic';
+
+  @override
+  String get apiClientNotifyRoadWorkHelp =>
+      'Rarely a taxi signal -- off by default.';
+
+  @override
+  String get apiClientNotifyRoadWorkLabel => 'Roadworks or queues';
+
+  @override
+  String get apiClientNotifyVehicleCancelledHelp =>
+      'Fewer people affected, but may still be worth a look.';
+
+  @override
+  String get apiClientNotifyVehicleCancelledLabel =>
+      'A single departure cancelled';
+
+  @override
+  String get apiClientNotifyVehicleCancelledShort =>
+      'One departure cancelled, the others run as usual';
+
+  @override
+  String get apiClientOnDutyNeedsBackend => 'On duty needs the new backend';
+
+  @override
+  String get apiClientPhoneNotPaired => 'The phone is not paired.';
+
+  @override
+  String get apiClientSupportChatUnavailable =>
+      'Support chat is not available here.';
+
+  @override
+  String get appMainLogout => 'Log out';
+
+  @override
+  String get appMainSomethingWrong => 'Something went wrong.';
+
+  @override
+  String get appMainTrialNotStarted =>
+      'The account was created but the trial could not start. Contact TaxiTips.';
+
+  @override
+  String get appMainTryAgain => 'Try again';
+
+  @override
+  String get bankIdFlowAppNotFound =>
+      'We cannot find the BankID app on this phone. Scan the code with BankID on another phone.';
+
+  @override
+  String get bankIdFlowApproveInApp =>
+      'Approve in the BankID app. Then come back here.';
+
+  @override
+  String get bankIdFlowBadEmail => 'Wrong email.';
+
+  @override
+  String get bankIdFlowCancel => 'Cancel';
+
+  @override
+  String get bankIdFlowChangeEmail => 'Change email too';
+
+  @override
+  String get bankIdFlowFailed => 'Identification failed. Try again.';
+
+  @override
+  String bankIdFlowHello(String name) {
+    return 'Hi $name!';
+  }
+
+  @override
+  String get bankIdFlowHidePassword => 'Hide password';
+
+  @override
+  String get bankIdFlowNewEmail => 'New email';
+
+  @override
+  String get bankIdFlowNewPasswordTitle => 'New password';
+
+  @override
+  String get bankIdFlowNoAccountHelp =>
+      'Your BankID has no account here.\n\nDid you get an invitation from your taxi company? Ask them to send the invitation again. You will then get an email where you choose a new password.\n\nDo you not have an account? Tap Create account.';
+
+  @override
+  String get bankIdFlowNoAccountTitle => 'We cannot find an account';
+
+  @override
+  String get bankIdFlowNoResponse =>
+      'BankID is not responding right now. Try again.';
+
+  @override
+  String get bankIdFlowOk => 'OK';
+
+  @override
+  String get bankIdFlowOpenBankId => 'Open BankID';
+
+  @override
+  String get bankIdFlowOtherPhone => 'BankID on another phone';
+
+  @override
+  String get bankIdFlowPasswordHelper => 'At least 8 characters';
+
+  @override
+  String get bankIdFlowPasswordMin => 'Password: at least 8 characters.';
+
+  @override
+  String get bankIdFlowQrLabel => 'QR code for BankID';
+
+  @override
+  String get bankIdFlowSave => 'Save';
+
+  @override
+  String get bankIdFlowScanOnOther =>
+      'Open BankID on your other phone and scan the code.';
+
+  @override
+  String get bankIdFlowShowPassword => 'Show password';
+
+  @override
+  String get bankIdFlowSomethingWrong => 'Something went wrong. Try again.';
+
+  @override
+  String get bankIdFlowThisPhone => 'BankID on this phone';
+
+  @override
+  String get bankIdFlowTooLong => 'It took too long. Try again.';
+
+  @override
+  String get bankIdFlowTryAgain => 'Try again';
+
+  @override
+  String get bankIdFlowYourAccount => 'Your account:';
+
+  @override
   String get categoryBarAll => 'All';
 
   @override
@@ -1407,6 +1640,134 @@ class AppLocalizationsEn extends AppLocalizations {
   String get languageTitle => 'Language';
 
   @override
+  String get loginScreenBack => 'Back';
+
+  @override
+  String get loginScreenCreateAccount => 'Create a free account';
+
+  @override
+  String get loginScreenDeviceSwapLimit =>
+      'You have already changed phone once this month. Contact support and we will help you change again.';
+
+  @override
+  String get loginScreenEmail => 'Email';
+
+  @override
+  String get loginScreenEmailNotConfirmed =>
+      'Confirm your email first. Tap the link in the email.';
+
+  @override
+  String get loginScreenEnterCredentials => 'Enter your email and password.';
+
+  @override
+  String get loginScreenFailed => 'Could not log in. Try again.';
+
+  @override
+  String get loginScreenForgotPassword => 'Forgot your password?';
+
+  @override
+  String get loginScreenHidePassword => 'Hide password';
+
+  @override
+  String get loginScreenIntro =>
+      'For drivers, owners and office staff. New driver? First choose a password with the link in your invitation.';
+
+  @override
+  String get loginScreenNoAccount => 'No account?';
+
+  @override
+  String get loginScreenNoInvite =>
+      'This account is not linked to any taxi company. Ask your boss to invite you, or tap Create a free account below.';
+
+  @override
+  String get loginScreenPassword => 'Password';
+
+  @override
+  String get loginScreenRateLimit => 'Wait a minute and try again.';
+
+  @override
+  String loginScreenRecovered(String email) {
+    return 'Done! Log in with $email.';
+  }
+
+  @override
+  String get loginScreenShowPassword => 'Show password';
+
+  @override
+  String get loginScreenTagline =>
+      'See where people need a taxi,\nbefore the queue grows.';
+
+  @override
+  String get loginScreenTitle => 'Log in';
+
+  @override
+  String get loginScreenWithBankId => 'Log in with BankID';
+
+  @override
+  String get loginScreenWrongCredentials => 'Wrong email or password.';
+
+  @override
+  String get membershipCopyAccessNotActive => 'Access is not active.';
+
+  @override
+  String get membershipCopyInvoicesOnWeb =>
+      'Invoices and membership are handled by the company\'s administrator on the web.';
+
+  @override
+  String get membershipCopyNotActive =>
+      'The membership is not active right now.';
+
+  @override
+  String get membershipCopyNotInMembership =>
+      'Not included in your membership.';
+
+  @override
+  String get membershipCopyNotInTrial => 'Not included in the trial.';
+
+  @override
+  String get membershipCopyOnWeb =>
+      'Your company\'s administrator manages the membership on the web.';
+
+  @override
+  String get membershipCopyPaused => 'The membership is paused.';
+
+  @override
+  String get membershipCopyPortalSubtitle =>
+      'Opens the customer portal on the web: cars, invoices and members.';
+
+  @override
+  String get membershipCopyPortalTitle => 'Manage company account';
+
+  @override
+  String get membershipCopyPromiseNoBinding => 'No commitment';
+
+  @override
+  String get membershipCopyPromiseNoCard => 'No card';
+
+  @override
+  String get membershipCopyPromiseNoCompany => 'No company needed';
+
+  @override
+  String get membershipCopyTrialEnded => 'The trial period has ended.';
+
+  @override
+  String get membershipCountyContinue => 'Continue';
+
+  @override
+  String get membershipCountyLoadFailed =>
+      'Could not load the counties. Pull down to try again.';
+
+  @override
+  String get membershipCountyRetry => 'Try again';
+
+  @override
+  String get membershipCountySubtitle =>
+      'Choose the county where you drive the most. You can change later.';
+
+  @override
+  String get membershipCountyTitle => 'Where do you want to drive?';
+
+  @override
   String get netStatusGenericError => 'Something went wrong. Try again.';
 
   @override
@@ -1567,6 +1928,79 @@ class AppLocalizationsEn extends AppLocalizations {
   String offlineBannerUnreachable(String at) {
     return 'Server not responding – showing tips from $at';
   }
+
+  @override
+  String get onboardingScreenClose => 'Close';
+
+  @override
+  String get onboardingScreenColorsBody =>
+      'These are tips, not bookings. You decide if it is worth going.';
+
+  @override
+  String get onboardingScreenColorsTitle =>
+      'The colour shows how strong the tip is';
+
+  @override
+  String get onboardingScreenDone => 'Done';
+
+  @override
+  String get onboardingScreenFeedbackBody =>
+      'Tap a tip and choose Got a fare or No customer. That makes the tips better for everyone.';
+
+  @override
+  String get onboardingScreenFeedbackTitle => 'Tell us how it went';
+
+  @override
+  String get onboardingScreenLevelMedium => 'Medium';
+
+  @override
+  String get onboardingScreenLevelMediumText =>
+      'Could lead to rides. Keep an eye on it.';
+
+  @override
+  String get onboardingScreenLevelStrong => 'Strong';
+
+  @override
+  String get onboardingScreenLevelStrongText => 'Many may need a taxi.';
+
+  @override
+  String get onboardingScreenLevelWeak => 'Weak';
+
+  @override
+  String get onboardingScreenLevelWeakText =>
+      'Good to know, rarely worth going.';
+
+  @override
+  String get onboardingScreenNext => 'Next';
+
+  @override
+  String get onboardingScreenNotifBody =>
+      'Turn on notifications in Settings. Then we will tell you when a strong tip shows up near you.';
+
+  @override
+  String get onboardingScreenNotifTitle => 'Notifications';
+
+  @override
+  String onboardingScreenPageOf(int page, int total) {
+    return 'Page $page of $total';
+  }
+
+  @override
+  String get onboardingScreenSkip => 'Skip';
+
+  @override
+  String get onboardingScreenStartBody =>
+      'Create a free account, or log in if you already have one. Then we will show you around the app.';
+
+  @override
+  String get onboardingScreenStartTitle => 'Get started';
+
+  @override
+  String get onboardingScreenTrafficBody =>
+      'Cancelled trains, late flights, ferries and events that end. We show where people may need a taxi. These are tips, not bookings.';
+
+  @override
+  String get onboardingScreenTrafficTitle => 'Tips from the traffic';
 
   @override
   String get settingsScreenAboutTips => 'About the tips';
@@ -2179,6 +2613,121 @@ class AppLocalizationsEn extends AppLocalizations {
   }
 
   @override
+  String get signupScreenBack => 'Back';
+
+  @override
+  String get signupScreenCompanyHelp =>
+      'You do not need an organisation number now.';
+
+  @override
+  String get signupScreenCompanyHint => 'For example Anna\'s Taxi';
+
+  @override
+  String get signupScreenCompanyLabel => 'Company name';
+
+  @override
+  String get signupScreenCompanyQuestion => 'What is the company called?';
+
+  @override
+  String get signupScreenCompanyText => 'With my own cars or drivers.';
+
+  @override
+  String get signupScreenCompanyTitle => 'I have a taxi company';
+
+  @override
+  String get signupScreenContinueBankId => 'Continue with BankID';
+
+  @override
+  String get signupScreenCreateAccount => 'Create the account';
+
+  @override
+  String get signupScreenDateInvalid =>
+      'The personal ID number (personnummer) has a date that does not exist. Check the number.';
+
+  @override
+  String get signupScreenEmailHelp => 'You log in with it.';
+
+  @override
+  String get signupScreenEmailLabel => 'Email';
+
+  @override
+  String get signupScreenEmailQuestion => 'Your email';
+
+  @override
+  String get signupScreenHaveAccount => 'Already have an account? Log in';
+
+  @override
+  String get signupScreenKindQuestion => 'How do you drive?';
+
+  @override
+  String signupScreenKindQuestionNamed(String name) {
+    return 'Hi $name! How do you drive?';
+  }
+
+  @override
+  String get signupScreenLoginInstead => 'Log in instead';
+
+  @override
+  String get signupScreenNext => 'Next';
+
+  @override
+  String get signupScreenNotSure => 'Not sure? Choose \"I drive on my own\".';
+
+  @override
+  String get signupScreenPasswordLabel => 'Password';
+
+  @override
+  String get signupScreenPasswordMin => 'At least 8 characters';
+
+  @override
+  String get signupScreenPasswordQuestion => 'Choose a password';
+
+  @override
+  String get signupScreenPhoneLabel => 'Mobile';
+
+  @override
+  String get signupScreenPhoneQuestion => 'Your mobile number';
+
+  @override
+  String get signupScreenProblemChoose => 'Choose one of the options.';
+
+  @override
+  String get signupScreenProblemCompany => 'Enter the company name.';
+
+  @override
+  String get signupScreenProblemEmail =>
+      'That does not look like an email address. Write for example name@gmail.com.';
+
+  @override
+  String get signupScreenProblemPassword =>
+      'The password needs at least 8 characters.';
+
+  @override
+  String get signupScreenProblemPhone =>
+      'That does not look like a mobile number. Write for example 070 123 45 67.';
+
+  @override
+  String get signupScreenSoloText => 'You do not need a company.';
+
+  @override
+  String get signupScreenSoloTitle => 'I drive on my own';
+
+  @override
+  String get signupScreenSomethingWrong => 'Something went wrong. Try again.';
+
+  @override
+  String signupScreenStepOf(int n, int total) {
+    return 'Step $n of $total';
+  }
+
+  @override
+  String get signupScreenTitle => 'Try free for one month';
+
+  @override
+  String get signupScreenUnder18 =>
+      'A sole proprietorship must be registered by someone aged 18 or older. Check the number.';
+
+  @override
   String get supportChatEmptyBody =>
       'Write your question below. You get a notification when we have replied.';
 
@@ -2391,6 +2940,185 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tipSheetUnsave => 'Remove from saved';
 
   @override
+  String get trialWelcomeAllIncluded => 'Everything is included right now.';
+
+  @override
+  String get trialWelcomeClose => 'Close';
+
+  @override
+  String get trialWelcomeColorNote =>
+      'The colour shows how strong the signal is. A strong signal means many people likely need a taxi.';
+
+  @override
+  String get trialWelcomeCostsNothing => 'It costs nothing to try.';
+
+  @override
+  String trialWelcomeDate(int day, String month) {
+    String _temp0 = intl.Intl.selectLogic(month, {
+      '1': 'January',
+      '2': 'February',
+      '3': 'March',
+      '4': 'April',
+      '5': 'May',
+      '6': 'June',
+      '7': 'July',
+      '8': 'August',
+      '9': 'September',
+      '10': 'October',
+      '11': 'November',
+      '12': 'December',
+      'other': '',
+    });
+    return '$_temp0 $day';
+  }
+
+  @override
+  String get trialWelcomeDone => 'Done';
+
+  @override
+  String trialWelcomeFreeDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Free for $days days.',
+      one: 'Free for $days day.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get trialWelcomeFreeToTry => 'Free to try.';
+
+  @override
+  String trialWelcomeFreeUntil(String date) {
+    return 'Free until $date.';
+  }
+
+  @override
+  String get trialWelcomeIncludedHeading => 'Included in the trial';
+
+  @override
+  String get trialWelcomeIncludedTitle => 'What is included in the trial?';
+
+  @override
+  String get trialWelcomeIncludedUnknown =>
+      'You can see what is included in the trial in the app. What is not included has a lock.';
+
+  @override
+  String get trialWelcomeLineEvent =>
+      'Events that end: a match, a concert or something else.';
+
+  @override
+  String get trialWelcomeLineFerry => 'Ferries docking at the harbour.';
+
+  @override
+  String get trialWelcomeLineFlight =>
+      'Flights that are late, or when many flights land.';
+
+  @override
+  String get trialWelcomeLineRoad => 'Traffic accidents that stop the traffic.';
+
+  @override
+  String get trialWelcomeLineTransit =>
+      'Trains and buses that are late or cancelled. The last departure.';
+
+  @override
+  String trialWelcomeNeedsMembership(String onWeb) {
+    return 'That requires a membership. $onWeb';
+  }
+
+  @override
+  String get trialWelcomeNext => 'Next';
+
+  @override
+  String get trialWelcomeOneSeat =>
+      'You can have 1 spot in the trial, with one county.';
+
+  @override
+  String trialWelcomePageOf(int page, int total) {
+    return 'Page $page of $total';
+  }
+
+  @override
+  String get trialWelcomeReadyTitle => 'All set! You are up and running';
+
+  @override
+  String trialWelcomeSeats(int limit) {
+    String _temp0 = intl.Intl.pluralLogic(
+      limit,
+      locale: localeName,
+      other: 'You can have up to $limit spots in the trial.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get trialWelcomeShowTips => 'Show the tips';
+
+  @override
+  String get trialWelcomeSkip => 'Skip';
+
+  @override
+  String get trialWelcomeStep1Text =>
+      'Open Settings and tap Your counties. The county decides which tips you get.';
+
+  @override
+  String get trialWelcomeStep1Title => 'Change county';
+
+  @override
+  String get trialWelcomeStep2Text =>
+      'The invitation is sent by the company\'s administrator on the web, not from the app. The driver gets an email, chooses a password and logs in to the app with email and password.';
+
+  @override
+  String get trialWelcomeStep2Title =>
+      'Do you have a taxi company? Invite drivers on the web';
+
+  @override
+  String get trialWelcomeStepsTitle => 'How to get started';
+
+  @override
+  String trialWelcomeTrialEnded(String onWeb) {
+    return 'The trial has ended. $onWeb';
+  }
+
+  @override
+  String trialWelcomeTrialRunning(String date) {
+    return 'The trial is running. It is valid until $date.';
+  }
+
+  @override
+  String get trialWelcomeTrialStarts =>
+      'The trial starts when the first driver logs in.';
+
+  @override
+  String get trialWelcomeTrialStartsPending =>
+      'The trial starts when the first driver logs in. Until then no time passes.';
+
+  @override
+  String trialWelcomeTrialTitleDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'You are trying for free for $days days',
+      one: 'You are trying for free for $days day',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get trialWelcomeTrialTitleNoDays => 'You are trying for free';
+
+  @override
+  String get trialWelcomeWatching => 'We watch';
+
+  @override
+  String get trialWelcomeWhatBody =>
+      'Taxi Tips shows where people may need a taxi right now. These are tips, not promises. You decide if it is worth driving there.';
+
+  @override
+  String get trialWelcomeWhatTitle => 'Welcome to Taxi Tips';
+
+  @override
   String get vehicleSessionAnotherPhone => 'another phone';
 
   @override
@@ -2453,4 +3181,19 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get vehicleSessionYouDriveThis => 'You are driving this one';
+
+  @override
+  String get welcomeScreenBrowserFailed => 'Could not open the browser';
+
+  @override
+  String get welcomeScreenCreateAccount => 'Create a free account';
+
+  @override
+  String get welcomeScreenHeadline => 'See where people need a taxi';
+
+  @override
+  String get welcomeScreenLogin => 'Log in';
+
+  @override
+  String get welcomeScreenSeeDemo => 'See the demo on the web';
 }

@@ -5,6 +5,7 @@ import 'package:liquid_swipe/liquid_swipe.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../analytics.dart';
+import '../l10n/l10n.dart';
 import '../theme.dart';
 
 /// Visad EN gång efter installationen, före välkomstskärmen: vad appen gör,
@@ -92,60 +93,50 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
 
   /// Sista sidan när introduktionen öppnas igen från Inställningar: föraren är
   /// redan inloggad, så här står det som återstår.
-  static const _replayLast = _PageData(
+  static _PageData get _replayLast => _PageData(
     background: TbColors.navyDeep,
     foreground: TbColors.foam,
     accent: TbColors.taxi,
     icon: Icons.notifications_active_rounded,
-    title: 'Notiser',
-    body:
-        'Slå på notiser under Inställningar. Då säger vi till när ett '
-        'starkt tips dyker upp nära dig.',
+    title: tr.onboardingScreenNotifTitle,
+    body: tr.onboardingScreenNotifBody,
   );
 
-  static const _traffic = _PageData(
+  static _PageData get _traffic => _PageData(
     background: TbColors.navy,
     foreground: TbColors.foam,
     accent: TbColors.taxi,
     icon: Icons.location_on_rounded,
-    title: 'Tips från trafiken',
-    body:
-        'Inställda tåg, sena flyg, färjor och event som slutar. Vi visar '
-        'var folk kan behöva taxi. Det är tips, inte beställningar.',
+    title: tr.onboardingScreenTrafficTitle,
+    body: tr.onboardingScreenTrafficBody,
   );
 
-  static const _colors = _PageData(
+  static _PageData get _colors => _PageData(
     background: Colors.white,
     foreground: TbColors.ink,
     accent: TbColors.navy,
     icon: Icons.traffic_rounded,
-    title: 'Färgen visar hur starkt tipset är',
-    body:
-        'Det är tips, inte beställningar. Du avgör själv om det är värt '
-        'att åka.',
+    title: tr.onboardingScreenColorsTitle,
+    body: tr.onboardingScreenColorsBody,
     levels: true,
   );
 
-  static const _feedback = _PageData(
+  static _PageData get _feedback => _PageData(
     background: TbColors.taxi,
     foreground: TbColors.ink,
     accent: TbColors.navy,
     icon: Icons.thumbs_up_down_rounded,
-    title: 'Säg hur det gick',
-    body:
-        'Tryck på ett tips och välj Fick körning eller Ingen kund. Då blir '
-        'tipsen bättre för alla.',
+    title: tr.onboardingScreenFeedbackTitle,
+    body: tr.onboardingScreenFeedbackBody,
   );
 
-  static const _start = _PageData(
+  static _PageData get _start => _PageData(
     background: TbColors.navyDeep,
     foreground: TbColors.foam,
     accent: TbColors.taxi,
     icon: Icons.local_taxi_rounded,
-    title: 'Kom igång',
-    body:
-        'Skapa ett konto gratis, eller logga in om du redan har ett. '
-        'Sedan visar vi dig runt i appen.',
+    title: tr.onboardingScreenStartTitle,
+    body: tr.onboardingScreenStartBody,
   );
 
   bool get _last => _page == _pages.length - 1;
@@ -176,27 +167,38 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   @override
   Widget build(BuildContext context) {
     final current = _pages[_page];
+    // liquid_swipe har vågen fast vid högerkanten och saknar riktningsval. På
+    // arabiska speglas därför hela svepet (och varje sida speglas tillbaka):
+    // vågen ligger då vid vänsterkanten och nästa sida kommer med ett svep åt
+    // höger, som i övriga appen.
+    Widget swipe = LiquidSwipe(
+      pages: [
+        for (final p in _pages)
+          isRtl ? _Mirror(child: _Page(data: p)) : _Page(data: p),
+      ],
+      liquidController: _controller,
+      enableLoop: false,
+      enableSideReveal: true,
+      waveType: WaveType.liquidReveal,
+      slideIconWidget: Icon(
+        Icons.arrow_back_ios_new_rounded,
+        // Alltid "vänster" här: på arabiska speglas hela svepet efteråt.
+        textDirection: TextDirection.ltr,
+        color: current.foreground.withValues(alpha: 0.7),
+        size: 20,
+      ),
+      positionSlideIcon: 0.55,
+      onPageChangeCallback: (page) => setState(() => _page = page),
+    );
+    if (isRtl) swipe = _Mirror(child: swipe);
     return Scaffold(
       backgroundColor: current.background,
       body: Stack(
         children: [
-          LiquidSwipe(
-            pages: [for (final p in _pages) _Page(data: p)],
-            liquidController: _controller,
-            enableLoop: false,
-            enableSideReveal: true,
-            waveType: WaveType.liquidReveal,
-            slideIconWidget: Icon(
-              Icons.arrow_back_ios_new_rounded,
-              color: current.foreground.withValues(alpha: 0.7),
-              size: 20,
-            ),
-            positionSlideIcon: 0.55,
-            onPageChangeCallback: (page) => setState(() => _page = page),
-          ),
+          swipe,
           SafeArea(
             child: Align(
-              alignment: Alignment.topRight,
+              alignment: AlignmentDirectional.topEnd,
               child: Padding(
                 padding: const EdgeInsets.all(8),
                 child: AnimatedOpacity(
@@ -209,7 +211,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       minimumSize: const Size(48, 48),
                     ),
                     child: Text(
-                      widget.replay ? 'Stäng' : 'Hoppa över',
+                      widget.replay
+                          ? tr.onboardingScreenClose
+                          : tr.onboardingScreenSkip,
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ),
@@ -221,7 +225,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             child: Align(
               alignment: Alignment.bottomCenter,
               child: Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+                padding: const EdgeInsetsDirectional.fromSTEB(24, 0, 24, 20),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -249,8 +253,10 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         ),
                         child: Text(
                           _last
-                              ? (widget.replay ? 'Klar' : 'Kom igång')
-                              : 'Nästa',
+                              ? (widget.replay
+                                    ? tr.onboardingScreenDone
+                                    : tr.onboardingScreenStartTitle)
+                              : tr.onboardingScreenNext,
                           style: const TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w800,
@@ -267,6 +273,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
       ),
     );
   }
+}
+
+/// Speglar sitt barn vågrätt (bara för arabiskans svep, se build ovan).
+class _Mirror extends StatelessWidget {
+  const _Mirror({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) =>
+      Transform.flip(flipX: true, child: child);
 }
 
 class _PageData {
@@ -304,8 +321,8 @@ class _Page extends StatelessWidget {
       child: SafeArea(
         child: Padding(
           // Plats under för prickar och knapp (ritas ovanpå i skärmen).
-          // Höger: plats för liquid_swipes kant med nästa sida och pilen.
-          padding: const EdgeInsets.fromLTRB(32, 64, 56, 140),
+          // Änden (vid vågen): plats för liquid_swipes kant med nästa sida och pilen.
+          padding: const EdgeInsetsDirectional.fromSTEB(32, 64, 56, 140),
           // Skrollbar men centrerad: stor textstorlek eller en liten
           // telefon ska inte klippa texten.
           child: LayoutBuilder(
@@ -349,20 +366,20 @@ class _Page extends StatelessWidget {
         const SizedBox(height: 14),
         if (data.levels) ...[
           const SizedBox(height: 6),
-          const _Level(
+          _Level(
             color: TbColors.likelihoodHigh,
-            label: 'Stark',
-            text: 'Många kan behöva taxi.',
+            label: tr.onboardingScreenLevelStrong,
+            text: tr.onboardingScreenLevelStrongText,
           ),
-          const _Level(
+          _Level(
             color: TbColors.likelihoodMedium,
-            label: 'Medel',
-            text: 'Kan bli körningar. Håll koll.',
+            label: tr.onboardingScreenLevelMedium,
+            text: tr.onboardingScreenLevelMediumText,
           ),
-          const _Level(
+          _Level(
             color: TbColors.likelihoodLow,
-            label: 'Svag',
-            text: 'Bra att veta, sällan värt att åka.',
+            label: tr.onboardingScreenLevelWeak,
+            text: tr.onboardingScreenLevelWeakText,
           ),
           const SizedBox(height: 14),
         ],
@@ -435,7 +452,7 @@ class _Dots extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Semantics(
-      label: 'Sida ${index + 1} av $count',
+      label: tr.onboardingScreenPageOf(index + 1, count),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [

@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../config.dart';
+import '../l10n/l10n.dart';
 import '../theme.dart';
 import '../widgets/language_picker.dart';
 
@@ -34,7 +35,7 @@ class WelcomeScreen extends StatelessWidget {
     } catch (_) {}
     if (!opened) {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Kunde inte öppna webbläsaren')),
+        SnackBar(content: Text(tr.welcomeScreenBrowserFailed)),
       );
     }
   }
@@ -80,10 +81,10 @@ class WelcomeScreen extends StatelessWidget {
                               SizedBox(
                                 height: constraints.maxHeight < 700 ? 24 : 40,
                               ),
-                              const Text(
-                                'Se var folk behöver taxi',
+                              Text(
+                                tr.welcomeScreenHeadline,
                                 textAlign: TextAlign.center,
-                                style: TextStyle(
+                                style: const TextStyle(
                                   fontFamily: kDisplayFont,
                                   color: TbColors.foam,
                                   fontSize: 30,
@@ -115,9 +116,9 @@ class WelcomeScreen extends StatelessWidget {
                                       borderRadius: BorderRadius.circular(14),
                                     ),
                                   ),
-                                  child: const Text(
-                                    'Skapa konto gratis',
-                                    style: TextStyle(
+                                  child: Text(
+                                    tr.welcomeScreenCreateAccount,
+                                    style: const TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.w800,
                                     ),
@@ -137,9 +138,9 @@ class WelcomeScreen extends StatelessWidget {
                                       borderRadius: BorderRadius.circular(14),
                                     ),
                                   ),
-                                  child: const Text(
-                                    'Logga in',
-                                    style: TextStyle(
+                                  child: Text(
+                                    tr.welcomeScreenLogin,
+                                    style: const TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.w700,
                                     ),
@@ -153,9 +154,9 @@ class WelcomeScreen extends StatelessWidget {
                                       foregroundColor: Colors.white70,
                                       minimumSize: const Size.fromHeight(48),
                                     ),
-                                    child: const Text(
-                                      'Se demon på webben',
-                                      style: TextStyle(
+                                    child: Text(
+                                      tr.welcomeScreenSeeDemo,
+                                      style: const TextStyle(
                                         decoration: TextDecoration.underline,
                                       ),
                                     ),

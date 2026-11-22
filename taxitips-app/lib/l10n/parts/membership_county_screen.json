@@ -1,0 +1,27 @@
+{
+  "membershipCountyLoadFailed": {
+    "sv": "Kunde inte hämta länen. Dra ner för att försöka igen.",
+    "en": "Could not load the counties. Pull down to try again.",
+    "ar": "تعذّر تحميل المقاطعات. اسحب للأسفل للمحاولة مرة أخرى."
+  },
+  "membershipCountyRetry": {
+    "sv": "Försök igen",
+    "en": "Try again",
+    "ar": "حاول مرة أخرى"
+  },
+  "membershipCountyContinue": {
+    "sv": "Fortsätt",
+    "en": "Continue",
+    "ar": "متابعة"
+  },
+  "membershipCountyTitle": {
+    "sv": "Var vill du köra?",
+    "en": "Where do you want to drive?",
+    "ar": "أين تريد أن تعمل؟"
+  },
+  "membershipCountySubtitle": {
+    "sv": "Välj länet där du kör mest. Du kan byta senare.",
+    "en": "Choose the county where you drive the most. You can change later.",
+    "ar": "اختر المقاطعة التي تعمل فيها أكثر. يمكنك التغيير لاحقًا."
+  }
+}

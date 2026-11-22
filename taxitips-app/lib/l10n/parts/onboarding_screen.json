@@ -1,0 +1,109 @@
+{
+  "onboardingScreenNotifTitle": {
+    "sv": "Notiser",
+    "en": "Notifications",
+    "ar": "الإشعارات"
+  },
+  "onboardingScreenNotifBody": {
+    "sv": "Slå på notiser under Inställningar. Då säger vi till när ett starkt tips dyker upp nära dig.",
+    "en": "Turn on notifications in Settings. Then we will tell you when a strong tip shows up near you.",
+    "ar": "فعّل الإشعارات من الإعدادات. عندها سننبّهك عندما يظهر تنبيه قوي قربك."
+  },
+  "onboardingScreenTrafficTitle": {
+    "sv": "Tips från trafiken",
+    "en": "Tips from the traffic",
+    "ar": "تنبيهات من حركة المرور"
+  },
+  "onboardingScreenTrafficBody": {
+    "sv": "Inställda tåg, sena flyg, färjor och event som slutar. Vi visar var folk kan behöva taxi. Det är tips, inte beställningar.",
+    "en": "Cancelled trains, late flights, ferries and events that end. We show where people may need a taxi. These are tips, not bookings.",
+    "ar": "قطارات ملغاة، ورحلات جوية متأخرة، وعبّارات، وفعاليات تنتهي. نُظهر أين قد يحتاج الناس إلى تاكسي. هذه تنبيهات وليست طلبات."
+  },
+  "onboardingScreenColorsTitle": {
+    "sv": "Färgen visar hur starkt tipset är",
+    "en": "The colour shows how strong the tip is",
+    "ar": "اللون يوضح مدى قوة التنبيه"
+  },
+  "onboardingScreenColorsBody": {
+    "sv": "Det är tips, inte beställningar. Du avgör själv om det är värt att åka.",
+    "en": "These are tips, not bookings. You decide if it is worth going.",
+    "ar": "هذه تنبيهات وليست طلبات. أنت تقرّر إن كان الذهاب يستحق."
+  },
+  "onboardingScreenLevelStrong": {
+    "sv": "Stark",
+    "en": "Strong",
+    "ar": "قوية"
+  },
+  "onboardingScreenLevelStrongText": {
+    "sv": "Många kan behöva taxi.",
+    "en": "Many may need a taxi.",
+    "ar": "قد يحتاج كثيرون إلى تاكسي."
+  },
+  "onboardingScreenLevelMedium": {
+    "sv": "Medel",
+    "en": "Medium",
+    "ar": "متوسطة"
+  },
+  "onboardingScreenLevelMediumText": {
+    "sv": "Kan bli körningar. Håll koll.",
+    "en": "Could lead to rides. Keep an eye on it.",
+    "ar": "قد تكون هناك رحلات. تابعها."
+  },
+  "onboardingScreenLevelWeak": {
+    "sv": "Svag",
+    "en": "Weak",
+    "ar": "ضعيفة"
+  },
+  "onboardingScreenLevelWeakText": {
+    "sv": "Bra att veta, sällan värt att åka.",
+    "en": "Good to know, rarely worth going.",
+    "ar": "جيد أن تعرف، نادراً ما يستحق الذهاب."
+  },
+  "onboardingScreenFeedbackTitle": {
+    "sv": "Säg hur det gick",
+    "en": "Tell us how it went",
+    "ar": "أخبرنا كيف سارت الأمور"
+  },
+  "onboardingScreenFeedbackBody": {
+    "sv": "Tryck på ett tips och välj Fick körning eller Ingen kund. Då blir tipsen bättre för alla.",
+    "en": "Tap a tip and choose Got a fare or No customer. That makes the tips better for everyone.",
+    "ar": "اضغط على تنبيه واختر «حصلت على راكب» أو «لا يوجد زبون». هكذا تصبح التنبيهات أفضل للجميع."
+  },
+  "onboardingScreenStartTitle": {
+    "sv": "Kom igång",
+    "en": "Get started",
+    "ar": "ابدأ الآن",
+    "description": "Rubrik på sista sidan och knapptext"
+  },
+  "onboardingScreenStartBody": {
+    "sv": "Skapa ett konto gratis, eller logga in om du redan har ett. Sedan visar vi dig runt i appen.",
+    "en": "Create a free account, or log in if you already have one. Then we will show you around the app.",
+    "ar": "أنشئ حساباً مجانياً، أو سجّل الدخول إن كان لديك حساب. بعدها سنعرّفك على التطبيق."
+  },
+  "onboardingScreenClose": {
+    "sv": "Stäng",
+    "en": "Close",
+    "ar": "إغلاق"
+  },
+  "onboardingScreenSkip": {
+    "sv": "Hoppa över",
+    "en": "Skip",
+    "ar": "تخطّي"
+  },
+  "onboardingScreenDone": {
+    "sv": "Klar",
+    "en": "Done",
+    "ar": "تم"
+  },
+  "onboardingScreenNext": {
+    "sv": "Nästa",
+    "en": "Next",
+    "ar": "التالي"
+  },
+  "onboardingScreenPageOf": {
+    "sv": "Sida {page} av {total}",
+    "en": "Page {page} of {total}",
+    "ar": "الصفحة {page} من {total}",
+    "placeholders": {"page": {"type": "int"}, "total": {"type": "int"}}
+  }
+}

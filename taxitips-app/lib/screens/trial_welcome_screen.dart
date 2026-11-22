@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../analytics.dart';
 import '../api_client.dart';
+import '../l10n/l10n.dart';
 import '../membership_copy.dart';
 import '../signal_kinds.dart';
 import '../theme.dart';
@@ -230,9 +231,9 @@ class _TrialWelcomeScreenState extends State<TrialWelcomeScreen> {
               const SizedBox(height: 48)
             else
               Align(
-                alignment: Alignment.centerRight,
+                alignment: AlignmentDirectional.centerEnd,
                 child: Padding(
-                  padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+                  padding: const EdgeInsetsDirectional.fromSTEB(8, 4, 8, 0),
                   child: TextButton(
                     onPressed: () => _finish(skipped: true),
                     style: TextButton.styleFrom(
@@ -240,7 +241,9 @@ class _TrialWelcomeScreenState extends State<TrialWelcomeScreen> {
                       minimumSize: const Size(48, 48),
                     ),
                     child: Text(
-                      widget.replay ? 'Stäng' : 'Hoppa över',
+                      widget.replay
+                          ? tr.trialWelcomeClose
+                          : tr.trialWelcomeSkip,
                       style: const TextStyle(fontWeight: FontWeight.w700),
                     ),
                   ),
@@ -263,13 +266,13 @@ class _TrialWelcomeScreenState extends State<TrialWelcomeScreen> {
             // En sida: knappen ligger i sidan och rullar med texten.
             if (!single)
               Padding(
-                padding: const EdgeInsets.fromLTRB(24, 8, 24, 20),
+                padding: const EdgeInsetsDirectional.fromSTEB(24, 8, 24, 20),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (!single) ...[
                       Semantics(
-                        label: 'Sida ${_page + 1} av $_pageCount',
+                        label: tr.trialWelcomePageOf(_page + 1, _pageCount),
                         child: Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
@@ -306,7 +309,7 @@ class _TrialWelcomeScreenState extends State<TrialWelcomeScreen> {
                           ),
                         ),
                         child: Text(
-                          _last ? 'Klar' : 'Nästa',
+                          _last ? tr.trialWelcomeDone : tr.trialWelcomeNext,
                           style: const TextStyle(
                             fontSize: 17,
                             fontWeight: FontWeight.w800,
@@ -340,7 +343,7 @@ class _PageFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.fromLTRB(24, 8, 24, 16),
+      padding: const EdgeInsetsDirectional.fromSTEB(24, 8, 24, 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -382,23 +385,9 @@ class _ReadyPage extends StatelessWidget {
   final TrialWelcomeInfo info;
   final VoidCallback onDone;
 
-  static const _months = [
-    'januari',
-    'februari',
-    'mars',
-    'april',
-    'maj',
-    'juni',
-    'juli',
-    'augusti',
-    'september',
-    'oktober',
-    'november',
-    'december',
-  ];
-
   /// "29 december" -- lättare att läsa än 2026-12-29.
-  static String date(DateTime d) => '${d.day} ${_months[d.month - 1]}';
+  static String date(DateTime d) =>
+      tr.trialWelcomeDate(d.day, d.month.toString());
 
   @override
   Widget build(BuildContext context) {
@@ -406,14 +395,16 @@ class _ReadyPage extends StatelessWidget {
     final ends = info.status == 'active' ? info.endsAt : null;
     return _PageFrame(
       icon: Icons.check_circle_rounded,
-      title: 'Klart! Du är igång',
+      title: tr.trialWelcomeReadyTitle,
       children: [
         // En rad: hur länge det är gratis. Betalning visas först när provet
         // är slut (ägarens beslut 2026-11-22).
         Text(
           ends != null
-              ? 'Gratis till ${date(ends)}.'
-              : (days == null ? 'Gratis att prova.' : 'Gratis i $days dagar.'),
+              ? tr.trialWelcomeFreeUntil(date(ends))
+              : (days == null
+                    ? tr.trialWelcomeFreeToTry
+                    : tr.trialWelcomeFreeDays(days)),
           style: _bodyStyle,
         ),
         const SizedBox(height: 24),
@@ -429,9 +420,9 @@ class _ReadyPage extends StatelessWidget {
                 borderRadius: BorderRadius.circular(14),
               ),
             ),
-            child: const Text(
-              'Visa tipsen',
-              style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+            child: Text(
+              tr.trialWelcomeShowTips,
+              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
             ),
           ),
         ),
@@ -447,30 +438,24 @@ class _WhatPage extends StatelessWidget {
   /// En rad per kategori, med försiktigt språk: ett tips är en signal, aldrig
   /// ett löfte om kunder.
   static String _line(SignalCategory c) => switch (c) {
-    SignalCategory.transit =>
-      'Tåg och buss som är sena eller inställda. '
-          'Sista avgången.',
-    SignalCategory.road => 'Trafikolyckor som stoppar trafiken.',
-    SignalCategory.flight => 'Flyg som är sena, eller när många flyg landar.',
-    SignalCategory.ferry => 'Färjor som lägger till i hamnen.',
-    SignalCategory.event => 'Event som slutar: match, konsert eller annat.',
+    SignalCategory.transit => tr.trialWelcomeLineTransit,
+    SignalCategory.road => tr.trialWelcomeLineRoad,
+    SignalCategory.flight => tr.trialWelcomeLineFlight,
+    SignalCategory.ferry => tr.trialWelcomeLineFerry,
+    SignalCategory.event => tr.trialWelcomeLineEvent,
   };
 
   @override
   Widget build(BuildContext context) {
     return _PageFrame(
       icon: Icons.location_on_rounded,
-      title: 'Välkommen till Taxi Tips',
+      title: tr.trialWelcomeWhatTitle,
       children: [
-        const Text(
-          'Taxi Tips visar var folk kan behöva taxi just nu. Det är tips, '
-          'inte löften. Du bestämmer själv om det är värt att åka.',
-          style: _bodyStyle,
-        ),
+        Text(tr.trialWelcomeWhatBody, style: _bodyStyle),
         const SizedBox(height: 18),
-        const Text(
-          'Vi bevakar',
-          style: TextStyle(
+        Text(
+          tr.trialWelcomeWatching,
+          style: const TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w800,
             color: TbColors.muted,
@@ -480,10 +465,13 @@ class _WhatPage extends StatelessWidget {
         for (final c in signalCategoryOrder)
           _CategoryRow(category: c, text: _line(c)),
         const SizedBox(height: 8),
-        const Text(
-          'Färgen visar hur stark signalen är. En stark signal betyder att '
-          'många sannolikt behöver taxi.',
-          style: TextStyle(fontSize: 16, height: 1.4, color: TbColors.muted),
+        Text(
+          tr.trialWelcomeColorNote,
+          style: const TextStyle(
+            fontSize: 16,
+            height: 1.4,
+            color: TbColors.muted,
+          ),
         ),
       ],
     );
@@ -568,16 +556,16 @@ class _TrialPage extends StatelessWidget {
     return _PageFrame(
       icon: Icons.card_giftcard_rounded,
       title: days == null
-          ? 'Du provar gratis'
-          : 'Du provar gratis i $days dagar',
+          ? tr.trialWelcomeTrialTitleNoDays
+          : tr.trialWelcomeTrialTitleDays(days),
       children: [
-        const Text('Det kostar inget att prova.', style: _bodyStyle),
+        Text(tr.trialWelcomeCostsNothing, style: _bodyStyle),
         const SizedBox(height: 12),
         if (ended)
-          const Text('Provet är slut. $kMembershipOnWeb', style: _bodyStyle)
+          Text(tr.trialWelcomeTrialEnded(kMembershipOnWeb), style: _bodyStyle)
         else if (started && info.endsAt != null)
           Text(
-            'Provet pågår. Det gäller till ${_date(info.endsAt!)}.',
+            tr.trialWelcomeTrialRunning(_date(info.endsAt!)),
             style: _bodyStyle,
           )
         else
@@ -585,17 +573,14 @@ class _TrialPage extends StatelessWidget {
             // "Tills dess går ingen tid" säger bara servern (status pending);
             // utan svar sägs bara när provet startar.
             info.status == 'pending'
-                ? 'Provet startar när första föraren loggar in. '
-                      'Tills dess går ingen tid.'
-                : 'Provet startar när första föraren loggar in.',
+                ? tr.trialWelcomeTrialStartsPending
+                : tr.trialWelcomeTrialStarts,
             style: _bodyStyle,
           ),
         if (limit != null) ...[
           const SizedBox(height: 12),
           Text(
-            limit == 1
-                ? 'Du kan ha 1 plats i provet, med ett län.'
-                : 'Du kan ha upp till $limit platser i provet.',
+            limit == 1 ? tr.trialWelcomeOneSeat : tr.trialWelcomeSeats(limit),
             style: _bodyStyle,
           ),
         ],
@@ -610,26 +595,21 @@ class _StepsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const _PageFrame(
+    return _PageFrame(
       icon: Icons.flag_rounded,
-      title: 'Så kommer du igång',
+      title: tr.trialWelcomeStepsTitle,
       children: [
         // Länet valdes redan i registreringen och platsen är kontots egen:
         // inget "Kör själv" att trycka på för att se tipsen.
         _Step(
           n: 1,
-          title: 'Byt län',
-          text:
-              'Öppna Inställningar och tryck på Dina län. '
-              'Länet styr vilka tips du får.',
+          title: tr.trialWelcomeStep1Title,
+          text: tr.trialWelcomeStep1Text,
         ),
         _Step(
           n: 2,
-          title: 'Har du ett taxibolag? Bjud in förare på webben',
-          text:
-              'Inbjudan skickas av företagets administratör på webben, inte från appen. '
-              'Föraren får ett mejl, väljer ett lösenord och loggar in i '
-              'appen med e-post och lösenord.',
+          title: tr.trialWelcomeStep2Title,
+          text: tr.trialWelcomeStep2Text,
         ),
       ],
     );
@@ -706,19 +686,15 @@ class _IncludedPage extends StatelessWidget {
     final locked = info.locked ?? const <SignalCategory>[];
     return _PageFrame(
       icon: Icons.lock_open_rounded,
-      title: 'Vad ingår i provet?',
+      title: tr.trialWelcomeIncludedTitle,
       children: [
         if (!info.hasFeatures)
-          const Text(
-            'Det som ingår i provet ser du i appen. Det som inte ingår har '
-            'ett lås.',
-            style: _bodyStyle,
-          )
+          Text(tr.trialWelcomeIncludedUnknown, style: _bodyStyle)
         else ...[
           if (included.isNotEmpty) ...[
-            const Text(
-              'Ingår i provet',
-              style: TextStyle(
+            Text(
+              tr.trialWelcomeIncludedHeading,
+              style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
                 color: TbColors.live,
@@ -729,9 +705,9 @@ class _IncludedPage extends StatelessWidget {
           ],
           if (locked.isNotEmpty) ...[
             const SizedBox(height: 8),
-            const Text(
+            Text(
               kNotInTrial,
-              style: TextStyle(
+              style: const TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w800,
                 color: TbColors.muted,
@@ -741,12 +717,12 @@ class _IncludedPage extends StatelessWidget {
             for (final c in locked)
               _CategoryRow(category: c, text: '', lock: true),
             const SizedBox(height: 8),
-            const Text(
-              'Det kräver medlemskap. $kMembershipOnWeb',
+            Text(
+              tr.trialWelcomeNeedsMembership(kMembershipOnWeb),
               style: _bodyStyle,
             ),
           ] else
-            const Text('Allt ingår just nu.', style: _bodyStyle),
+            Text(tr.trialWelcomeAllIncluded, style: _bodyStyle),
         ],
       ],
     );

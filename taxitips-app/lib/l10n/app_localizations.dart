@@ -136,6 +136,414 @@ abstract class AppLocalizations {
   /// **'Hur gick det?'**
   String get alertFeedbackTitle;
 
+  /// No description provided for @apiClientAccountCreatedOffline.
+  ///
+  /// In sv, this message translates to:
+  /// **'Kontot är skapat, men vi nådde inte servern. Logga in när du har nät igen.'**
+  String get apiClientAccountCreatedOffline;
+
+  /// No description provided for @apiClientAuthError.
+  ///
+  /// In sv, this message translates to:
+  /// **'Auth-fel: {details}'**
+  String apiClientAuthError(String details);
+
+  /// No description provided for @apiClientBankIdUnavailable.
+  ///
+  /// In sv, this message translates to:
+  /// **'BankID är inte tillgängligt just nu.'**
+  String get apiClientBankIdUnavailable;
+
+  /// Utvecklarfel: servern är inte konfigurerad
+  ///
+  /// In sv, this message translates to:
+  /// **'API_BASE_URL är inte satt. Parkoppling och bilval kräver TaxiTips-backenden.'**
+  String get apiClientBaseUrlMissing;
+
+  /// No description provided for @apiClientCannotDeleteAccount.
+  ///
+  /// In sv, this message translates to:
+  /// **'Det går inte att radera kontot just nu. Försök igen senare.'**
+  String get apiClientCannotDeleteAccount;
+
+  /// No description provided for @apiClientCouldNotCreateAccount.
+  ///
+  /// In sv, this message translates to:
+  /// **'Kunde inte skapa konto'**
+  String get apiClientCouldNotCreateAccount;
+
+  /// No description provided for @apiClientDatabaseError.
+  ///
+  /// In sv, this message translates to:
+  /// **'Databasfel: {details}'**
+  String apiClientDatabaseError(String details);
+
+  /// No description provided for @apiClientFavoritesNeedBackend.
+  ///
+  /// In sv, this message translates to:
+  /// **'Favoriter kräver Django-backenden'**
+  String get apiClientFavoritesNeedBackend;
+
+  /// No description provided for @apiClientInvalidTransferCode.
+  ///
+  /// In sv, this message translates to:
+  /// **'Ogiltig byteskod'**
+  String get apiClientInvalidTransferCode;
+
+  /// No description provided for @apiClientInvalidVerificationCode.
+  ///
+  /// In sv, this message translates to:
+  /// **'Verifieringskoden är ogiltig'**
+  String get apiClientInvalidVerificationCode;
+
+  /// No description provided for @apiClientLoginFailed.
+  ///
+  /// In sv, this message translates to:
+  /// **'Det gick inte att logga in. Försök igen.'**
+  String get apiClientLoginFailed;
+
+  /// No description provided for @apiClientLoginRequired.
+  ///
+  /// In sv, this message translates to:
+  /// **'Logga in för att fortsätta.'**
+  String get apiClientLoginRequired;
+
+  /// No description provided for @apiClientNoCompany.
+  ///
+  /// In sv, this message translates to:
+  /// **'Inget bolag'**
+  String get apiClientNoCompany;
+
+  /// No description provided for @apiClientNoDevice.
+  ///
+  /// In sv, this message translates to:
+  /// **'Ingen enhet'**
+  String get apiClientNoDevice;
+
+  /// No description provided for @apiClientNoDeviceKey.
+  ///
+  /// In sv, this message translates to:
+  /// **'Servern gav ingen enhetsnyckel.'**
+  String get apiClientNoDeviceKey;
+
+  /// No description provided for @apiClientNoDevicePush.
+  ///
+  /// In sv, this message translates to:
+  /// **'Ingen enhet — logga in via backend för push'**
+  String get apiClientNoDevicePush;
+
+  /// No description provided for @apiClientNoDeviceToName.
+  ///
+  /// In sv, this message translates to:
+  /// **'Ingen enhet att namnge.'**
+  String get apiClientNoDeviceToName;
+
+  /// No description provided for @apiClientNoValidSession.
+  ///
+  /// In sv, this message translates to:
+  /// **'Inloggningen gav ingen giltig session.'**
+  String get apiClientNoValidSession;
+
+  /// No description provided for @apiClientNotLoggedIn.
+  ///
+  /// In sv, this message translates to:
+  /// **'Inte inloggad'**
+  String get apiClientNotLoggedIn;
+
+  /// No description provided for @apiClientNotifyLineDelayedHelp.
+  ///
+  /// In sv, this message translates to:
+  /// **'Vanligtvis en svag signal -- av som standard.'**
+  String get apiClientNotifyLineDelayedHelp;
+
+  /// No description provided for @apiClientNotifyLineDelayedLabel.
+  ///
+  /// In sv, this message translates to:
+  /// **'Förseningar'**
+  String get apiClientNotifyLineDelayedLabel;
+
+  /// No description provided for @apiClientNotifyLineDelayedShort.
+  ///
+  /// In sv, this message translates to:
+  /// **'Linjen kör, men försenad'**
+  String get apiClientNotifyLineDelayedShort;
+
+  /// No description provided for @apiClientNotifyLinePausedHelp.
+  ///
+  /// In sv, this message translates to:
+  /// **'Störst chans att det finns folk som behöver taxi.'**
+  String get apiClientNotifyLinePausedHelp;
+
+  /// No description provided for @apiClientNotifyLinePausedLabel.
+  ///
+  /// In sv, this message translates to:
+  /// **'Hela linjen står stilla'**
+  String get apiClientNotifyLinePausedLabel;
+
+  /// No description provided for @apiClientNotifyLinePausedShort.
+  ///
+  /// In sv, this message translates to:
+  /// **'Ingen trafik alls på linjen'**
+  String get apiClientNotifyLinePausedShort;
+
+  /// No description provided for @apiClientNotifyNeedsServer.
+  ///
+  /// In sv, this message translates to:
+  /// **'Notisvalen kräver TaxiTips-servern.'**
+  String get apiClientNotifyNeedsServer;
+
+  /// No description provided for @apiClientNotifyRoadAccidentHelp.
+  ///
+  /// In sv, this message translates to:
+  /// **'Påverkar mest bilister redan på väg, men värt att veta om.'**
+  String get apiClientNotifyRoadAccidentHelp;
+
+  /// No description provided for @apiClientNotifyRoadAccidentLabel.
+  ///
+  /// In sv, this message translates to:
+  /// **'Olycka eller avstängd väg'**
+  String get apiClientNotifyRoadAccidentLabel;
+
+  /// No description provided for @apiClientNotifyRoadShort.
+  ///
+  /// In sv, this message translates to:
+  /// **'Vägtrafik'**
+  String get apiClientNotifyRoadShort;
+
+  /// No description provided for @apiClientNotifyRoadWorkHelp.
+  ///
+  /// In sv, this message translates to:
+  /// **'Sällan en taxisignal -- av som standard.'**
+  String get apiClientNotifyRoadWorkHelp;
+
+  /// No description provided for @apiClientNotifyRoadWorkLabel.
+  ///
+  /// In sv, this message translates to:
+  /// **'Vägarbete eller köbildning'**
+  String get apiClientNotifyRoadWorkLabel;
+
+  /// No description provided for @apiClientNotifyVehicleCancelledHelp.
+  ///
+  /// In sv, this message translates to:
+  /// **'Färre påverkade, men kan ändå vara värt en titt.'**
+  String get apiClientNotifyVehicleCancelledHelp;
+
+  /// No description provided for @apiClientNotifyVehicleCancelledLabel.
+  ///
+  /// In sv, this message translates to:
+  /// **'Enstaka avgång inställd'**
+  String get apiClientNotifyVehicleCancelledLabel;
+
+  /// No description provided for @apiClientNotifyVehicleCancelledShort.
+  ///
+  /// In sv, this message translates to:
+  /// **'En avgång inställd, andra går som vanligt'**
+  String get apiClientNotifyVehicleCancelledShort;
+
+  /// No description provided for @apiClientOnDutyNeedsBackend.
+  ///
+  /// In sv, this message translates to:
+  /// **'I tjänst kräver den nya backenden'**
+  String get apiClientOnDutyNeedsBackend;
+
+  /// No description provided for @apiClientPhoneNotPaired.
+  ///
+  /// In sv, this message translates to:
+  /// **'Telefonen är inte parkopplad.'**
+  String get apiClientPhoneNotPaired;
+
+  /// No description provided for @apiClientSupportChatUnavailable.
+  ///
+  /// In sv, this message translates to:
+  /// **'Supportchatten är inte tillgänglig här.'**
+  String get apiClientSupportChatUnavailable;
+
+  /// No description provided for @appMainLogout.
+  ///
+  /// In sv, this message translates to:
+  /// **'Logga ut'**
+  String get appMainLogout;
+
+  /// No description provided for @appMainSomethingWrong.
+  ///
+  /// In sv, this message translates to:
+  /// **'Något gick fel.'**
+  String get appMainSomethingWrong;
+
+  /// No description provided for @appMainTrialNotStarted.
+  ///
+  /// In sv, this message translates to:
+  /// **'Kontot är skapat men provet kunde inte starta. Kontakta TaxiTips.'**
+  String get appMainTrialNotStarted;
+
+  /// No description provided for @appMainTryAgain.
+  ///
+  /// In sv, this message translates to:
+  /// **'Försök igen'**
+  String get appMainTryAgain;
+
+  /// No description provided for @bankIdFlowAppNotFound.
+  ///
+  /// In sv, this message translates to:
+  /// **'Vi hittar inte BankID-appen på den här telefonen. Skanna koden med BankID på en annan telefon.'**
+  String get bankIdFlowAppNotFound;
+
+  /// No description provided for @bankIdFlowApproveInApp.
+  ///
+  /// In sv, this message translates to:
+  /// **'Godkänn i BankID-appen. Kom sedan tillbaka hit.'**
+  String get bankIdFlowApproveInApp;
+
+  /// No description provided for @bankIdFlowBadEmail.
+  ///
+  /// In sv, this message translates to:
+  /// **'Fel e-post.'**
+  String get bankIdFlowBadEmail;
+
+  /// No description provided for @bankIdFlowCancel.
+  ///
+  /// In sv, this message translates to:
+  /// **'Avbryt'**
+  String get bankIdFlowCancel;
+
+  /// No description provided for @bankIdFlowChangeEmail.
+  ///
+  /// In sv, this message translates to:
+  /// **'Byt e-post också'**
+  String get bankIdFlowChangeEmail;
+
+  /// No description provided for @bankIdFlowFailed.
+  ///
+  /// In sv, this message translates to:
+  /// **'Legitimeringen misslyckades. Försök igen.'**
+  String get bankIdFlowFailed;
+
+  /// No description provided for @bankIdFlowHello.
+  ///
+  /// In sv, this message translates to:
+  /// **'Hej {name}!'**
+  String bankIdFlowHello(String name);
+
+  /// No description provided for @bankIdFlowHidePassword.
+  ///
+  /// In sv, this message translates to:
+  /// **'Dölj lösenord'**
+  String get bankIdFlowHidePassword;
+
+  /// No description provided for @bankIdFlowNewEmail.
+  ///
+  /// In sv, this message translates to:
+  /// **'Ny e-post'**
+  String get bankIdFlowNewEmail;
+
+  /// Dialogrubrik (utan namn) och fältetikett
+  ///
+  /// In sv, this message translates to:
+  /// **'Nytt lösenord'**
+  String get bankIdFlowNewPasswordTitle;
+
+  /// No description provided for @bankIdFlowNoAccountHelp.
+  ///
+  /// In sv, this message translates to:
+  /// **'Ditt BankID har inget konto här.\n\nFick du en inbjudan från ditt taxibolag? Be dem skicka inbjudan igen. Då får du ett mejl där du väljer ett nytt lösenord.\n\nHar du inget konto? Tryck på Skapa konto.'**
+  String get bankIdFlowNoAccountHelp;
+
+  /// No description provided for @bankIdFlowNoAccountTitle.
+  ///
+  /// In sv, this message translates to:
+  /// **'Vi hittar inget konto'**
+  String get bankIdFlowNoAccountTitle;
+
+  /// No description provided for @bankIdFlowNoResponse.
+  ///
+  /// In sv, this message translates to:
+  /// **'BankID svarar inte just nu. Försök igen.'**
+  String get bankIdFlowNoResponse;
+
+  /// No description provided for @bankIdFlowOk.
+  ///
+  /// In sv, this message translates to:
+  /// **'OK'**
+  String get bankIdFlowOk;
+
+  /// No description provided for @bankIdFlowOpenBankId.
+  ///
+  /// In sv, this message translates to:
+  /// **'Öppna BankID'**
+  String get bankIdFlowOpenBankId;
+
+  /// No description provided for @bankIdFlowOtherPhone.
+  ///
+  /// In sv, this message translates to:
+  /// **'BankID på en annan telefon'**
+  String get bankIdFlowOtherPhone;
+
+  /// No description provided for @bankIdFlowPasswordHelper.
+  ///
+  /// In sv, this message translates to:
+  /// **'Minst 8 tecken'**
+  String get bankIdFlowPasswordHelper;
+
+  /// No description provided for @bankIdFlowPasswordMin.
+  ///
+  /// In sv, this message translates to:
+  /// **'Lösenordet: minst 8 tecken.'**
+  String get bankIdFlowPasswordMin;
+
+  /// No description provided for @bankIdFlowQrLabel.
+  ///
+  /// In sv, this message translates to:
+  /// **'QR-kod för BankID'**
+  String get bankIdFlowQrLabel;
+
+  /// No description provided for @bankIdFlowSave.
+  ///
+  /// In sv, this message translates to:
+  /// **'Spara'**
+  String get bankIdFlowSave;
+
+  /// No description provided for @bankIdFlowScanOnOther.
+  ///
+  /// In sv, this message translates to:
+  /// **'Öppna BankID på din andra telefon och skanna koden.'**
+  String get bankIdFlowScanOnOther;
+
+  /// No description provided for @bankIdFlowShowPassword.
+  ///
+  /// In sv, this message translates to:
+  /// **'Visa lösenord'**
+  String get bankIdFlowShowPassword;
+
+  /// No description provided for @bankIdFlowSomethingWrong.
+  ///
+  /// In sv, this message translates to:
+  /// **'Något gick fel. Försök igen.'**
+  String get bankIdFlowSomethingWrong;
+
+  /// No description provided for @bankIdFlowThisPhone.
+  ///
+  /// In sv, this message translates to:
+  /// **'BankID på den här telefonen'**
+  String get bankIdFlowThisPhone;
+
+  /// No description provided for @bankIdFlowTooLong.
+  ///
+  /// In sv, this message translates to:
+  /// **'Det tog för lång tid. Försök igen.'**
+  String get bankIdFlowTooLong;
+
+  /// No description provided for @bankIdFlowTryAgain.
+  ///
+  /// In sv, this message translates to:
+  /// **'Försök igen'**
+  String get bankIdFlowTryAgain;
+
+  /// No description provided for @bankIdFlowYourAccount.
+  ///
+  /// In sv, this message translates to:
+  /// **'Ditt konto:'**
+  String get bankIdFlowYourAccount;
+
   /// No description provided for @categoryBarAll.
   ///
   /// In sv, this message translates to:
@@ -2326,6 +2734,234 @@ abstract class AppLocalizations {
   /// **'Språk'**
   String get languageTitle;
 
+  /// No description provided for @loginScreenBack.
+  ///
+  /// In sv, this message translates to:
+  /// **'Tillbaka'**
+  String get loginScreenBack;
+
+  /// No description provided for @loginScreenCreateAccount.
+  ///
+  /// In sv, this message translates to:
+  /// **'Skapa konto gratis'**
+  String get loginScreenCreateAccount;
+
+  /// No description provided for @loginScreenDeviceSwapLimit.
+  ///
+  /// In sv, this message translates to:
+  /// **'Du har bytt telefon en gång den här månaden. Kontakta support så hjälper vi dig byta igen.'**
+  String get loginScreenDeviceSwapLimit;
+
+  /// No description provided for @loginScreenEmail.
+  ///
+  /// In sv, this message translates to:
+  /// **'E-post'**
+  String get loginScreenEmail;
+
+  /// No description provided for @loginScreenEmailNotConfirmed.
+  ///
+  /// In sv, this message translates to:
+  /// **'Bekräfta din e-post först. Tryck på länken i mejlet.'**
+  String get loginScreenEmailNotConfirmed;
+
+  /// No description provided for @loginScreenEnterCredentials.
+  ///
+  /// In sv, this message translates to:
+  /// **'Skriv din e-post och ditt lösenord.'**
+  String get loginScreenEnterCredentials;
+
+  /// No description provided for @loginScreenFailed.
+  ///
+  /// In sv, this message translates to:
+  /// **'Det gick inte att logga in. Försök igen.'**
+  String get loginScreenFailed;
+
+  /// No description provided for @loginScreenForgotPassword.
+  ///
+  /// In sv, this message translates to:
+  /// **'Glömt lösenord?'**
+  String get loginScreenForgotPassword;
+
+  /// No description provided for @loginScreenHidePassword.
+  ///
+  /// In sv, this message translates to:
+  /// **'Dölj lösenord'**
+  String get loginScreenHidePassword;
+
+  /// No description provided for @loginScreenIntro.
+  ///
+  /// In sv, this message translates to:
+  /// **'För förare, ägare och kontor. Ny förare? Välj först ett lösenord med länken i inbjudan.'**
+  String get loginScreenIntro;
+
+  /// No description provided for @loginScreenNoAccount.
+  ///
+  /// In sv, this message translates to:
+  /// **'Inget konto?'**
+  String get loginScreenNoAccount;
+
+  /// No description provided for @loginScreenNoInvite.
+  ///
+  /// In sv, this message translates to:
+  /// **'Kontot är inte kopplat till något taxibolag. Be din chef bjuda in dig, eller tryck på Skapa konto gratis nedan.'**
+  String get loginScreenNoInvite;
+
+  /// No description provided for @loginScreenPassword.
+  ///
+  /// In sv, this message translates to:
+  /// **'Lösenord'**
+  String get loginScreenPassword;
+
+  /// No description provided for @loginScreenRateLimit.
+  ///
+  /// In sv, this message translates to:
+  /// **'Vänta en minut och försök igen.'**
+  String get loginScreenRateLimit;
+
+  /// No description provided for @loginScreenRecovered.
+  ///
+  /// In sv, this message translates to:
+  /// **'Klart! Logga in med {email}.'**
+  String loginScreenRecovered(String email);
+
+  /// No description provided for @loginScreenShowPassword.
+  ///
+  /// In sv, this message translates to:
+  /// **'Visa lösenord'**
+  String get loginScreenShowPassword;
+
+  /// Rubrik under loggan överst på inloggningen
+  ///
+  /// In sv, this message translates to:
+  /// **'Se var folk behöver taxi,\ninnan kön växer.'**
+  String get loginScreenTagline;
+
+  /// Rubrik och knapptext på inloggningen
+  ///
+  /// In sv, this message translates to:
+  /// **'Logga in'**
+  String get loginScreenTitle;
+
+  /// No description provided for @loginScreenWithBankId.
+  ///
+  /// In sv, this message translates to:
+  /// **'Logga in med BankID'**
+  String get loginScreenWithBankId;
+
+  /// No description provided for @loginScreenWrongCredentials.
+  ///
+  /// In sv, this message translates to:
+  /// **'Fel e-post eller lösenord.'**
+  String get loginScreenWrongCredentials;
+
+  /// No description provided for @membershipCopyAccessNotActive.
+  ///
+  /// In sv, this message translates to:
+  /// **'Åtkomsten är inte aktiv.'**
+  String get membershipCopyAccessNotActive;
+
+  /// No description provided for @membershipCopyInvoicesOnWeb.
+  ///
+  /// In sv, this message translates to:
+  /// **'Fakturor och medlemskap hanteras av företagets administratör på webben.'**
+  String get membershipCopyInvoicesOnWeb;
+
+  /// No description provided for @membershipCopyNotActive.
+  ///
+  /// In sv, this message translates to:
+  /// **'Medlemskapet är inte aktivt just nu.'**
+  String get membershipCopyNotActive;
+
+  /// No description provided for @membershipCopyNotInMembership.
+  ///
+  /// In sv, this message translates to:
+  /// **'Ingår inte i ditt medlemskap.'**
+  String get membershipCopyNotInMembership;
+
+  /// No description provided for @membershipCopyNotInTrial.
+  ///
+  /// In sv, this message translates to:
+  /// **'Ingår inte i provet.'**
+  String get membershipCopyNotInTrial;
+
+  /// No description provided for @membershipCopyOnWeb.
+  ///
+  /// In sv, this message translates to:
+  /// **'Ditt företags administratör hanterar medlemskapet på webben.'**
+  String get membershipCopyOnWeb;
+
+  /// No description provided for @membershipCopyPaused.
+  ///
+  /// In sv, this message translates to:
+  /// **'Medlemskapet är pausat.'**
+  String get membershipCopyPaused;
+
+  /// No description provided for @membershipCopyPortalSubtitle.
+  ///
+  /// In sv, this message translates to:
+  /// **'Öppnar kundportalen på webben: bilar, fakturor och medlemmar.'**
+  String get membershipCopyPortalSubtitle;
+
+  /// No description provided for @membershipCopyPortalTitle.
+  ///
+  /// In sv, this message translates to:
+  /// **'Hantera företagskonto'**
+  String get membershipCopyPortalTitle;
+
+  /// No description provided for @membershipCopyPromiseNoBinding.
+  ///
+  /// In sv, this message translates to:
+  /// **'Ingen bindning'**
+  String get membershipCopyPromiseNoBinding;
+
+  /// No description provided for @membershipCopyPromiseNoCard.
+  ///
+  /// In sv, this message translates to:
+  /// **'Inget kort'**
+  String get membershipCopyPromiseNoCard;
+
+  /// No description provided for @membershipCopyPromiseNoCompany.
+  ///
+  /// In sv, this message translates to:
+  /// **'Inget företag behövs'**
+  String get membershipCopyPromiseNoCompany;
+
+  /// No description provided for @membershipCopyTrialEnded.
+  ///
+  /// In sv, this message translates to:
+  /// **'Provperioden är slut.'**
+  String get membershipCopyTrialEnded;
+
+  /// No description provided for @membershipCountyContinue.
+  ///
+  /// In sv, this message translates to:
+  /// **'Fortsätt'**
+  String get membershipCountyContinue;
+
+  /// No description provided for @membershipCountyLoadFailed.
+  ///
+  /// In sv, this message translates to:
+  /// **'Kunde inte hämta länen. Dra ner för att försöka igen.'**
+  String get membershipCountyLoadFailed;
+
+  /// No description provided for @membershipCountyRetry.
+  ///
+  /// In sv, this message translates to:
+  /// **'Försök igen'**
+  String get membershipCountyRetry;
+
+  /// No description provided for @membershipCountySubtitle.
+  ///
+  /// In sv, this message translates to:
+  /// **'Välj länet där du kör mest. Du kan byta senare.'**
+  String get membershipCountySubtitle;
+
+  /// No description provided for @membershipCountyTitle.
+  ///
+  /// In sv, this message translates to:
+  /// **'Var vill du köra?'**
+  String get membershipCountyTitle;
+
   /// No description provided for @netStatusGenericError.
   ///
   /// In sv, this message translates to:
@@ -2595,6 +3231,132 @@ abstract class AppLocalizations {
   /// In sv, this message translates to:
   /// **'Servern svarar inte – visar tips från {at}'**
   String offlineBannerUnreachable(String at);
+
+  /// No description provided for @onboardingScreenClose.
+  ///
+  /// In sv, this message translates to:
+  /// **'Stäng'**
+  String get onboardingScreenClose;
+
+  /// No description provided for @onboardingScreenColorsBody.
+  ///
+  /// In sv, this message translates to:
+  /// **'Det är tips, inte beställningar. Du avgör själv om det är värt att åka.'**
+  String get onboardingScreenColorsBody;
+
+  /// No description provided for @onboardingScreenColorsTitle.
+  ///
+  /// In sv, this message translates to:
+  /// **'Färgen visar hur starkt tipset är'**
+  String get onboardingScreenColorsTitle;
+
+  /// No description provided for @onboardingScreenDone.
+  ///
+  /// In sv, this message translates to:
+  /// **'Klar'**
+  String get onboardingScreenDone;
+
+  /// No description provided for @onboardingScreenFeedbackBody.
+  ///
+  /// In sv, this message translates to:
+  /// **'Tryck på ett tips och välj Fick körning eller Ingen kund. Då blir tipsen bättre för alla.'**
+  String get onboardingScreenFeedbackBody;
+
+  /// No description provided for @onboardingScreenFeedbackTitle.
+  ///
+  /// In sv, this message translates to:
+  /// **'Säg hur det gick'**
+  String get onboardingScreenFeedbackTitle;
+
+  /// No description provided for @onboardingScreenLevelMedium.
+  ///
+  /// In sv, this message translates to:
+  /// **'Medel'**
+  String get onboardingScreenLevelMedium;
+
+  /// No description provided for @onboardingScreenLevelMediumText.
+  ///
+  /// In sv, this message translates to:
+  /// **'Kan bli körningar. Håll koll.'**
+  String get onboardingScreenLevelMediumText;
+
+  /// No description provided for @onboardingScreenLevelStrong.
+  ///
+  /// In sv, this message translates to:
+  /// **'Stark'**
+  String get onboardingScreenLevelStrong;
+
+  /// No description provided for @onboardingScreenLevelStrongText.
+  ///
+  /// In sv, this message translates to:
+  /// **'Många kan behöva taxi.'**
+  String get onboardingScreenLevelStrongText;
+
+  /// No description provided for @onboardingScreenLevelWeak.
+  ///
+  /// In sv, this message translates to:
+  /// **'Svag'**
+  String get onboardingScreenLevelWeak;
+
+  /// No description provided for @onboardingScreenLevelWeakText.
+  ///
+  /// In sv, this message translates to:
+  /// **'Bra att veta, sällan värt att åka.'**
+  String get onboardingScreenLevelWeakText;
+
+  /// No description provided for @onboardingScreenNext.
+  ///
+  /// In sv, this message translates to:
+  /// **'Nästa'**
+  String get onboardingScreenNext;
+
+  /// No description provided for @onboardingScreenNotifBody.
+  ///
+  /// In sv, this message translates to:
+  /// **'Slå på notiser under Inställningar. Då säger vi till när ett starkt tips dyker upp nära dig.'**
+  String get onboardingScreenNotifBody;
+
+  /// No description provided for @onboardingScreenNotifTitle.
+  ///
+  /// In sv, this message translates to:
+  /// **'Notiser'**
+  String get onboardingScreenNotifTitle;
+
+  /// No description provided for @onboardingScreenPageOf.
+  ///
+  /// In sv, this message translates to:
+  /// **'Sida {page} av {total}'**
+  String onboardingScreenPageOf(int page, int total);
+
+  /// No description provided for @onboardingScreenSkip.
+  ///
+  /// In sv, this message translates to:
+  /// **'Hoppa över'**
+  String get onboardingScreenSkip;
+
+  /// No description provided for @onboardingScreenStartBody.
+  ///
+  /// In sv, this message translates to:
+  /// **'Skapa ett konto gratis, eller logga in om du redan har ett. Sedan visar vi dig runt i appen.'**
+  String get onboardingScreenStartBody;
+
+  /// Rubrik på sista sidan och knapptext
+  ///
+  /// In sv, this message translates to:
+  /// **'Kom igång'**
+  String get onboardingScreenStartTitle;
+
+  /// No description provided for @onboardingScreenTrafficBody.
+  ///
+  /// In sv, this message translates to:
+  /// **'Inställda tåg, sena flyg, färjor och event som slutar. Vi visar var folk kan behöva taxi. Det är tips, inte beställningar.'**
+  String get onboardingScreenTrafficBody;
+
+  /// No description provided for @onboardingScreenTrafficTitle.
+  ///
+  /// In sv, this message translates to:
+  /// **'Tips från trafiken'**
+  String get onboardingScreenTrafficTitle;
 
   /// No description provided for @settingsScreenAboutTips.
   ///
@@ -3502,6 +4264,216 @@ abstract class AppLocalizations {
   /// **'Färja {name}'**
   String signalMapFerry(String name);
 
+  /// No description provided for @signupScreenBack.
+  ///
+  /// In sv, this message translates to:
+  /// **'Tillbaka'**
+  String get signupScreenBack;
+
+  /// No description provided for @signupScreenCompanyHelp.
+  ///
+  /// In sv, this message translates to:
+  /// **'Organisationsnummer behövs inte nu.'**
+  String get signupScreenCompanyHelp;
+
+  /// No description provided for @signupScreenCompanyHint.
+  ///
+  /// In sv, this message translates to:
+  /// **'Till exempel Annas Taxi'**
+  String get signupScreenCompanyHint;
+
+  /// No description provided for @signupScreenCompanyLabel.
+  ///
+  /// In sv, this message translates to:
+  /// **'Företagets namn'**
+  String get signupScreenCompanyLabel;
+
+  /// No description provided for @signupScreenCompanyQuestion.
+  ///
+  /// In sv, this message translates to:
+  /// **'Vad heter företaget?'**
+  String get signupScreenCompanyQuestion;
+
+  /// No description provided for @signupScreenCompanyText.
+  ///
+  /// In sv, this message translates to:
+  /// **'Med egna bilar eller förare.'**
+  String get signupScreenCompanyText;
+
+  /// No description provided for @signupScreenCompanyTitle.
+  ///
+  /// In sv, this message translates to:
+  /// **'Jag har ett taxibolag'**
+  String get signupScreenCompanyTitle;
+
+  /// No description provided for @signupScreenContinueBankId.
+  ///
+  /// In sv, this message translates to:
+  /// **'Fortsätt med BankID'**
+  String get signupScreenContinueBankId;
+
+  /// No description provided for @signupScreenCreateAccount.
+  ///
+  /// In sv, this message translates to:
+  /// **'Skapa kontot'**
+  String get signupScreenCreateAccount;
+
+  /// No description provided for @signupScreenDateInvalid.
+  ///
+  /// In sv, this message translates to:
+  /// **'Personnumret har ett datum som inte finns. Kontrollera numret.'**
+  String get signupScreenDateInvalid;
+
+  /// No description provided for @signupScreenEmailHelp.
+  ///
+  /// In sv, this message translates to:
+  /// **'Du loggar in med den.'**
+  String get signupScreenEmailHelp;
+
+  /// No description provided for @signupScreenEmailLabel.
+  ///
+  /// In sv, this message translates to:
+  /// **'E-post'**
+  String get signupScreenEmailLabel;
+
+  /// No description provided for @signupScreenEmailQuestion.
+  ///
+  /// In sv, this message translates to:
+  /// **'Din e-post'**
+  String get signupScreenEmailQuestion;
+
+  /// No description provided for @signupScreenHaveAccount.
+  ///
+  /// In sv, this message translates to:
+  /// **'Har du redan ett konto? Logga in'**
+  String get signupScreenHaveAccount;
+
+  /// No description provided for @signupScreenKindQuestion.
+  ///
+  /// In sv, this message translates to:
+  /// **'Hur kör du?'**
+  String get signupScreenKindQuestion;
+
+  /// No description provided for @signupScreenKindQuestionNamed.
+  ///
+  /// In sv, this message translates to:
+  /// **'Hej {name}! Hur kör du?'**
+  String signupScreenKindQuestionNamed(String name);
+
+  /// No description provided for @signupScreenLoginInstead.
+  ///
+  /// In sv, this message translates to:
+  /// **'Logga in i stället'**
+  String get signupScreenLoginInstead;
+
+  /// No description provided for @signupScreenNext.
+  ///
+  /// In sv, this message translates to:
+  /// **'Nästa'**
+  String get signupScreenNext;
+
+  /// No description provided for @signupScreenNotSure.
+  ///
+  /// In sv, this message translates to:
+  /// **'Inte säker? Välj \"Jag kör själv\".'**
+  String get signupScreenNotSure;
+
+  /// No description provided for @signupScreenPasswordLabel.
+  ///
+  /// In sv, this message translates to:
+  /// **'Lösenord'**
+  String get signupScreenPasswordLabel;
+
+  /// No description provided for @signupScreenPasswordMin.
+  ///
+  /// In sv, this message translates to:
+  /// **'Minst 8 tecken'**
+  String get signupScreenPasswordMin;
+
+  /// No description provided for @signupScreenPasswordQuestion.
+  ///
+  /// In sv, this message translates to:
+  /// **'Välj ett lösenord'**
+  String get signupScreenPasswordQuestion;
+
+  /// No description provided for @signupScreenPhoneLabel.
+  ///
+  /// In sv, this message translates to:
+  /// **'Mobil'**
+  String get signupScreenPhoneLabel;
+
+  /// No description provided for @signupScreenPhoneQuestion.
+  ///
+  /// In sv, this message translates to:
+  /// **'Ditt mobilnummer'**
+  String get signupScreenPhoneQuestion;
+
+  /// No description provided for @signupScreenProblemChoose.
+  ///
+  /// In sv, this message translates to:
+  /// **'Välj ett av alternativen.'**
+  String get signupScreenProblemChoose;
+
+  /// No description provided for @signupScreenProblemCompany.
+  ///
+  /// In sv, this message translates to:
+  /// **'Skriv företagets namn.'**
+  String get signupScreenProblemCompany;
+
+  /// No description provided for @signupScreenProblemEmail.
+  ///
+  /// In sv, this message translates to:
+  /// **'Det ser inte ut som en e-postadress. Skriv till exempel namn@gmail.com.'**
+  String get signupScreenProblemEmail;
+
+  /// No description provided for @signupScreenProblemPassword.
+  ///
+  /// In sv, this message translates to:
+  /// **'Lösenordet behöver minst 8 tecken.'**
+  String get signupScreenProblemPassword;
+
+  /// No description provided for @signupScreenProblemPhone.
+  ///
+  /// In sv, this message translates to:
+  /// **'Det ser inte ut som ett mobilnummer. Skriv till exempel 070 123 45 67.'**
+  String get signupScreenProblemPhone;
+
+  /// No description provided for @signupScreenSoloText.
+  ///
+  /// In sv, this message translates to:
+  /// **'Du behöver inget företag.'**
+  String get signupScreenSoloText;
+
+  /// No description provided for @signupScreenSoloTitle.
+  ///
+  /// In sv, this message translates to:
+  /// **'Jag kör själv'**
+  String get signupScreenSoloTitle;
+
+  /// No description provided for @signupScreenSomethingWrong.
+  ///
+  /// In sv, this message translates to:
+  /// **'Något gick fel. Försök igen.'**
+  String get signupScreenSomethingWrong;
+
+  /// No description provided for @signupScreenStepOf.
+  ///
+  /// In sv, this message translates to:
+  /// **'Steg {n} av {total}'**
+  String signupScreenStepOf(int n, int total);
+
+  /// No description provided for @signupScreenTitle.
+  ///
+  /// In sv, this message translates to:
+  /// **'Prova gratis i en månad'**
+  String get signupScreenTitle;
+
+  /// No description provided for @signupScreenUnder18.
+  ///
+  /// In sv, this message translates to:
+  /// **'En enskild firma registreras av någon som fyllt 18. Kontrollera numret.'**
+  String get signupScreenUnder18;
+
   /// No description provided for @supportChatEmptyBody.
   ///
   /// In sv, this message translates to:
@@ -3880,6 +4852,240 @@ abstract class AppLocalizations {
   /// **'Ta bort sparat'**
   String get tipSheetUnsave;
 
+  /// No description provided for @trialWelcomeAllIncluded.
+  ///
+  /// In sv, this message translates to:
+  /// **'Allt ingår just nu.'**
+  String get trialWelcomeAllIncluded;
+
+  /// No description provided for @trialWelcomeClose.
+  ///
+  /// In sv, this message translates to:
+  /// **'Stäng'**
+  String get trialWelcomeClose;
+
+  /// No description provided for @trialWelcomeColorNote.
+  ///
+  /// In sv, this message translates to:
+  /// **'Färgen visar hur stark signalen är. En stark signal betyder att många sannolikt behöver taxi.'**
+  String get trialWelcomeColorNote;
+
+  /// No description provided for @trialWelcomeCostsNothing.
+  ///
+  /// In sv, this message translates to:
+  /// **'Det kostar inget att prova.'**
+  String get trialWelcomeCostsNothing;
+
+  /// Datum utan år, t.ex. "29 december"
+  ///
+  /// In sv, this message translates to:
+  /// **'{day} {month, select, 1{januari} 2{februari} 3{mars} 4{april} 5{maj} 6{juni} 7{juli} 8{augusti} 9{september} 10{oktober} 11{november} 12{december} other{}}'**
+  String trialWelcomeDate(int day, String month);
+
+  /// No description provided for @trialWelcomeDone.
+  ///
+  /// In sv, this message translates to:
+  /// **'Klar'**
+  String get trialWelcomeDone;
+
+  /// No description provided for @trialWelcomeFreeDays.
+  ///
+  /// In sv, this message translates to:
+  /// **'{days, plural, one{Gratis i {days} dag.} other{Gratis i {days} dagar.}}'**
+  String trialWelcomeFreeDays(int days);
+
+  /// No description provided for @trialWelcomeFreeToTry.
+  ///
+  /// In sv, this message translates to:
+  /// **'Gratis att prova.'**
+  String get trialWelcomeFreeToTry;
+
+  /// No description provided for @trialWelcomeFreeUntil.
+  ///
+  /// In sv, this message translates to:
+  /// **'Gratis till {date}.'**
+  String trialWelcomeFreeUntil(String date);
+
+  /// No description provided for @trialWelcomeIncludedHeading.
+  ///
+  /// In sv, this message translates to:
+  /// **'Ingår i provet'**
+  String get trialWelcomeIncludedHeading;
+
+  /// No description provided for @trialWelcomeIncludedTitle.
+  ///
+  /// In sv, this message translates to:
+  /// **'Vad ingår i provet?'**
+  String get trialWelcomeIncludedTitle;
+
+  /// No description provided for @trialWelcomeIncludedUnknown.
+  ///
+  /// In sv, this message translates to:
+  /// **'Det som ingår i provet ser du i appen. Det som inte ingår har ett lås.'**
+  String get trialWelcomeIncludedUnknown;
+
+  /// No description provided for @trialWelcomeLineEvent.
+  ///
+  /// In sv, this message translates to:
+  /// **'Event som slutar: match, konsert eller annat.'**
+  String get trialWelcomeLineEvent;
+
+  /// No description provided for @trialWelcomeLineFerry.
+  ///
+  /// In sv, this message translates to:
+  /// **'Färjor som lägger till i hamnen.'**
+  String get trialWelcomeLineFerry;
+
+  /// No description provided for @trialWelcomeLineFlight.
+  ///
+  /// In sv, this message translates to:
+  /// **'Flyg som är sena, eller när många flyg landar.'**
+  String get trialWelcomeLineFlight;
+
+  /// No description provided for @trialWelcomeLineRoad.
+  ///
+  /// In sv, this message translates to:
+  /// **'Trafikolyckor som stoppar trafiken.'**
+  String get trialWelcomeLineRoad;
+
+  /// No description provided for @trialWelcomeLineTransit.
+  ///
+  /// In sv, this message translates to:
+  /// **'Tåg och buss som är sena eller inställda. Sista avgången.'**
+  String get trialWelcomeLineTransit;
+
+  /// No description provided for @trialWelcomeNeedsMembership.
+  ///
+  /// In sv, this message translates to:
+  /// **'Det kräver medlemskap. {onWeb}'**
+  String trialWelcomeNeedsMembership(String onWeb);
+
+  /// No description provided for @trialWelcomeNext.
+  ///
+  /// In sv, this message translates to:
+  /// **'Nästa'**
+  String get trialWelcomeNext;
+
+  /// No description provided for @trialWelcomeOneSeat.
+  ///
+  /// In sv, this message translates to:
+  /// **'Du kan ha 1 plats i provet, med ett län.'**
+  String get trialWelcomeOneSeat;
+
+  /// No description provided for @trialWelcomePageOf.
+  ///
+  /// In sv, this message translates to:
+  /// **'Sida {page} av {total}'**
+  String trialWelcomePageOf(int page, int total);
+
+  /// No description provided for @trialWelcomeReadyTitle.
+  ///
+  /// In sv, this message translates to:
+  /// **'Klart! Du är igång'**
+  String get trialWelcomeReadyTitle;
+
+  /// No description provided for @trialWelcomeSeats.
+  ///
+  /// In sv, this message translates to:
+  /// **'{limit, plural, other{Du kan ha upp till {limit} platser i provet.}}'**
+  String trialWelcomeSeats(int limit);
+
+  /// No description provided for @trialWelcomeShowTips.
+  ///
+  /// In sv, this message translates to:
+  /// **'Visa tipsen'**
+  String get trialWelcomeShowTips;
+
+  /// No description provided for @trialWelcomeSkip.
+  ///
+  /// In sv, this message translates to:
+  /// **'Hoppa över'**
+  String get trialWelcomeSkip;
+
+  /// No description provided for @trialWelcomeStep1Text.
+  ///
+  /// In sv, this message translates to:
+  /// **'Öppna Inställningar och tryck på Dina län. Länet styr vilka tips du får.'**
+  String get trialWelcomeStep1Text;
+
+  /// No description provided for @trialWelcomeStep1Title.
+  ///
+  /// In sv, this message translates to:
+  /// **'Byt län'**
+  String get trialWelcomeStep1Title;
+
+  /// No description provided for @trialWelcomeStep2Text.
+  ///
+  /// In sv, this message translates to:
+  /// **'Inbjudan skickas av företagets administratör på webben, inte från appen. Föraren får ett mejl, väljer ett lösenord och loggar in i appen med e-post och lösenord.'**
+  String get trialWelcomeStep2Text;
+
+  /// No description provided for @trialWelcomeStep2Title.
+  ///
+  /// In sv, this message translates to:
+  /// **'Har du ett taxibolag? Bjud in förare på webben'**
+  String get trialWelcomeStep2Title;
+
+  /// No description provided for @trialWelcomeStepsTitle.
+  ///
+  /// In sv, this message translates to:
+  /// **'Så kommer du igång'**
+  String get trialWelcomeStepsTitle;
+
+  /// No description provided for @trialWelcomeTrialEnded.
+  ///
+  /// In sv, this message translates to:
+  /// **'Provet är slut. {onWeb}'**
+  String trialWelcomeTrialEnded(String onWeb);
+
+  /// No description provided for @trialWelcomeTrialRunning.
+  ///
+  /// In sv, this message translates to:
+  /// **'Provet pågår. Det gäller till {date}.'**
+  String trialWelcomeTrialRunning(String date);
+
+  /// No description provided for @trialWelcomeTrialStarts.
+  ///
+  /// In sv, this message translates to:
+  /// **'Provet startar när första föraren loggar in.'**
+  String get trialWelcomeTrialStarts;
+
+  /// No description provided for @trialWelcomeTrialStartsPending.
+  ///
+  /// In sv, this message translates to:
+  /// **'Provet startar när första föraren loggar in. Tills dess går ingen tid.'**
+  String get trialWelcomeTrialStartsPending;
+
+  /// No description provided for @trialWelcomeTrialTitleDays.
+  ///
+  /// In sv, this message translates to:
+  /// **'{days, plural, one{Du provar gratis i {days} dag} other{Du provar gratis i {days} dagar}}'**
+  String trialWelcomeTrialTitleDays(int days);
+
+  /// No description provided for @trialWelcomeTrialTitleNoDays.
+  ///
+  /// In sv, this message translates to:
+  /// **'Du provar gratis'**
+  String get trialWelcomeTrialTitleNoDays;
+
+  /// No description provided for @trialWelcomeWatching.
+  ///
+  /// In sv, this message translates to:
+  /// **'Vi bevakar'**
+  String get trialWelcomeWatching;
+
+  /// No description provided for @trialWelcomeWhatBody.
+  ///
+  /// In sv, this message translates to:
+  /// **'Taxi Tips visar var folk kan behöva taxi just nu. Det är tips, inte löften. Du bestämmer själv om det är värt att åka.'**
+  String get trialWelcomeWhatBody;
+
+  /// No description provided for @trialWelcomeWhatTitle.
+  ///
+  /// In sv, this message translates to:
+  /// **'Välkommen till Taxi Tips'**
+  String get trialWelcomeWhatTitle;
+
   /// No description provided for @vehicleSessionAnotherPhone.
   ///
   /// In sv, this message translates to:
@@ -3975,6 +5181,36 @@ abstract class AppLocalizations {
   /// In sv, this message translates to:
   /// **'Du kör den här'**
   String get vehicleSessionYouDriveThis;
+
+  /// No description provided for @welcomeScreenBrowserFailed.
+  ///
+  /// In sv, this message translates to:
+  /// **'Kunde inte öppna webbläsaren'**
+  String get welcomeScreenBrowserFailed;
+
+  /// No description provided for @welcomeScreenCreateAccount.
+  ///
+  /// In sv, this message translates to:
+  /// **'Skapa konto gratis'**
+  String get welcomeScreenCreateAccount;
+
+  /// Huvudrubrik på välkomstskärmen
+  ///
+  /// In sv, this message translates to:
+  /// **'Se var folk behöver taxi'**
+  String get welcomeScreenHeadline;
+
+  /// No description provided for @welcomeScreenLogin.
+  ///
+  /// In sv, this message translates to:
+  /// **'Logga in'**
+  String get welcomeScreenLogin;
+
+  /// No description provided for @welcomeScreenSeeDemo.
+  ///
+  /// In sv, this message translates to:
+  /// **'Se demon på webben'**
+  String get welcomeScreenSeeDemo;
 }
 
 class _AppLocalizationsDelegate

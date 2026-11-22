@@ -1,0 +1,28 @@
+{
+  "welcomeScreenHeadline": {
+    "sv": "Se var folk behöver taxi",
+    "en": "See where people need a taxi",
+    "ar": "اعرف أين يحتاج الناس إلى تاكسي",
+    "description": "Huvudrubrik på välkomstskärmen"
+  },
+  "welcomeScreenCreateAccount": {
+    "sv": "Skapa konto gratis",
+    "en": "Create a free account",
+    "ar": "أنشئ حساباً مجانياً"
+  },
+  "welcomeScreenLogin": {
+    "sv": "Logga in",
+    "en": "Log in",
+    "ar": "تسجيل الدخول"
+  },
+  "welcomeScreenSeeDemo": {
+    "sv": "Se demon på webben",
+    "en": "See the demo on the web",
+    "ar": "شاهد العرض التجريبي على الويب"
+  },
+  "welcomeScreenBrowserFailed": {
+    "sv": "Kunde inte öppna webbläsaren",
+    "en": "Could not open the browser",
+    "ar": "تعذّر فتح المتصفح"
+  }
+}

@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -167,6 +168,33 @@ void main() {
           }
         }
       });
+      expect(hits, isEmpty, reason: hits.join('\n'));
+    });
+
+    test('inga köporder i översättningarna (sv, en, ar)', () {
+      // Samma regel som för koden, på alla tre språken: appen säljer inget.
+      // Skannar texterna i lib/l10n/parts/*.json (inte beskrivningarna).
+      final forbidden = RegExp(
+        r'stripe|checkout|betallänk|uppgradera|prenumerera|'
+        r'\b(buy|purchase|purchases|subscribe|subscription|upgrade|price|'
+        r'pricing|pay|payment)\b|'
+        r'شراء|اشترك|اشتراك|ترقية|سعر|ادفع',
+        caseSensitive: false,
+      );
+      final hits = <String>[];
+      final parts = Directory('lib/l10n/parts').listSync().whereType<File>();
+      for (final file in parts.where((f) => f.path.endsWith('.json'))) {
+        final data =
+            jsonDecode(file.readAsStringSync()) as Map<String, dynamic>;
+        data.forEach((key, entry) {
+          for (final lang in const ['sv', 'en', 'ar']) {
+            final text = (entry as Map)[lang]?.toString() ?? '';
+            if (forbidden.hasMatch(text)) {
+              hits.add('${file.path} $key.$lang: $text');
+            }
+          }
+        });
+      }
       expect(hits, isEmpty, reason: hits.join('\n'));
     });
 

@@ -680,10 +680,10 @@ class _AccountDeletionFooter extends StatelessWidget {
       child: Column(
         children: [
           if (showBillingNote) ...[
-            const Text(
+            Text(
               kBillingOnWeb,
               textAlign: TextAlign.center,
-              style: TextStyle(
+              style: const TextStyle(
                 color: TbColors.muted,
                 fontSize: 13,
                 height: 1.35,

@@ -1,0 +1,105 @@
+{
+  "loginScreenTagline": {
+    "sv": "Se var folk behöver taxi,\ninnan kön växer.",
+    "en": "See where people need a taxi,\nbefore the queue grows.",
+    "ar": "اعرف أين يحتاج الناس إلى تاكسي،\nقبل أن يطول الطابور.",
+    "description": "Rubrik under loggan överst på inloggningen"
+  },
+  "loginScreenBack": {
+    "sv": "Tillbaka",
+    "en": "Back",
+    "ar": "رجوع"
+  },
+  "loginScreenTitle": {
+    "sv": "Logga in",
+    "en": "Log in",
+    "ar": "تسجيل الدخول",
+    "description": "Rubrik och knapptext på inloggningen"
+  },
+  "loginScreenIntro": {
+    "sv": "För förare, ägare och kontor. Ny förare? Välj först ett lösenord med länken i inbjudan.",
+    "en": "For drivers, owners and office staff. New driver? First choose a password with the link in your invitation.",
+    "ar": "للسائقين والملّاك والمكتب. سائق جديد؟ اختر أولاً كلمة مرور من الرابط الموجود في الدعوة."
+  },
+  "loginScreenEmail": {
+    "sv": "E-post",
+    "en": "Email",
+    "ar": "البريد الإلكتروني"
+  },
+  "loginScreenPassword": {
+    "sv": "Lösenord",
+    "en": "Password",
+    "ar": "كلمة المرور"
+  },
+  "loginScreenShowPassword": {
+    "sv": "Visa lösenord",
+    "en": "Show password",
+    "ar": "إظهار كلمة المرور"
+  },
+  "loginScreenHidePassword": {
+    "sv": "Dölj lösenord",
+    "en": "Hide password",
+    "ar": "إخفاء كلمة المرور"
+  },
+  "loginScreenForgotPassword": {
+    "sv": "Glömt lösenord?",
+    "en": "Forgot your password?",
+    "ar": "نسيت كلمة المرور؟"
+  },
+  "loginScreenWithBankId": {
+    "sv": "Logga in med BankID",
+    "en": "Log in with BankID",
+    "ar": "تسجيل الدخول بـ BankID"
+  },
+  "loginScreenNoAccount": {
+    "sv": "Inget konto?",
+    "en": "No account?",
+    "ar": "ليس لديك حساب؟"
+  },
+  "loginScreenCreateAccount": {
+    "sv": "Skapa konto gratis",
+    "en": "Create a free account",
+    "ar": "أنشئ حساباً مجانياً"
+  },
+  "loginScreenEnterCredentials": {
+    "sv": "Skriv din e-post och ditt lösenord.",
+    "en": "Enter your email and password.",
+    "ar": "اكتب بريدك الإلكتروني وكلمة المرور."
+  },
+  "loginScreenRecovered": {
+    "sv": "Klart! Logga in med {email}.",
+    "en": "Done! Log in with {email}.",
+    "ar": "تم! سجّل الدخول بـ {email}.",
+    "placeholders": {"email": {"type": "String"}}
+  },
+  "loginScreenWrongCredentials": {
+    "sv": "Fel e-post eller lösenord.",
+    "en": "Wrong email or password.",
+    "ar": "البريد الإلكتروني أو كلمة المرور غير صحيحة."
+  },
+  "loginScreenEmailNotConfirmed": {
+    "sv": "Bekräfta din e-post först. Tryck på länken i mejlet.",
+    "en": "Confirm your email first. Tap the link in the email.",
+    "ar": "أكّد بريدك الإلكتروني أولاً. اضغط على الرابط في الرسالة."
+  },
+  "loginScreenRateLimit": {
+    "sv": "Vänta en minut och försök igen.",
+    "en": "Wait a minute and try again.",
+    "ar": "انتظر دقيقة ثم حاول مرة أخرى."
+  },
+  "loginScreenNoInvite": {
+    "sv": "Kontot är inte kopplat till något taxibolag. Be din chef bjuda in dig, eller tryck på Skapa konto gratis nedan.",
+    "en": "This account is not linked to any taxi company. Ask your boss to invite you, or tap Create a free account below.",
+    "ar": "هذا الحساب غير مرتبط بأي شركة تاكسي. اطلب من مديرك أن يدعوك، أو اضغط على «أنشئ حساباً مجانياً» أدناه."
+  },
+  "loginScreenDeviceSwapLimit": {
+    "sv": "Du har bytt telefon en gång den här månaden. Kontakta support så hjälper vi dig byta igen.",
+    "en": "You have already changed phone once this month. Contact support and we will help you change again.",
+    "ar": "لقد غيّرت هاتفك مرة واحدة هذا الشهر. تواصل مع الدعم وسنساعدك على التغيير مرة أخرى."
+  },
+  "loginScreenFailed": {
+    "sv": "Det gick inte att logga in. Försök igen.",
+    "en": "Could not log in. Try again.",
+    "ar": "تعذّر تسجيل الدخول. حاول مرة أخرى."
+  }
+}

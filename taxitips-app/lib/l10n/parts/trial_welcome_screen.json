@@ -1,0 +1,249 @@
+{
+  "trialWelcomeClose": {
+    "sv": "Stäng",
+    "en": "Close",
+    "ar": "إغلاق"
+  },
+  "trialWelcomeSkip": {
+    "sv": "Hoppa över",
+    "en": "Skip",
+    "ar": "تخطَّ"
+  },
+  "trialWelcomePageOf": {
+    "sv": "Sida {page} av {total}",
+    "en": "Page {page} of {total}",
+    "ar": "الصفحة {page} من {total}",
+    "placeholders": {
+      "page": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "trialWelcomeDone": {
+    "sv": "Klar",
+    "en": "Done",
+    "ar": "تم"
+  },
+  "trialWelcomeNext": {
+    "sv": "Nästa",
+    "en": "Next",
+    "ar": "التالي"
+  },
+  "trialWelcomeDate": {
+    "sv": "{day} {month, select, 1{januari} 2{februari} 3{mars} 4{april} 5{maj} 6{juni} 7{juli} 8{augusti} 9{september} 10{oktober} 11{november} 12{december} other{}}",
+    "en": "{month, select, 1{January} 2{February} 3{March} 4{April} 5{May} 6{June} 7{July} 8{August} 9{September} 10{October} 11{November} 12{December} other{}} {day}",
+    "ar": "{day} {month, select, 1{يناير} 2{فبراير} 3{مارس} 4{أبريل} 5{مايو} 6{يونيو} 7{يوليو} 8{أغسطس} 9{سبتمبر} 10{أكتوبر} 11{نوفمبر} 12{ديسمبر} other{}}",
+    "description": "Datum utan år, t.ex. \"29 december\"",
+    "placeholders": {
+      "day": {
+        "type": "int"
+      },
+      "month": {
+        "type": "String"
+      }
+    }
+  },
+  "trialWelcomeReadyTitle": {
+    "sv": "Klart! Du är igång",
+    "en": "All set! You are up and running",
+    "ar": "تم! أنت جاهز"
+  },
+  "trialWelcomeFreeUntil": {
+    "sv": "Gratis till {date}.",
+    "en": "Free until {date}.",
+    "ar": "مجاني حتى {date}.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trialWelcomeFreeToTry": {
+    "sv": "Gratis att prova.",
+    "en": "Free to try.",
+    "ar": "مجاني للتجربة."
+  },
+  "trialWelcomeFreeDays": {
+    "sv": "{days, plural, one{Gratis i {days} dag.} other{Gratis i {days} dagar.}}",
+    "en": "{days, plural, one{Free for {days} day.} other{Free for {days} days.}}",
+    "ar": "{days, plural, zero{مجاني لمدة {days} يوم.} one{مجاني لمدة يوم واحد.} two{مجاني لمدة يومين.} few{مجاني لمدة {days} أيام.} many{مجاني لمدة {days} يومًا.} other{مجاني لمدة {days} يوم.}}",
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "trialWelcomeShowTips": {
+    "sv": "Visa tipsen",
+    "en": "Show the tips",
+    "ar": "اعرض التنبيهات"
+  },
+  "trialWelcomeLineTransit": {
+    "sv": "Tåg och buss som är sena eller inställda. Sista avgången.",
+    "en": "Trains and buses that are late or cancelled. The last departure.",
+    "ar": "قطارات وحافلات متأخرة أو ملغاة. آخر رحلة."
+  },
+  "trialWelcomeLineRoad": {
+    "sv": "Trafikolyckor som stoppar trafiken.",
+    "en": "Traffic accidents that stop the traffic.",
+    "ar": "حوادث سير توقف الحركة."
+  },
+  "trialWelcomeLineFlight": {
+    "sv": "Flyg som är sena, eller när många flyg landar.",
+    "en": "Flights that are late, or when many flights land.",
+    "ar": "رحلات جوية متأخرة، أو عند هبوط عدد كبير من الطائرات."
+  },
+  "trialWelcomeLineFerry": {
+    "sv": "Färjor som lägger till i hamnen.",
+    "en": "Ferries docking at the harbour.",
+    "ar": "عبّارات ترسو في الميناء."
+  },
+  "trialWelcomeLineEvent": {
+    "sv": "Event som slutar: match, konsert eller annat.",
+    "en": "Events that end: a match, a concert or something else.",
+    "ar": "فعاليات تنتهي: مباراة أو حفلة أو غيرها."
+  },
+  "trialWelcomeWhatTitle": {
+    "sv": "Välkommen till Taxi Tips",
+    "en": "Welcome to Taxi Tips",
+    "ar": "مرحبًا بك في Taxi Tips"
+  },
+  "trialWelcomeWhatBody": {
+    "sv": "Taxi Tips visar var folk kan behöva taxi just nu. Det är tips, inte löften. Du bestämmer själv om det är värt att åka.",
+    "en": "Taxi Tips shows where people may need a taxi right now. These are tips, not promises. You decide if it is worth driving there.",
+    "ar": "يعرض Taxi Tips الأماكن التي قد يحتاج فيها الناس إلى سيارة أجرة الآن. هذه اقتراحات وليست وعودًا. أنت من يقرر إن كان الذهاب يستحق."
+  },
+  "trialWelcomeWatching": {
+    "sv": "Vi bevakar",
+    "en": "We watch",
+    "ar": "نراقب"
+  },
+  "trialWelcomeColorNote": {
+    "sv": "Färgen visar hur stark signalen är. En stark signal betyder att många sannolikt behöver taxi.",
+    "en": "The colour shows how strong the signal is. A strong signal means many people likely need a taxi.",
+    "ar": "يدل اللون على قوة الإشارة. الإشارة القوية تعني أن كثيرين على الأرجح يحتاجون إلى سيارة أجرة."
+  },
+  "trialWelcomeTrialTitleNoDays": {
+    "sv": "Du provar gratis",
+    "en": "You are trying for free",
+    "ar": "أنت تجرّب مجانًا"
+  },
+  "trialWelcomeTrialTitleDays": {
+    "sv": "{days, plural, one{Du provar gratis i {days} dag} other{Du provar gratis i {days} dagar}}",
+    "en": "{days, plural, one{You are trying for free for {days} day} other{You are trying for free for {days} days}}",
+    "ar": "{days, plural, zero{أنت تجرّب مجانًا لمدة {days} يوم} one{أنت تجرّب مجانًا لمدة يوم واحد} two{أنت تجرّب مجانًا لمدة يومين} few{أنت تجرّب مجانًا لمدة {days} أيام} many{أنت تجرّب مجانًا لمدة {days} يومًا} other{أنت تجرّب مجانًا لمدة {days} يوم}}",
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "trialWelcomeCostsNothing": {
+    "sv": "Det kostar inget att prova.",
+    "en": "It costs nothing to try.",
+    "ar": "التجربة لا تكلّف شيئًا."
+  },
+  "trialWelcomeTrialEnded": {
+    "sv": "Provet är slut. {onWeb}",
+    "en": "The trial has ended. {onWeb}",
+    "ar": "انتهت الفترة التجريبية. {onWeb}",
+    "placeholders": {
+      "onWeb": {
+        "type": "String"
+      }
+    }
+  },
+  "trialWelcomeTrialRunning": {
+    "sv": "Provet pågår. Det gäller till {date}.",
+    "en": "The trial is running. It is valid until {date}.",
+    "ar": "الفترة التجريبية جارية. وهي سارية حتى {date}.",
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trialWelcomeTrialStartsPending": {
+    "sv": "Provet startar när första föraren loggar in. Tills dess går ingen tid.",
+    "en": "The trial starts when the first driver logs in. Until then no time passes.",
+    "ar": "تبدأ الفترة التجريبية عندما يسجّل أول سائق الدخول. حتى ذلك الحين لا يمر أي وقت."
+  },
+  "trialWelcomeTrialStarts": {
+    "sv": "Provet startar när första föraren loggar in.",
+    "en": "The trial starts when the first driver logs in.",
+    "ar": "تبدأ الفترة التجريبية عندما يسجّل أول سائق الدخول."
+  },
+  "trialWelcomeOneSeat": {
+    "sv": "Du kan ha 1 plats i provet, med ett län.",
+    "en": "You can have 1 spot in the trial, with one county.",
+    "ar": "يمكنك الحصول على مكان واحد في الفترة التجريبية، مع مقاطعة واحدة."
+  },
+  "trialWelcomeSeats": {
+    "sv": "{limit, plural, other{Du kan ha upp till {limit} platser i provet.}}",
+    "en": "{limit, plural, other{You can have up to {limit} spots in the trial.}}",
+    "ar": "{limit, plural, zero{يمكنك الحصول على {limit} مكان في الفترة التجريبية.} one{يمكنك الحصول على مكان واحد في الفترة التجريبية.} two{يمكنك الحصول على ما يصل إلى مكانين في الفترة التجريبية.} few{يمكنك الحصول على ما يصل إلى {limit} أماكن في الفترة التجريبية.} many{يمكنك الحصول على ما يصل إلى {limit} مكانًا في الفترة التجريبية.} other{يمكنك الحصول على ما يصل إلى {limit} مكان في الفترة التجريبية.}}",
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "trialWelcomeStepsTitle": {
+    "sv": "Så kommer du igång",
+    "en": "How to get started",
+    "ar": "كيف تبدأ"
+  },
+  "trialWelcomeStep1Title": {
+    "sv": "Byt län",
+    "en": "Change county",
+    "ar": "غيّر المقاطعة"
+  },
+  "trialWelcomeStep1Text": {
+    "sv": "Öppna Inställningar och tryck på Dina län. Länet styr vilka tips du får.",
+    "en": "Open Settings and tap Your counties. The county decides which tips you get.",
+    "ar": "افتح الإعدادات واضغط على مقاطعاتك. المقاطعة تحدد التنبيهات التي تصلك."
+  },
+  "trialWelcomeStep2Title": {
+    "sv": "Har du ett taxibolag? Bjud in förare på webben",
+    "en": "Do you have a taxi company? Invite drivers on the web",
+    "ar": "هل لديك شركة سيارات أجرة؟ ادعُ السائقين عبر الويب"
+  },
+  "trialWelcomeStep2Text": {
+    "sv": "Inbjudan skickas av företagets administratör på webben, inte från appen. Föraren får ett mejl, väljer ett lösenord och loggar in i appen med e-post och lösenord.",
+    "en": "The invitation is sent by the company's administrator on the web, not from the app. The driver gets an email, chooses a password and logs in to the app with email and password.",
+    "ar": "يرسل مسؤول الشركة الدعوة عبر الويب وليس من التطبيق. يصل السائق بريد إلكتروني، ويختار كلمة مرور، ثم يسجّل الدخول إلى التطبيق بالبريد الإلكتروني وكلمة المرور."
+  },
+  "trialWelcomeIncludedTitle": {
+    "sv": "Vad ingår i provet?",
+    "en": "What is included in the trial?",
+    "ar": "ما المشمول في الفترة التجريبية؟"
+  },
+  "trialWelcomeIncludedUnknown": {
+    "sv": "Det som ingår i provet ser du i appen. Det som inte ingår har ett lås.",
+    "en": "You can see what is included in the trial in the app. What is not included has a lock.",
+    "ar": "ما هو مشمول في الفترة التجريبية تراه في التطبيق. وما ليس مشمولًا عليه قفل."
+  },
+  "trialWelcomeIncludedHeading": {
+    "sv": "Ingår i provet",
+    "en": "Included in the trial",
+    "ar": "مشمول في الفترة التجريبية"
+  },
+  "trialWelcomeNeedsMembership": {
+    "sv": "Det kräver medlemskap. {onWeb}",
+    "en": "That requires a membership. {onWeb}",
+    "ar": "هذا يتطلب عضوية. {onWeb}",
+    "placeholders": {
+      "onWeb": {
+        "type": "String"
+      }
+    }
+  },
+  "trialWelcomeAllIncluded": {
+    "sv": "Allt ingår just nu.",
+    "en": "Everything is included right now.",
+    "ar": "كل شيء مشمول حاليًا."
+  }
+}

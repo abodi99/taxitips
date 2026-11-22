@@ -9,6 +9,7 @@ import 'backend_api.dart';
 import 'client_log.dart';
 import 'config.dart';
 import 'device_credential.dart';
+import 'l10n/l10n.dart';
 import 'net_status.dart';
 import 'notify_rules_api.dart';
 import 'pending_feedback.dart';
@@ -91,11 +92,7 @@ class ApiClient {
   BackendApi get _fleet {
     final backend = _backend;
     if (backend == null) {
-      throw ApiException(
-        503,
-        'API_BASE_URL är inte satt. Parkoppling och bilval kräver '
-        'TaxiTips-backenden.',
-      );
+      throw ApiException(503, tr.apiClientBaseUrlMissing);
     }
     return backend;
   }
@@ -196,12 +193,12 @@ class ApiClient {
       if (details.isNotEmpty) parts.add(details);
       if (hint.isNotEmpty) parts.add('hint: $hint');
       if ((e.code ?? '').isNotEmpty) parts.add('code: ${e.code}');
-      final message = 'Databasfel: ${parts.join(' | ')}';
+      final message = tr.apiClientDatabaseError(parts.join(' | '));
       debugPrint('ApiClient[$operation] PostgREST: $message');
       throw ApiException(500, message);
     }
     if (e is AuthException) {
-      throw ApiException(401, 'Auth-fel: ${e.message}');
+      throw ApiException(401, tr.apiClientAuthError(e.message));
     }
     throw ApiException(500, e.toString());
   }
@@ -384,7 +381,7 @@ class ApiClient {
       }
       final token = res.session?.accessToken;
       if (token == null || token.isEmpty) {
-        throw ApiException(401, 'Inloggningen gav ingen giltig session.');
+        throw ApiException(401, tr.apiClientNoValidSession);
       }
 
       var owner = false;
@@ -415,7 +412,7 @@ class ApiClient {
       }, accessToken: token);
       final secret = data['deviceToken']?.toString();
       if (secret == null || secret.isEmpty) {
-        throw ApiException(500, 'Servern gav ingen enhetsnyckel.');
+        throw ApiException(500, tr.apiClientNoDeviceKey);
       }
       await saveDevice(secret);
       await clearLocalAreaFilter();
@@ -531,7 +528,9 @@ class ApiClient {
       // Inget nät: inget konto har skapats. Kort text i stället för råtext.
       throw asApiIfNetwork(e);
     }
-    if (auth.user == null) throw ApiException(400, 'Kunde inte skapa konto');
+    if (auth.user == null) {
+      throw ApiException(400, tr.apiClientCouldNotCreateAccount);
+    }
     await saveCredentials(email, password);
     final session = auth.session;
     if (session == null) {
@@ -552,8 +551,7 @@ class ApiClient {
       if (net == null) rethrow;
       throw ApiException(
         0,
-        'Kontot är skapat, men vi nådde inte servern. '
-        'Logga in när du har nät igen.',
+        tr.apiClientAccountCreatedOffline,
         reason: netReason(net),
       );
     }
@@ -566,7 +564,7 @@ class ApiClient {
   BackendApi get _bankidBackend {
     final backend = _backend;
     if (backend == null) {
-      throw ApiException(503, 'BankID är inte tillgängligt just nu.');
+      throw ApiException(503, tr.apiClientBankIdUnavailable);
     }
     return backend;
   }
@@ -635,7 +633,7 @@ class ApiClient {
         }
         final hash = data['tokenHash']?.toString() ?? '';
         if (hash.isEmpty) {
-          throw ApiException(500, 'Det gick inte att logga in. Försök igen.');
+          throw ApiException(500, tr.apiClientLoginFailed);
         }
         final AuthResponse res;
         try {
@@ -648,7 +646,7 @@ class ApiClient {
         }
         final token = res.session?.accessToken;
         if (token == null || token.isEmpty) {
-          throw ApiException(401, 'Inloggningen gav ingen giltig session.');
+          throw ApiException(401, tr.apiClientNoValidSession);
         }
         await saveSession(token);
       });
@@ -692,7 +690,7 @@ class ApiClient {
     Map<String, dynamic> company,
   ) async {
     final token = _accessToken;
-    if (token == null) throw ApiException(401, 'Logga in för att fortsätta.');
+    if (token == null) throw ApiException(401, tr.apiClientLoginRequired);
     final result = await _fleet.ownerPost(
       'register',
       company,
@@ -749,7 +747,7 @@ class ApiClient {
         : _fleet.ownerPost(path, body, accessToken: token);
 
     final token = await _freshAccessToken();
-    if (token == null) throw ApiException(401, 'Logga in för att fortsätta.');
+    if (token == null) throw ApiException(401, tr.apiClientLoginRequired);
     try {
       return await call(token);
     } on ApiException catch (e) {
@@ -883,15 +881,12 @@ class ApiClient {
         await ensureInitialized();
         final backend = _backend;
         if (backend == null) {
-          throw ApiException(
-            503,
-            'Det går inte att radera kontot just nu. Försök igen senare.',
-          );
+          throw ApiException(503, tr.apiClientCannotDeleteAccount);
         }
         final access = _accessToken;
         final device = deviceToken;
         if (access == null && (device == null || device.isEmpty)) {
-          throw ApiException(401, 'Logga in för att fortsätta.');
+          throw ApiException(401, tr.apiClientLoginRequired);
         }
         final result = await backend.deleteAccount(
           accessToken: access,
@@ -925,7 +920,7 @@ class ApiClient {
     try {
       await ensureInitialized();
       final user = _sb.auth.currentUser;
-      if (user == null) throw ApiException(401, 'Inte inloggad');
+      if (user == null) throw ApiException(401, tr.apiClientNotLoggedIn);
 
       Map<String, dynamic>? profile;
       try {
@@ -1150,7 +1145,7 @@ class ApiClient {
     await ensureInitialized();
     final meData = await me();
     final company = meData['company'] as Map<String, dynamic>?;
-    if (company == null) throw ApiException(400, 'Inget bolag');
+    if (company == null) throw ApiException(400, tr.apiClientNoCompany);
     await _sb
         .from('companies')
         .update({'watched_areas': areas})
@@ -1162,7 +1157,7 @@ class ApiClient {
     await ensureInitialized();
     final meData = await me();
     final company = meData['company'] as Map<String, dynamic>?;
-    if (company == null) throw ApiException(400, 'Inget bolag');
+    if (company == null) throw ApiException(400, tr.apiClientNoCompany);
     final code = await _sb.rpc(
       'regenerate_join_code',
       params: {'p_company_id': company['id']},
@@ -1211,7 +1206,7 @@ class ApiClient {
     );
     final secret = data['deviceToken']?.toString();
     if (secret == null || secret.isEmpty) {
-      throw ApiException(500, 'Servern gav ingen enhetsnyckel.');
+      throw ApiException(500, tr.apiClientNoDeviceKey);
     }
     await saveDevice(secret);
     await clearLocalAreaFilter();
@@ -1239,7 +1234,7 @@ class ApiClient {
     );
     final secret = data['deviceToken']?.toString();
     if (secret == null || secret.isEmpty) {
-      throw ApiException(500, 'Servern gav ingen enhetsnyckel.');
+      throw ApiException(500, tr.apiClientNoDeviceKey);
     }
     await saveDevice(secret);
     await clearLocalAreaFilter();
@@ -1271,7 +1266,7 @@ class ApiClient {
   BackendApi _supportBackend() {
     final backend = _backend;
     if (backend == null) {
-      throw ApiException(503, 'Supportchatten är inte tillgänglig här.');
+      throw ApiException(503, tr.apiClientSupportChatUnavailable);
     }
     return backend;
   }
@@ -1367,7 +1362,7 @@ class ApiClient {
   }) async {
     if (deviceToken == null) await loadTokens();
     final token = deviceToken;
-    if (token == null) throw ApiException(401, 'Telefonen är inte parkopplad.');
+    if (token == null) throw ApiException(401, tr.apiClientPhoneNotPaired);
     return _fleet.startVehicleSession(
       licenseId: licenseId,
       deviceToken: token,
@@ -1404,7 +1399,7 @@ class ApiClient {
         .select('*, device:devices(*)')
         .eq('code', transferCode.toUpperCase())
         .maybeSingle();
-    if (row == null) throw ApiException(404, 'Ogiltig byteskod');
+    if (row == null) throw ApiException(404, tr.apiClientInvalidTransferCode);
     final device = Map<String, dynamic>.from(row['device'] as Map);
     final newToken = List.generate(
       32,
@@ -1440,40 +1435,40 @@ class ApiClient {
   // of introducing a second, inconsistent vocabulary. Kept client-side (no
   // server catalog table) since this is a small, stable, hand-picked list --
   // the same reasoning as severity_labels.dart's tier labels.
-  static const notifyTypeCatalog = [
+  static List<Map<String, Object>> get notifyTypeCatalog => [
     {
       'id': 'line_paused',
-      'label': 'Hela linjen står stilla',
-      'short': 'Ingen trafik alls på linjen',
-      'help': 'Störst chans att det finns folk som behöver taxi.',
+      'label': tr.apiClientNotifyLinePausedLabel,
+      'short': tr.apiClientNotifyLinePausedShort,
+      'help': tr.apiClientNotifyLinePausedHelp,
       'defaultOn': true,
     },
     {
       'id': 'vehicle_cancelled',
-      'label': 'Enstaka avgång inställd',
-      'short': 'En avgång inställd, andra går som vanligt',
-      'help': 'Färre påverkade, men kan ändå vara värt en titt.',
+      'label': tr.apiClientNotifyVehicleCancelledLabel,
+      'short': tr.apiClientNotifyVehicleCancelledShort,
+      'help': tr.apiClientNotifyVehicleCancelledHelp,
       'defaultOn': true,
     },
     {
       'id': 'road_accident_or_closure',
-      'label': 'Olycka eller avstängd väg',
-      'short': 'Vägtrafik',
-      'help': 'Påverkar mest bilister redan på väg, men värt att veta om.',
+      'label': tr.apiClientNotifyRoadAccidentLabel,
+      'short': tr.apiClientNotifyRoadShort,
+      'help': tr.apiClientNotifyRoadAccidentHelp,
       'defaultOn': true,
     },
     {
       'id': 'line_delayed',
-      'label': 'Förseningar',
-      'short': 'Linjen kör, men försenad',
-      'help': 'Vanligtvis en svag signal -- av som standard.',
+      'label': tr.apiClientNotifyLineDelayedLabel,
+      'short': tr.apiClientNotifyLineDelayedShort,
+      'help': tr.apiClientNotifyLineDelayedHelp,
       'defaultOn': false,
     },
     {
       'id': 'road_work_or_queue',
-      'label': 'Vägarbete eller köbildning',
-      'short': 'Vägtrafik',
-      'help': 'Sällan en taxisignal -- av som standard.',
+      'label': tr.apiClientNotifyRoadWorkLabel,
+      'short': tr.apiClientNotifyRoadShort,
+      'help': tr.apiClientNotifyRoadWorkHelp,
       'defaultOn': false,
     },
   ];
@@ -1527,7 +1522,7 @@ class ApiClient {
     }
     // Fallback utan Django: gamla Supabase-uppdateringen kräver deviceToken.
     if (deviceToken == null) {
-      throw ApiException(401, 'Ingen enhet — logga in via backend för push');
+      throw ApiException(401, tr.apiClientNoDevicePush);
     }
     if (fcmToken.isEmpty) {
       return {'ok': true, 'linked': 'no_backend_no_fcm'};
@@ -1684,7 +1679,7 @@ class ApiClient {
   Future<void> setOnDuty(bool on, {double? lat, double? lon}) async {
     final backend = _backend;
     if (backend == null) {
-      throw Exception('I tjänst kräver den nya backenden');
+      throw Exception(tr.apiClientOnDutyNeedsBackend);
     }
     await backend.setPresence(
       on: on,
@@ -1822,7 +1817,7 @@ class ApiClient {
     Map<String, dynamic> body,
   ) async {
     if (_backend == null) {
-      throw ApiException(400, 'Notisvalen kräver TaxiTips-servern.');
+      throw ApiException(400, tr.apiClientNotifyNeedsServer);
     }
     return postNotifyRules(
       baseUrl: TaxiTipsConfig.apiBaseUrl,
@@ -1886,7 +1881,7 @@ class ApiClient {
     await ensureInitialized();
     final meData = await me();
     final company = meData['company'] as Map<String, dynamic>?;
-    if (company == null) throw ApiException(400, 'Inget bolag');
+    if (company == null) throw ApiException(400, tr.apiClientNoCompany);
     await _sb
         .from('companies')
         .update({'name': ?name, 'org_number': ?orgNumber})
@@ -1941,7 +1936,7 @@ class ApiClient {
     );
     final session = response.session;
     if (session == null) {
-      throw ApiException(401, 'Verifieringskoden är ogiltig');
+      throw ApiException(401, tr.apiClientInvalidVerificationCode);
     }
     await saveSession(session.accessToken);
     await _sb.auth.updateUser(
@@ -1962,7 +1957,7 @@ class ApiClient {
     );
     final session = response.session;
     if (session == null) {
-      throw ApiException(401, 'Verifieringskoden är ogiltig');
+      throw ApiException(401, tr.apiClientInvalidVerificationCode);
     }
     await saveSession(session.accessToken);
     await _sb.auth.updateUser(UserAttributes(password: newPassword));
@@ -1976,7 +1971,7 @@ class ApiClient {
   /// "Enheten hittades inte" som PostgrestException i Inställningar.
   Future<Map<String, dynamic>> getDeviceMe() async {
     await ensureInitialized();
-    if (deviceToken == null) throw ApiException(401, 'Ingen enhet');
+    if (deviceToken == null) throw ApiException(401, tr.apiClientNoDevice);
     final backend = _backend;
     if (backend != null) {
       final status = await backend.fleetStatus(deviceToken: deviceToken);
@@ -2009,7 +2004,7 @@ class ApiClient {
     final device = meDev['device'] as Map? ?? {};
     final id = device['id']?.toString();
     if (id == null || id.isEmpty) {
-      throw ApiException(400, 'Ingen enhet att namnge.');
+      throw ApiException(400, tr.apiClientNoDeviceToName);
     }
     try {
       await _sb.from('devices').update({'label': label}).eq('id', id);
@@ -2431,7 +2426,7 @@ class ApiClient {
   }) async {
     final backend = _backend;
     if (backend == null) {
-      throw ApiException(501, 'Favoriter kräver Django-backenden');
+      throw ApiException(501, tr.apiClientFavoritesNeedBackend);
     }
     try {
       final body = await backend.setFavorite(
@@ -2528,7 +2523,7 @@ class ApiClient {
     await ensureInitialized();
     final meData = await me();
     final company = meData['company'] as Map<String, dynamic>?;
-    if (company == null) throw ApiException(400, 'Inget bolag');
+    if (company == null) throw ApiException(400, tr.apiClientNoCompany);
     await _sb
         .from('company_members')
         .delete()

@@ -1,0 +1,139 @@
+{
+  "bankIdFlowNoResponse": {
+    "sv": "BankID svarar inte just nu. Försök igen.",
+    "en": "BankID is not responding right now. Try again.",
+    "ar": "BankID لا يستجيب الآن. حاول مرة أخرى."
+  },
+  "bankIdFlowAppNotFound": {
+    "sv": "Vi hittar inte BankID-appen på den här telefonen. Skanna koden med BankID på en annan telefon.",
+    "en": "We cannot find the BankID app on this phone. Scan the code with BankID on another phone.",
+    "ar": "لا نجد تطبيق BankID على هذا الهاتف. امسح الرمز باستخدام BankID على هاتف آخر."
+  },
+  "bankIdFlowTooLong": {
+    "sv": "Det tog för lång tid. Försök igen.",
+    "en": "It took too long. Try again.",
+    "ar": "استغرق الأمر وقتاً طويلاً. حاول مرة أخرى."
+  },
+  "bankIdFlowFailed": {
+    "sv": "Legitimeringen misslyckades. Försök igen.",
+    "en": "Identification failed. Try again.",
+    "ar": "فشل التحقق من الهوية. حاول مرة أخرى."
+  },
+  "bankIdFlowTryAgain": {
+    "sv": "Försök igen",
+    "en": "Try again",
+    "ar": "حاول مرة أخرى"
+  },
+  "bankIdFlowApproveInApp": {
+    "sv": "Godkänn i BankID-appen. Kom sedan tillbaka hit.",
+    "en": "Approve in the BankID app. Then come back here.",
+    "ar": "وافق في تطبيق BankID ثم عد إلى هنا."
+  },
+  "bankIdFlowOpenBankId": {
+    "sv": "Öppna BankID",
+    "en": "Open BankID",
+    "ar": "افتح BankID"
+  },
+  "bankIdFlowOtherPhone": {
+    "sv": "BankID på en annan telefon",
+    "en": "BankID on another phone",
+    "ar": "BankID على هاتف آخر"
+  },
+  "bankIdFlowScanOnOther": {
+    "sv": "Öppna BankID på din andra telefon och skanna koden.",
+    "en": "Open BankID on your other phone and scan the code.",
+    "ar": "افتح BankID على هاتفك الآخر وامسح الرمز."
+  },
+  "bankIdFlowQrLabel": {
+    "sv": "QR-kod för BankID",
+    "en": "QR code for BankID",
+    "ar": "رمز QR لـ BankID"
+  },
+  "bankIdFlowThisPhone": {
+    "sv": "BankID på den här telefonen",
+    "en": "BankID on this phone",
+    "ar": "BankID على هذا الهاتف"
+  },
+  "bankIdFlowCancel": {
+    "sv": "Avbryt",
+    "en": "Cancel",
+    "ar": "إلغاء"
+  },
+  "bankIdFlowNoAccountHelp": {
+    "sv": "Ditt BankID har inget konto här.\n\nFick du en inbjudan från ditt taxibolag? Be dem skicka inbjudan igen. Då får du ett mejl där du väljer ett nytt lösenord.\n\nHar du inget konto? Tryck på Skapa konto.",
+    "en": "Your BankID has no account here.\n\nDid you get an invitation from your taxi company? Ask them to send the invitation again. You will then get an email where you choose a new password.\n\nDo you not have an account? Tap Create account.",
+    "ar": "ليس لـ BankID الخاص بك حساب هنا.\n\nهل وصلتك دعوة من شركة التاكسي؟ اطلب منهم إرسال الدعوة مرة أخرى. ستصلك رسالة بريد تختار فيها كلمة مرور جديدة.\n\nليس لديك حساب؟ اضغط على «إنشاء حساب»."
+  },
+  "bankIdFlowNoAccountTitle": {
+    "sv": "Vi hittar inget konto",
+    "en": "We cannot find an account",
+    "ar": "لا نجد حساباً"
+  },
+  "bankIdFlowOk": {
+    "sv": "OK",
+    "en": "OK",
+    "ar": "حسناً"
+  },
+  "bankIdFlowPasswordMin": {
+    "sv": "Lösenordet: minst 8 tecken.",
+    "en": "Password: at least 8 characters.",
+    "ar": "كلمة المرور: 8 أحرف على الأقل."
+  },
+  "bankIdFlowBadEmail": {
+    "sv": "Fel e-post.",
+    "en": "Wrong email.",
+    "ar": "البريد الإلكتروني غير صحيح."
+  },
+  "bankIdFlowSomethingWrong": {
+    "sv": "Något gick fel. Försök igen.",
+    "en": "Something went wrong. Try again.",
+    "ar": "حدث خطأ ما. حاول مرة أخرى."
+  },
+  "bankIdFlowNewPasswordTitle": {
+    "sv": "Nytt lösenord",
+    "en": "New password",
+    "ar": "كلمة مرور جديدة",
+    "description": "Dialogrubrik (utan namn) och fältetikett"
+  },
+  "bankIdFlowHello": {
+    "sv": "Hej {name}!",
+    "en": "Hi {name}!",
+    "ar": "مرحباً {name}!",
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "bankIdFlowYourAccount": {
+    "sv": "Ditt konto:",
+    "en": "Your account:",
+    "ar": "حسابك:"
+  },
+  "bankIdFlowPasswordHelper": {
+    "sv": "Minst 8 tecken",
+    "en": "At least 8 characters",
+    "ar": "8 أحرف على الأقل"
+  },
+  "bankIdFlowShowPassword": {
+    "sv": "Visa lösenord",
+    "en": "Show password",
+    "ar": "إظهار كلمة المرور"
+  },
+  "bankIdFlowHidePassword": {
+    "sv": "Dölj lösenord",
+    "en": "Hide password",
+    "ar": "إخفاء كلمة المرور"
+  },
+  "bankIdFlowChangeEmail": {
+    "sv": "Byt e-post också",
+    "en": "Change email too",
+    "ar": "غيّر البريد الإلكتروني أيضاً"
+  },
+  "bankIdFlowNewEmail": {
+    "sv": "Ny e-post",
+    "en": "New email",
+    "ar": "بريد إلكتروني جديد"
+  },
+  "bankIdFlowSave": {
+    "sv": "Spara",
+    "en": "Save",
+    "ar": "حفظ"
+  }
+}

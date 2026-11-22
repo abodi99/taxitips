@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../api_client.dart';
+import '../l10n/l10n.dart';
 import '../net_status.dart';
 import '../theme.dart';
 
@@ -82,7 +83,7 @@ class _MembershipCountyScreenState extends State<MembershipCountyScreen> {
     if (e is ApiException) return e.message;
     final net = netFailureOf(e);
     if (net != null) return netMessage(net);
-    return 'Kunde inte hämta länen. Dra ner för att försöka igen.';
+    return tr.membershipCountyLoadFailed;
   }
 
   Future<void> _save() async {
@@ -153,7 +154,7 @@ class _MembershipCountyScreenState extends State<MembershipCountyScreen> {
                   backgroundColor: TbColors.taxi,
                   foregroundColor: TbColors.ink,
                 ),
-                child: const Text('Försök igen'),
+                child: Text(tr.membershipCountyRetry),
               ),
             ],
           ),
@@ -164,7 +165,7 @@ class _MembershipCountyScreenState extends State<MembershipCountyScreen> {
       children: [
         Expanded(
           child: Container(
-            margin: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+            margin: const EdgeInsetsDirectional.fromSTEB(16, 0, 16, 0),
             decoration: BoxDecoration(
               color: Colors.white,
               borderRadius: BorderRadius.circular(20),
@@ -230,9 +231,9 @@ class _MembershipCountyScreenState extends State<MembershipCountyScreen> {
                           strokeWidth: 2.5,
                         ),
                       )
-                    : const Text(
-                        'Fortsätt',
-                        style: TextStyle(
+                    : Text(
+                        tr.membershipCountyContinue,
+                        style: const TextStyle(
                           fontSize: 17,
                           fontWeight: FontWeight.w800,
                         ),
@@ -251,24 +252,28 @@ class _Header extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(24, 28, 24, 20),
+    return Padding(
+      padding: const EdgeInsetsDirectional.fromSTEB(24, 28, 24, 20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Var vill du köra?',
-            style: TextStyle(
+            tr.membershipCountyTitle,
+            style: const TextStyle(
               fontFamily: kDisplayFont,
               color: Colors.white,
               fontSize: 26,
               fontWeight: FontWeight.w800,
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
-            'Välj länet där du kör mest. Du kan byta senare.',
-            style: TextStyle(color: TbColors.foam, fontSize: 17, height: 1.4),
+            tr.membershipCountySubtitle,
+            style: const TextStyle(
+              color: TbColors.foam,
+              fontSize: 17,
+              height: 1.4,
+            ),
           ),
         ],
       ),

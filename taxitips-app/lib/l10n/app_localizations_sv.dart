@@ -27,6 +27,236 @@ class AppLocalizationsSv extends AppLocalizations {
   String get alertFeedbackTitle => 'Hur gick det?';
 
   @override
+  String get apiClientAccountCreatedOffline =>
+      'Kontot är skapat, men vi nådde inte servern. Logga in när du har nät igen.';
+
+  @override
+  String apiClientAuthError(String details) {
+    return 'Auth-fel: $details';
+  }
+
+  @override
+  String get apiClientBankIdUnavailable =>
+      'BankID är inte tillgängligt just nu.';
+
+  @override
+  String get apiClientBaseUrlMissing =>
+      'API_BASE_URL är inte satt. Parkoppling och bilval kräver TaxiTips-backenden.';
+
+  @override
+  String get apiClientCannotDeleteAccount =>
+      'Det går inte att radera kontot just nu. Försök igen senare.';
+
+  @override
+  String get apiClientCouldNotCreateAccount => 'Kunde inte skapa konto';
+
+  @override
+  String apiClientDatabaseError(String details) {
+    return 'Databasfel: $details';
+  }
+
+  @override
+  String get apiClientFavoritesNeedBackend =>
+      'Favoriter kräver Django-backenden';
+
+  @override
+  String get apiClientInvalidTransferCode => 'Ogiltig byteskod';
+
+  @override
+  String get apiClientInvalidVerificationCode => 'Verifieringskoden är ogiltig';
+
+  @override
+  String get apiClientLoginFailed => 'Det gick inte att logga in. Försök igen.';
+
+  @override
+  String get apiClientLoginRequired => 'Logga in för att fortsätta.';
+
+  @override
+  String get apiClientNoCompany => 'Inget bolag';
+
+  @override
+  String get apiClientNoDevice => 'Ingen enhet';
+
+  @override
+  String get apiClientNoDeviceKey => 'Servern gav ingen enhetsnyckel.';
+
+  @override
+  String get apiClientNoDevicePush =>
+      'Ingen enhet — logga in via backend för push';
+
+  @override
+  String get apiClientNoDeviceToName => 'Ingen enhet att namnge.';
+
+  @override
+  String get apiClientNoValidSession =>
+      'Inloggningen gav ingen giltig session.';
+
+  @override
+  String get apiClientNotLoggedIn => 'Inte inloggad';
+
+  @override
+  String get apiClientNotifyLineDelayedHelp =>
+      'Vanligtvis en svag signal -- av som standard.';
+
+  @override
+  String get apiClientNotifyLineDelayedLabel => 'Förseningar';
+
+  @override
+  String get apiClientNotifyLineDelayedShort => 'Linjen kör, men försenad';
+
+  @override
+  String get apiClientNotifyLinePausedHelp =>
+      'Störst chans att det finns folk som behöver taxi.';
+
+  @override
+  String get apiClientNotifyLinePausedLabel => 'Hela linjen står stilla';
+
+  @override
+  String get apiClientNotifyLinePausedShort => 'Ingen trafik alls på linjen';
+
+  @override
+  String get apiClientNotifyNeedsServer =>
+      'Notisvalen kräver TaxiTips-servern.';
+
+  @override
+  String get apiClientNotifyRoadAccidentHelp =>
+      'Påverkar mest bilister redan på väg, men värt att veta om.';
+
+  @override
+  String get apiClientNotifyRoadAccidentLabel => 'Olycka eller avstängd väg';
+
+  @override
+  String get apiClientNotifyRoadShort => 'Vägtrafik';
+
+  @override
+  String get apiClientNotifyRoadWorkHelp =>
+      'Sällan en taxisignal -- av som standard.';
+
+  @override
+  String get apiClientNotifyRoadWorkLabel => 'Vägarbete eller köbildning';
+
+  @override
+  String get apiClientNotifyVehicleCancelledHelp =>
+      'Färre påverkade, men kan ändå vara värt en titt.';
+
+  @override
+  String get apiClientNotifyVehicleCancelledLabel => 'Enstaka avgång inställd';
+
+  @override
+  String get apiClientNotifyVehicleCancelledShort =>
+      'En avgång inställd, andra går som vanligt';
+
+  @override
+  String get apiClientOnDutyNeedsBackend => 'I tjänst kräver den nya backenden';
+
+  @override
+  String get apiClientPhoneNotPaired => 'Telefonen är inte parkopplad.';
+
+  @override
+  String get apiClientSupportChatUnavailable =>
+      'Supportchatten är inte tillgänglig här.';
+
+  @override
+  String get appMainLogout => 'Logga ut';
+
+  @override
+  String get appMainSomethingWrong => 'Något gick fel.';
+
+  @override
+  String get appMainTrialNotStarted =>
+      'Kontot är skapat men provet kunde inte starta. Kontakta TaxiTips.';
+
+  @override
+  String get appMainTryAgain => 'Försök igen';
+
+  @override
+  String get bankIdFlowAppNotFound =>
+      'Vi hittar inte BankID-appen på den här telefonen. Skanna koden med BankID på en annan telefon.';
+
+  @override
+  String get bankIdFlowApproveInApp =>
+      'Godkänn i BankID-appen. Kom sedan tillbaka hit.';
+
+  @override
+  String get bankIdFlowBadEmail => 'Fel e-post.';
+
+  @override
+  String get bankIdFlowCancel => 'Avbryt';
+
+  @override
+  String get bankIdFlowChangeEmail => 'Byt e-post också';
+
+  @override
+  String get bankIdFlowFailed => 'Legitimeringen misslyckades. Försök igen.';
+
+  @override
+  String bankIdFlowHello(String name) {
+    return 'Hej $name!';
+  }
+
+  @override
+  String get bankIdFlowHidePassword => 'Dölj lösenord';
+
+  @override
+  String get bankIdFlowNewEmail => 'Ny e-post';
+
+  @override
+  String get bankIdFlowNewPasswordTitle => 'Nytt lösenord';
+
+  @override
+  String get bankIdFlowNoAccountHelp =>
+      'Ditt BankID har inget konto här.\n\nFick du en inbjudan från ditt taxibolag? Be dem skicka inbjudan igen. Då får du ett mejl där du väljer ett nytt lösenord.\n\nHar du inget konto? Tryck på Skapa konto.';
+
+  @override
+  String get bankIdFlowNoAccountTitle => 'Vi hittar inget konto';
+
+  @override
+  String get bankIdFlowNoResponse => 'BankID svarar inte just nu. Försök igen.';
+
+  @override
+  String get bankIdFlowOk => 'OK';
+
+  @override
+  String get bankIdFlowOpenBankId => 'Öppna BankID';
+
+  @override
+  String get bankIdFlowOtherPhone => 'BankID på en annan telefon';
+
+  @override
+  String get bankIdFlowPasswordHelper => 'Minst 8 tecken';
+
+  @override
+  String get bankIdFlowPasswordMin => 'Lösenordet: minst 8 tecken.';
+
+  @override
+  String get bankIdFlowQrLabel => 'QR-kod för BankID';
+
+  @override
+  String get bankIdFlowSave => 'Spara';
+
+  @override
+  String get bankIdFlowScanOnOther =>
+      'Öppna BankID på din andra telefon och skanna koden.';
+
+  @override
+  String get bankIdFlowShowPassword => 'Visa lösenord';
+
+  @override
+  String get bankIdFlowSomethingWrong => 'Något gick fel. Försök igen.';
+
+  @override
+  String get bankIdFlowThisPhone => 'BankID på den här telefonen';
+
+  @override
+  String get bankIdFlowTooLong => 'Det tog för lång tid. Försök igen.';
+
+  @override
+  String get bankIdFlowTryAgain => 'Försök igen';
+
+  @override
+  String get bankIdFlowYourAccount => 'Ditt konto:';
+
+  @override
   String get categoryBarAll => 'Alla';
 
   @override
@@ -1380,6 +1610,133 @@ class AppLocalizationsSv extends AppLocalizations {
   String get languageTitle => 'Språk';
 
   @override
+  String get loginScreenBack => 'Tillbaka';
+
+  @override
+  String get loginScreenCreateAccount => 'Skapa konto gratis';
+
+  @override
+  String get loginScreenDeviceSwapLimit =>
+      'Du har bytt telefon en gång den här månaden. Kontakta support så hjälper vi dig byta igen.';
+
+  @override
+  String get loginScreenEmail => 'E-post';
+
+  @override
+  String get loginScreenEmailNotConfirmed =>
+      'Bekräfta din e-post först. Tryck på länken i mejlet.';
+
+  @override
+  String get loginScreenEnterCredentials =>
+      'Skriv din e-post och ditt lösenord.';
+
+  @override
+  String get loginScreenFailed => 'Det gick inte att logga in. Försök igen.';
+
+  @override
+  String get loginScreenForgotPassword => 'Glömt lösenord?';
+
+  @override
+  String get loginScreenHidePassword => 'Dölj lösenord';
+
+  @override
+  String get loginScreenIntro =>
+      'För förare, ägare och kontor. Ny förare? Välj först ett lösenord med länken i inbjudan.';
+
+  @override
+  String get loginScreenNoAccount => 'Inget konto?';
+
+  @override
+  String get loginScreenNoInvite =>
+      'Kontot är inte kopplat till något taxibolag. Be din chef bjuda in dig, eller tryck på Skapa konto gratis nedan.';
+
+  @override
+  String get loginScreenPassword => 'Lösenord';
+
+  @override
+  String get loginScreenRateLimit => 'Vänta en minut och försök igen.';
+
+  @override
+  String loginScreenRecovered(String email) {
+    return 'Klart! Logga in med $email.';
+  }
+
+  @override
+  String get loginScreenShowPassword => 'Visa lösenord';
+
+  @override
+  String get loginScreenTagline =>
+      'Se var folk behöver taxi,\ninnan kön växer.';
+
+  @override
+  String get loginScreenTitle => 'Logga in';
+
+  @override
+  String get loginScreenWithBankId => 'Logga in med BankID';
+
+  @override
+  String get loginScreenWrongCredentials => 'Fel e-post eller lösenord.';
+
+  @override
+  String get membershipCopyAccessNotActive => 'Åtkomsten är inte aktiv.';
+
+  @override
+  String get membershipCopyInvoicesOnWeb =>
+      'Fakturor och medlemskap hanteras av företagets administratör på webben.';
+
+  @override
+  String get membershipCopyNotActive => 'Medlemskapet är inte aktivt just nu.';
+
+  @override
+  String get membershipCopyNotInMembership => 'Ingår inte i ditt medlemskap.';
+
+  @override
+  String get membershipCopyNotInTrial => 'Ingår inte i provet.';
+
+  @override
+  String get membershipCopyOnWeb =>
+      'Ditt företags administratör hanterar medlemskapet på webben.';
+
+  @override
+  String get membershipCopyPaused => 'Medlemskapet är pausat.';
+
+  @override
+  String get membershipCopyPortalSubtitle =>
+      'Öppnar kundportalen på webben: bilar, fakturor och medlemmar.';
+
+  @override
+  String get membershipCopyPortalTitle => 'Hantera företagskonto';
+
+  @override
+  String get membershipCopyPromiseNoBinding => 'Ingen bindning';
+
+  @override
+  String get membershipCopyPromiseNoCard => 'Inget kort';
+
+  @override
+  String get membershipCopyPromiseNoCompany => 'Inget företag behövs';
+
+  @override
+  String get membershipCopyTrialEnded => 'Provperioden är slut.';
+
+  @override
+  String get membershipCountyContinue => 'Fortsätt';
+
+  @override
+  String get membershipCountyLoadFailed =>
+      'Kunde inte hämta länen. Dra ner för att försöka igen.';
+
+  @override
+  String get membershipCountyRetry => 'Försök igen';
+
+  @override
+  String get membershipCountySubtitle =>
+      'Välj länet där du kör mest. Du kan byta senare.';
+
+  @override
+  String get membershipCountyTitle => 'Var vill du köra?';
+
+  @override
   String get netStatusGenericError => 'Något gick fel. Försök igen.';
 
   @override
@@ -1538,6 +1895,77 @@ class AppLocalizationsSv extends AppLocalizations {
   String offlineBannerUnreachable(String at) {
     return 'Servern svarar inte – visar tips från $at';
   }
+
+  @override
+  String get onboardingScreenClose => 'Stäng';
+
+  @override
+  String get onboardingScreenColorsBody =>
+      'Det är tips, inte beställningar. Du avgör själv om det är värt att åka.';
+
+  @override
+  String get onboardingScreenColorsTitle => 'Färgen visar hur starkt tipset är';
+
+  @override
+  String get onboardingScreenDone => 'Klar';
+
+  @override
+  String get onboardingScreenFeedbackBody =>
+      'Tryck på ett tips och välj Fick körning eller Ingen kund. Då blir tipsen bättre för alla.';
+
+  @override
+  String get onboardingScreenFeedbackTitle => 'Säg hur det gick';
+
+  @override
+  String get onboardingScreenLevelMedium => 'Medel';
+
+  @override
+  String get onboardingScreenLevelMediumText => 'Kan bli körningar. Håll koll.';
+
+  @override
+  String get onboardingScreenLevelStrong => 'Stark';
+
+  @override
+  String get onboardingScreenLevelStrongText => 'Många kan behöva taxi.';
+
+  @override
+  String get onboardingScreenLevelWeak => 'Svag';
+
+  @override
+  String get onboardingScreenLevelWeakText =>
+      'Bra att veta, sällan värt att åka.';
+
+  @override
+  String get onboardingScreenNext => 'Nästa';
+
+  @override
+  String get onboardingScreenNotifBody =>
+      'Slå på notiser under Inställningar. Då säger vi till när ett starkt tips dyker upp nära dig.';
+
+  @override
+  String get onboardingScreenNotifTitle => 'Notiser';
+
+  @override
+  String onboardingScreenPageOf(int page, int total) {
+    return 'Sida $page av $total';
+  }
+
+  @override
+  String get onboardingScreenSkip => 'Hoppa över';
+
+  @override
+  String get onboardingScreenStartBody =>
+      'Skapa ett konto gratis, eller logga in om du redan har ett. Sedan visar vi dig runt i appen.';
+
+  @override
+  String get onboardingScreenStartTitle => 'Kom igång';
+
+  @override
+  String get onboardingScreenTrafficBody =>
+      'Inställda tåg, sena flyg, färjor och event som slutar. Vi visar var folk kan behöva taxi. Det är tips, inte beställningar.';
+
+  @override
+  String get onboardingScreenTrafficTitle => 'Tips från trafiken';
 
   @override
   String get settingsScreenAboutTips => 'Om tipsen';
@@ -2139,6 +2567,120 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String get signupScreenBack => 'Tillbaka';
+
+  @override
+  String get signupScreenCompanyHelp => 'Organisationsnummer behövs inte nu.';
+
+  @override
+  String get signupScreenCompanyHint => 'Till exempel Annas Taxi';
+
+  @override
+  String get signupScreenCompanyLabel => 'Företagets namn';
+
+  @override
+  String get signupScreenCompanyQuestion => 'Vad heter företaget?';
+
+  @override
+  String get signupScreenCompanyText => 'Med egna bilar eller förare.';
+
+  @override
+  String get signupScreenCompanyTitle => 'Jag har ett taxibolag';
+
+  @override
+  String get signupScreenContinueBankId => 'Fortsätt med BankID';
+
+  @override
+  String get signupScreenCreateAccount => 'Skapa kontot';
+
+  @override
+  String get signupScreenDateInvalid =>
+      'Personnumret har ett datum som inte finns. Kontrollera numret.';
+
+  @override
+  String get signupScreenEmailHelp => 'Du loggar in med den.';
+
+  @override
+  String get signupScreenEmailLabel => 'E-post';
+
+  @override
+  String get signupScreenEmailQuestion => 'Din e-post';
+
+  @override
+  String get signupScreenHaveAccount => 'Har du redan ett konto? Logga in';
+
+  @override
+  String get signupScreenKindQuestion => 'Hur kör du?';
+
+  @override
+  String signupScreenKindQuestionNamed(String name) {
+    return 'Hej $name! Hur kör du?';
+  }
+
+  @override
+  String get signupScreenLoginInstead => 'Logga in i stället';
+
+  @override
+  String get signupScreenNext => 'Nästa';
+
+  @override
+  String get signupScreenNotSure => 'Inte säker? Välj \"Jag kör själv\".';
+
+  @override
+  String get signupScreenPasswordLabel => 'Lösenord';
+
+  @override
+  String get signupScreenPasswordMin => 'Minst 8 tecken';
+
+  @override
+  String get signupScreenPasswordQuestion => 'Välj ett lösenord';
+
+  @override
+  String get signupScreenPhoneLabel => 'Mobil';
+
+  @override
+  String get signupScreenPhoneQuestion => 'Ditt mobilnummer';
+
+  @override
+  String get signupScreenProblemChoose => 'Välj ett av alternativen.';
+
+  @override
+  String get signupScreenProblemCompany => 'Skriv företagets namn.';
+
+  @override
+  String get signupScreenProblemEmail =>
+      'Det ser inte ut som en e-postadress. Skriv till exempel namn@gmail.com.';
+
+  @override
+  String get signupScreenProblemPassword =>
+      'Lösenordet behöver minst 8 tecken.';
+
+  @override
+  String get signupScreenProblemPhone =>
+      'Det ser inte ut som ett mobilnummer. Skriv till exempel 070 123 45 67.';
+
+  @override
+  String get signupScreenSoloText => 'Du behöver inget företag.';
+
+  @override
+  String get signupScreenSoloTitle => 'Jag kör själv';
+
+  @override
+  String get signupScreenSomethingWrong => 'Något gick fel. Försök igen.';
+
+  @override
+  String signupScreenStepOf(int n, int total) {
+    return 'Steg $n av $total';
+  }
+
+  @override
+  String get signupScreenTitle => 'Prova gratis i en månad';
+
+  @override
+  String get signupScreenUnder18 =>
+      'En enskild firma registreras av någon som fyllt 18. Kontrollera numret.';
+
+  @override
   String get supportChatEmptyBody =>
       'Skriv din fråga nedan. Du får en notis när vi svarat.';
 
@@ -2353,6 +2895,184 @@ class AppLocalizationsSv extends AppLocalizations {
   String get tipSheetUnsave => 'Ta bort sparat';
 
   @override
+  String get trialWelcomeAllIncluded => 'Allt ingår just nu.';
+
+  @override
+  String get trialWelcomeClose => 'Stäng';
+
+  @override
+  String get trialWelcomeColorNote =>
+      'Färgen visar hur stark signalen är. En stark signal betyder att många sannolikt behöver taxi.';
+
+  @override
+  String get trialWelcomeCostsNothing => 'Det kostar inget att prova.';
+
+  @override
+  String trialWelcomeDate(int day, String month) {
+    String _temp0 = intl.Intl.selectLogic(month, {
+      '1': 'januari',
+      '2': 'februari',
+      '3': 'mars',
+      '4': 'april',
+      '5': 'maj',
+      '6': 'juni',
+      '7': 'juli',
+      '8': 'augusti',
+      '9': 'september',
+      '10': 'oktober',
+      '11': 'november',
+      '12': 'december',
+      'other': '',
+    });
+    return '$day $_temp0';
+  }
+
+  @override
+  String get trialWelcomeDone => 'Klar';
+
+  @override
+  String trialWelcomeFreeDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Gratis i $days dagar.',
+      one: 'Gratis i $days dag.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get trialWelcomeFreeToTry => 'Gratis att prova.';
+
+  @override
+  String trialWelcomeFreeUntil(String date) {
+    return 'Gratis till $date.';
+  }
+
+  @override
+  String get trialWelcomeIncludedHeading => 'Ingår i provet';
+
+  @override
+  String get trialWelcomeIncludedTitle => 'Vad ingår i provet?';
+
+  @override
+  String get trialWelcomeIncludedUnknown =>
+      'Det som ingår i provet ser du i appen. Det som inte ingår har ett lås.';
+
+  @override
+  String get trialWelcomeLineEvent =>
+      'Event som slutar: match, konsert eller annat.';
+
+  @override
+  String get trialWelcomeLineFerry => 'Färjor som lägger till i hamnen.';
+
+  @override
+  String get trialWelcomeLineFlight =>
+      'Flyg som är sena, eller när många flyg landar.';
+
+  @override
+  String get trialWelcomeLineRoad => 'Trafikolyckor som stoppar trafiken.';
+
+  @override
+  String get trialWelcomeLineTransit =>
+      'Tåg och buss som är sena eller inställda. Sista avgången.';
+
+  @override
+  String trialWelcomeNeedsMembership(String onWeb) {
+    return 'Det kräver medlemskap. $onWeb';
+  }
+
+  @override
+  String get trialWelcomeNext => 'Nästa';
+
+  @override
+  String get trialWelcomeOneSeat => 'Du kan ha 1 plats i provet, med ett län.';
+
+  @override
+  String trialWelcomePageOf(int page, int total) {
+    return 'Sida $page av $total';
+  }
+
+  @override
+  String get trialWelcomeReadyTitle => 'Klart! Du är igång';
+
+  @override
+  String trialWelcomeSeats(int limit) {
+    String _temp0 = intl.Intl.pluralLogic(
+      limit,
+      locale: localeName,
+      other: 'Du kan ha upp till $limit platser i provet.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get trialWelcomeShowTips => 'Visa tipsen';
+
+  @override
+  String get trialWelcomeSkip => 'Hoppa över';
+
+  @override
+  String get trialWelcomeStep1Text =>
+      'Öppna Inställningar och tryck på Dina län. Länet styr vilka tips du får.';
+
+  @override
+  String get trialWelcomeStep1Title => 'Byt län';
+
+  @override
+  String get trialWelcomeStep2Text =>
+      'Inbjudan skickas av företagets administratör på webben, inte från appen. Föraren får ett mejl, väljer ett lösenord och loggar in i appen med e-post och lösenord.';
+
+  @override
+  String get trialWelcomeStep2Title =>
+      'Har du ett taxibolag? Bjud in förare på webben';
+
+  @override
+  String get trialWelcomeStepsTitle => 'Så kommer du igång';
+
+  @override
+  String trialWelcomeTrialEnded(String onWeb) {
+    return 'Provet är slut. $onWeb';
+  }
+
+  @override
+  String trialWelcomeTrialRunning(String date) {
+    return 'Provet pågår. Det gäller till $date.';
+  }
+
+  @override
+  String get trialWelcomeTrialStarts =>
+      'Provet startar när första föraren loggar in.';
+
+  @override
+  String get trialWelcomeTrialStartsPending =>
+      'Provet startar när första föraren loggar in. Tills dess går ingen tid.';
+
+  @override
+  String trialWelcomeTrialTitleDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'Du provar gratis i $days dagar',
+      one: 'Du provar gratis i $days dag',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get trialWelcomeTrialTitleNoDays => 'Du provar gratis';
+
+  @override
+  String get trialWelcomeWatching => 'Vi bevakar';
+
+  @override
+  String get trialWelcomeWhatBody =>
+      'Taxi Tips visar var folk kan behöva taxi just nu. Det är tips, inte löften. Du bestämmer själv om det är värt att åka.';
+
+  @override
+  String get trialWelcomeWhatTitle => 'Välkommen till Taxi Tips';
+
+  @override
   String get vehicleSessionAnotherPhone => 'en annan telefon';
 
   @override
@@ -2409,4 +3129,19 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get vehicleSessionYouDriveThis => 'Du kör den här';
+
+  @override
+  String get welcomeScreenBrowserFailed => 'Kunde inte öppna webbläsaren';
+
+  @override
+  String get welcomeScreenCreateAccount => 'Skapa konto gratis';
+
+  @override
+  String get welcomeScreenHeadline => 'Se var folk behöver taxi';
+
+  @override
+  String get welcomeScreenLogin => 'Logga in';
+
+  @override
+  String get welcomeScreenSeeDemo => 'Se demon på webben';
 }

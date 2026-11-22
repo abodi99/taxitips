@@ -177,10 +177,10 @@ ihop med `python3 tool/build_arb.py` och genereras med `flutter gen-l10n`. I kod
 den globala `tr` (lib/l10n/l10n.dart), aldrig `AppLocalizations.of(context)`; utan
 app är `tr` svenska, så testerna jämför fortfarande mot svensk text. Arabiska ritas
 höger till vänster (använd `EdgeInsetsDirectional`, `AlignmentDirectional` m.fl.) och
-med västerländska siffror. Inte översatt än: inloggning, registrering, välkomstens
-texter, provets välkomst, BankID, `membership_copy.dart`, `api_client.dart`s
-felmeddelanden, kartförklaringen och push-bannern -- och allt som servern skriver
-(tipsens rader, notiser, felmeddelanden, mejl). Översättningarna bör läsas av någon
+med västerländska siffror. Tester börjar alltid på svenska
+(`test/flutter_test_config.dart`). Inte översatt än: kartförklaringen
+(`map_legend_sheet.dart`), push-bannern och `settings_ui.dart` -- och allt som
+servern skriver (tipsens rader, notiser, BankID-statustexter, felmeddelanden, mejl). Översättningarna bör läsas av någon
 med arabiska som modersmål före lansering.
 
 Förarkartan i appen (ombyggd 2026-09-21, för förare med begränsad svenska):

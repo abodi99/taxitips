@@ -1,0 +1,67 @@
+{
+  "membershipCopyNotInTrial": {
+    "sv": "Ingår inte i provet.",
+    "en": "Not included in the trial.",
+    "ar": "غير مشمول في الفترة التجريبية."
+  },
+  "membershipCopyOnWeb": {
+    "sv": "Ditt företags administratör hanterar medlemskapet på webben.",
+    "en": "Your company's administrator manages the membership on the web.",
+    "ar": "يدير مسؤول شركتك العضوية على الويب."
+  },
+  "membershipCopyInvoicesOnWeb": {
+    "sv": "Fakturor och medlemskap hanteras av företagets administratör på webben.",
+    "en": "Invoices and membership are handled by the company's administrator on the web.",
+    "ar": "يتولى مسؤول الشركة الفواتير والعضوية على الويب."
+  },
+  "membershipCopyNotInMembership": {
+    "sv": "Ingår inte i ditt medlemskap.",
+    "en": "Not included in your membership.",
+    "ar": "غير مشمول في عضويتك."
+  },
+  "membershipCopyPortalTitle": {
+    "sv": "Hantera företagskonto",
+    "en": "Manage company account",
+    "ar": "إدارة حساب الشركة"
+  },
+  "membershipCopyPortalSubtitle": {
+    "sv": "Öppnar kundportalen på webben: bilar, fakturor och medlemmar.",
+    "en": "Opens the customer portal on the web: cars, invoices and members.",
+    "ar": "يفتح بوابة العملاء على الويب: السيارات والفواتير والأعضاء."
+  },
+  "membershipCopyTrialEnded": {
+    "sv": "Provperioden är slut.",
+    "en": "The trial period has ended.",
+    "ar": "انتهت الفترة التجريبية."
+  },
+  "membershipCopyPaused": {
+    "sv": "Medlemskapet är pausat.",
+    "en": "The membership is paused.",
+    "ar": "العضوية متوقفة مؤقتًا."
+  },
+  "membershipCopyNotActive": {
+    "sv": "Medlemskapet är inte aktivt just nu.",
+    "en": "The membership is not active right now.",
+    "ar": "العضوية غير نشطة حاليًا."
+  },
+  "membershipCopyAccessNotActive": {
+    "sv": "Åtkomsten är inte aktiv.",
+    "en": "Access is not active.",
+    "ar": "الوصول غير مفعّل."
+  },
+  "membershipCopyPromiseNoCard": {
+    "sv": "Inget kort",
+    "en": "No card",
+    "ar": "بلا بطاقة"
+  },
+  "membershipCopyPromiseNoBinding": {
+    "sv": "Ingen bindning",
+    "en": "No commitment",
+    "ar": "بلا التزام"
+  },
+  "membershipCopyPromiseNoCompany": {
+    "sv": "Inget företag behövs",
+    "en": "No company needed",
+    "ar": "لا حاجة إلى شركة"
+  }
+}

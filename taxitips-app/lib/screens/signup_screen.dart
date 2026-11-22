@@ -3,6 +3,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 
 import '../api_client.dart';
 import '../bankid_flow.dart';
+import '../l10n/l10n.dart';
 import '../membership_copy.dart';
 import '../net_status.dart';
 import '../theme.dart';
@@ -157,7 +158,7 @@ class SignupScreenState extends State<SignupScreen> {
               : (now.year ~/ 100 - 1) * 100 + yy);
     final born = DateTime(year, mm, dd);
     if (dd < 1 || born.month != mm || born.day != dd || born.isAfter(now)) {
-      return 'Personnumret har ett datum som inte finns. Kontrollera numret.';
+      return tr.signupScreenDateInvalid;
     }
     var age = now.year - born.year;
     if (now.month < born.month ||
@@ -165,7 +166,7 @@ class SignupScreenState extends State<SignupScreen> {
       age--;
     }
     if (age < 18) {
-      return 'En enskild firma registreras av någon som fyllt 18. Kontrollera numret.';
+      return tr.signupScreenUnder18;
     }
     return null;
   }
@@ -214,21 +215,17 @@ class SignupScreenState extends State<SignupScreen> {
 
   /// Vad som är fel på ett steg, i vanliga ord och med ett exempel.
   String? _problem(SignupStep step) => switch (step) {
-    SignupStep.kind => _private == null ? 'Välj ett av alternativen.' : null,
+    SignupStep.kind => _private == null ? tr.signupScreenProblemChoose : null,
     SignupStep.company =>
-      _company.text.trim().isEmpty ? 'Skriv företagets namn.' : null,
+      _company.text.trim().isEmpty ? tr.signupScreenProblemCompany : null,
     SignupStep.phone =>
-      phoneLooksValid(_phone.text)
-          ? null
-          : 'Det ser inte ut som ett mobilnummer. '
-                'Skriv till exempel 070 123 45 67.',
+      phoneLooksValid(_phone.text) ? null : tr.signupScreenProblemPhone,
     SignupStep.email =>
       _emailShape.hasMatch(_email.text.trim())
           ? null
-          : 'Det ser inte ut som en e-postadress. '
-                'Skriv till exempel namn@gmail.com.',
+          : tr.signupScreenProblemEmail,
     SignupStep.password =>
-      _password.text.length < 8 ? 'Lösenordet behöver minst 8 tecken.' : null,
+      _password.text.length < 8 ? tr.signupScreenProblemPassword : null,
   };
 
   void _next() {
@@ -341,7 +338,7 @@ class SignupScreenState extends State<SignupScreen> {
       setState(
         () => _error = net != null
             ? netMessage(net)
-            : 'Något gick fel. Försök igen.',
+            : tr.signupScreenSomethingWrong,
       );
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -402,13 +399,13 @@ class SignupScreenState extends State<SignupScreen> {
     final steps = _steps;
     final n = steps.indexOf(_step) + 1;
     return Semantics(
-      label: 'Steg $n av ${steps.length}',
+      label: tr.signupScreenStepOf(n, steps.length),
       excludeSemantics: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Steg $n av ${steps.length}',
+            tr.signupScreenStepOf(n, steps.length),
             style: const TextStyle(
               color: TbColors.muted,
               fontSize: 15,
@@ -533,7 +530,7 @@ class SignupScreenState extends State<SignupScreen> {
   // --- Stegen ------------------------------------------------------------
 
   List<Widget> _bankIdStep() => [
-    _title('Prova gratis i en månad'),
+    _title(tr.signupScreenTitle),
     const SizedBox(height: 20),
     _promises(),
     const SizedBox(height: 24),
@@ -545,9 +542,9 @@ class SignupScreenState extends State<SignupScreen> {
       onPressed: _bankId,
       style: _primary,
       icon: const Icon(Icons.fingerprint, size: 26),
-      label: const Text(
-        'Fortsätt med BankID',
-        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+      label: Text(
+        tr.signupScreenContinueBankId,
+        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
       ),
     ),
     const SizedBox(height: 12),
@@ -557,9 +554,9 @@ class SignupScreenState extends State<SignupScreen> {
         foregroundColor: TbColors.navy,
         minimumSize: const Size.fromHeight(52),
       ),
-      child: const Text(
-        'Har du redan ett konto? Logga in',
-        style: TextStyle(
+      child: Text(
+        tr.signupScreenHaveAccount,
+        style: const TextStyle(
           fontSize: 16,
           fontWeight: FontWeight.w700,
           decoration: TextDecoration.underline,
@@ -573,27 +570,31 @@ class SignupScreenState extends State<SignupScreen> {
         ? identity.givenName
         : identity.name;
     return [
-      _question(hello.isEmpty ? 'Hur kör du?' : 'Hej $hello! Hur kör du?'),
+      _question(
+        hello.isEmpty
+            ? tr.signupScreenKindQuestion
+            : tr.signupScreenKindQuestionNamed(hello),
+      ),
       const SizedBox(height: 20),
       _ChoiceCard(
         icon: Icons.person_rounded,
-        title: 'Jag kör själv',
-        text: 'Du behöver inget företag.',
+        title: tr.signupScreenSoloTitle,
+        text: tr.signupScreenSoloText,
         selected: _private == true,
         onTap: () => _choose(true),
       ),
       const SizedBox(height: 12),
       _ChoiceCard(
         icon: Icons.local_taxi_rounded,
-        title: 'Jag har ett taxibolag',
-        text: 'Med egna bilar eller förare.',
+        title: tr.signupScreenCompanyTitle,
+        text: tr.signupScreenCompanyText,
         selected: _private == false,
         onTap: () => _choose(false),
       ),
       const SizedBox(height: 16),
-      const Text(
-        'Inte säker? Välj "Jag kör själv".',
-        style: TextStyle(color: TbColors.muted, fontSize: 16),
+      Text(
+        tr.signupScreenNotSure,
+        style: const TextStyle(color: TbColors.muted, fontSize: 16),
       ),
       if (_error != null) ...[const SizedBox(height: 12), _errorBox(_error!)],
     ];
@@ -604,25 +605,25 @@ class SignupScreenState extends State<SignupScreen> {
     final field = switch (_step) {
       SignupStep.company => [
         _question(
-          'Vad heter företaget?',
-          help: 'Organisationsnummer behövs inte nu.',
+          tr.signupScreenCompanyQuestion,
+          help: tr.signupScreenCompanyHelp,
         ),
         const SizedBox(height: 20),
         _input(
           controller: _company,
-          label: 'Företagets namn',
-          hint: 'Till exempel Annas Taxi',
+          label: tr.signupScreenCompanyLabel,
+          hint: tr.signupScreenCompanyHint,
           icon: Icons.business_outlined,
           autofill: const [AutofillHints.organizationName],
           capitalization: TextCapitalization.words,
         ),
       ],
       SignupStep.phone => [
-        _question('Ditt mobilnummer'),
+        _question(tr.signupScreenPhoneQuestion),
         const SizedBox(height: 20),
         _input(
           controller: _phone,
-          label: 'Mobil',
+          label: tr.signupScreenPhoneLabel,
           hint: '070 123 45 67',
           icon: Icons.phone_outlined,
           keyboard: TextInputType.phone,
@@ -630,11 +631,11 @@ class SignupScreenState extends State<SignupScreen> {
         ),
       ],
       SignupStep.email => [
-        _question('Din e-post', help: 'Du loggar in med den.'),
+        _question(tr.signupScreenEmailQuestion, help: tr.signupScreenEmailHelp),
         const SizedBox(height: 20),
         _input(
           controller: _email,
-          label: 'E-post',
+          label: tr.signupScreenEmailLabel,
           hint: 'namn@gmail.com',
           icon: Icons.email_outlined,
           keyboard: TextInputType.emailAddress,
@@ -642,11 +643,11 @@ class SignupScreenState extends State<SignupScreen> {
         ),
       ],
       SignupStep.password => [
-        _question('Välj ett lösenord'),
+        _question(tr.signupScreenPasswordQuestion),
         const SizedBox(height: 20),
         _input(
           controller: _password,
-          label: 'Lösenord',
+          label: tr.signupScreenPasswordLabel,
           icon: Icons.lock_outline,
           obscure: _hidePassword,
           autofill: const [AutofillHints.newPassword],
@@ -657,7 +658,10 @@ class SignupScreenState extends State<SignupScreen> {
           ),
         ),
         const SizedBox(height: 12),
-        _Requirement(met: _password.text.length >= 8, text: 'Minst 8 tecken'),
+        _Requirement(
+          met: _password.text.length >= 8,
+          text: tr.signupScreenPasswordMin,
+        ),
       ],
       SignupStep.kind => const <Widget>[],
     };
@@ -674,9 +678,9 @@ class SignupScreenState extends State<SignupScreen> {
               borderRadius: BorderRadius.circular(12),
             ),
           ),
-          child: const Text(
-            'Logga in i stället',
-            style: TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+          child: Text(
+            tr.signupScreenLoginInstead,
+            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
           ),
         ),
       ],
@@ -694,7 +698,7 @@ class SignupScreenState extends State<SignupScreen> {
                 ),
               )
             : Text(
-                last ? 'Skapa kontot' : 'Nästa',
+                last ? tr.signupScreenCreateAccount : tr.signupScreenNext,
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
@@ -731,7 +735,7 @@ class SignupScreenState extends State<SignupScreen> {
           leading: widget.onBack == null && identity == null
               ? null
               : IconButton(
-                  tooltip: 'Tillbaka',
+                  tooltip: tr.signupScreenBack,
                   onPressed: _busy
                       ? null
                       : (identity != null ? _back : widget.onBack),

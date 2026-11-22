@@ -1,0 +1,198 @@
+{
+  "apiClientBaseUrlMissing": {
+    "sv": "API_BASE_URL är inte satt. Parkoppling och bilval kräver TaxiTips-backenden.",
+    "en": "API_BASE_URL is not set. Pairing and car selection need the TaxiTips backend.",
+    "ar": "لم يتم ضبط API_BASE_URL. يحتاج الاقتران واختيار السيارة إلى خادم TaxiTips.",
+    "description": "Utvecklarfel: servern är inte konfigurerad"
+  },
+  "apiClientDatabaseError": {
+    "sv": "Databasfel: {details}",
+    "en": "Database error: {details}",
+    "ar": "خطأ في قاعدة البيانات: {details}",
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "apiClientAuthError": {
+    "sv": "Auth-fel: {details}",
+    "en": "Auth error: {details}",
+    "ar": "خطأ في المصادقة: {details}",
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "apiClientNoValidSession": {
+    "sv": "Inloggningen gav ingen giltig session.",
+    "en": "The login did not give a valid session.",
+    "ar": "لم يعطِ تسجيل الدخول جلسة صالحة."
+  },
+  "apiClientNoDeviceKey": {
+    "sv": "Servern gav ingen enhetsnyckel.",
+    "en": "The server did not give a device key.",
+    "ar": "لم يرسل الخادم مفتاح الجهاز."
+  },
+  "apiClientCouldNotCreateAccount": {
+    "sv": "Kunde inte skapa konto",
+    "en": "Could not create the account",
+    "ar": "تعذّر إنشاء الحساب"
+  },
+  "apiClientAccountCreatedOffline": {
+    "sv": "Kontot är skapat, men vi nådde inte servern. Logga in när du har nät igen.",
+    "en": "The account is created, but we could not reach the server. Log in when you have a connection again.",
+    "ar": "تم إنشاء الحساب، لكن لم نتمكن من الوصول إلى الخادم. سجّل الدخول عندما يعود الاتصال."
+  },
+  "apiClientBankIdUnavailable": {
+    "sv": "BankID är inte tillgängligt just nu.",
+    "en": "BankID is not available right now.",
+    "ar": "BankID غير متاح الآن."
+  },
+  "apiClientLoginFailed": {
+    "sv": "Det gick inte att logga in. Försök igen.",
+    "en": "Could not log in. Try again.",
+    "ar": "تعذّر تسجيل الدخول. حاول مرة أخرى."
+  },
+  "apiClientLoginRequired": {
+    "sv": "Logga in för att fortsätta.",
+    "en": "Log in to continue.",
+    "ar": "سجّل الدخول للمتابعة."
+  },
+  "apiClientCannotDeleteAccount": {
+    "sv": "Det går inte att radera kontot just nu. Försök igen senare.",
+    "en": "The account cannot be deleted right now. Try again later.",
+    "ar": "لا يمكن حذف الحساب الآن. حاول مرة أخرى لاحقًا."
+  },
+  "apiClientNotLoggedIn": {
+    "sv": "Inte inloggad",
+    "en": "Not logged in",
+    "ar": "لم تسجّل الدخول"
+  },
+  "apiClientNoCompany": {
+    "sv": "Inget bolag",
+    "en": "No company",
+    "ar": "لا توجد شركة"
+  },
+  "apiClientSupportChatUnavailable": {
+    "sv": "Supportchatten är inte tillgänglig här.",
+    "en": "Support chat is not available here.",
+    "ar": "دردشة الدعم غير متاحة هنا."
+  },
+  "apiClientPhoneNotPaired": {
+    "sv": "Telefonen är inte parkopplad.",
+    "en": "The phone is not paired.",
+    "ar": "الهاتف غير مقترن."
+  },
+  "apiClientInvalidTransferCode": {
+    "sv": "Ogiltig byteskod",
+    "en": "Invalid transfer code",
+    "ar": "رمز النقل غير صالح"
+  },
+  "apiClientNoDevicePush": {
+    "sv": "Ingen enhet — logga in via backend för push",
+    "en": "No device — log in via the backend for push",
+    "ar": "لا يوجد جهاز — سجّل الدخول عبر الخادم لتلقي الإشعارات"
+  },
+  "apiClientOnDutyNeedsBackend": {
+    "sv": "I tjänst kräver den nya backenden",
+    "en": "On duty needs the new backend",
+    "ar": "يتطلب وضع \"في الخدمة\" الخادم الجديد"
+  },
+  "apiClientNotifyNeedsServer": {
+    "sv": "Notisvalen kräver TaxiTips-servern.",
+    "en": "The notification settings need the TaxiTips server.",
+    "ar": "تتطلب خيارات الإشعارات خادم TaxiTips."
+  },
+  "apiClientInvalidVerificationCode": {
+    "sv": "Verifieringskoden är ogiltig",
+    "en": "The verification code is invalid",
+    "ar": "رمز التحقق غير صالح"
+  },
+  "apiClientNoDevice": {
+    "sv": "Ingen enhet",
+    "en": "No device",
+    "ar": "لا يوجد جهاز"
+  },
+  "apiClientNoDeviceToName": {
+    "sv": "Ingen enhet att namnge.",
+    "en": "No device to name.",
+    "ar": "لا يوجد جهاز لتسميته."
+  },
+  "apiClientFavoritesNeedBackend": {
+    "sv": "Favoriter kräver Django-backenden",
+    "en": "Favorites need the Django backend",
+    "ar": "تتطلب المفضلة خادم Django"
+  },
+  "apiClientNotifyLinePausedLabel": {
+    "sv": "Hela linjen står stilla",
+    "en": "The whole line is at a standstill",
+    "ar": "الخط بالكامل متوقف"
+  },
+  "apiClientNotifyLinePausedShort": {
+    "sv": "Ingen trafik alls på linjen",
+    "en": "No traffic at all on the line",
+    "ar": "لا توجد حركة على الخط إطلاقًا"
+  },
+  "apiClientNotifyLinePausedHelp": {
+    "sv": "Störst chans att det finns folk som behöver taxi.",
+    "en": "The best chance that people need a taxi.",
+    "ar": "أكبر احتمال لوجود أشخاص يحتاجون إلى سيارة أجرة."
+  },
+  "apiClientNotifyVehicleCancelledLabel": {
+    "sv": "Enstaka avgång inställd",
+    "en": "A single departure cancelled",
+    "ar": "إلغاء رحلة واحدة"
+  },
+  "apiClientNotifyVehicleCancelledShort": {
+    "sv": "En avgång inställd, andra går som vanligt",
+    "en": "One departure cancelled, the others run as usual",
+    "ar": "إلغاء رحلة واحدة، والبقية تعمل كالمعتاد"
+  },
+  "apiClientNotifyVehicleCancelledHelp": {
+    "sv": "Färre påverkade, men kan ändå vara värt en titt.",
+    "en": "Fewer people affected, but may still be worth a look.",
+    "ar": "عدد أقل من المتأثرين، لكنه قد يستحق النظر."
+  },
+  "apiClientNotifyRoadAccidentLabel": {
+    "sv": "Olycka eller avstängd väg",
+    "en": "Accident or closed road",
+    "ar": "حادث أو طريق مغلق"
+  },
+  "apiClientNotifyRoadShort": {
+    "sv": "Vägtrafik",
+    "en": "Road traffic",
+    "ar": "حركة الطرق"
+  },
+  "apiClientNotifyRoadAccidentHelp": {
+    "sv": "Påverkar mest bilister redan på väg, men värt att veta om.",
+    "en": "Mostly affects drivers already on the road, but good to know.",
+    "ar": "يؤثر في الغالب على السائقين الموجودين على الطريق، لكن من المفيد معرفته."
+  },
+  "apiClientNotifyLineDelayedLabel": {
+    "sv": "Förseningar",
+    "en": "Delays",
+    "ar": "تأخيرات"
+  },
+  "apiClientNotifyLineDelayedShort": {
+    "sv": "Linjen kör, men försenad",
+    "en": "The line runs, but is delayed",
+    "ar": "الخط يعمل، لكنه متأخر"
+  },
+  "apiClientNotifyLineDelayedHelp": {
+    "sv": "Vanligtvis en svag signal -- av som standard.",
+    "en": "Usually a weak signal -- off by default.",
+    "ar": "عادةً إشارة ضعيفة -- متوقفة افتراضيًا."
+  },
+  "apiClientNotifyRoadWorkLabel": {
+    "sv": "Vägarbete eller köbildning",
+    "en": "Roadworks or queues",
+    "ar": "أعمال طرق أو ازدحام"
+  },
+  "apiClientNotifyRoadWorkHelp": {
+    "sv": "Sällan en taxisignal -- av som standard.",
+    "en": "Rarely a taxi signal -- off by default.",
+    "ar": "نادرًا ما تكون إشارة لسيارات الأجرة -- متوقفة افتراضيًا."
+  }
+}

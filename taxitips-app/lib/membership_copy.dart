@@ -16,27 +16,26 @@
 /// betalning -- se [membershipNotice].
 library;
 
+import 'l10n/l10n.dart';
 import 'signal_kinds.dart';
 
 /// En kategori eller funktion som provet inte omfattar.
-const kNotInTrial = 'Ingår inte i provet.';
+String get kNotInTrial => tr.membershipCopyNotInTrial;
 
 /// Vem som sköter medlemskapet. Ingen länk, inget pris, ingen knapp.
 /// Visas för förare och i låsta lägen — inte som köpuppmaning.
-const kMembershipOnWeb =
-    'Ditt företags administratör hanterar medlemskapet på webben.';
+String get kMembershipOnWeb => tr.membershipCopyOnWeb;
 
 /// Raden om fakturor och medlemskap när användaren inte är admin (ingen länk).
-const kInvoicesOnWeb =
-    'Fakturor och medlemskap hanteras av företagets administratör på webben.';
+String get kInvoicesOnWeb => tr.membershipCopyInvoicesOnWeb;
 
 /// Båda meningarna: det som visas där något är låst.
-const kNotInTrialNote = '$kNotInTrial $kMembershipOnWeb';
+String get kNotInTrialNote => '$kNotInTrial $kMembershipOnWeb';
 
 /// En kategori som ett beviljat medlemskap inte omfattar. Ett beviljande
 /// (fleet/grants.py) kan öppna bara vissa kategorier; det är inget prov, och
 /// "Ingår inte i provet" vore då fel. Servern kallar planen `grant`.
-const kNotInMembership = 'Ingår inte i ditt medlemskap.';
+String get kNotInMembership => tr.membershipCopyNotInMembership;
 
 /// Den korta låsraden efter serverns plan (`features.plan`). Okänd eller
 /// saknad plan = provet, som var den enda låsta planen före beviljandena.
@@ -49,16 +48,14 @@ String lockedNoteFor(Object? plan) =>
 
 /// Inställningarnas hänvisning för fakturor och medlemskap (förare / footer).
 /// Ingen länk, inget pris, ingen knapp -- bara var det sköts.
-const kBillingOnWeb =
-    'Fakturor och medlemskap hanteras av företagets administratör på webben.';
+String get kBillingOnWeb => tr.membershipCopyInvoicesOnWeb;
 
 /// Rubrik på admin-genvägen till kundportalen (Inställningar → Företaget).
 /// Formulerad som kontohantering, inte köp.
-const kPortalAccountTitle = 'Hantera företagskonto';
+String get kPortalAccountTitle => tr.membershipCopyPortalTitle;
 
 /// Underrad till [kPortalAccountTitle]. Inget om att köpa, prenumerera eller pris.
-const kPortalAccountSubtitle =
-    'Öppnar kundportalen på webben: bilar, fakturor och medlemmar.';
+String get kPortalAccountSubtitle => tr.membershipCopyPortalSubtitle;
 
 /// Skäl (`access.reason`, fleet/access.py) som handlar om betalning eller
 /// avtal. Deras serverstext visas inte; appen använder [membershipNotice].
@@ -75,10 +72,11 @@ const _billingReasons = {
 };
 
 /// Besked när provperioden är slut. Pekar på webben utan länk.
-const kTrialEndedNotice = 'Provperioden är slut. $kMembershipOnWeb';
+String get kTrialEndedNotice =>
+    '${tr.membershipCopyTrialEnded} $kMembershipOnWeb';
 
 /// Besked när medlemskapet är pausat (företaget eller kontot).
-const kPausedNotice = 'Medlemskapet är pausat. $kMembershipOnWeb';
+String get kPausedNotice => '${tr.membershipCopyPaused} $kMembershipOnWeb';
 
 /// Handlar skälet om medlemskap (prov slut, period slut, betalning, uppsagt)?
 bool isMembershipReason(String? reason) => _billingReasons.contains(reason);
@@ -89,17 +87,19 @@ bool isMembershipReason(String? reason) => _billingReasons.contains(reason);
 String membershipNotice(
   String? reason, {
   String? serverMessage,
-  String fallback = 'Åtkomsten är inte aktiv.',
+  String? fallback,
 }) {
   if (reason == 'trial_ended') return kTrialEndedNotice;
   if (reason == 'company_paused' || reason == 'account_paused') {
     return kPausedNotice;
   }
   if (_billingReasons.contains(reason)) {
-    return 'Medlemskapet är inte aktivt just nu. $kMembershipOnWeb';
+    return '${tr.membershipCopyNotActive} $kMembershipOnWeb';
   }
   final message = serverMessage?.trim() ?? '';
-  return message.isEmpty ? fallback : message;
+  return message.isEmpty
+      ? (fallback ?? tr.membershipCopyAccessNotActive)
+      : message;
 }
 
 /// Kategorin bakom en nyckel i serverns `features` (fleet/features.py).
@@ -110,8 +110,8 @@ SignalCategory? signalCategoryFromFeatureKey(Object? key) =>
 /// BankID vid registreringen: tre korta löften, inga långa meningar. Många
 /// förare läser inte mycket svenska. "Ingen bindning" måste stå kvar: BankID
 /// är inget avtal, och det ska synas direkt.
-const kBankIdPromises = [
-  'Inget kort',
-  'Ingen bindning',
-  'Inget företag behövs',
+List<String> get kBankIdPromises => [
+  tr.membershipCopyPromiseNoCard,
+  tr.membershipCopyPromiseNoBinding,
+  tr.membershipCopyPromiseNoCompany,
 ];

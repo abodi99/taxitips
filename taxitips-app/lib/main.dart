@@ -174,7 +174,7 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
         _showLoginError(
           (message != null && message.isNotEmpty)
               ? message
-              : 'Kontot är skapat men provet kunde inte starta. Kontakta TaxiTips.',
+              : tr.appMainTrialNotStarted,
         );
         return;
       }
@@ -431,7 +431,7 @@ class _TaxiPrognosAppState extends State<TaxiPrognosApp> {
                   onBack: _goShell,
                 ),
                 AppRoute.loginError => _LoginErrorScreen(
-                  message: _loginError ?? 'Något gick fel.',
+                  message: _loginError ?? tr.appMainSomethingWrong,
                   onRetry: () => unawaited(_afterLogin()),
                   onLogout: () => unawaited(_logoutToLogin()),
                 ),
@@ -524,17 +524,20 @@ class _LoginErrorScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                child: const Text(
-                  'Försök igen',
-                  style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800),
+                child: Text(
+                  tr.appMainTryAgain,
+                  style: const TextStyle(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w800,
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
               TextButton(
                 onPressed: onLogout,
-                child: const Text(
-                  'Logga ut',
-                  style: TextStyle(color: Colors.white),
+                child: Text(
+                  tr.appMainLogout,
+                  style: const TextStyle(color: Colors.white),
                 ),
               ),
             ],

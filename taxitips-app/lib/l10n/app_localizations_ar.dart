@@ -27,6 +27,232 @@ class AppLocalizationsAr extends AppLocalizations {
   String get alertFeedbackTitle => 'كيف كانت النتيجة؟';
 
   @override
+  String get apiClientAccountCreatedOffline =>
+      'تم إنشاء الحساب، لكن لم نتمكن من الوصول إلى الخادم. سجّل الدخول عندما يعود الاتصال.';
+
+  @override
+  String apiClientAuthError(String details) {
+    return 'خطأ في المصادقة: $details';
+  }
+
+  @override
+  String get apiClientBankIdUnavailable => 'BankID غير متاح الآن.';
+
+  @override
+  String get apiClientBaseUrlMissing =>
+      'لم يتم ضبط API_BASE_URL. يحتاج الاقتران واختيار السيارة إلى خادم TaxiTips.';
+
+  @override
+  String get apiClientCannotDeleteAccount =>
+      'لا يمكن حذف الحساب الآن. حاول مرة أخرى لاحقًا.';
+
+  @override
+  String get apiClientCouldNotCreateAccount => 'تعذّر إنشاء الحساب';
+
+  @override
+  String apiClientDatabaseError(String details) {
+    return 'خطأ في قاعدة البيانات: $details';
+  }
+
+  @override
+  String get apiClientFavoritesNeedBackend => 'تتطلب المفضلة خادم Django';
+
+  @override
+  String get apiClientInvalidTransferCode => 'رمز النقل غير صالح';
+
+  @override
+  String get apiClientInvalidVerificationCode => 'رمز التحقق غير صالح';
+
+  @override
+  String get apiClientLoginFailed => 'تعذّر تسجيل الدخول. حاول مرة أخرى.';
+
+  @override
+  String get apiClientLoginRequired => 'سجّل الدخول للمتابعة.';
+
+  @override
+  String get apiClientNoCompany => 'لا توجد شركة';
+
+  @override
+  String get apiClientNoDevice => 'لا يوجد جهاز';
+
+  @override
+  String get apiClientNoDeviceKey => 'لم يرسل الخادم مفتاح الجهاز.';
+
+  @override
+  String get apiClientNoDevicePush =>
+      'لا يوجد جهاز — سجّل الدخول عبر الخادم لتلقي الإشعارات';
+
+  @override
+  String get apiClientNoDeviceToName => 'لا يوجد جهاز لتسميته.';
+
+  @override
+  String get apiClientNoValidSession => 'لم يعطِ تسجيل الدخول جلسة صالحة.';
+
+  @override
+  String get apiClientNotLoggedIn => 'لم تسجّل الدخول';
+
+  @override
+  String get apiClientNotifyLineDelayedHelp =>
+      'عادةً إشارة ضعيفة -- متوقفة افتراضيًا.';
+
+  @override
+  String get apiClientNotifyLineDelayedLabel => 'تأخيرات';
+
+  @override
+  String get apiClientNotifyLineDelayedShort => 'الخط يعمل، لكنه متأخر';
+
+  @override
+  String get apiClientNotifyLinePausedHelp =>
+      'أكبر احتمال لوجود أشخاص يحتاجون إلى سيارة أجرة.';
+
+  @override
+  String get apiClientNotifyLinePausedLabel => 'الخط بالكامل متوقف';
+
+  @override
+  String get apiClientNotifyLinePausedShort => 'لا توجد حركة على الخط إطلاقًا';
+
+  @override
+  String get apiClientNotifyNeedsServer =>
+      'تتطلب خيارات الإشعارات خادم TaxiTips.';
+
+  @override
+  String get apiClientNotifyRoadAccidentHelp =>
+      'يؤثر في الغالب على السائقين الموجودين على الطريق، لكن من المفيد معرفته.';
+
+  @override
+  String get apiClientNotifyRoadAccidentLabel => 'حادث أو طريق مغلق';
+
+  @override
+  String get apiClientNotifyRoadShort => 'حركة الطرق';
+
+  @override
+  String get apiClientNotifyRoadWorkHelp =>
+      'نادرًا ما تكون إشارة لسيارات الأجرة -- متوقفة افتراضيًا.';
+
+  @override
+  String get apiClientNotifyRoadWorkLabel => 'أعمال طرق أو ازدحام';
+
+  @override
+  String get apiClientNotifyVehicleCancelledHelp =>
+      'عدد أقل من المتأثرين، لكنه قد يستحق النظر.';
+
+  @override
+  String get apiClientNotifyVehicleCancelledLabel => 'إلغاء رحلة واحدة';
+
+  @override
+  String get apiClientNotifyVehicleCancelledShort =>
+      'إلغاء رحلة واحدة، والبقية تعمل كالمعتاد';
+
+  @override
+  String get apiClientOnDutyNeedsBackend =>
+      'يتطلب وضع \"في الخدمة\" الخادم الجديد';
+
+  @override
+  String get apiClientPhoneNotPaired => 'الهاتف غير مقترن.';
+
+  @override
+  String get apiClientSupportChatUnavailable => 'دردشة الدعم غير متاحة هنا.';
+
+  @override
+  String get appMainLogout => 'تسجيل الخروج';
+
+  @override
+  String get appMainSomethingWrong => 'حدث خطأ ما.';
+
+  @override
+  String get appMainTrialNotStarted =>
+      'تم إنشاء الحساب لكن تعذّر بدء الفترة التجريبية. تواصل مع TaxiTips.';
+
+  @override
+  String get appMainTryAgain => 'حاول مرة أخرى';
+
+  @override
+  String get bankIdFlowAppNotFound =>
+      'لا نجد تطبيق BankID على هذا الهاتف. امسح الرمز باستخدام BankID على هاتف آخر.';
+
+  @override
+  String get bankIdFlowApproveInApp => 'وافق في تطبيق BankID ثم عد إلى هنا.';
+
+  @override
+  String get bankIdFlowBadEmail => 'البريد الإلكتروني غير صحيح.';
+
+  @override
+  String get bankIdFlowCancel => 'إلغاء';
+
+  @override
+  String get bankIdFlowChangeEmail => 'غيّر البريد الإلكتروني أيضاً';
+
+  @override
+  String get bankIdFlowFailed => 'فشل التحقق من الهوية. حاول مرة أخرى.';
+
+  @override
+  String bankIdFlowHello(String name) {
+    return 'مرحباً $name!';
+  }
+
+  @override
+  String get bankIdFlowHidePassword => 'إخفاء كلمة المرور';
+
+  @override
+  String get bankIdFlowNewEmail => 'بريد إلكتروني جديد';
+
+  @override
+  String get bankIdFlowNewPasswordTitle => 'كلمة مرور جديدة';
+
+  @override
+  String get bankIdFlowNoAccountHelp =>
+      'ليس لـ BankID الخاص بك حساب هنا.\n\nهل وصلتك دعوة من شركة التاكسي؟ اطلب منهم إرسال الدعوة مرة أخرى. ستصلك رسالة بريد تختار فيها كلمة مرور جديدة.\n\nليس لديك حساب؟ اضغط على «إنشاء حساب».';
+
+  @override
+  String get bankIdFlowNoAccountTitle => 'لا نجد حساباً';
+
+  @override
+  String get bankIdFlowNoResponse => 'BankID لا يستجيب الآن. حاول مرة أخرى.';
+
+  @override
+  String get bankIdFlowOk => 'حسناً';
+
+  @override
+  String get bankIdFlowOpenBankId => 'افتح BankID';
+
+  @override
+  String get bankIdFlowOtherPhone => 'BankID على هاتف آخر';
+
+  @override
+  String get bankIdFlowPasswordHelper => '8 أحرف على الأقل';
+
+  @override
+  String get bankIdFlowPasswordMin => 'كلمة المرور: 8 أحرف على الأقل.';
+
+  @override
+  String get bankIdFlowQrLabel => 'رمز QR لـ BankID';
+
+  @override
+  String get bankIdFlowSave => 'حفظ';
+
+  @override
+  String get bankIdFlowScanOnOther =>
+      'افتح BankID على هاتفك الآخر وامسح الرمز.';
+
+  @override
+  String get bankIdFlowShowPassword => 'إظهار كلمة المرور';
+
+  @override
+  String get bankIdFlowSomethingWrong => 'حدث خطأ ما. حاول مرة أخرى.';
+
+  @override
+  String get bankIdFlowThisPhone => 'BankID على هذا الهاتف';
+
+  @override
+  String get bankIdFlowTooLong => 'استغرق الأمر وقتاً طويلاً. حاول مرة أخرى.';
+
+  @override
+  String get bankIdFlowTryAgain => 'حاول مرة أخرى';
+
+  @override
+  String get bankIdFlowYourAccount => 'حسابك:';
+
+  @override
   String get categoryBarAll => 'الكل';
 
   @override
@@ -1439,6 +1665,133 @@ class AppLocalizationsAr extends AppLocalizations {
   String get languageTitle => 'اللغة';
 
   @override
+  String get loginScreenBack => 'رجوع';
+
+  @override
+  String get loginScreenCreateAccount => 'أنشئ حساباً مجانياً';
+
+  @override
+  String get loginScreenDeviceSwapLimit =>
+      'لقد غيّرت هاتفك مرة واحدة هذا الشهر. تواصل مع الدعم وسنساعدك على التغيير مرة أخرى.';
+
+  @override
+  String get loginScreenEmail => 'البريد الإلكتروني';
+
+  @override
+  String get loginScreenEmailNotConfirmed =>
+      'أكّد بريدك الإلكتروني أولاً. اضغط على الرابط في الرسالة.';
+
+  @override
+  String get loginScreenEnterCredentials =>
+      'اكتب بريدك الإلكتروني وكلمة المرور.';
+
+  @override
+  String get loginScreenFailed => 'تعذّر تسجيل الدخول. حاول مرة أخرى.';
+
+  @override
+  String get loginScreenForgotPassword => 'نسيت كلمة المرور؟';
+
+  @override
+  String get loginScreenHidePassword => 'إخفاء كلمة المرور';
+
+  @override
+  String get loginScreenIntro =>
+      'للسائقين والملّاك والمكتب. سائق جديد؟ اختر أولاً كلمة مرور من الرابط الموجود في الدعوة.';
+
+  @override
+  String get loginScreenNoAccount => 'ليس لديك حساب؟';
+
+  @override
+  String get loginScreenNoInvite =>
+      'هذا الحساب غير مرتبط بأي شركة تاكسي. اطلب من مديرك أن يدعوك، أو اضغط على «أنشئ حساباً مجانياً» أدناه.';
+
+  @override
+  String get loginScreenPassword => 'كلمة المرور';
+
+  @override
+  String get loginScreenRateLimit => 'انتظر دقيقة ثم حاول مرة أخرى.';
+
+  @override
+  String loginScreenRecovered(String email) {
+    return 'تم! سجّل الدخول بـ $email.';
+  }
+
+  @override
+  String get loginScreenShowPassword => 'إظهار كلمة المرور';
+
+  @override
+  String get loginScreenTagline =>
+      'اعرف أين يحتاج الناس إلى تاكسي،\nقبل أن يطول الطابور.';
+
+  @override
+  String get loginScreenTitle => 'تسجيل الدخول';
+
+  @override
+  String get loginScreenWithBankId => 'تسجيل الدخول بـ BankID';
+
+  @override
+  String get loginScreenWrongCredentials =>
+      'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
+
+  @override
+  String get membershipCopyAccessNotActive => 'الوصول غير مفعّل.';
+
+  @override
+  String get membershipCopyInvoicesOnWeb =>
+      'يتولى مسؤول الشركة الفواتير والعضوية على الويب.';
+
+  @override
+  String get membershipCopyNotActive => 'العضوية غير نشطة حاليًا.';
+
+  @override
+  String get membershipCopyNotInMembership => 'غير مشمول في عضويتك.';
+
+  @override
+  String get membershipCopyNotInTrial => 'غير مشمول في الفترة التجريبية.';
+
+  @override
+  String get membershipCopyOnWeb => 'يدير مسؤول شركتك العضوية على الويب.';
+
+  @override
+  String get membershipCopyPaused => 'العضوية متوقفة مؤقتًا.';
+
+  @override
+  String get membershipCopyPortalSubtitle =>
+      'يفتح بوابة العملاء على الويب: السيارات والفواتير والأعضاء.';
+
+  @override
+  String get membershipCopyPortalTitle => 'إدارة حساب الشركة';
+
+  @override
+  String get membershipCopyPromiseNoBinding => 'بلا التزام';
+
+  @override
+  String get membershipCopyPromiseNoCard => 'بلا بطاقة';
+
+  @override
+  String get membershipCopyPromiseNoCompany => 'لا حاجة إلى شركة';
+
+  @override
+  String get membershipCopyTrialEnded => 'انتهت الفترة التجريبية.';
+
+  @override
+  String get membershipCountyContinue => 'متابعة';
+
+  @override
+  String get membershipCountyLoadFailed =>
+      'تعذّر تحميل المقاطعات. اسحب للأسفل للمحاولة مرة أخرى.';
+
+  @override
+  String get membershipCountyRetry => 'حاول مرة أخرى';
+
+  @override
+  String get membershipCountySubtitle =>
+      'اختر المقاطعة التي تعمل فيها أكثر. يمكنك التغيير لاحقًا.';
+
+  @override
+  String get membershipCountyTitle => 'أين تريد أن تعمل؟';
+
+  @override
   String get netStatusGenericError => 'حدث خطأ ما. حاول مرة أخرى.';
 
   @override
@@ -1597,6 +1950,77 @@ class AppLocalizationsAr extends AppLocalizations {
   String offlineBannerUnreachable(String at) {
     return 'الخادم لا يستجيب – عرض النصائح من $at';
   }
+
+  @override
+  String get onboardingScreenClose => 'إغلاق';
+
+  @override
+  String get onboardingScreenColorsBody =>
+      'هذه تنبيهات وليست طلبات. أنت تقرّر إن كان الذهاب يستحق.';
+
+  @override
+  String get onboardingScreenColorsTitle => 'اللون يوضح مدى قوة التنبيه';
+
+  @override
+  String get onboardingScreenDone => 'تم';
+
+  @override
+  String get onboardingScreenFeedbackBody =>
+      'اضغط على تنبيه واختر «حصلت على راكب» أو «لا يوجد زبون». هكذا تصبح التنبيهات أفضل للجميع.';
+
+  @override
+  String get onboardingScreenFeedbackTitle => 'أخبرنا كيف سارت الأمور';
+
+  @override
+  String get onboardingScreenLevelMedium => 'متوسطة';
+
+  @override
+  String get onboardingScreenLevelMediumText => 'قد تكون هناك رحلات. تابعها.';
+
+  @override
+  String get onboardingScreenLevelStrong => 'قوية';
+
+  @override
+  String get onboardingScreenLevelStrongText => 'قد يحتاج كثيرون إلى تاكسي.';
+
+  @override
+  String get onboardingScreenLevelWeak => 'ضعيفة';
+
+  @override
+  String get onboardingScreenLevelWeakText =>
+      'جيد أن تعرف، نادراً ما يستحق الذهاب.';
+
+  @override
+  String get onboardingScreenNext => 'التالي';
+
+  @override
+  String get onboardingScreenNotifBody =>
+      'فعّل الإشعارات من الإعدادات. عندها سننبّهك عندما يظهر تنبيه قوي قربك.';
+
+  @override
+  String get onboardingScreenNotifTitle => 'الإشعارات';
+
+  @override
+  String onboardingScreenPageOf(int page, int total) {
+    return 'الصفحة $page من $total';
+  }
+
+  @override
+  String get onboardingScreenSkip => 'تخطّي';
+
+  @override
+  String get onboardingScreenStartBody =>
+      'أنشئ حساباً مجانياً، أو سجّل الدخول إن كان لديك حساب. بعدها سنعرّفك على التطبيق.';
+
+  @override
+  String get onboardingScreenStartTitle => 'ابدأ الآن';
+
+  @override
+  String get onboardingScreenTrafficBody =>
+      'قطارات ملغاة، ورحلات جوية متأخرة، وعبّارات، وفعاليات تنتهي. نُظهر أين قد يحتاج الناس إلى تاكسي. هذه تنبيهات وليست طلبات.';
+
+  @override
+  String get onboardingScreenTrafficTitle => 'تنبيهات من حركة المرور';
 
   @override
   String get settingsScreenAboutTips => 'حول التنبيهات';
@@ -2214,6 +2638,120 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String get signupScreenBack => 'رجوع';
+
+  @override
+  String get signupScreenCompanyHelp => 'لا حاجة إلى رقم المنظمة الآن.';
+
+  @override
+  String get signupScreenCompanyHint => 'مثلاً Annas Taxi';
+
+  @override
+  String get signupScreenCompanyLabel => 'اسم الشركة';
+
+  @override
+  String get signupScreenCompanyQuestion => 'ما اسم الشركة؟';
+
+  @override
+  String get signupScreenCompanyText => 'بسيارات أو سائقين تابعين لي.';
+
+  @override
+  String get signupScreenCompanyTitle => 'لدي شركة تاكسي';
+
+  @override
+  String get signupScreenContinueBankId => 'تابع باستخدام BankID';
+
+  @override
+  String get signupScreenCreateAccount => 'أنشئ الحساب';
+
+  @override
+  String get signupScreenDateInvalid =>
+      'الرقم الشخصي السويدي يحتوي على تاريخ غير موجود. تحقق من الرقم.';
+
+  @override
+  String get signupScreenEmailHelp => 'ستسجّل الدخول به.';
+
+  @override
+  String get signupScreenEmailLabel => 'البريد الإلكتروني';
+
+  @override
+  String get signupScreenEmailQuestion => 'بريدك الإلكتروني';
+
+  @override
+  String get signupScreenHaveAccount => 'هل لديك حساب بالفعل؟ سجّل الدخول';
+
+  @override
+  String get signupScreenKindQuestion => 'كيف تعمل في القيادة؟';
+
+  @override
+  String signupScreenKindQuestionNamed(String name) {
+    return 'مرحباً $name! كيف تعمل في القيادة؟';
+  }
+
+  @override
+  String get signupScreenLoginInstead => 'سجّل الدخول بدلاً من ذلك';
+
+  @override
+  String get signupScreenNext => 'التالي';
+
+  @override
+  String get signupScreenNotSure => 'غير متأكد؟ اختر «أقود بمفردي».';
+
+  @override
+  String get signupScreenPasswordLabel => 'كلمة المرور';
+
+  @override
+  String get signupScreenPasswordMin => '8 أحرف على الأقل';
+
+  @override
+  String get signupScreenPasswordQuestion => 'اختر كلمة مرور';
+
+  @override
+  String get signupScreenPhoneLabel => 'الهاتف المحمول';
+
+  @override
+  String get signupScreenPhoneQuestion => 'رقم هاتفك المحمول';
+
+  @override
+  String get signupScreenProblemChoose => 'اختر أحد الخيارات.';
+
+  @override
+  String get signupScreenProblemCompany => 'اكتب اسم الشركة.';
+
+  @override
+  String get signupScreenProblemEmail =>
+      'لا يبدو هذا عنوان بريد إلكتروني. اكتب مثلاً name@gmail.com.';
+
+  @override
+  String get signupScreenProblemPassword =>
+      'كلمة المرور تحتاج 8 أحرف على الأقل.';
+
+  @override
+  String get signupScreenProblemPhone =>
+      'لا يبدو هذا رقم هاتف محمول. اكتب مثلاً 070 123 45 67.';
+
+  @override
+  String get signupScreenSoloText => 'لا تحتاج إلى شركة.';
+
+  @override
+  String get signupScreenSoloTitle => 'أقود بمفردي';
+
+  @override
+  String get signupScreenSomethingWrong => 'حدث خطأ ما. حاول مرة أخرى.';
+
+  @override
+  String signupScreenStepOf(int n, int total) {
+    return 'الخطوة $n من $total';
+  }
+
+  @override
+  String get signupScreenTitle => 'جرّب مجاناً لمدة شهر';
+
+  @override
+  String get signupScreenUnder18 =>
+      'يجب أن يكون مسجّل الشركة الفردية قد بلغ 18 عاماً. تحقق من الرقم.';
+
+  @override
   String get supportChatEmptyBody => 'اكتب سؤالك أدناه. سيصلك إشعار عندما نرد.';
 
   @override
@@ -2424,6 +2962,197 @@ class AppLocalizationsAr extends AppLocalizations {
   String get tipSheetUnsave => 'إزالة من المحفوظات';
 
   @override
+  String get trialWelcomeAllIncluded => 'كل شيء مشمول حاليًا.';
+
+  @override
+  String get trialWelcomeClose => 'إغلاق';
+
+  @override
+  String get trialWelcomeColorNote =>
+      'يدل اللون على قوة الإشارة. الإشارة القوية تعني أن كثيرين على الأرجح يحتاجون إلى سيارة أجرة.';
+
+  @override
+  String get trialWelcomeCostsNothing => 'التجربة لا تكلّف شيئًا.';
+
+  @override
+  String trialWelcomeDate(int day, String month) {
+    String _temp0 = intl.Intl.selectLogic(month, {
+      '1': 'يناير',
+      '2': 'فبراير',
+      '3': 'مارس',
+      '4': 'أبريل',
+      '5': 'مايو',
+      '6': 'يونيو',
+      '7': 'يوليو',
+      '8': 'أغسطس',
+      '9': 'سبتمبر',
+      '10': 'أكتوبر',
+      '11': 'نوفمبر',
+      '12': 'ديسمبر',
+      'other': '',
+    });
+    return '$day $_temp0';
+  }
+
+  @override
+  String get trialWelcomeDone => 'تم';
+
+  @override
+  String trialWelcomeFreeDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'مجاني لمدة $days يوم.',
+      many: 'مجاني لمدة $days يومًا.',
+      few: 'مجاني لمدة $days أيام.',
+      two: 'مجاني لمدة يومين.',
+      one: 'مجاني لمدة يوم واحد.',
+      zero: 'مجاني لمدة $days يوم.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get trialWelcomeFreeToTry => 'مجاني للتجربة.';
+
+  @override
+  String trialWelcomeFreeUntil(String date) {
+    return 'مجاني حتى $date.';
+  }
+
+  @override
+  String get trialWelcomeIncludedHeading => 'مشمول في الفترة التجريبية';
+
+  @override
+  String get trialWelcomeIncludedTitle => 'ما المشمول في الفترة التجريبية؟';
+
+  @override
+  String get trialWelcomeIncludedUnknown =>
+      'ما هو مشمول في الفترة التجريبية تراه في التطبيق. وما ليس مشمولًا عليه قفل.';
+
+  @override
+  String get trialWelcomeLineEvent => 'فعاليات تنتهي: مباراة أو حفلة أو غيرها.';
+
+  @override
+  String get trialWelcomeLineFerry => 'عبّارات ترسو في الميناء.';
+
+  @override
+  String get trialWelcomeLineFlight =>
+      'رحلات جوية متأخرة، أو عند هبوط عدد كبير من الطائرات.';
+
+  @override
+  String get trialWelcomeLineRoad => 'حوادث سير توقف الحركة.';
+
+  @override
+  String get trialWelcomeLineTransit =>
+      'قطارات وحافلات متأخرة أو ملغاة. آخر رحلة.';
+
+  @override
+  String trialWelcomeNeedsMembership(String onWeb) {
+    return 'هذا يتطلب عضوية. $onWeb';
+  }
+
+  @override
+  String get trialWelcomeNext => 'التالي';
+
+  @override
+  String get trialWelcomeOneSeat =>
+      'يمكنك الحصول على مكان واحد في الفترة التجريبية، مع مقاطعة واحدة.';
+
+  @override
+  String trialWelcomePageOf(int page, int total) {
+    return 'الصفحة $page من $total';
+  }
+
+  @override
+  String get trialWelcomeReadyTitle => 'تم! أنت جاهز';
+
+  @override
+  String trialWelcomeSeats(int limit) {
+    String _temp0 = intl.Intl.pluralLogic(
+      limit,
+      locale: localeName,
+      other: 'يمكنك الحصول على ما يصل إلى $limit مكان في الفترة التجريبية.',
+      many: 'يمكنك الحصول على ما يصل إلى $limit مكانًا في الفترة التجريبية.',
+      few: 'يمكنك الحصول على ما يصل إلى $limit أماكن في الفترة التجريبية.',
+      two: 'يمكنك الحصول على ما يصل إلى مكانين في الفترة التجريبية.',
+      one: 'يمكنك الحصول على مكان واحد في الفترة التجريبية.',
+      zero: 'يمكنك الحصول على $limit مكان في الفترة التجريبية.',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get trialWelcomeShowTips => 'اعرض التنبيهات';
+
+  @override
+  String get trialWelcomeSkip => 'تخطَّ';
+
+  @override
+  String get trialWelcomeStep1Text =>
+      'افتح الإعدادات واضغط على مقاطعاتك. المقاطعة تحدد التنبيهات التي تصلك.';
+
+  @override
+  String get trialWelcomeStep1Title => 'غيّر المقاطعة';
+
+  @override
+  String get trialWelcomeStep2Text =>
+      'يرسل مسؤول الشركة الدعوة عبر الويب وليس من التطبيق. يصل السائق بريد إلكتروني، ويختار كلمة مرور، ثم يسجّل الدخول إلى التطبيق بالبريد الإلكتروني وكلمة المرور.';
+
+  @override
+  String get trialWelcomeStep2Title =>
+      'هل لديك شركة سيارات أجرة؟ ادعُ السائقين عبر الويب';
+
+  @override
+  String get trialWelcomeStepsTitle => 'كيف تبدأ';
+
+  @override
+  String trialWelcomeTrialEnded(String onWeb) {
+    return 'انتهت الفترة التجريبية. $onWeb';
+  }
+
+  @override
+  String trialWelcomeTrialRunning(String date) {
+    return 'الفترة التجريبية جارية. وهي سارية حتى $date.';
+  }
+
+  @override
+  String get trialWelcomeTrialStarts =>
+      'تبدأ الفترة التجريبية عندما يسجّل أول سائق الدخول.';
+
+  @override
+  String get trialWelcomeTrialStartsPending =>
+      'تبدأ الفترة التجريبية عندما يسجّل أول سائق الدخول. حتى ذلك الحين لا يمر أي وقت.';
+
+  @override
+  String trialWelcomeTrialTitleDays(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: 'أنت تجرّب مجانًا لمدة $days يوم',
+      many: 'أنت تجرّب مجانًا لمدة $days يومًا',
+      few: 'أنت تجرّب مجانًا لمدة $days أيام',
+      two: 'أنت تجرّب مجانًا لمدة يومين',
+      one: 'أنت تجرّب مجانًا لمدة يوم واحد',
+      zero: 'أنت تجرّب مجانًا لمدة $days يوم',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get trialWelcomeTrialTitleNoDays => 'أنت تجرّب مجانًا';
+
+  @override
+  String get trialWelcomeWatching => 'نراقب';
+
+  @override
+  String get trialWelcomeWhatBody =>
+      'يعرض Taxi Tips الأماكن التي قد يحتاج فيها الناس إلى سيارة أجرة الآن. هذه اقتراحات وليست وعودًا. أنت من يقرر إن كان الذهاب يستحق.';
+
+  @override
+  String get trialWelcomeWhatTitle => 'مرحبًا بك في Taxi Tips';
+
+  @override
   String get vehicleSessionAnotherPhone => 'هاتف آخر';
 
   @override
@@ -2490,4 +3219,19 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get vehicleSessionYouDriveThis => 'أنت تقود هذه السيارة';
+
+  @override
+  String get welcomeScreenBrowserFailed => 'تعذّر فتح المتصفح';
+
+  @override
+  String get welcomeScreenCreateAccount => 'أنشئ حساباً مجانياً';
+
+  @override
+  String get welcomeScreenHeadline => 'اعرف أين يحتاج الناس إلى تاكسي';
+
+  @override
+  String get welcomeScreenLogin => 'تسجيل الدخول';
+
+  @override
+  String get welcomeScreenSeeDemo => 'شاهد العرض التجريبي على الويب';
 }

@@ -6,6 +6,101 @@
   "alertFeedbackSaveFailed": "Kunde inte spara svaret. Försök igen.",
   "alertFeedbackThanks": "Tack!",
   "alertFeedbackTitle": "Hur gick det?",
+  "apiClientAccountCreatedOffline": "Kontot är skapat, men vi nådde inte servern. Logga in när du har nät igen.",
+  "apiClientAuthError": "Auth-fel: {details}",
+  "@apiClientAuthError": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "apiClientBankIdUnavailable": "BankID är inte tillgängligt just nu.",
+  "apiClientBaseUrlMissing": "API_BASE_URL är inte satt. Parkoppling och bilval kräver TaxiTips-backenden.",
+  "@apiClientBaseUrlMissing": {
+    "description": "Utvecklarfel: servern är inte konfigurerad"
+  },
+  "apiClientCannotDeleteAccount": "Det går inte att radera kontot just nu. Försök igen senare.",
+  "apiClientCouldNotCreateAccount": "Kunde inte skapa konto",
+  "apiClientDatabaseError": "Databasfel: {details}",
+  "@apiClientDatabaseError": {
+    "placeholders": {
+      "details": {
+        "type": "String"
+      }
+    }
+  },
+  "apiClientFavoritesNeedBackend": "Favoriter kräver Django-backenden",
+  "apiClientInvalidTransferCode": "Ogiltig byteskod",
+  "apiClientInvalidVerificationCode": "Verifieringskoden är ogiltig",
+  "apiClientLoginFailed": "Det gick inte att logga in. Försök igen.",
+  "apiClientLoginRequired": "Logga in för att fortsätta.",
+  "apiClientNoCompany": "Inget bolag",
+  "apiClientNoDevice": "Ingen enhet",
+  "apiClientNoDeviceKey": "Servern gav ingen enhetsnyckel.",
+  "apiClientNoDevicePush": "Ingen enhet — logga in via backend för push",
+  "apiClientNoDeviceToName": "Ingen enhet att namnge.",
+  "apiClientNoValidSession": "Inloggningen gav ingen giltig session.",
+  "apiClientNotLoggedIn": "Inte inloggad",
+  "apiClientNotifyLineDelayedHelp": "Vanligtvis en svag signal -- av som standard.",
+  "apiClientNotifyLineDelayedLabel": "Förseningar",
+  "apiClientNotifyLineDelayedShort": "Linjen kör, men försenad",
+  "apiClientNotifyLinePausedHelp": "Störst chans att det finns folk som behöver taxi.",
+  "apiClientNotifyLinePausedLabel": "Hela linjen står stilla",
+  "apiClientNotifyLinePausedShort": "Ingen trafik alls på linjen",
+  "apiClientNotifyNeedsServer": "Notisvalen kräver TaxiTips-servern.",
+  "apiClientNotifyRoadAccidentHelp": "Påverkar mest bilister redan på väg, men värt att veta om.",
+  "apiClientNotifyRoadAccidentLabel": "Olycka eller avstängd väg",
+  "apiClientNotifyRoadShort": "Vägtrafik",
+  "apiClientNotifyRoadWorkHelp": "Sällan en taxisignal -- av som standard.",
+  "apiClientNotifyRoadWorkLabel": "Vägarbete eller köbildning",
+  "apiClientNotifyVehicleCancelledHelp": "Färre påverkade, men kan ändå vara värt en titt.",
+  "apiClientNotifyVehicleCancelledLabel": "Enstaka avgång inställd",
+  "apiClientNotifyVehicleCancelledShort": "En avgång inställd, andra går som vanligt",
+  "apiClientOnDutyNeedsBackend": "I tjänst kräver den nya backenden",
+  "apiClientPhoneNotPaired": "Telefonen är inte parkopplad.",
+  "apiClientSupportChatUnavailable": "Supportchatten är inte tillgänglig här.",
+  "appMainLogout": "Logga ut",
+  "appMainSomethingWrong": "Något gick fel.",
+  "appMainTrialNotStarted": "Kontot är skapat men provet kunde inte starta. Kontakta TaxiTips.",
+  "appMainTryAgain": "Försök igen",
+  "bankIdFlowAppNotFound": "Vi hittar inte BankID-appen på den här telefonen. Skanna koden med BankID på en annan telefon.",
+  "bankIdFlowApproveInApp": "Godkänn i BankID-appen. Kom sedan tillbaka hit.",
+  "bankIdFlowBadEmail": "Fel e-post.",
+  "bankIdFlowCancel": "Avbryt",
+  "bankIdFlowChangeEmail": "Byt e-post också",
+  "bankIdFlowFailed": "Legitimeringen misslyckades. Försök igen.",
+  "bankIdFlowHello": "Hej {name}!",
+  "@bankIdFlowHello": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "bankIdFlowHidePassword": "Dölj lösenord",
+  "bankIdFlowNewEmail": "Ny e-post",
+  "bankIdFlowNewPasswordTitle": "Nytt lösenord",
+  "@bankIdFlowNewPasswordTitle": {
+    "description": "Dialogrubrik (utan namn) och fältetikett"
+  },
+  "bankIdFlowNoAccountHelp": "Ditt BankID har inget konto här.\n\nFick du en inbjudan från ditt taxibolag? Be dem skicka inbjudan igen. Då får du ett mejl där du väljer ett nytt lösenord.\n\nHar du inget konto? Tryck på Skapa konto.",
+  "bankIdFlowNoAccountTitle": "Vi hittar inget konto",
+  "bankIdFlowNoResponse": "BankID svarar inte just nu. Försök igen.",
+  "bankIdFlowOk": "OK",
+  "bankIdFlowOpenBankId": "Öppna BankID",
+  "bankIdFlowOtherPhone": "BankID på en annan telefon",
+  "bankIdFlowPasswordHelper": "Minst 8 tecken",
+  "bankIdFlowPasswordMin": "Lösenordet: minst 8 tecken.",
+  "bankIdFlowQrLabel": "QR-kod för BankID",
+  "bankIdFlowSave": "Spara",
+  "bankIdFlowScanOnOther": "Öppna BankID på din andra telefon och skanna koden.",
+  "bankIdFlowShowPassword": "Visa lösenord",
+  "bankIdFlowSomethingWrong": "Något gick fel. Försök igen.",
+  "bankIdFlowThisPhone": "BankID på den här telefonen",
+  "bankIdFlowTooLong": "Det tog för lång tid. Försök igen.",
+  "bankIdFlowTryAgain": "Försök igen",
+  "bankIdFlowYourAccount": "Ditt konto:",
   "categoryBarAll": "Alla",
   "categoryBarSaved": "Sparat",
   "companySettingsActiveTitle": "Aktivt",
@@ -1020,6 +1115,57 @@
   "@languageTitle": {
     "description": "Rubrik för språkvalet i inställningarna och i väljaren"
   },
+  "loginScreenBack": "Tillbaka",
+  "loginScreenCreateAccount": "Skapa konto gratis",
+  "loginScreenDeviceSwapLimit": "Du har bytt telefon en gång den här månaden. Kontakta support så hjälper vi dig byta igen.",
+  "loginScreenEmail": "E-post",
+  "loginScreenEmailNotConfirmed": "Bekräfta din e-post först. Tryck på länken i mejlet.",
+  "loginScreenEnterCredentials": "Skriv din e-post och ditt lösenord.",
+  "loginScreenFailed": "Det gick inte att logga in. Försök igen.",
+  "loginScreenForgotPassword": "Glömt lösenord?",
+  "loginScreenHidePassword": "Dölj lösenord",
+  "loginScreenIntro": "För förare, ägare och kontor. Ny förare? Välj först ett lösenord med länken i inbjudan.",
+  "loginScreenNoAccount": "Inget konto?",
+  "loginScreenNoInvite": "Kontot är inte kopplat till något taxibolag. Be din chef bjuda in dig, eller tryck på Skapa konto gratis nedan.",
+  "loginScreenPassword": "Lösenord",
+  "loginScreenRateLimit": "Vänta en minut och försök igen.",
+  "loginScreenRecovered": "Klart! Logga in med {email}.",
+  "@loginScreenRecovered": {
+    "placeholders": {
+      "email": {
+        "type": "String"
+      }
+    }
+  },
+  "loginScreenShowPassword": "Visa lösenord",
+  "loginScreenTagline": "Se var folk behöver taxi,\ninnan kön växer.",
+  "@loginScreenTagline": {
+    "description": "Rubrik under loggan överst på inloggningen"
+  },
+  "loginScreenTitle": "Logga in",
+  "@loginScreenTitle": {
+    "description": "Rubrik och knapptext på inloggningen"
+  },
+  "loginScreenWithBankId": "Logga in med BankID",
+  "loginScreenWrongCredentials": "Fel e-post eller lösenord.",
+  "membershipCopyAccessNotActive": "Åtkomsten är inte aktiv.",
+  "membershipCopyInvoicesOnWeb": "Fakturor och medlemskap hanteras av företagets administratör på webben.",
+  "membershipCopyNotActive": "Medlemskapet är inte aktivt just nu.",
+  "membershipCopyNotInMembership": "Ingår inte i ditt medlemskap.",
+  "membershipCopyNotInTrial": "Ingår inte i provet.",
+  "membershipCopyOnWeb": "Ditt företags administratör hanterar medlemskapet på webben.",
+  "membershipCopyPaused": "Medlemskapet är pausat.",
+  "membershipCopyPortalSubtitle": "Öppnar kundportalen på webben: bilar, fakturor och medlemmar.",
+  "membershipCopyPortalTitle": "Hantera företagskonto",
+  "membershipCopyPromiseNoBinding": "Ingen bindning",
+  "membershipCopyPromiseNoCard": "Inget kort",
+  "membershipCopyPromiseNoCompany": "Inget företag behövs",
+  "membershipCopyTrialEnded": "Provperioden är slut.",
+  "membershipCountyContinue": "Fortsätt",
+  "membershipCountyLoadFailed": "Kunde inte hämta länen. Dra ner för att försöka igen.",
+  "membershipCountyRetry": "Försök igen",
+  "membershipCountySubtitle": "Välj länet där du kör mest. Du kan byta senare.",
+  "membershipCountyTitle": "Var vill du köra?",
   "netStatusGenericError": "Något gick fel. Försök igen.",
   "netStatusOffline": "Ingen internetanslutning",
   "netStatusTimeout": "Dålig uppkoppling. Försök igen.",
@@ -1135,6 +1281,40 @@
       }
     }
   },
+  "onboardingScreenClose": "Stäng",
+  "onboardingScreenColorsBody": "Det är tips, inte beställningar. Du avgör själv om det är värt att åka.",
+  "onboardingScreenColorsTitle": "Färgen visar hur starkt tipset är",
+  "onboardingScreenDone": "Klar",
+  "onboardingScreenFeedbackBody": "Tryck på ett tips och välj Fick körning eller Ingen kund. Då blir tipsen bättre för alla.",
+  "onboardingScreenFeedbackTitle": "Säg hur det gick",
+  "onboardingScreenLevelMedium": "Medel",
+  "onboardingScreenLevelMediumText": "Kan bli körningar. Håll koll.",
+  "onboardingScreenLevelStrong": "Stark",
+  "onboardingScreenLevelStrongText": "Många kan behöva taxi.",
+  "onboardingScreenLevelWeak": "Svag",
+  "onboardingScreenLevelWeakText": "Bra att veta, sällan värt att åka.",
+  "onboardingScreenNext": "Nästa",
+  "onboardingScreenNotifBody": "Slå på notiser under Inställningar. Då säger vi till när ett starkt tips dyker upp nära dig.",
+  "onboardingScreenNotifTitle": "Notiser",
+  "onboardingScreenPageOf": "Sida {page} av {total}",
+  "@onboardingScreenPageOf": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "onboardingScreenSkip": "Hoppa över",
+  "onboardingScreenStartBody": "Skapa ett konto gratis, eller logga in om du redan har ett. Sedan visar vi dig runt i appen.",
+  "onboardingScreenStartTitle": "Kom igång",
+  "@onboardingScreenStartTitle": {
+    "description": "Rubrik på sista sidan och knapptext"
+  },
+  "onboardingScreenTrafficBody": "Inställda tåg, sena flyg, färjor och event som slutar. Vi visar var folk kan behöva taxi. Det är tips, inte beställningar.",
+  "onboardingScreenTrafficTitle": "Tips från trafiken",
   "settingsScreenAboutTips": "Om tipsen",
   "settingsScreenAccountClosed": "Kontot är avslutat.",
   "settingsScreenAccountDescription": "Logga ut om du slutar köra eller byter telefon.",
@@ -1519,6 +1699,58 @@
       }
     }
   },
+  "signupScreenBack": "Tillbaka",
+  "signupScreenCompanyHelp": "Organisationsnummer behövs inte nu.",
+  "signupScreenCompanyHint": "Till exempel Annas Taxi",
+  "signupScreenCompanyLabel": "Företagets namn",
+  "signupScreenCompanyQuestion": "Vad heter företaget?",
+  "signupScreenCompanyText": "Med egna bilar eller förare.",
+  "signupScreenCompanyTitle": "Jag har ett taxibolag",
+  "signupScreenContinueBankId": "Fortsätt med BankID",
+  "signupScreenCreateAccount": "Skapa kontot",
+  "signupScreenDateInvalid": "Personnumret har ett datum som inte finns. Kontrollera numret.",
+  "signupScreenEmailHelp": "Du loggar in med den.",
+  "signupScreenEmailLabel": "E-post",
+  "signupScreenEmailQuestion": "Din e-post",
+  "signupScreenHaveAccount": "Har du redan ett konto? Logga in",
+  "signupScreenKindQuestion": "Hur kör du?",
+  "signupScreenKindQuestionNamed": "Hej {name}! Hur kör du?",
+  "@signupScreenKindQuestionNamed": {
+    "placeholders": {
+      "name": {
+        "type": "String"
+      }
+    }
+  },
+  "signupScreenLoginInstead": "Logga in i stället",
+  "signupScreenNext": "Nästa",
+  "signupScreenNotSure": "Inte säker? Välj \"Jag kör själv\".",
+  "signupScreenPasswordLabel": "Lösenord",
+  "signupScreenPasswordMin": "Minst 8 tecken",
+  "signupScreenPasswordQuestion": "Välj ett lösenord",
+  "signupScreenPhoneLabel": "Mobil",
+  "signupScreenPhoneQuestion": "Ditt mobilnummer",
+  "signupScreenProblemChoose": "Välj ett av alternativen.",
+  "signupScreenProblemCompany": "Skriv företagets namn.",
+  "signupScreenProblemEmail": "Det ser inte ut som en e-postadress. Skriv till exempel namn@gmail.com.",
+  "signupScreenProblemPassword": "Lösenordet behöver minst 8 tecken.",
+  "signupScreenProblemPhone": "Det ser inte ut som ett mobilnummer. Skriv till exempel 070 123 45 67.",
+  "signupScreenSoloText": "Du behöver inget företag.",
+  "signupScreenSoloTitle": "Jag kör själv",
+  "signupScreenSomethingWrong": "Något gick fel. Försök igen.",
+  "signupScreenStepOf": "Steg {n} av {total}",
+  "@signupScreenStepOf": {
+    "placeholders": {
+      "n": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "signupScreenTitle": "Prova gratis i en månad",
+  "signupScreenUnder18": "En enskild firma registreras av någon som fyllt 18. Kontrollera numret.",
   "supportChatEmptyBody": "Skriv din fråga nedan. Du får en notis när vi svarat.",
   "supportChatEmptyTitle": "Hur kan vi hjälpa till?",
   "supportChatHint": "Skriv ett meddelande",
@@ -1648,6 +1880,115 @@
   "tipSheetStatusStopped": "STOPP I TRAFIKEN",
   "tipSheetTaxiPaid": "Taxi betalas",
   "tipSheetUnsave": "Ta bort sparat",
+  "trialWelcomeAllIncluded": "Allt ingår just nu.",
+  "trialWelcomeClose": "Stäng",
+  "trialWelcomeColorNote": "Färgen visar hur stark signalen är. En stark signal betyder att många sannolikt behöver taxi.",
+  "trialWelcomeCostsNothing": "Det kostar inget att prova.",
+  "trialWelcomeDate": "{day} {month, select, 1{januari} 2{februari} 3{mars} 4{april} 5{maj} 6{juni} 7{juli} 8{augusti} 9{september} 10{oktober} 11{november} 12{december} other{}}",
+  "@trialWelcomeDate": {
+    "description": "Datum utan år, t.ex. \"29 december\"",
+    "placeholders": {
+      "day": {
+        "type": "int"
+      },
+      "month": {
+        "type": "String"
+      }
+    }
+  },
+  "trialWelcomeDone": "Klar",
+  "trialWelcomeFreeDays": "{days, plural, one{Gratis i {days} dag.} other{Gratis i {days} dagar.}}",
+  "@trialWelcomeFreeDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "trialWelcomeFreeToTry": "Gratis att prova.",
+  "trialWelcomeFreeUntil": "Gratis till {date}.",
+  "@trialWelcomeFreeUntil": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trialWelcomeIncludedHeading": "Ingår i provet",
+  "trialWelcomeIncludedTitle": "Vad ingår i provet?",
+  "trialWelcomeIncludedUnknown": "Det som ingår i provet ser du i appen. Det som inte ingår har ett lås.",
+  "trialWelcomeLineEvent": "Event som slutar: match, konsert eller annat.",
+  "trialWelcomeLineFerry": "Färjor som lägger till i hamnen.",
+  "trialWelcomeLineFlight": "Flyg som är sena, eller när många flyg landar.",
+  "trialWelcomeLineRoad": "Trafikolyckor som stoppar trafiken.",
+  "trialWelcomeLineTransit": "Tåg och buss som är sena eller inställda. Sista avgången.",
+  "trialWelcomeNeedsMembership": "Det kräver medlemskap. {onWeb}",
+  "@trialWelcomeNeedsMembership": {
+    "placeholders": {
+      "onWeb": {
+        "type": "String"
+      }
+    }
+  },
+  "trialWelcomeNext": "Nästa",
+  "trialWelcomeOneSeat": "Du kan ha 1 plats i provet, med ett län.",
+  "trialWelcomePageOf": "Sida {page} av {total}",
+  "@trialWelcomePageOf": {
+    "placeholders": {
+      "page": {
+        "type": "int"
+      },
+      "total": {
+        "type": "int"
+      }
+    }
+  },
+  "trialWelcomeReadyTitle": "Klart! Du är igång",
+  "trialWelcomeSeats": "{limit, plural, other{Du kan ha upp till {limit} platser i provet.}}",
+  "@trialWelcomeSeats": {
+    "placeholders": {
+      "limit": {
+        "type": "int"
+      }
+    }
+  },
+  "trialWelcomeShowTips": "Visa tipsen",
+  "trialWelcomeSkip": "Hoppa över",
+  "trialWelcomeStep1Text": "Öppna Inställningar och tryck på Dina län. Länet styr vilka tips du får.",
+  "trialWelcomeStep1Title": "Byt län",
+  "trialWelcomeStep2Text": "Inbjudan skickas av företagets administratör på webben, inte från appen. Föraren får ett mejl, väljer ett lösenord och loggar in i appen med e-post och lösenord.",
+  "trialWelcomeStep2Title": "Har du ett taxibolag? Bjud in förare på webben",
+  "trialWelcomeStepsTitle": "Så kommer du igång",
+  "trialWelcomeTrialEnded": "Provet är slut. {onWeb}",
+  "@trialWelcomeTrialEnded": {
+    "placeholders": {
+      "onWeb": {
+        "type": "String"
+      }
+    }
+  },
+  "trialWelcomeTrialRunning": "Provet pågår. Det gäller till {date}.",
+  "@trialWelcomeTrialRunning": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      }
+    }
+  },
+  "trialWelcomeTrialStarts": "Provet startar när första föraren loggar in.",
+  "trialWelcomeTrialStartsPending": "Provet startar när första föraren loggar in. Tills dess går ingen tid.",
+  "trialWelcomeTrialTitleDays": "{days, plural, one{Du provar gratis i {days} dag} other{Du provar gratis i {days} dagar}}",
+  "@trialWelcomeTrialTitleDays": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "trialWelcomeTrialTitleNoDays": "Du provar gratis",
+  "trialWelcomeWatching": "Vi bevakar",
+  "trialWelcomeWhatBody": "Taxi Tips visar var folk kan behöva taxi just nu. Det är tips, inte löften. Du bestämmer själv om det är värt att åka.",
+  "trialWelcomeWhatTitle": "Välkommen till Taxi Tips",
   "vehicleSessionAnotherPhone": "en annan telefon",
   "vehicleSessionCancel": "Avbryt",
   "vehicleSessionCar": "Bil",
@@ -1691,5 +2032,13 @@
       }
     }
   },
-  "vehicleSessionYouDriveThis": "Du kör den här"
+  "vehicleSessionYouDriveThis": "Du kör den här",
+  "welcomeScreenBrowserFailed": "Kunde inte öppna webbläsaren",
+  "welcomeScreenCreateAccount": "Skapa konto gratis",
+  "welcomeScreenHeadline": "Se var folk behöver taxi",
+  "@welcomeScreenHeadline": {
+    "description": "Huvudrubrik på välkomstskärmen"
+  },
+  "welcomeScreenLogin": "Logga in",
+  "welcomeScreenSeeDemo": "Se demon på webben"
 }
