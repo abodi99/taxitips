@@ -537,9 +537,12 @@ OUTREACH_SMTP_USER = os.environ.get("OUTREACH_SMTP_USER", "")
 OUTREACH_SMTP_PASSWORD = os.environ.get("OUTREACH_SMTP_PASSWORD", "")
 OUTREACH_IMAP_HOST = os.environ.get("OUTREACH_IMAP_HOST", "imap.hostinger.com")
 OUTREACH_IMAP_PORT = int(os.environ.get("OUTREACH_IMAP_PORT", "993") or 993)
-# Avsändarnamnet i inkorgen ("Abbe från Taxi Tips") och signaturen under mejlet.
-OUTREACH_FROM_NAME = os.environ.get("OUTREACH_FROM_NAME", "")
-OUTREACH_SENDER_NAME = os.environ.get("OUTREACH_SENDER_NAME", "")
+# Avsändarnamnet i inkorgen och signaturen under mejlet. Namnet står här och
+# inte i Coolify: det är inte hemligt, och utan det skickas ingenting
+# (outreach.enabled). Ingen titel är valt med avsikt. Telefonnumret sätts i
+# miljön, så att det inte ligger i git.
+OUTREACH_FROM_NAME = os.environ.get("OUTREACH_FROM_NAME", "Abbe från Taxi Tips")
+OUTREACH_SENDER_NAME = os.environ.get("OUTREACH_SENDER_NAME", "Abbe")
 OUTREACH_SENDER_TITLE = os.environ.get("OUTREACH_SENDER_TITLE", "")
 OUTREACH_SENDER_PHONE = os.environ.get("OUTREACH_SENDER_PHONE", "")
 # Vem som står bakom utskicket (marknadsföringslagen: avsändaren ska framgå).
