@@ -533,7 +533,9 @@ FLEET_SMS_SENDER = os.environ.get("FLEET_SMS_SENDER", "TaxiTips")
 # tjänstemejl (inloggningskoder, betalningsfel) inte delar avsändare. Utan
 # OUTREACH_ENABLED=1 och brevlådans uppgifter köas och skickas ingenting.
 OUTREACH_ENABLED = os.environ.get("OUTREACH_ENABLED", "") == "1"
-OUTREACH_SMTP_USER = os.environ.get("OUTREACH_SMTP_USER", "")
+# Adressen är inte hemlig och står därför här. Lösenordet är det enda som
+# måste läggas in i Coolify; utan det är brevlådan inte konfigurerad.
+OUTREACH_SMTP_USER = os.environ.get("OUTREACH_SMTP_USER", "abbe@taxitips.se")
 OUTREACH_SMTP_PASSWORD = os.environ.get("OUTREACH_SMTP_PASSWORD", "")
 OUTREACH_IMAP_HOST = os.environ.get("OUTREACH_IMAP_HOST", "imap.hostinger.com")
 OUTREACH_IMAP_PORT = int(os.environ.get("OUTREACH_IMAP_PORT", "993") or 993)
