@@ -334,10 +334,17 @@ Vyn står i adressen (`?vy=…`, `?kund=…&flik=…`, `?vy=konton&konto=…`), 
 bakåtknapp, omladdning och delade länkar fungerar. **Hem** är att-göra-listan
 plus genvägar och nyckeltal. Kundsidan har sex flikar som byts utan omhämtning:
 **Översikt** (tidslinje, Nästa steg, läget i fyra rutor, CRM), Platser,
-Betalning (ovanliga åtgärder under "Särskilda åtgärder"), Inloggningar,
+Betalning (priset räknas av sig självt; allt utanför det vanliga flödet --
+rabatt, gratis plats, extra dagar utan Stripe, plats utan betallänk, avsluta
+provet/allt -- samlat under **Undantag** sist), Inloggningar,
 Företaget (behörighet, uppgifter, Bolagsverket, stäng av/arkivera/radera) och
 Historik. Gamla del-/fliknamn översätts av `kundTab`; Hem och Kunder länkar till
-rätt flik. Kvitton och fel visas som en ruta längst ner (syns i telefonen).
+rätt flik. "Nästa steg" har en huvudknapp; resten ligger under "Fler åtgärder".
+Kvitton och fel visas som en ruta längst ner (syns i telefonen). Frågor och
+bekräftelser går genom `src/admin/dialog.js` (`ask`/`sure`/`choose`), aldrig
+webbläsarens prompt()/confirm(): första stycket blir rubrik, sista stycket som
+slutar med ":" blir fältets etikett, "(obligatoriskt)"/"Skriv varför" gör fältet
+obligatoriskt och knappen får frågans verb.
 Under 900 px fälls menyn ut från vänster och kundsidans flikrad står kvar överst. Reglerna för vad som är klart bor
 på ett ställe (`src/admin/views.js`, `attention`/`issues`/`nextStep`). Grundaren
 (`bbf6ca6c-…`) är platform_admin. Konton skapade med Google har inget lösenord

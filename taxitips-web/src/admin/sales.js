@@ -58,12 +58,11 @@ export function stripeNotice(config) {
     const problems = stripe.problems ?? [];
     return problems.length
       ? `<p class="error">Stripe: ${problems.map((p) => esc(p)).join(" · ")}</p>`
-      : `<p class="muted">Stripe (${stripe.mode === "live" ? "skarpt" : "test"}): betallänk och faktura skapas automatiskt.</p>`;
+      : stripe.mode === "live" ? "" : '<p class="muted small"><span class="pill pill-warn">Stripe testläge</span></p>';
   }
   // All betalning går genom Stripe. Utan Stripe går det inte att beställa --
   // prov och kuponger fungerar som vanligt.
-  return `<p class="error"><b>Stripe är inte kopplat.</b> Beställningar kan inte tas betalt för
-    förrän det är det${stripe.reason ? ` (${esc(stripe.reason)})` : ""}. Prov och kuponger fungerar.</p>`;
+  return `<p class="error small" title="${esc(stripe.reason ?? "")}"><b>Stripe är inte kopplat</b> – betallänkar går inte att skicka. Prov och kuponger fungerar.</p>`;
 }
 
 /* --- Bolagsverket ------------------------------------------------------ */
@@ -266,6 +265,9 @@ export function addCarsBlock(d, config) {
   const payOption = (value) =>
     `<option value="${value}" ${value === "stripe_card" ? "selected" : ""}>${esc(PAYMENT_LABEL[value])}</option>`;
   const maxTrial = Number(config.trial?.vehicleLimit ?? 3);
+  // Förval: det län bolagets platser oftast har -- en sak mindre att välja.
+  const used = (d.licenses ?? []).map((l) => l.baseCounty).filter(Boolean);
+  const usual = used.sort((a, b) => used.filter((x) => x === b).length - used.filter((x) => x === a).length)[0] ?? "";
   return `
     <div class="card" id="salesPanel">
       <h2>Lägg till plats</h2>
@@ -274,27 +276,23 @@ export function addCarsBlock(d, config) {
         <label>Antal<input id="pkgCount" type="number" min="1" max="50" value="1" /></label>
         <label>Län<select id="pkgCounty">
           <option value="">Välj län …</option>
-          ${countyOptions(counties, "")}
+          ${countyOptions(counties, usual)}
         </select></label>
       </div>
 
       ${!paying ? `
       <div class="pack-path">
         <p><b>${trialOpen ? "Lägg till i provet" : "Starta prov"}</b>
-          <span class="muted"> — ${esc(config.trial?.days ?? 7)} dagar, högst ${esc(maxTrial)} platser.
-            Startar när första kontot loggar in i appen. Kostar inget.</span></p>
+          <span class="muted"> – gratis${trialOpen ? "" : ` i ${esc(config.trial?.days ?? 7)} dagar`}, högst ${esc(maxTrial)} ${maxTrial === 1 ? "plats" : "platser"}</span></p>
         <button class="btn ${paying ? "btn-quiet" : "btn-primary"}" type="button" data-action="pkg-trial">
           ${trialOpen ? "Lägg till i provet" : "Starta prov"}</button>
       </div>` : ""}
 
       <div class="pack-path pack-charge">
-        <p><b>Ta betalt</b> <span class="muted">— kortlänk eller Stripe-faktura. Samma belopp som kunden ser.</span></p>
+        <p><b>Ta betalt</b> <span class="muted">– kortlänk eller faktura</span></p>
         ${stripeNotice(config)}
         ${stripeOk ? `
-        <div class="btn-row">
-          <button class="btn btn-quiet" type="button" data-action="pkg-quote">Räkna pris</button>
-        </div>
-        <div id="pkgQuote"></div>
+        <div id="pkgQuote" aria-live="polite"><p class="muted small">Priset räknas när antal och län är valda.</p></div>
         <div class="pack-pay">
           <label>Betalning<select id="pkgPayment">
             ${payOption("stripe_card")}${payOption("stripe_invoice")}
@@ -308,9 +306,6 @@ export function addCarsBlock(d, config) {
 
       <details class="pack-extras">
         <summary>Kupong</summary>
-        <p class="muted">${paying
-          ? "Gratisdagar: nästa debitering flyttas eller perioden förlängs."
-          : "Tillfällig åtkomst i kupongens antal dagar, för platserna ovan."}</p>
         <div class="inline-field">
           <input id="couponCode" placeholder="KUPONGKOD" autocomplete="off" />
           <button class="btn btn-quiet" type="button" data-action="pkg-coupon">Lös in</button>
@@ -326,9 +321,8 @@ export function ownerBlock(d) {
   const members = (d.members ?? []).some((m) => m.status === "active");
   return `
     <div class="card" id="ownerCard">
-      <h2>Bjud in en inloggning</h2>
-      <p class="muted">Personen får ett mejl från Taxi Tips med en inloggningslänk och kopplas till företaget
-        när hen loggar in. Gäller i 14 dagar.</p>
+      <h2>Bjud in</h2>
+      <p class="muted small">Mejlet har en inloggningslänk som gäller i 14 dagar.</p>
       <div class="inline-field">
         <input id="ownerEmail" type="email" value="${esc(members ? "" : profile.contactEmail ?? "")}" placeholder="namn@bolaget.se" />
         <select id="ownerRole" aria-label="Roll">
@@ -358,7 +352,7 @@ export function cancelBlock(d, config) {
         <p><span class="pill pill-warn">Uppsagt</span> Åtkomsten gäller till ${esc(date(s.accessUntil))}.</p>
         <div class="btn-row"><button class="btn btn-quiet" type="button" data-action="undo-cancel">Ångra uppsägningen</button></div>
       ` : `
-        <p class="muted">Kunden behåller åtkomsten den betalda perioden ut, sedan debiteras inget mer.</p>
+        <p class="muted small">Gäller perioden ut, sedan debiteras inget mer.</p>
         <div class="btn-row"><button class="btn btn-quiet" type="button" data-action="cancel-period">Säg upp till periodens slut</button></div>
       `}
     </div>`;
@@ -443,35 +437,34 @@ export function ordersCard(orders, config) {
     </div>`;
 }
 
-/** Steg Betalning: förläng pågående prov (säljare). */
+/** Provet: förläng med ett tryck, ändra hur många platser det får ha. Avsluta ligger under Undantag. */
 export function trialExtendBlock(d, config) {
   if (!config?.canSell) return "";
   const t = d.trial;
   if (!t || !["pending", "active"].includes(t.status)) return "";
   const pending = t.status === "pending";
+  const limit = t.vehicleLimit ?? 1;
   return `
     <div class="card">
-      <h2>Provperiod</h2>
+      <h2>Prov</h2>
       <p class="muted">${pending
-        ? `Provet startar när första kontot loggar in i appen. Planerad längd: ${esc(t.plannedDays ?? config.trial?.days ?? 7)} dagar.`
-        : `Provet pågår till ${esc(date(t.endsAt))}.`}</p>
-      <div class="inline-field">
-        <input id="trialExtendDays" type="number" min="1" max="366" value="7" />
-        <button class="btn btn-quiet" type="button" data-action="trial-extend">Förläng med dagar</button>
+        ? `Startar vid första inloggningen · ${esc(t.plannedDays ?? config.trial?.days ?? 7)} dagar`
+        : `Pågår till ${esc(date(t.endsAt))}`} · ${esc(t.vehicles ?? 0)} av högst ${esc(limit)} ${limit === 1 ? "plats" : "platser"}</p>
+      <div class="trial-row">
+        <span class="trial-row-label">Förläng</span>
+        <div class="btn-row">
+          <button class="btn btn-quiet btn-small" type="button" data-action="trial-extend" data-days="7">+7 dagar</button>
+          <button class="btn btn-quiet btn-small" type="button" data-action="trial-extend" data-days="14">+14 dagar</button>
+          <button class="btn btn-quiet btn-small" type="button" data-action="trial-extend" data-days="30">+30 dagar</button>
+        </div>
       </div>
-      <p>Platser i provet: <b>${esc(t.vehicles ?? 0)}</b> av högst <b>${esc(t.vehicleLimit ?? 1)}</b>.
-        <span class="muted">Ett nytt prov har en plats, ett län och tåg &amp; buss.</span></p>
-      <div class="inline-field">
-        <label class="visually-hidden" for="trialVehicleLimit">Högst antal platser i provet</label>
-        <input id="trialVehicleLimit" type="number" min="${esc(Math.max(1, t.vehicles ?? 1))}" max="25"
-          value="${esc(t.vehicleLimit ?? 1)}" />
-        <button class="btn btn-quiet" type="button" data-action="trial-vehicles">Ändra antal platser</button>
+      <div class="trial-row">
+        <label class="trial-row-label" for="trialVehicleLimit">Högst antal platser</label>
+        <div class="inline-field">
+          <input id="trialVehicleLimit" type="number" min="${esc(Math.max(1, t.vehicles ?? 1))}" max="25" value="${esc(limit)}" />
+          <button class="btn btn-quiet btn-small" type="button" data-action="trial-vehicles">Ändra</button>
+        </div>
       </div>
-      <p class="muted">Skälet sparas i händelseloggen. Bjud in kontona under Platser.</p>
-      <h3>Avsluta provet</h3>
-      <p class="muted">Provet slutar nu: inga tips och inga notiser. Kunden får samma mejl som när provet
-        löper ut. Ett betalt abonnemang påverkas inte.</p>
-      <div class="btn-row"><button class="btn btn-danger" type="button" data-action="trial-end">Avsluta provet</button></div>
     </div>`;
 }
 
@@ -485,14 +478,14 @@ export function discountBlock(d, config) {
       : `${money(active.value)} / mån exkl. moms`)
     : null;
   return `
-    <details class="card" id="discountCard"${active ? " open" : ""}>
-      <summary>Prisrabatt${active ? ` · ${esc(label)}` : ""}</summary>
+    <details class="card exc" id="discountCard"${active ? " open" : ""}>
+      <summary><span class="exc-head"><b>Prisrabatt${active ? ` · ${esc(label)}` : ""}</b>
+        <span class="muted">Procent eller kronor av varje månad.</span></span></summary>
+      <div class="exc-body">
       ${active ? `<p><span class="pill pill-ok">Aktiv</span> ${esc(label)}
         ${active.validUntil ? `<span class="muted"> till ${esc(date(active.validUntil))}</span>` : ""}
         ${active.description ? `<span class="muted"> — ${esc(active.description)}</span>` : ""}</p>
         <button class="btn btn-danger" type="button" data-action="discount-clear">Ta bort rabatt</button>` : `
-      <p class="muted">Procent eller fast belopp dras av platserna i prismotorn.
-        Syns i offerter och MRR.</p>
       <form id="discountForm" class="form-grid">
         <label>Typ<select name="kind">
           <option value="percent_bp">Procent</option>
@@ -503,6 +496,7 @@ export function discountBlock(d, config) {
         <label class="span-2">Anteckning<input name="description" placeholder="Avtal med VD 2026-10-01" /></label>
         <div class="btn-row span-2"><button class="btn btn-primary" type="submit">Spara rabatt</button></div>
       </form>`}
+      </div>
     </details>`;
 }
 
@@ -543,7 +537,7 @@ export function kuponger(list, config) {
   return `
     <div class="page-head">
       <div><h1>Kuponger</h1>
-        <p class="muted">Rabattkoder som ger gratisdagar. Ett bolag kan använda samma kupong en gång.</p></div>
+        <p class="muted">Koder som ger gratisdagar. En gång per bolag.</p></div>
     </div>
     ${canManage ? `
     <form id="couponForm" class="card form-grid">

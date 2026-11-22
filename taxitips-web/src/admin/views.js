@@ -558,30 +558,40 @@ function nextStep(d, config) {
     }
   }
 
+  // Allt annat man kan göra här: i en meny, så att huvudsteget syns.
+  const more = [];
+  const item = (label, attrs) =>
+    `<button type="button" class="btn btn-quiet btn-small" role="menuitem" ${attrs}>${esc(label)}</button>`;
+  const secItem = (label, section, target = "") =>
+    item(label, `data-action="sec-open" data-sec="${section}"${target ? ` data-target="${target}"` : ""}`);
   if (!d.suspension) {
     // Ett prov som väntar på första inloggningen säger redan varför ingen får tips.
     if (d.access && !d.access.ok && !d.pause && s?.status !== "past_due" && !(trialOpen && t.status === "pending")) {
       text += ` Förarna får inga tips: ${ACCESS_TEXT[d.access.reason] ?? d.access.reason}.`;
     }
-    if (sell && !(trialOpen && t.status === "pending") && (s || t)) buttons.push(sec("Lägg till plats", "betalning", "salesPanel"));
-    if (manage) buttons.push(sec("Ge rabatt eller kupong", "betalning", "discountCard"));
-    if (sell && !d.pause) buttons.push(btn("Pausa tipsen", 'data-action="company-pause"'));
+    if (sell && !(trialOpen && t.status === "pending") && (s || t)) more.push(secItem("Lägg till plats", "betalning", "salesPanel"));
     if (sell && !(d.members ?? []).some((m) => m.status === "active")) {
-      buttons.push(sec("Ge portal-inloggning", "inloggningar", "ownerCard"));
+      more.push(secItem("Bjud in till kundportalen", "inloggningar", "ownerCard"));
     }
+    if (manage) more.push(secItem("Ge rabatt", "betalning", "discountCard"));
+    if (sell) more.push(secItem("Undantag", "betalning", "undantag"));
+    if (sell && !d.pause) more.push(item("Pausa tipsen", 'data-action="company-pause"'));
   }
+  // Det som inte syns i rutorna under (riskgranskningar) får en egen rad.
+  const reviews = (d.reviews ?? []).filter((r) => r.status === "open").length;
 
-  const more = issues(d).filter((i) => i.level < 3 || i.sec !== "betalning" || s?.status !== "past_due");
   return `
     <div class="next-card">
       <h2>Nästa steg</h2>
       <p class="next-text">${esc(text)}</p>
-      <p class="next-auto"><b>Sker automatiskt:</b> ${esc(auto.join(" · ") || "inget just nu")}.</p>
-      ${buttons.length ? `<div class="btn-row next-buttons">${buttons.join("")}</div>` : ""}
-      ${more.length ? `<ul class="next-also">${more.map((i) => `
-        <li><span>${esc(i.text)}</span>${i.sec
-          ? ` <button class="linklike" type="button" data-action="sec-open" data-sec="${esc(i.sec)}"${i.target ? ` data-target="${esc(i.target)}"` : ""}>${esc(i.label)} →</button>`
-          : ` <button class="linklike" type="button" data-action="goto" data-view="granskning">${esc(i.label)} →</button>`}</li>`).join("")}</ul>` : ""}
+      ${auto.length ? `<p class="next-auto">Automatiskt: ${esc(auto.join(" · "))}.</p>` : ""}
+      ${buttons.length || more.length ? `<div class="btn-row next-buttons">${buttons.join("")}
+        ${more.length ? `<details class="more-menu">
+          <summary class="btn btn-small btn-more">Fler åtgärder</summary>
+          <div class="more-items" role="menu">${more.join("")}</div>
+        </details>` : ""}</div>` : ""}
+      ${reviews ? `<p class="next-also"><span>${esc(plural(reviews, "riskgranskning väntar", "riskgranskningar väntar"))}.</span>
+        <button class="linklike" type="button" data-action="goto" data-view="granskning">Granska →</button></p>` : ""}
     </div>`;
 }
 
@@ -704,8 +714,6 @@ export function kund(d, config = null, tab = "", pending = null, crm = null, log
       </div>` : d.pause ? `
       <div class="paused-banner" role="status">
         <b>Tipsen är pausade.</b> ${esc(d.pause.reason)}
-        <span class="muted">Inga tips och inga notiser. Kunden ser ett neutralt besked i appen och kan
-          ordna platserna i kundportalen.</span>
         ${config?.canSell ? '<button class="btn btn-quiet" data-action="company-resume">Återuppta tipsen</button>' : ""}
       </div>` : ""}
 
@@ -764,20 +772,15 @@ function inviteUnassignedBlock(d, config) {
 function addMembershipBlock(d, config) {
   if (!config?.canManage) return "";
   const counties = config?.counties ?? [];
-  return `
-    <details class="card">
-      <summary>+ Lägg till plats utan betalning</summary>
-      <p class="muted">Bara när Stripe inte ska in. Platsen räknas mot nästa faktura om den inte
-        beviljas utan kostnad nedan. Vanliga sälj skapar platser under Betalning.</p>
+  return exceptionRow("Plats utan betallänk", "Läggs på nästa faktura.", `
       <div class="county-add">
-        <input id="newMemberEmail" type="email" placeholder="namn@bolaget.se" autocomplete="off" />
+        <input id="newMemberEmail" type="email" placeholder="förarens e-post" autocomplete="off" />
         <select id="newMemberCounty" aria-label="Län för den nya platsen">
           <option value="">Län (valfritt)</option>
           ${counties.map((c) => `<option value="${esc(c.code)}">${esc(c.name)}</option>`).join("")}
         </select>
         <button class="btn btn-quiet btn-small" data-action="membership-create">Skapa plats</button>
-      </div>
-    </details>`;
+      </div>`);
 }
 
 /**
@@ -857,12 +860,8 @@ function grantsCard(d, config) {
         : g.userId
           ? "ett konto"
           : "—";
-  return `
-    <details class="card"${active ? " open" : ""}>
-      <summary>Beviljat utan kostnad <span class="muted">(${esc(active)})</span></summary>
-      <p class="muted">Plats utan betalning, till en person, med de kategorier och län du väljer.
-        Ingen order, ingen faktura och ingen ändring i Stripe — platsen räknas inte mot nästa faktura.
-        Skälet loggas. Ett bolag som redan betalar behåller alla kategorier.</p>
+  return exceptionRow(`Gratis plats${active ? ` (${active} aktiva)` : ""}`,
+    "Till en person, utan faktura och utan Stripe.", `
       ${config?.canManage ? `
       <div class="start-option">
         <label>Kontots e-post<input id="grantEmail" type="email" placeholder="namn@bolaget.se" autocomplete="off" /></label>
@@ -878,7 +877,7 @@ function grantsCard(d, config) {
           <summary>Begränsa till vissa län <span class="muted">(annars alla län)</span></summary>
           <div class="county-grid">${grantCountyChecks("grantCounty", counties, [])}</div>
         </details>` : ""}
-        <button class="btn btn-quiet" data-action="grant-membership">Tilldela utan kostnad</button>
+        <button class="btn btn-primary" data-action="grant-membership">Ge gratis plats</button>
       </div>` : ""}
       ${grants.length ? `<table><thead><tr><th>Konto</th><th>Skäl</th><th>Gäller</th><th></th></tr></thead>
         <tbody>${grants.map((g) => `
@@ -897,8 +896,7 @@ function grantsCard(d, config) {
                   data-grant="${esc(g.id)}" data-who="${esc(g.resolvedEmail || g.email || g.userId)}">Återkalla</button>`
               : ""}</td></tr>
           ${config?.canManage && !g.revokedAt ? grantEditRow(g, config) : ""}`).join("")}
-        </tbody></table>` : '<p class="muted">Inga beviljanden.</p>'}
-    </details>`;
+        </tbody></table>` : ""}`, { open: active > 0 });
 }
 
 function tabPlatser(d, config, pending) {
@@ -909,7 +907,6 @@ function tabPlatser(d, config, pending) {
   }) : "";
   return `
     ${membershipsCard(d, config, pending)}
-    ${addMembershipBlock(d, config)}
     ${companyChangesCard(d, config)}
     <details class="card kt-fold">
       <summary><h2>Telefoner och notiser <span class="muted">(${esc(devices.length)})</span></h2></summary>
@@ -929,8 +926,7 @@ function phonesCard(d, config) {
     <div class="card table-scroll">
       <div class="card-head"><h2>Telefoner <span class="muted">(${esc(devices.length)})</span></h2>
         ${manage && devices.length ? '<button class="btn btn-quiet btn-small" data-action="test-push">Skicka testnotis till alla</button>' : ""}</div>
-      <p class="muted">Utan notistoken kan telefonen inte få notiser – be föraren öppna appen och tillåta notiser.
-        Ett extra telefonbyte behövs när föraren har bytt telefon en gång den här månaden.</p>
+      <p class="muted small">"Ingen token": föraren ska öppna appen och tillåta notiser.</p>
       ${devices.length ? `<table><thead><tr><th>Telefon</th><th>Notiser</th><th>Senast sedd</th><th></th></tr></thead>
       <tbody>${devices.map((dv) => `
         <tr><td data-label="Telefon"><b>${esc(dv.label || "Telefon")}</b>
@@ -1002,34 +998,61 @@ function tabKonton(d, config, loginLink) {
 function tabBetalning(d, config) {
   const s = d.subscription;
   return `
-    ${s?.packageSummary ? `<p class="muted">Paket: ${esc(s.packageSummary)}${
+    ${s?.packageSummary ? `<p class="muted kt-lead">Paket: ${esc(s.packageSummary)}${
       s.priceVersion ? ` · prislista ${esc(s.priceVersion)}` : ""}</p>` : ""}
     ${ordersCard(d.orders, config)}
     ${addCarsBlock(d, config)}
     ${trialExtendBlock(d, config)}
-    ${discountBlock(d, config)}
     ${redemptionsCard(d.couponRedemptions)}
     ${cancelBlock(d, config)}
-    ${config?.canManage || (d.grants ?? []).length ? '<h2 class="kt-sub">Särskilda åtgärder</h2>' : ""}
-    ${grantsCard(d, config)}
-    ${config?.canManage ? `
-    <details class="card">
-      <summary>Ge åtkomst utan Stripe</summary>
-      <p class="muted">När kunden behöver några dagar till medan en betalning går igenom.
-        Ändrar appens rättigheter, inte Stripe. Skälet loggas.</p>
+    ${exceptionsBlock(d, config)}
+  `;
+}
+
+/** En rad bland undantagen: rubrik, en mening och innehållet när den fälls ut. */
+function exceptionRow(title, line, body, { open = false, danger = false, id = "" } = {}) {
+  return `
+    <details class="card exc${danger ? " exc-danger" : ""}"${id ? ` id="${id}"` : ""}${open ? " open" : ""}>
+      <summary><span class="exc-head"><b>${esc(title)}</b><span class="muted">${esc(line)}</span></span></summary>
+      <div class="exc-body">${body}</div>
+    </details>`;
+}
+
+/**
+ * Undantagen: allt som går förbi det vanliga flödet (prov -> betallänk ->
+ * Stripe). Samlade på ett ställe, sist på Betalning, så att de inte blandas
+ * med det man gör varje dag men alltid går att hitta. Allt loggas.
+ */
+function exceptionsBlock(d, config) {
+  const sell = !!config?.canSell;
+  const manage = !!config?.canManage;
+  const s = d.subscription;
+  const t = d.trial;
+  const trialOpen = t && ["pending", "active"].includes(t.status);
+  const rows = [
+    manage ? discountBlock(d, config) : "",
+    grantsCard(d, config),
+    manage ? exceptionRow("Extra dagar utan Stripe", "När en betalning dröjer. Stripe ändras inte.", `
       <div class="btn-row">
         <button class="btn btn-quiet" data-action="extend" data-days="7">+7 dagar</button>
         <button class="btn btn-quiet" data-action="extend" data-days="30">+30 dagar</button>
-      </div>
-    </details>` : ""}
-    ${config?.canManage && !["canceled"].includes(d.subscription?.status) ? `
-    <details class="card danger-zone">
-      <summary>Avsluta direkt</summary>
-      <p class="muted">Åtkomsten upphör nu, alla platser och förarpass avslutas och Stripe slutar debitera.
-        Ingen återbetalning görs automatiskt.</p>
-      <div class="btn-row"><button class="btn btn-danger" data-action="terminate-now">Avsluta direkt</button></div>
-    </details>` : ""}
-  `;
+      </div>`) : "",
+    addMembershipBlock(d, config),
+    sell && trialOpen ? exceptionRow("Avsluta provet nu", "Inga fler tips. Kunden får samma mejl som vid provslut.", `
+      <div class="btn-row"><button class="btn btn-danger" type="button" data-action="trial-end">Avsluta provet</button></div>`,
+    { danger: true }) : "",
+    manage && !["canceled"].includes(s?.status) && (s || trialOpen) ? exceptionRow("Avsluta allt direkt",
+      "Åtkomst, platser och debitering stoppas nu. Ingen återbetalning.", `
+      <div class="btn-row"><button class="btn btn-danger" data-action="terminate-now">Avsluta direkt</button></div>`,
+    { danger: true }) : "",
+  ].filter(Boolean);
+  if (!rows.length) return "";
+  return `
+    <section id="undantag" class="exceptions" aria-labelledby="undantagTitle">
+      <h2 class="kt-sub" id="undantagTitle">Undantag</h2>
+      <p class="muted small exc-lead">Utanför det vanliga flödet. Allt loggas med vem och varför.</p>
+      ${rows.join("")}
+    </section>`;
 }
 
 /* --- Uppgifter ----------------------------------------------------------- */
@@ -1058,8 +1081,8 @@ function tabUppgifter(d, config) {
       </div>
       ${p.registry ? registryBlock(p.registry, { checkedAt: p.registryCheckedAt })
         : (p.orgNumber || d.company.orgNumber)
-          ? '<p class="muted">Inte uppslaget än. Tryck på <b>Hämta igen</b>.</p>'
-          : `<p class="muted">${esc(ORG_MISSING)}. Bolaget slås upp när kunden anger org.nr vid sin första beställning.</p>`}
+          ? '<p class="muted">Inte uppslaget än.</p>'
+          : '<p class="muted">Slås upp när kunden anger org.nr.</p>'}
     </div>
   `;
 }
@@ -1257,10 +1280,7 @@ function verificationCard(d, config) {
   return `
     <div class="card">
       <h2>Kontrollera behörigheten</h2>
-      <p class="muted">Företaget registrerade sig själv. En e-post och ett orgnr bevisar
-        inte att personen får företräda bolaget. Ring växeln eller kontrollera firmatecknare,
-        och skriv hur det gjordes.</p>
-      <p class="muted">Nuvarande anteckning: ${esc(p.verificationNote || "—")}</p>
+      <p class="muted">Ring växeln eller kolla firmatecknare: får personen företräda bolaget?</p>
       <div class="btn-row">
         <button class="btn btn-primary" data-action="verify" data-status="verified">Markera som kontrollerad</button>
         <button class="btn btn-danger" data-action="verify" data-status="rejected">Avvisa</button>
@@ -1283,9 +1303,7 @@ function membersCard(d, config) {
   const sell = !!config?.canSell;
   return `
     <div class="card">
-      <h2>Vem kan logga in</h2>
-      <p class="muted">Ägare och administratörer i kundportalen och appens adminläge. Förarplatser bjuds in
-        under <button class="linklike" data-action="sec-open" data-sec="platser">Platser</button>.</p>
+      <h2>Kan logga in i kundportalen</h2>
       ${members.length ? `<div class="table-scroll"><table>
         <thead><tr><th>Konto</th><th>Roll</th><th>Status</th><th></th></tr></thead>
         <tbody>${members.map((m) => `
@@ -1315,9 +1333,9 @@ function membersCard(d, config) {
               </div></details>
             </div>` : ""}</td>
           </tr>`).join("")}</tbody></table></div>`
-        : '<p class="muted">Ingen kan logga in än. Bjud in kundens ägare nedan.</p>'}
-      <p class="muted small"><b>Ägare</b> gör allt. <b>Bilar och förare</b> sköter platser, län och konton.
-        <b>Ekonomi</b> ser och betalar fakturor.</p>
+        : '<p class="muted">Ingen än. Bjud in ägaren nedan.</p>'}
+      <p class="muted small">Ägare: allt · Bilar och förare: platser och konton · Ekonomi: fakturor.
+        Förare bjuds in under <button class="linklike" data-action="sec-open" data-sec="platser">Platser</button>.</p>
     </div>`;
 }
 
@@ -1467,10 +1485,8 @@ function membershipsCard(d, config, pending = null) {
 function dangerZone(d, config) {
   if (!config?.canManage || d.suspension) return "";
   return `
-    <h3>Stäng av företaget</h3>
-    <p class="muted">Alla förartelefoner och inloggningar slutar få data direkt. Inget raderas, och när
-      avstängningen hävs fungerar allt som förut. Stripe påverkas inte — säg upp under Betalning om
-      debiteringen också ska sluta.</p>
+    <h3>Stäng av</h3>
+    <p class="muted">Ingen får data. Inget raderas, och allt fungerar igen när du häver det. Stripe debiterar som vanligt.</p>
     <div class="btn-row"><button class="btn btn-danger" data-action="suspend">Stäng av företaget</button></div>`;
 }
 
@@ -1482,7 +1498,7 @@ export function notiser(list, status = "") {
   return `
     <div class="page-head">
       <div><h1>Notiser</h1>
-        <p class="muted">Pushnotiser som skickats till förarnas telefoner, senaste först.</p></div>
+        <p class="muted">Skickade pushnotiser, senaste först.</p></div>
     </div>
     <div class="toolbar">
       <label for="pushStatus">Status</label>
@@ -1528,7 +1544,7 @@ export function evenemang(list, f = {}, config = null, importState = null) {
   return `
     <div class="page-head">
       <div><h1>Evenemang</h1>
-        <p class="muted">Det förarna ser under Evenemang i appen, i sina län. Dolda syns inte för någon förare.</p></div>
+        <p class="muted">Det förarna ser under Evenemang i appen.</p></div>
     </div>
 
     ${manage ? `
@@ -1627,8 +1643,7 @@ export function granskning(list) {
   return `
     <div class="page-head">
       <div><h1>Granskningar</h1>
-        <p class="muted">Riskärenden blockerar kundens NÄSTA ändring, aldrig åtkomsten
-          som redan gäller. Godkänn för att släppa spärren.</p></div>
+        <p class="muted">Spärrar kundens nästa ändring tills du godkänner. Åtkomsten påverkas inte.</p></div>
     </div>
     ${rows.length ? rows.map((r) => `
       <div class="card">
@@ -1656,8 +1671,7 @@ function archiveCard(d, config) {
   if (!a.archivedAt) {
     return `
     <h3>Arkivera</h3>
-    <p class="muted">Döljer bolaget från Hem, Kunder och Uppföljning. Inget tas bort, och det går att
-      återställa under Kunder → Arkiverade.</p>
+    <p class="muted">Döljs i listorna. Kan återställas under Kunder → Arkiverade.</p>
     ${a.canArchive
       ? '<div class="btn-row"><button class="btn btn-quiet" data-action="archive">Arkivera bolaget</button></div>'
       : `<p class="muted">${esc(a.archiveBlocker)}</p>

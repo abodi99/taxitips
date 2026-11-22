@@ -10,7 +10,7 @@ export async function mount(container, { onError, onOpenChange }) {
   container.innerHTML = `
     <div class="page-head">
       <div><h1>Tipprapporter</h1>
-        <p class="muted">Förare som tror att ett tips är fel. Granska tipset och ta bort det ur flödet om det behövs.</p></div>
+        <p class="muted">Tips som förare har rapporterat som fel.</p></div>
     </div>
     <div class="support">
       <aside class="card support-list" aria-label="Rapporter">

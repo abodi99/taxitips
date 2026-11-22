@@ -1,3 +1,4 @@
+import { sure } from "./dialog.js";
 import { admin } from "./api.js";
 import { dateTime } from "../portal/api.js";
 
@@ -139,7 +140,7 @@ export function bindAppVersionForm(root) {
     event.preventDefault();
     const body = bodyOf(form);
     const text = confirmText(lastData?.stored, body);
-    if (!text || !confirm(text)) return;
+    if (!text || !(await sure(text))) return;
     const button = form.querySelector('button[type="submit"]');
     if (button) button.disabled = true;
     const card = document.getElementById("appVersionCard");

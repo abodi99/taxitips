@@ -594,7 +594,7 @@ export function dashboard(d) {
   return `
     <div class="page-head">
       <div><h1>Rapport</h1>
-        <p class="muted">Hela tjänsten på en sida. Tryck på en siffra för att öppna listan bakom den.</p></div>
+        <p class="muted">Tryck på en siffra för att se listan bakom den.</p></div>
       <button class="btn btn-quiet" type="button" data-action="goto" data-view="dashboard">Uppdatera</button>
     </div>
     <nav class="chips dash-jump" aria-label="Avsnitt">

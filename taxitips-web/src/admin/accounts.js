@@ -53,8 +53,7 @@ export function konton(found, blocks, q = "", config = null) {
   return `
     <div class="page-head">
       <div><h1>Konton</h1>
-        <p class="muted">Användarnivå: öppna ett konto för platser, loggar, lösenordslänk, spärr och radering.
-          Spärrade konton och adresser får ingen data och kan inte registrera nya företag.</p></div>
+        <p class="muted">En person i taget: telefoner, lösenordslänk, spärr och radering.</p></div>
     </div>
 
     <form class="toolbar" id="accountSearch">
@@ -426,8 +425,7 @@ export function personal(list, config = null) {
   return `
     <div class="page-head">
       <div><h1>Personal</h1>
-        <p class="muted"><b>Support</b> läser. <b>Säljare</b> lägger upp kunder, paket, prov och kuponger.
-          <b>Plattformsadministratör</b> gör allt, även spärrar och avstängning.</p></div>
+        <p class="muted">Support läser · Säljare säljer · Plattformsadministratör gör allt.</p></div>
     </div>
     <div class="card table-scroll">
       <table>

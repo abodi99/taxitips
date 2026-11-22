@@ -26,6 +26,7 @@ import {
 import * as views from "./views.js";
 import { mountNav, navItem } from "./nav.js";
 import { setupPalette } from "./palette.js";
+import { ask, choose, sure } from "./dialog.js";
 
 /**
  * Adminwebbens sammanhållning.
@@ -251,7 +252,15 @@ async function render() {
   syncUrl();
   firstUrlSync = false;
   clearError();
-  el.view.innerHTML = '<p class="muted">Laddar …</p>';
+  // Samma kund ritas om efter en åtgärd: behåll sidan (och var man står) tills
+  // den nya är klar, i stället för att hoppa till toppen via "Laddar …".
+  const sameCompany = !!state.companyId && el.view.dataset.company === state.companyId;
+  state.keepScroll = sameCompany ? window.scrollY : null;
+  if (sameCompany) el.view.setAttribute("aria-busy", "true");
+  else {
+    delete el.view.dataset.company;
+    el.view.innerHTML = '<p class="muted">Laddar …</p>';
+  }
   const note = state.flash;
   state.flash = null;
   try {
@@ -322,6 +331,12 @@ async function renderView(seq) {
         detail, state.config, state.companyTab, state.pending, crm, state.companyLoginLink,
         state.secOpen,
       ));
+      if (current()) {
+        el.view.dataset.company = state.companyId;
+        el.view.removeAttribute("aria-busy");
+        if (state.keepScroll != null) window.scrollTo({ top: state.keepScroll });
+        autoQuote();
+      }
       // Vald flik synlig i flikraden (i telefonen kan den ligga utanför kanten).
       const bar = current() ? el.view.querySelector(".kt-bar") : null;
       const sel = bar?.querySelector('.kt-tab[aria-selected="true"]');
@@ -507,6 +522,8 @@ async function renderView(seq) {
     }
   } catch (error) {
     if (!current()) return;
+    el.view.removeAttribute("aria-busy");
+    delete el.view.dataset.company;
     paint("");
     if (error instanceof ApiError && error.reason === "not_staff") {
       paint(`<div class="card"><h2>Ingen adminbehörighet</h2>
@@ -1086,7 +1103,11 @@ function flash(message) {
   state.flash = message;
 }
 
-el.view.addEventListener("change", (event) => {
+el.view.addEventListener("change", async (event) => {
+  if (event.target.id === "pkgCounty" || event.target.id === "pkgCount") {
+    autoQuote();
+    return;
+  }
   if (event.target.id === "pushStatus") {
     state.pushStatus = event.target.value;
     render();
@@ -1098,7 +1119,7 @@ el.view.addEventListener("change", (event) => {
     const ds = select.dataset;
     const county = select.value;
     if (!county || county === ds.base) return;
-    if (!confirm(`Byta län på ${ds.plate} till ${countyLabel(county)}? Gäller direkt.`)) {
+    if (!await sure(`Byta län på ${ds.plate} till ${countyLabel(county)}? Gäller direkt.`)) {
       select.value = ds.base;
       return;
     }
@@ -1255,6 +1276,14 @@ function showKundTab(name) {
   return panel;
 }
 
+// En meny ("Fler åtgärder", "Mer") stängs när man valt något i den eller klickar utanför.
+document.addEventListener("click", (event) => {
+  const inMenu = event.target.closest?.(".more-menu");
+  for (const menu of document.querySelectorAll(".more-menu[open]")) {
+    if (menu !== inMenu || event.target.closest('[role="menuitem"]')) menu.open = false;
+  }
+});
+
 // Flikraden i mobilen: tona inte ut kanten när man redan svept till slutet.
 el.view.addEventListener("scroll", (event) => {
   const bar = event.target;
@@ -1342,9 +1371,8 @@ async function act(action, ds) {
 
     case "extend": {
       const days = Number(ds.days);
-      const note = prompt(
-        `Förläng perioden med ${days} dagar.\n\nÄndrar appens rättigheter, inte Stripe. ` +
-          "Ange ett skäl (sparas i loggen):",
+      const note = await ask(
+        `Ge ${days} extra dagar?\n\nÄndrar inte Stripe.\n\nSkäl:`,
       );
       if (note === null) return;
       await admin.setSubscription(state.companyId, { extendDays: days, note });
@@ -1355,7 +1383,7 @@ async function act(action, ds) {
       return driverCode(ds.license, ds.plate);
 
     case "block": {
-      if (!confirm(`Spärra ${ds.label || "telefonen"}? Den slutar visa tips direkt och lämnar bilen.\n\n` +
+      if (!await sure(`Spärra ${ds.label || "telefonen"}? Den slutar visa tips direkt och lämnar bilen.\n\n` +
         "Föraren behöver en ny inbjudan för att köra igen.")) return;
       await admin.blockPhone(ds.approval, "admin_block");
       flash(`${ds.label || "Telefonen"} är spärrad.`);
@@ -1365,9 +1393,8 @@ async function act(action, ds) {
     /* --- Supportåtgärder på kundsidan --- */
 
     case "car-release": {
-      const reason = prompt(
-        `Frigör ${ds.plate}? ${ds.holder} lämnar bilen, så att en annan förare kan ta den.\n\n` +
-          "Telefonen får fortfarande köra bilen igen. Skäl (sparas i loggen):",
+      const reason = await ask(
+        `Frigör ${ds.plate}?\n\n${ds.holder} lämnar bilen så att någon annan kan ta den.\n\nSkäl:`,
         "Föraren glömde lämna bilen",
       );
       if (reason === null) return;
@@ -1388,9 +1415,8 @@ async function act(action, ds) {
     }
 
     case "membership-assign": {
-      const email = prompt(
-        `Kontot som ska få ${memberLabel(ds)}? Skriv kontots e-post.\n\n` +
-          "Är adressen känd binds platsen direkt; annars väntar den tills personen loggar in i appen.",
+      const email = await ask(
+        `Vem ska ha ${memberLabel(ds)}?\n\nPlatsen kopplas när personen loggar in i appen.\n\nE-post:`,
       );
       if (!email?.trim()) return;
       await admin.assignMembership(ds.license, { email: email.trim() });
@@ -1400,7 +1426,7 @@ async function act(action, ds) {
 
     case "membership-unassign": {
       if (
-        !confirm(
+        !await sure(
           `Ta bort tilldelningen på ${memberLabel(ds)}? Platsen är kvar men inget konto använder den.`,
         )
       )
@@ -1458,7 +1484,7 @@ async function act(action, ds) {
         return;
       }
       if (
-        !confirm(
+        !await sure(
           `Tilldela ${email} plats utan kostnad?\n\n` +
             `Kategorier: ${choice.categoryText}.\nLän: ${choice.countyText}.\n` +
             (endsAt ? `Gäller till ${endsAt}. ` : "Gäller tills vidare. ") +
@@ -1483,7 +1509,7 @@ async function act(action, ds) {
         return;
       }
       if (
-        !confirm(
+        !await sure(
           `Ändra beviljandet för ${ds.who}?\n\n` +
             `Kategorier: ${choice.categoryText}.\nLän: ${choice.countyText}.\n` +
             "Ändringen gäller direkt och loggas.",
@@ -1496,9 +1522,8 @@ async function act(action, ds) {
     }
 
     case "grant-revoke": {
-      const reason = prompt(
-        `Återkalla beviljandet för ${ds.who}? Åtkomsten stängs direkt och platsen som ` +
-          "beviljandet skapade avslutas.\n\nSkäl (sparas i loggen):",
+      const reason = await ask(
+        `Återkalla gratisplatsen för ${ds.who}?\n\nÅtkomsten stängs direkt.\n\nSkäl:`,
       );
       if (!reason?.trim()) return;
       await admin.revokeGrant(ds.grant, reason.trim());
@@ -1507,7 +1532,7 @@ async function act(action, ds) {
     }
 
     case "phone-rename": {
-      const label = prompt("Nytt namn på telefonen (syns under bilen och i appen):", ds.label || "");
+      const label = await ask("Byt namn på telefonen\n\nNamn:", ds.label || "");
       if (!label?.trim()) return;
       await admin.renamePhone(ds.approval, label.trim());
       flash(`Telefonen heter nu ${label.trim()}.`);
@@ -1515,9 +1540,9 @@ async function act(action, ds) {
     }
 
     case "driver-invite": {
-      const email = prompt(`Förarens e-post för ${ds.plate}?\n\nFöraren får ett mejl, väljer ett lösenord och loggar in i appen med e-post och lösenord. Inbjudan gäller i 7 dagar.`);
+      const email = await ask(`Bjud in förare till ${ds.plate}\n\nFöraren får ett mejl och väljer lösenord. Gäller i 7 dagar.\n\nE-post:`);
       if (!email?.trim()) return;
-      const label = prompt("Förarens namn (visas som telefonens namn):", "") ?? "";
+      const label = await ask("Förarens namn\n\nVisas som telefonens namn.\n\nNamn:", "") ?? "";
       await admin.inviteDriver(state.companyId, ds.license, email.trim(), label.trim());
       flash(`Inbjudan är skickad till ${email.trim()}.`);
       return render();
@@ -1529,7 +1554,7 @@ async function act(action, ds) {
       return render();
 
     case "driver-invite-revoke":
-      if (!confirm(`Återkalla inbjudan till ${ds.email}?`)) return;
+      if (!await sure(`Återkalla inbjudan till ${ds.email}?`)) return;
       await admin.revokeDriverInvite(ds.invite);
       flash("Inbjudan är återkallad.");
       return render();
@@ -1555,7 +1580,7 @@ async function act(action, ds) {
         fleet_admin: "Bilar och förare. Hen sköter platser, län och konton men inte betalning",
         finance: "Ekonomi. Hen ser och betalar fakturor men ändrar inte bilar eller förare",
       }[ds.role];
-      if (!confirm(`Ändra rollen till ${what}?`)) return;
+      if (!await sure(`Ändra rollen till ${what}?`)) return;
       await admin.setMember(state.companyId, ds.user, { role: ds.role });
       flash(`Rollen är ändrad till ${views.MEMBER_ROLE[ds.role] ?? ds.role}.`);
       return render();
@@ -1566,12 +1591,12 @@ async function act(action, ds) {
       const lines = (result.results ?? []).map(
         (r) => `${r.device}: ${r.sent ? "skickad" : `inte skickad (${r.reason})`}`,
       );
-      alert(lines.length ? lines.join("\n") : "Bolaget har inga telefoner.");
+      await sure(`Testnotis\n\n${lines.length ? lines.join("\n") : "Bolaget har inga telefoner."}`, { ok: "OK", danger: false });
       return;
     }
 
     case "event-hide": {
-      const reason = prompt("Varför döljs evenemanget för förarna?");
+      const reason = await ask("Dölj evenemanget för förarna?\n\nSkäl (obligatoriskt):");
       if (!reason) return;
       await admin.setEventVisibility(Number(ds.event), true, reason);
       return render();
@@ -1582,7 +1607,7 @@ async function act(action, ds) {
       return render();
 
     case "event-delete":
-      if (!confirm(`Ta bort "${ds.name}"? Det försvinner för förarna direkt.`)) return;
+      if (!await sure(`Ta bort "${ds.name}"? Det försvinner för förarna direkt.`)) return;
       await admin.deleteEvent(Number(ds.event));
       flash("Evenemanget är borttaget.");
       return render();
@@ -1606,7 +1631,7 @@ async function act(action, ds) {
 
     case "registry-refresh": {
       const overwrite = ds.overwrite === "1";
-      if (overwrite && !confirm("Ersätta fakturaadressen med adressen hos Bolagsverket?")) return;
+      if (overwrite && !await sure("Ersätta fakturaadressen med adressen hos Bolagsverket?")) return;
       const result = await admin.refreshRegistry(state.companyId, overwrite);
       const r = result.registry;
       flash(r.found
@@ -1700,13 +1725,13 @@ async function act(action, ds) {
       return render();
 
     case "crm-task-delete":
-      if (!confirm("Ta bort uppgiften?")) return;
+      if (!await sure("Ta bort uppgiften?")) return;
       await admin.crmTaskDelete(ds.task);
       flash("Uppgiften togs bort.");
       return render();
 
     case "crm-contact": {
-      if (ds.op === "unlink" && !confirm("Ta bort kontakten från bolaget? Den finns kvar och kan kopplas igen.")) return;
+      if (ds.op === "unlink" && !await sure("Ta bort kontakten från bolaget? Den finns kvar och kan kopplas igen.")) return;
       if (ds.op === "link") {
         await admin.crmContactAdd(ds.deal, { personId: ds.person });
         state.crmPeople = null;
@@ -1731,7 +1756,7 @@ async function act(action, ds) {
       return render();
 
     case "pipeline-new-lead": {
-      const body = pipelineNewLeadPrompt();
+      const body = await pipelineNewLeadPrompt();
       if (!body?.contactName || !body.contactEmail) return;
       await admin.crmCreateLead(body);
       flash("Affären sparades i CRM.");
@@ -1791,8 +1816,8 @@ async function act(action, ds) {
 
     case "account-delete": {
       const email = ds.email || "";
-      const typed = prompt(
-        `Radera kontot ${email}?\n\nTar bort inloggningen och platserna. Supporttrådar och felrader behålls.\n\nSkriv e-postadressen för att bekräfta:`,
+      const typed = await ask(
+        `Radera kontot ${email}?\n\nInloggningen och platserna tas bort.\n\nSkriv e-postadressen för att bekräfta:`,
       );
       if (typed === null) return;
       await admin.deleteAccount(ds.user, typed.trim());
@@ -1814,9 +1839,8 @@ async function act(action, ds) {
     }
 
     case "county-change-allow": {
-      const note = prompt(
-        `Tillåt ett extra länbyte för ${memberLabel(ds)} den här månaden?\n\n` +
-          "Anteckning (valfritt, syns i revisionen):",
+      const note = await ask(
+        `Ge ${memberLabel(ds)} ett extra länbyte?\n\nGäller den här månaden.\n\nAnteckning (valfritt):`,
       );
       if (note === null) return;
       const body = await admin.allowCountyChange(ds.license, note.trim());
@@ -1825,8 +1849,8 @@ async function act(action, ds) {
     }
 
     case "account-allow-device-swap": {
-      const note = prompt(
-        "Tillåt ett extra telefonbyte den här månaden?\n\nAnteckning (valfritt, syns i revisionen):",
+      const note = await ask(
+        "Ge ett extra telefonbyte?\n\nGäller den här månaden.\n\nAnteckning (valfritt):",
       );
       if (note === null) return;
       const body = await admin.allowDeviceSwap(ds.user, note.trim());
@@ -1840,8 +1864,8 @@ async function act(action, ds) {
       return render();
 
     case "block-user": {
-      const reason = prompt(
-        `Spärra kontot ${ds.email || ""}? Det får ingen data i något företag och inga adminrättigheter.\n\nSkäl (obligatoriskt):`,
+      const reason = await ask(
+        `Spärra kontot ${ds.email || ""}?\n\nKontot får ingen data i något företag.\n\nSkäl (obligatoriskt):`,
       );
       if (!reason) return;
       await admin.block("user", ds.user, reason);
@@ -1850,7 +1874,7 @@ async function act(action, ds) {
     }
 
     case "block-email": {
-      const reason = prompt(`Spärra adressen ${ds.email}? Den kan inte heller registrera nya företag.\n\nSkäl:`);
+      const reason = await ask(`Spärra adressen ${ds.email}?\n\nDen kan inte registrera nya företag.\n\nSkäl (obligatoriskt):`);
       if (!reason) return;
       await admin.block("email", ds.email, reason);
       flash("Adressen är spärrad.");
@@ -1858,7 +1882,7 @@ async function act(action, ds) {
     }
 
     case "block-lift": {
-      const note = prompt("Häv spärren. Anteckning (sparas i loggen):");
+      const note = await ask("Häv spärren?\n\nAnteckning:");
       if (note === null) return;
       await admin.liftBlock(ds.block, note);
       flash("Spärren är hävd.");
@@ -1866,8 +1890,8 @@ async function act(action, ds) {
     }
 
     case "suspend": {
-      const reason = prompt(
-        "STÄNG AV FÖRETAGET: alla telefoner och inloggningar slutar få data direkt. Inget raderas.\n\nSkäl (obligatoriskt):",
+      const reason = await ask(
+        "Stäng av företaget?\n\nIngen får data förrän du häver det. Inget raderas.\n\nSkäl (obligatoriskt):",
       );
       if (!reason) return;
       await admin.block("company", state.companyId, reason);
@@ -1882,10 +1906,10 @@ async function act(action, ds) {
 
     case "verify": {
       const verified = ds.status === "verified";
-      const note = prompt(
+      const note = await ask(
         verified
-          ? "Hur kontrollerades att personen får företräda bolaget? (t.ex. ringde växeln, firmatecknare enligt Bolagsverket)"
-          : "Varför avvisas företaget?",
+          ? "Markera som kontrollerat\n\nT.ex. ringde växeln eller firmatecknare enligt Bolagsverket.\n\nHur kontrollerades det?:"
+          : "Avvisa företaget?\n\nSkäl (obligatoriskt):",
       );
       if (!note) return;
       await admin.verifyCompany(state.companyId, ds.status, note);
@@ -1894,7 +1918,7 @@ async function act(action, ds) {
     }
 
     case "staff-remove":
-      if (!confirm(`Ta bort rollen för ${ds.email}?`)) return;
+      if (!await sure(`Ta bort rollen för ${ds.email}?`)) return;
       await admin.setStaff(ds.email, "");
       flash("Rollen är borttagen.");
       return render();
@@ -1902,7 +1926,7 @@ async function act(action, ds) {
     case "review-approve":
     case "review-reject": {
       const approved = action === "review-approve";
-      const note = prompt(approved ? "Godkänn — anteckning:" : "Avslå — skäl:");
+      const note = await ask(approved ? "Godkänn granskningen\n\nAnteckning:" : "Avslå granskningen\n\nSkäl:");
       if (note === null) return;
       await admin.resolveReview(ds.review, approved, note);
       return render();
@@ -1973,6 +1997,7 @@ el.view.addEventListener("drop", (event) => {
 
 let venueTimer = null;
 el.view.addEventListener("input", (event) => {
+  if (event.target.id === "pkgCount") autoQuote();
   if (event.target.id !== "venueInput") return;
   clearTimeout(venueTimer);
   const q = event.target.value.trim();
@@ -2011,7 +2036,7 @@ let codeTimer = null;
  * nedräkning, och en knapp för nästa förare i samma bil.
  */
 async function driverCode(licenseId, plate) {
-  const name = prompt(`Förarens namn (visas som telefonens namn) för ${plate || "bilen"}:`);
+  const name = await ask(`Förarkod för ${plate || "bilen"}\n\nNamnet visas som telefonens namn.\n\nFörarens namn:`);
   if (name === null) return;
   const result = await admin.pairingCode(state.companyId, licenseId, name.trim() || "Förare");
   el.codeFor.textContent = `${name.trim() || "Förare"} · ${plate || "bilen"}`;
@@ -2047,6 +2072,39 @@ function portalUrl() {
   // Kundportalen ligger på huvuddomänen, inte på admin-värden.
   const host = window.location.hostname.replace(/^admin\./, "");
   return `${window.location.protocol}//${host}${window.location.port ? `:${window.location.port}` : ""}/portal`;
+}
+
+/**
+ * Priset för "Lägg till plats" räknas av sig självt när antal och län är
+ * valda (serverns prismotor, samma som offerten alltid använt) -- inget
+ * "Räkna pris"-steg. Beställningen kräver fortfarande att det som skickas är
+ * exakt det som visades (`state.quotedChange`).
+ */
+let quoteTimer = null;
+function autoQuote() {
+  clearTimeout(quoteTimer);
+  const box = document.getElementById("pkgQuote");
+  if (!box) return;
+  state.quotedChange = null;
+  const count = Number(document.getElementById("pkgCount")?.value || 0);
+  const county = document.getElementById("pkgCounty")?.value || "";
+  if (count < 1 || !county) {
+    box.innerHTML = '<p class="muted small">Priset räknas när antal och län är valda.</p>';
+    return;
+  }
+  box.innerHTML = '<p class="muted small">Räknar priset …</p>';
+  const companyId = state.companyId;
+  quoteTimer = setTimeout(async () => {
+    try {
+      const { change } = packageChange();
+      const quote = await admin.quote(companyId, change);
+      if (!box.isConnected || state.companyId !== companyId) return;
+      state.quotedChange = JSON.stringify(change);
+      box.innerHTML = sales.quoteBox(quote);
+    } catch (error) {
+      if (box.isConnected) box.innerHTML = `<p class="error small">${sales.esc(error?.message ?? "Kunde inte räkna priset.")}</p>`;
+    }
+  }, 300);
 }
 
 function packageChange() {
@@ -2125,7 +2183,7 @@ async function salesAction(action, ds) {
 
     case "trial-vehicles": {
       const limit = Number(document.getElementById("trialVehicleLimit")?.value || 0);
-      const reason = prompt(`Provet får högst ${limit} ${limit === 1 ? "plats" : "platser"}.\n\nSkriv varför (sparas i loggen):`);
+      const reason = await ask(`Provet får högst ${limit} ${limit === 1 ? "plats" : "platser"}?\n\nSkäl (obligatoriskt):`);
       if (reason === null || !reason.trim()) return;
       const result = await admin.setTrialVehicleLimit(state.companyId, limit, reason.trim());
       flash(`Provet får nu ha högst ${result.vehicleLimit} ${result.vehicleLimit === 1 ? "plats" : "platser"}.`);
@@ -2134,7 +2192,7 @@ async function salesAction(action, ds) {
 
     case "trial-extend": {
       const days = Number(ds.days || document.getElementById("trialExtendDays")?.value || 0);
-      const reason = prompt(`Förläng provet med ${days} dagar.\n\nSkriv varför (sparas i loggen):`);
+      const reason = await ask(`Förläng provet med ${days} dagar?\n\nSkäl (obligatoriskt):`);
       if (reason === null || !reason.trim()) return;
       await admin.extendTrial(state.companyId, days, reason.trim());
       flash("Provperioden är förlängd.");
@@ -2142,8 +2200,7 @@ async function salesAction(action, ds) {
     }
 
     case "trial-end": {
-      if (!confirm("Avsluta provet NU? Kunden får inga fler tips eller notiser. Ett betalt abonnemang påverkas inte.")) return;
-      const reason = prompt("Skriv varför provet avslutas (sparas i loggen):");
+      const reason = await ask("Avsluta provet nu?\n\nKunden får inga fler tips. Ett betalt abonnemang påverkas inte.\n\nSkäl (obligatoriskt):");
       if (reason === null || !reason.trim()) return;
       const result = await admin.endTrial(state.companyId, reason.trim());
       flash(result.changed ? "Provet är avslutat." : "Provet var redan avslutat.");
@@ -2151,8 +2208,8 @@ async function salesAction(action, ds) {
     }
 
     case "company-pause": {
-      const reason = prompt(
-        "PAUSA TIPSEN: inga tips och inga notiser för företaget tills du återupptar. Kunden ser ett neutralt besked i appen; inget raderas.\n\nSkäl (obligatoriskt, sparas i loggen):",
+      const reason = await ask(
+        "Pausa tipsen för hela företaget?\n\nInga tips eller notiser tills du återupptar. Inget raderas.\n\nSkäl (obligatoriskt):",
       );
       if (reason === null || !reason.trim()) return;
       await admin.pauseCompany(state.companyId, reason.trim());
@@ -2161,7 +2218,7 @@ async function salesAction(action, ds) {
     }
 
     case "company-resume": {
-      const note = prompt("Återuppta tipsen. Anteckning (sparas i loggen):");
+      const note = await ask("Återuppta tipsen?\n\nAnteckning:", "", { ok: "Återuppta" });
       if (note === null) return;
       await admin.resumeCompany(state.companyId, note.trim());
       flash("Tipsen är återupptagna.");
@@ -2169,8 +2226,8 @@ async function salesAction(action, ds) {
     }
 
     case "member-pause": {
-      const reason = prompt(
-        `Pausa tipsen för ${ds.email || "kontot"}? Kontot får inga tips eller notiser men kan fortfarande logga in i kundportalen.\n\nSkäl (obligatoriskt):`,
+      const reason = await ask(
+        `Pausa tipsen för ${ds.email || "kontot"}?\n\nKontot kan fortfarande logga in i kundportalen.\n\nSkäl (obligatoriskt):`,
       );
       if (reason === null || !reason.trim()) return;
       await admin.pauseAccount(ds.user, state.companyId, reason.trim());
@@ -2179,7 +2236,7 @@ async function salesAction(action, ds) {
     }
 
     case "member-resume": {
-      const note = prompt("Återuppta tipsen för kontot. Anteckning (sparas i loggen):");
+      const note = await ask("Återuppta tipsen för kontot?\n\nAnteckning:", "", { ok: "Återuppta" });
       if (note === null) return;
       await admin.resumeAccount(ds.user, state.companyId, note.trim());
       flash("Tipsen är återupptagna för kontot.");
@@ -2187,7 +2244,7 @@ async function salesAction(action, ds) {
     }
 
     case "discount-clear": {
-      const reason = prompt("Ta bort prisrabatten?\n\nSkäl (valfritt):");
+      const reason = await ask("Ta bort prisrabatten?\n\nSkäl (valfritt):", "", { ok: "Ta bort" });
       if (reason === null) return;
       await admin.clearDiscount(state.companyId, reason.trim());
       flash("Rabatten är borttagen.");
@@ -2220,7 +2277,7 @@ async function salesAction(action, ds) {
       if (state.quotedChange !== JSON.stringify(change)) {
         throw new ApiError(
           400,
-          "Räkna priset först, och läs upp det för kunden. Platserna har ändrats sedan offerten.",
+          "Vänta tills priset har räknats, och läs upp det för kunden.",
           "quote_required",
         );
       }
@@ -2247,7 +2304,7 @@ async function salesAction(action, ds) {
     case "base-change": {
       const county = document.querySelector(`[data-base-for="${ds.license}"]`)?.value;
       if (!county) throw new ApiError(400, "Välj det nya länet i listan först.", "county_required");
-      if (!confirm(`Byta län till ${countyLabel(county)}? Gäller direkt. Högst 2 byten per månad.`)) return;
+      if (!await sure(`Byta län till ${countyLabel(county)}? Gäller direkt. Högst 2 byten per månad.`)) return;
       // Fler län från äldre avtal behålls; själva länet byts direkt för alla platser.
       const extras = splitList(ds.extras).filter((c) => c !== county);
       await admin.setTrialCounties(ds.license, county, extras);
@@ -2256,7 +2313,7 @@ async function salesAction(action, ds) {
     }
 
     case "pending-undo": {
-      const reason = prompt(`Ångra "${ds.label}"? Det som skulle ändras vid förnyelsen ligger kvar som idag.\n\nAnge ett skäl (sparas i loggen):`);
+      const reason = await ask(`Ångra "${ds.label}"?\n\nInget ändras vid förnyelsen.\n\nSkäl (obligatoriskt):`);
       if (!reason) return;
       await admin.undoPendingChange(ds.change, reason);
       flash(`"${ds.label}" är ångrad.`);
@@ -2264,7 +2321,7 @@ async function salesAction(action, ds) {
     }
 
     case "car-plate-ask": {
-      const plate = prompt(`Nytt registreringsnummer för ${ds.plate}?\n\nLänen och perioden följer med. Förarna behöver en ny inbjudan.`);
+      const plate = await ask(`Nytt registreringsnummer för ${ds.plate}?\n\nLänen och perioden följer med. Förarna behöver en ny inbjudan.`);
       if (!plate) return;
       const result = await admin.changeVehicle(ds.license, plate.trim(), "permanent");
       flash(`Bilen är nu ${result.plate}. Förarna behöver en ny inbjudan.`);
@@ -2273,7 +2330,7 @@ async function salesAction(action, ds) {
 
     case "car-remove": {
       if (ds.trial) {
-        const reason = prompt(`Ta bort provplatsen ${memberLabel(ds)}? Kontot förlorar åtkomsten direkt.\n\nSkäl:`);
+        const reason = await ask(`Ta bort provplatsen ${memberLabel(ds)}?\n\nKontot förlorar åtkomsten direkt.\n\nSkäl (obligatoriskt):`);
         if (!reason) return;
         await admin.removeLicense(ds.license, reason);
         flash(`${memberLabel(ds)} är borttagen.`);
@@ -2284,7 +2341,7 @@ async function salesAction(action, ds) {
     }
 
     case "car-remove-now": {
-      const reason = prompt(`Ta bort ${memberLabel(ds)} NU? Kontot förlorar åtkomsten direkt. Ingen återbetalning görs automatiskt.\n\nSkäl:`);
+      const reason = await ask(`Ta bort ${memberLabel(ds)} nu?\n\nKontot förlorar åtkomsten direkt. Ingen återbetalning.\n\nSkäl (obligatoriskt):`);
       if (!reason) return;
       await admin.removeLicense(ds.license, reason);
       state.pending = null;
@@ -2315,7 +2372,7 @@ async function salesAction(action, ds) {
       const plate = document.getElementById(`plate-${ds.license}`)?.value.trim();
       if (!plate) throw new ApiError(400, "Skriv det nya registreringsnumret.", "plate_required");
       const temporary = ds.mode === "temporary";
-      if (!confirm(temporary
+      if (!await sure(temporary
         ? `Ersättningsbil ${plate}? Länen följer med. Förarna behöver en ny inbjudan till ersättningsbilen.`
         : `Byt till ${plate}? Länen och perioden följer med. Förarna behöver en ny inbjudan.`)) return;
       const result = await admin.changeVehicle(ds.license, plate, ds.mode);
@@ -2329,7 +2386,7 @@ async function salesAction(action, ds) {
       return render();
 
     case "lic-cancel": {
-      if (!confirm(`Avsluta platsen ${ds.plate} vid nästa förnyelse? Bilen fungerar perioden ut.`)) return;
+      if (!await sure(`Avsluta platsen ${ds.plate} vid nästa förnyelse? Bilen fungerar perioden ut.`)) return;
       return quotedOrder({ cancelLicenseIds: [ds.license] });
     }
 
@@ -2359,29 +2416,28 @@ async function salesAction(action, ds) {
     }
 
     case "cancel-period": {
-      const reason = prompt("Säg upp till periodens slut. Varför slutar kunden? (sparas i loggen)");
+      const reason = await ask("Säg upp till periodens slut?\n\nKunden har åtkomst perioden ut, sedan debiteras inget mer.\n\nVarför slutar kunden?:");
       if (reason === null) return;
       const result = await admin.cancelSubscription(companyId, reason, false);
-      alert(`Uppsagt till ${result.effectiveAt?.slice(0, 10)}. Kunden har åtkomst till dess.${stripeWarning(result)}`);
+      flash(`Uppsagt till ${result.effectiveAt?.slice(0, 10)}. Kunden har åtkomst till dess.${stripeWarning(result)}`);
       return render();
     }
 
     case "undo-cancel": {
       const result = await admin.undoCancel(companyId);
-      alert(`Uppsägningen är ångrad.${stripeWarning(result)}`);
+      flash(`Uppsägningen är ångrad.${stripeWarning(result)}`);
       return render();
     }
 
     case "terminate-now": {
-      const reason = prompt(
-        "AVSLUTA DIREKT: åtkomsten upphör nu. Platser, förarpass, prov och beviljade platser " +
-          "avslutas och Stripe slutar debitera. Ingen återbetalning görs automatiskt.\n\nSkäl (obligatoriskt):",
+      const reason = await ask(
+        "Avsluta allt direkt?\n\nÅtkomst, platser och prov stängs nu och Stripe slutar debitera. Ingen återbetalning.\n\nSkäl (obligatoriskt):",
       );
       if (!reason) return;
-      if (!confirm("Är du säker? Det går inte att ångra.")) return;
+      if (!await sure("Är du säker?\n\nDet går inte att ångra.", { ok: "Avsluta direkt" })) return;
       const result = await admin.cancelSubscription(companyId, reason, true);
-      alert(`Abonnemanget är avslutat.${stripeWarning(result)}`);
-      if (confirm("Vill du också arkivera bolaget, så att det inte syns i listorna längre?")) {
+      flash(`Abonnemanget är avslutat.${stripeWarning(result)}`);
+      if (await sure("Arkivera bolaget också?\n\nDet döljs i listorna men kan återställas.", { ok: "Arkivera", danger: false })) {
         try {
           await admin.archiveCompany(companyId, true);
           flash("Bolaget är avslutat och arkiverat. Det finns under Kunder → Arkiverade.");
@@ -2404,10 +2460,9 @@ async function salesAction(action, ds) {
       return render();
 
     case "delete-company": {
-      const name = prompt(
-        "RADERA PERMANENT: bolaget, bilarna, telefonerna, beställningarna, chatten, bolagets " +
-          "inloggningar och provhistoriken tas bort och går inte att få tillbaka.\n\n" +
-          "Skriv bolagets namn exakt för att bekräfta:",
+      const name = await ask(
+        "Radera bolaget permanent?\n\nPlatser, telefoner, beställningar, chatt och inloggningar tas bort och går inte att få tillbaka.\n\n" +
+          "Skriv bolagets namn för att bekräfta:",
       );
       if (!name) return;
       const result = await admin.deleteCompany(companyId, name);
@@ -2431,7 +2486,10 @@ async function salesAction(action, ds) {
       return render();
 
     case "order-link": {
-      const payment = confirm("Kort (OK) eller faktura via e-post (Avbryt)?") ? "stripe_card" : "stripe_invoice";
+      const payment = await choose("Hur ska kunden betala?", [
+        ["stripe_card", "Kort (betallänk)"], ["stripe_invoice", "Faktura via e-post"],
+      ]);
+      if (!payment) return;
       await admin.paymentLink(ds.order, payment);
       flash("Betallänken är skapad.");
       return render();
@@ -2448,14 +2506,14 @@ async function salesAction(action, ds) {
     }
 
     case "order-cancel": {
-      if (!confirm("Avbryta den obetalda ordern? En faktura i Stripe makuleras.")) return;
+      if (!await sure("Avbryta den obetalda ordern? En faktura i Stripe makuleras.")) return;
       await admin.cancelOrder(ds.order, "Avbruten av säljare");
       flash("Ordern är avbruten.");
       return render();
     }
 
     case "coupon-off": {
-      if (!confirm("Stänga av kupongen? Kampanjkoden i Stripe-kassan stängs också. Redan inlösta påverkas inte.")) return;
+      if (!await sure("Stänga av kupongen? Kampanjkoden i Stripe-kassan stängs också. Redan inlösta påverkas inte.")) return;
       await admin.deactivateCoupon(ds.coupon);
       return render();
     }
@@ -2516,7 +2574,7 @@ async function quotedOrder(change) {
   const quote = await admin.quote(state.companyId, change);
   const box = document.createElement("div");
   box.innerHTML = sales.quoteBox(quote);
-  if (!confirm(`${box.innerText}\n\nHar kunden godkänt det här?`)) return;
+  if (!await sure(`${box.innerText}\n\nHar kunden godkänt det här?`)) return;
   const result = await admin.order(state.companyId, {
     ...change,
     accepted: true,

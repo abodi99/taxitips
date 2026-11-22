@@ -1,3 +1,4 @@
+import { ask } from "./dialog.js";
 import { dateTime } from "../portal/api.js";
 
 /** Separat CRM-modul — tabell, sök och stegfilter. */
@@ -724,12 +725,12 @@ export function dealDetailView(data, config, opts = {}) {
     </div>`;
 }
 
-export function pipelineNewLeadPrompt() {
-  const contactName = prompt("Kontaktnamn:");
+export async function pipelineNewLeadPrompt() {
+  const contactName = await ask("Kontaktnamn:");
   if (contactName === null) return null;
-  const contactEmail = prompt("E-post:");
+  const contactEmail = await ask("E-post:");
   if (contactEmail === null) return null;
-  const companyName = prompt("Bolagsnamn (valfritt):") ?? "";
+  const companyName = await ask("Bolagsnamn (valfritt):") ?? "";
   return {
     contactName: contactName.trim(),
     contactEmail: contactEmail.trim(),

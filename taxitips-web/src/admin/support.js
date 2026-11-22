@@ -75,7 +75,7 @@ export function mount(container, { threadId = null, onOpenCompany, onError, onWa
   container.innerHTML = `
     <div class="page-head">
       <div><h1>Supportfrågor</h1>
-        <p class="muted">Frågor från appen. Nya meddelanden hämtas automatiskt; användaren får en notis när du svarar.</p></div>
+        <p class="muted">Frågor från appen. Kunden får en notis när du svarar.</p></div>
     </div>
     <div class="support">
       <aside class="card support-list" aria-label="Konversationer">

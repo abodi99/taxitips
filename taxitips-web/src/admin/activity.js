@@ -217,9 +217,7 @@ function page(inner) {
   return `
     <div class="page-head">
       <div><h1>Appar och fel</h1>
-        <p class="muted">Appens krascher och misslyckade inloggningar, registreringar, parkopplingar och
-          tipsflöden, serverns egna fel, och vilken app varje konto och telefon kör. Feltexter är
-          tvättade från tokens, e-post, telefonnummer och positioner. Fel sparas i 30 dygn.</p></div>
+        <p class="muted">Krascher, misslyckade flöden och vilken appversion varje telefon kör. Sparas i 30 dygn.</p></div>
     </div>
     <div class="chips" role="tablist" aria-label="Vy">
       <button class="chip" role="tab" data-activity="tab" data-tab="fel" aria-selected="${view.tab === "fel"}">Fel</button>
