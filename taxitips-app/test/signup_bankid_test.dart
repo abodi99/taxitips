@@ -158,6 +158,52 @@ void main() {
     expect(f.focusNode!.hasFocus, isTrue);
   });
 
+  testWidgets(
+    'det man skriver efter Nästa hamnar i nästa fält, utan att trycka i det',
+    (tester) async {
+      // Förarens väg: tangentbordet är redan uppe, ingen trycker i fältet.
+      // testTextInput skriver till det fält som har tangentbordskopplingen --
+      // tappas kopplingen mellan frågorna hamnar texten ingenstans (sett
+      // 2026-11-22 när alla frågor delade en fokusnod).
+      Future<void> type(String text) async {
+        tester.testTextInput.enterText(text);
+        await tester.pump();
+      }
+
+      Future<void> submit() async {
+        await tester.testTextInput.receiveAction(TextInputAction.next);
+        await tester.pump();
+        await tester.pump();
+      }
+
+      await pump(tester, identity: anna);
+      await tapText(tester, 'Jag är förare');
+      await tester.pump();
+
+      await type('070 812 34 91');
+      expect(find.text('070 812 34 91'), findsOneWidget);
+      await submit();
+      expect(find.text('Din e-post'), findsOneWidget);
+      expect(tester.testTextInput.hasAnyClients, isTrue);
+
+      await type('anna@gmail.com');
+      expect(find.text('anna@gmail.com'), findsOneWidget);
+      await submit();
+      expect(find.text('Skapa kontot'), findsOneWidget);
+      expect(tester.testTextInput.hasAnyClients, isTrue);
+
+      await type('hemligt123');
+      final password = tester.widget<TextField>(find.byType(TextField));
+      expect(password.controller!.text, 'hemligt123');
+
+      // Tillbaka: e-posten finns kvar och går att skriva vidare i.
+      await tester.tap(find.byTooltip('Tillbaka'));
+      await tester.pump();
+      await tester.pump();
+      expect(find.text('anna@gmail.com'), findsOneWidget);
+    },
+  );
+
   testWidgets('taxibolag: ett steg till, företagets namn', (tester) async {
     await pump(tester, identity: anna);
     await tapText(tester, 'Jag äger ett taxibolag');
