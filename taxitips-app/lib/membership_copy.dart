@@ -107,11 +107,11 @@ String membershipNotice(
 SignalCategory? signalCategoryFromFeatureKey(Object? key) =>
     signalCategoryFromKey(key == 'events' ? 'event' : key?.toString());
 
-/// BankID vid registreringen: tre korta löften, inga långa meningar. Många
+/// BankID vid registreringen: två korta löften, inga långa meningar. Många
 /// förare läser inte mycket svenska. "Ingen bindning" måste stå kvar: BankID
-/// är inget avtal, och det ska synas direkt.
+/// är inget avtal, och det ska synas direkt. ("Inget företag behövs" togs
+/// bort 2026-11-23, ägarens beslut.)
 List<String> get kBankIdPromises => [
   tr.membershipCopyPromiseNoCard,
   tr.membershipCopyPromiseNoBinding,
-  tr.membershipCopyPromiseNoCompany,
 ];

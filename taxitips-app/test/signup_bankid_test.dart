@@ -52,9 +52,11 @@ void main() {
     await tester.pump();
   }
 
-  testWidgets('första steget säger att inget företag behövs', (tester) async {
+  testWidgets('första steget: två löften, inget om företag', (tester) async {
     await pump(tester);
-    expect(find.text('Inget företag behövs'), findsOneWidget);
+    expect(find.text('Inget kort'), findsOneWidget);
+    expect(find.text('Ingen bindning'), findsOneWidget);
+    expect(find.text('Inget företag behövs'), findsNothing);
     expect(find.text('Har du redan ett konto? Logga in'), findsOneWidget);
   });
 
