@@ -9,6 +9,7 @@ utan organisationsnummer kan inte beställa förrän numret är angivet.
 
 from __future__ import annotations
 
+import base64
 import json
 import uuid
 from datetime import timedelta
@@ -132,7 +133,13 @@ class BankIdTests(FleetTestCase):
         url, body, headers = calls[0]
         self.assertTrue(url.endswith("/auth"))
         self.assertFalse(body["useProduction"])  # styrs av servern, inte anropet
-        self.assertIn("userVisibleData", body)
+        # Texten går som base64 i sitt eget fält, aldrig i `userVisibleData`
+        # (som proxyn kodar en gång till -- då visade BankID obegripliga tecken).
+        self.assertNotIn("userVisibleData", body)
+        self.assertEqual(
+            base64.b64decode(body["userVisibleDataBase64"]).decode("utf-8"),
+            bankid.USER_VISIBLE_TEXT["register"],
+        )
         self.assertEqual(headers["Authorization"], "Bearer proxy-secret")
         self.assertEqual(res.json()["autoStartToken"], "auto")
 
