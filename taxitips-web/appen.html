@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Hämta appen — Taxi Tips</title>
+  <meta name="description" content="Hämta appen Taxi Tips till iPhone eller Android. Skapa ett konto i appen och prova gratis i en månad." />
+  <!-- noindex: sökmotorernas mobilrobotar skulle annars följa hoppet till butiken. -->
+  <meta name="robots" content="noindex" />
+  <!--
+    Hit leder länken och knappen i säljmejlen (fleet/outreach_templates.py,
+    APP_PATH). Ett mejl vet inte vilken telefon läsaren har, så sidan avgör
+    det: iPhone går till App Store, Android till Google Play. Vid en dator
+    visas båda butikerna och en QR-kod som leder hit igen från telefonen.
+    Registreringen sker sedan i appen.
+
+    Skriptet står i <head> och före stilmallarna, så att telefonen hinner
+    iväg innan något ritas. Fungerar hoppet inte (vissa mejlappars inbyggda
+    webbläsare stoppar det) finns knapparna kvar på sidan.
+  -->
+  <script>
+    (function () {
+      var IOS = "https://apps.apple.com/se/app/taxitips/id6821288601";
+      var ANDROID = "https://play.google.com/store/apps/details?id=se.taxitips.app";
+      var ua = navigator.userAgent || "";
+      // Android först: det står alltid i webbläsarens namn. iPad säger sig
+      // däremot vara en Mac, och där är det pekskärmen som skiljer dem åt.
+      var android = /Android/i.test(ua);
+      var ios = !android && (/iPhone|iPad|iPod/i.test(ua) ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
+
+      // Google Play tar emot kampanjen (utm_*) som "referrer" och visar den i
+      // Play Console. Den säger vilket utskick länken kom ifrån, inte vem som tryckte.
+      var utm = [];
+      try {
+        new URLSearchParams(location.search).forEach(function (value, key) {
+          if (/^utm_(source|medium|campaign)$/.test(key) && /^[\w.-]{1,60}$/.test(value)) {
+            utm.push(key + "=" + value);
+          }
+        });
+      } catch (e) { /* gammal webbläsare: länken fungerar ändå */ }
+      if (utm.length) ANDROID += "&referrer=" + encodeURIComponent(utm.join("&"));
+
+      window.TAXITIPS_STORE = { ios: IOS, android: ANDROID };
+      var root = document.documentElement;
+      if (ios) root.className += " is-ios";
+      if (android) root.className += " is-android";
+      if (ios) location.replace(IOS);
+      else if (android) location.replace(ANDROID);
+    })();
+  </script>
+  <link rel="icon" href="/favicon.ico" sizes="any" />
+  <link rel="icon" href="/brand/favicon.svg" type="image/svg+xml" />
+  <link rel="apple-touch-icon" href="/brand/apple-touch-icon.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Montserrat:wght@700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="/src/brand.css" />
+  <link rel="stylesheet" href="/src/portal.css" />
+  <style>
+    .get-app {
+      max-width: 460px;
+      margin: 3rem auto;
+      text-align: center;
+    }
+    .get-app .app-icon {
+      width: 76px;
+      height: 76px;
+      border-radius: 18px;
+      margin: 0.25rem auto 1rem;
+      display: block;
+    }
+    .get-app h1 {
+      font-size: 1.6rem;
+    }
+    .get-app .stores {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 0.75rem;
+      margin-top: 1.5rem;
+    }
+    .get-app .store {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.7rem;
+      min-height: 56px;
+      padding: 0.6rem 1.15rem;
+      border-radius: 12px;
+      background: var(--midnatt);
+      text-decoration: none;
+    }
+    .get-app .store:focus-visible {
+      outline: 2px solid var(--guld);
+      outline-offset: 3px;
+    }
+    .get-app .store img {
+      width: auto;
+      height: 1.6rem;
+      max-width: 1.6rem;
+      filter: invert(1);
+    }
+    .get-app .store span {
+      display: flex;
+      flex-direction: column;
+      text-align: left;
+      line-height: 1.3;
+    }
+    .get-app .store small {
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: rgba(245, 247, 250, 0.7);
+    }
+    .get-app .store strong {
+      font-size: 1rem;
+      color: #fff;
+    }
+    .get-app .qr {
+      margin-top: 1.75rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--line, #e3e7ee);
+    }
+    .get-app .qr img {
+      width: 168px;
+      height: 168px;
+      display: block;
+      margin: 0 auto 0.75rem;
+    }
+    .get-app ol {
+      margin: 1.75rem 0 0;
+      padding-left: 1.4rem;
+      text-align: left;
+      line-height: 1.8;
+    }
+    /* I telefonen: bara den egna butiken, och ingen QR-kod att fota av sig själv. */
+    .is-ios .get-app .store-android,
+    .is-android .get-app .store-ios,
+    .is-ios .get-app .qr,
+    .is-android .get-app .qr {
+      display: none;
+    }
+    .is-ios .get-app .store,
+    .is-android .get-app .store {
+      width: 100%;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body class="portal">
+  <header class="portal-nav">
+    <a class="brand-logo" href="/"><img src="/brand/logo-on-dark.svg" alt="Taxi Tips" height="26" /></a>
+  </header>
+
+  <main class="portal-main">
+    <section class="card get-app">
+      <img class="app-icon" src="/brand/app-icon-96.png" alt="" width="76" height="76" />
+      <h1>Hämta appen Taxi Tips</h1>
+      <p class="muted">Skapa ett konto i appen. Det kostar inget i en månad, och du behöver inget kort.</p>
+
+      <div class="stores">
+        <a class="store store-ios" id="storeIos" href="https://apps.apple.com/se/app/taxitips/id6821288601" rel="noopener">
+          <img src="/brand/icons/apple.svg" alt="" aria-hidden="true" />
+          <span><small>Hämta i</small><strong>App Store</strong></span>
+        </a>
+        <a class="store store-android" id="storeAndroid" href="https://play.google.com/store/apps/details?id=se.taxitips.app" rel="noopener">
+          <img src="/brand/icons/google-play.svg" alt="" aria-hidden="true" />
+          <span><small>Hämta på</small><strong>Google Play</strong></span>
+        </a>
+      </div>
+
+      <div class="qr">
+        <img src="/brand/qr-appen.svg" alt="QR-kod som öppnar taxitips.se/appen i telefonen" width="168" height="168" />
+        <p class="muted">Sitter du vid datorn? Rikta telefonens kamera mot koden.</p>
+      </div>
+
+      <ol>
+        <li>Hämta appen.</li>
+        <li>Öppna den och skapa ett konto.</li>
+        <li>Välj <b>Jag äger ett taxibolag</b>, eller <b>Jag är förare</b>.</li>
+      </ol>
+    </section>
+  </main>
+
+  <script>
+    // Knappen till Google Play får med sig kampanjen, samma länk som hoppet ovan.
+    (function () {
+      var store = window.TAXITIPS_STORE;
+      if (store) document.getElementById("storeAndroid").href = store.android;
+    })();
+  </script>
+</body>
+</html>

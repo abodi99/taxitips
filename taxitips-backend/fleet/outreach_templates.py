@@ -5,6 +5,11 @@ Säljmejlens texter (fleet/outreach.py skickar dem).
 person, inte som ett nyhetsbrev: ingen logga, inga bilder, en länk. Varje mejl
 ska gå att läsa på tio sekunder.
 
+**Länken går till appen, inte till ett formulär.** taxitips.se/appen skickar
+en iPhone till App Store och en Android till Google Play; vid en dator visar
+sidan båda butikerna och en QR-kod. Kontot skapas sedan i appen, där provet
+också används.
+
 **En bild, inte en funktionslista.** Mejlen berättar om ett ögonblick som
 varje taxiägare känner igen -- perrongen full av folk, bilen på fel ställe --
 och säger sedan en sak om vad appen gör åt det. Datakällor, tipsstyrkor och
@@ -27,7 +32,7 @@ from dataclasses import dataclass
 
 from django.conf import settings
 
-REGISTER_PATH = "/registrera"
+APP_PATH = "/appen"
 PRIVACY_PATH = "/privacy"
 
 # Antal mejl i serien. outreach.STEPS styr när de går.
@@ -64,9 +69,9 @@ def site() -> str:
     return (getattr(settings, "OUTREACH_SITE_BASE", "") or "https://taxitips.se").rstrip("/")
 
 
-def register_url(ctx: Context) -> str:
+def app_url(ctx: Context) -> str:
     # utm_* säger bara vilken kampanj länken kom ifrån -- ingen mottagare pekas ut.
-    return f"{site()}{REGISTER_PATH}?utm_source=mejl&utm_campaign={ctx.campaign}"
+    return f"{site()}{APP_PATH}?utm_source=mejl&utm_campaign={ctx.campaign}"
 
 
 def sender_name() -> str:
@@ -125,7 +130,10 @@ def subject(ctx: Context) -> str:
 
 def _offer(ctx: Context) -> str:
     you = "Du" if ctx.size == SOLO else "Ni"
-    return f"Det kostar inget i en månad. {you} behöver inget kort.\n{register_url(ctx)}"
+    return (
+        f"Det kostar inget i en månad. {you} behöver inget kort. "
+        f"{you} börjar i appen:\n{app_url(ctx)}"
+    )
 
 
 # Tre öppningsbilder, en per mottagare. Hundra likadana mejl om dagen ser ut som
@@ -153,7 +161,7 @@ def _step1(ctx: Context) -> str:
             "Appen Taxi Tips säger till era förare när många behöver taxi. De ser "
             "var och varför.",
             f"Vill ni på {ctx.company} se det? Svara på mejlet, så visar jag det "
-            "på tio minuter. Ni kan också prova med en bil. " + _offer(ctx),
+            "på tio minuter. Eller prova med en bil. " + _offer(ctx),
         ]
     else:
         middle = [
@@ -196,7 +204,7 @@ def _step3(ctx: Context) -> str:
         "Det här är mitt sista mejl.",
         f"En förare vet inte var nästa kund står. Taxi Tips {helps}.",
         "Vill du hellre prata? Svara med ditt telefonnummer, så ringer jag.",
-        f"{start}:\n{register_url(ctx)}",
+        f"{start}. Hämta appen här:\n{app_url(ctx)}",
         "Vänliga hälsningar\n" + _signature(),
     ])
 
@@ -276,12 +284,12 @@ _MIDNATT = "#14213d"
 _GULD = "#fca311"
 _LINE = "#e3e7ee"
 _PANEL = "#f5f7fa"
-BUTTON_LABEL = "Starta provmånaden"
+BUTTON_LABEL = "Hämta appen"
 _P = f"margin:0 0 16px 0;font-family:{_FONT};font-size:16px;line-height:1.6;color:{_INK}"
 
 
 def _linkify(escaped: str) -> str:
-    # Länken visas utan https:// och utan frågesträng: "taxitips.se/registrera"
+    # Länken visas utan https:// och utan frågesträng: "taxitips.se/appen"
     # läses som en adress, en rad med utm-parametrar läses som reklam.
     def link(match: re.Match) -> str:
         url = match.group(0)
@@ -336,7 +344,7 @@ def _signature_block(lines: list[str]) -> str:
 
 def html_from_text(body: str) -> str:
     """
-    Samma text som HTML. Raden som bara är registreringslänken blir en knapp,
+    Samma text som HTML. Raden som bara är länken till appen blir en knapp,
     tipset i citattecken ett kort, signaturen får en kant och sidfoten (efter
     "-- ") blir liten och grå under en linje.
     """
@@ -349,7 +357,7 @@ def html_from_text(body: str) -> str:
         last = lines[-1].strip()
         if lines[0].strip() == "Vänliga hälsningar":
             blocks.append(_signature_block([line.strip() for line in lines[1:]]))
-        elif _URL.fullmatch(last) and REGISTER_PATH in last:
+        elif _URL.fullmatch(last) and APP_PATH in last:
             if lines[:-1]:
                 blocks.append(f'<p style="{_P};margin-bottom:12px">{_lines(lines[:-1])}</p>')
             blocks.append(_button(last))

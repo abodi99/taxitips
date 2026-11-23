@@ -478,7 +478,11 @@ GET avregistrerar inte), studs, startat prov eller flyttad affär; kampanjen
 pausar sig själv över 5 % studsar eller 3 % avregistreringar. `enroll` slår upp
 mottagarens domän (MX, `dnspython`) och stryker dem som inte tar emot mejl.
 HTML-versionen har knapp, tipskort och signatur men inga bilder, och mejl 1
-har tre öppningsbilder som väljs per mottagare. Tilltalet följer segmentet
+har tre öppningsbilder som väljs per mottagare. Länken och knappen ("Hämta
+appen") går till `taxitips.se/appen` (`taxitips-web/appen.html`), som skickar
+iPhone till App Store och Android till Google Play och vid en dator visar båda
+butikerna och en QR-kod; kontot skapas i appen, inte på webben. Webben måste
+därför vara driftsatt före backend och worker när länken ändras. Tilltalet följer segmentet
 (C = "du", B/D = "ni", A = "ni" + visning på tio minuter); hälsningen är
 förnamn bara vid exakt för- och efternamn, annars bolagsnamnet. Språket gissas
 aldrig ur namnet: alla får samma lätta svenska, och testerna håller varje mejl
