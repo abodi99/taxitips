@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import io
 import uuid
 from datetime import datetime, timedelta
 from email.message import EmailMessage
@@ -9,6 +10,7 @@ from types import SimpleNamespace
 from unittest import mock
 from zoneinfo import ZoneInfo
 
+from django.core.management import call_command
 from django.test import Client, override_settings
 
 from fleet import crm, mailer, notifications, outreach, outreach_inbox, outreach_templates
@@ -585,6 +587,46 @@ class MessageTests(OutreachCase):
         self.assertEqual(message.from_email, "Abbe från Taxi Tips <abbe@taxitips.test>")
         self.assertEqual(message.reply_to, ["abbe@taxitips.test"])
         self.assertEqual(message.alternatives[0][1], "text/html")
+
+    @OUTREACH
+    def test_sent_copy_is_built_with_crlf_line_endings(self):
+        # IMAP APPEND kräver CRLF. Kopian i Skickat byggs ur det färdiga mejlet.
+        row = SimpleNamespace(
+            category="outreach_1", to_address="info@malmotaxi.test", subject="Hej Malmö",
+            body="Hej Anna,\n\nåäö på två rader.\n\n-- \nSidfot", payload={},
+        )
+        raw = mailer.wire_bytes(mailer.build_outreach(row))
+        self.assertIn(b"\r\n\r\n", raw)
+        self.assertNotIn(b"\n", raw.replace(b"\r\n", b""))
+        self.assertIn(b"To: info@malmotaxi.test\r\n", raw)
+
+    @OUTREACH
+    def test_send_stores_a_copy_in_the_sent_folder(self):
+        row = OutboxMessage.objects.create(
+            category="outreach_1", to_address="info@malmotaxi.test", dedupe_key="kopia",
+            subject="Hej Malmö", body="Hej Anna,\n\n-- \nSidfot", payload={},
+        )
+        with mock.patch.object(mailer, "_deliver") as deliver, \
+                mock.patch.object(outreach_inbox, "append_sent", return_value=True) as append:
+            mailer.send_outreach(row)
+        deliver.assert_called_once()
+        (raw,), _ = append.call_args
+        self.assertIsInstance(raw, bytes)
+        self.assertIn(b"Subject: Hej", raw)
+        row.refresh_from_db()
+        self.assertTrue(row.payload["message_id"].endswith("@taxitips.test>"))
+
+    @OUTREACH
+    def test_test_send_sends_all_three_and_stores_copies(self):
+        out = io.StringIO()
+        with mock.patch.object(mailer, "_deliver") as deliver, \
+                mock.patch.object(outreach_inbox, "append_sent", return_value=True) as append:
+            call_command("outreach", "test-send", to="du@exempel.test", stdout=out)
+        self.assertEqual(deliver.call_count, 3)
+        self.assertEqual(append.call_count, 3)
+        for (raw,), _ in append.call_args_list:
+            self.assertNotIn(b"\n", raw.replace(b"\r\n", b""))
+        self.assertEqual(out.getvalue().count("(kopia i Skickat)"), 3)
 
     def test_unconfigured_mailbox_is_retried_not_dropped(self):
         row = SimpleNamespace(category="outreach_1", to_address="a@b.test", payload={})
