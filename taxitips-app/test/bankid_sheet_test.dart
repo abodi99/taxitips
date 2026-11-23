@@ -9,8 +9,11 @@ import 'package:taxitips_app/bankid_flow.dart';
 /// QR-koden när appen inte finns på telefonen, eller när föraren väljer
 /// "BankID på en annan telefon".
 class _FakeBankIdApi extends ApiClient {
-  _FakeBankIdApi()
+  _FakeBankIdApi({this.oldServer = false})
     : super(supabaseUrl: 'http://localhost', supabaseAnonKey: 'x');
+
+  /// En server före 2026-11-22: kodens delar, aldrig den färdiga koden.
+  final bool oldServer;
 
   int collects = 0;
   final cancelled = <String>[];
@@ -19,7 +22,11 @@ class _FakeBankIdApi extends ApiClient {
   Future<Map<String, dynamic>> bankIdStart(String purpose) async => {
     'orderRef': 'order-1',
     'autoStartToken': 'auto-1',
-    'qrData': 'bankid.q.0.abc',
+    if (oldServer) ...{
+      'qrStartToken': 'tok',
+      'qrStartSecret': 'hemlig',
+    } else
+      'qrData': 'bankid.q.0.abc',
   };
 
   @override
@@ -29,7 +36,7 @@ class _FakeBankIdApi extends ApiClient {
       'status': 'pending',
       'hintCode': 'outstandingTransaction',
       'message': 'Öppna BankID-appen.',
-      'qrData': 'bankid.q.$collects.def',
+      'qrData': oldServer ? null : 'bankid.q.$collects.def',
     };
   }
 
@@ -40,11 +47,14 @@ class _FakeBankIdApi extends ApiClient {
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
-  Future<_FakeBankIdApi> open(WidgetTester tester) async {
+  Future<_FakeBankIdApi> open(
+    WidgetTester tester, {
+    bool oldServer = false,
+  }) async {
     tester.view.physicalSize = const Size(1170, 2532);
     tester.view.devicePixelRatio = 3;
     addTearDown(tester.view.reset);
-    final api = _FakeBankIdApi();
+    final api = _FakeBankIdApi(oldServer: oldServer);
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
@@ -104,6 +114,41 @@ void main() {
     expect(find.textContaining('skanna koden'), findsOneWidget);
     await tester.tap(find.text('Avbryt'));
     await tester.pumpAndSettle();
+  });
+
+  testWidgets('servern skickar bara kodens delar: appen räknar QR-koden', (
+    tester,
+  ) async {
+    bankIdAppOpener = (token) async => false;
+    addTearDown(() => bankIdAppOpener = openBankIdApp);
+    final api = await open(tester, oldServer: true);
+    expect(find.byType(QrImageView), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    // Servern svarar utan kod: appens egen kod står kvar, ingen snurra.
+    await tester.pump(const Duration(seconds: 1));
+    expect(api.collects, greaterThan(0));
+    expect(find.byType(QrImageView), findsOneWidget);
+    expect(find.byType(CircularProgressIndicator), findsNothing);
+
+    await tester.tap(find.text('Avbryt'));
+    await tester.pumpAndSettle();
+  });
+
+  test('QR-koden följer BankID:s format och exempel', () {
+    // Exemplet i BankID:s dokumentation ("QR code", tid 0).
+    expect(
+      bankIdQrData(
+        '67df3917-fa0d-44e5-b327-edcc928297f8',
+        'd28db9a7-4cde-429e-a983-359be676944c',
+        0,
+      ),
+      'bankid.67df3917-fa0d-44e5-b327-edcc928297f8.0.'
+      'dc69358e712458a66a7525beef148ae8526b1c71610eff2c16cdffb4cdac9bf8',
+    );
+    // Koden byts varje sekund, och tiden går aldrig bakåt.
+    expect(bankIdQrData('t', 's', 1), isNot(bankIdQrData('t', 's', 2)));
+    expect(bankIdQrData('t', 's', -3), bankIdQrData('t', 's', 0));
   });
 
   test('BankID öppnas med autostart-token, utan väg tillbaka via webben', () {

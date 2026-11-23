@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
@@ -86,6 +88,19 @@ Future<bool> openBankIdApp(String autoStartToken) async {
   return false;
 }
 
+/// QR-koden för "BankID på en annan telefon", räknad i appen:
+/// `bankid.<qrStartToken>.<sekunder sedan start>.<HMAC-SHA256(hemlighet, sekunder)>`.
+///
+/// Bara för en server som skickar kodens delar i stället för den färdiga
+/// koden (före 2026-11-22). En nyare server räknar koden själv och skickar
+/// `qrData`; då används den och hemligheten lämnar aldrig servern.
+@visibleForTesting
+String bankIdQrData(String token, String secret, int seconds) {
+  final s = seconds < 0 ? 0 : seconds;
+  final code = Hmac(sha256, utf8.encode(secret)).convert(utf8.encode('$s'));
+  return 'bankid.$token.$s.$code';
+}
+
 /// Det arket använder för att öppna BankID-appen. Byts bara ut i tester.
 @visibleForTesting
 Future<bool> Function(String autoStartToken) bankIdAppOpener = openBankIdApp;
@@ -112,6 +127,10 @@ class _BankIdSheetState extends State<_BankIdSheet> {
   String? _orderRef;
   String? _autoStart;
   String? _qrData;
+  // Kodens delar från en äldre server, och om servern själv skickat koden.
+  String? _qrToken;
+  String? _qrSecret;
+  bool _serverQr = false;
   String? _status;
   String? _notice;
   String? _error;
@@ -147,7 +166,11 @@ class _BankIdSheetState extends State<_BankIdSheet> {
       _orderRef = data['orderRef']?.toString();
       _autoStart = data['autoStartToken']?.toString();
       _qrData = data['qrData']?.toString();
+      _serverQr = _qrData != null;
+      _qrToken = data['qrStartToken']?.toString();
+      _qrSecret = data['qrStartSecret']?.toString();
       _startedAt = DateTime.now();
+      _localQr();
       if (!mounted) return;
       setState(() => _starting = false);
       if (!_qr) await _openApp();
@@ -169,6 +192,21 @@ class _BankIdSheetState extends State<_BankIdSheet> {
     }
   }
 
+  /// Servern skickade inte den färdiga koden: räkna den här, en ny varje
+  /// sekund. Gör ingenting när servern sköter det.
+  void _localQr() {
+    final token = _qrToken, secret = _qrSecret, started = _startedAt;
+    if (_serverQr || started == null) return;
+    if (token == null || token.isEmpty || secret == null || secret.isEmpty) {
+      return;
+    }
+    _qrData = bankIdQrData(
+      token,
+      secret,
+      DateTime.now().difference(started).inSeconds,
+    );
+  }
+
   Future<void> _openApp() async {
     final token = _autoStart;
     if (token == null || token.isEmpty) return;
@@ -177,6 +215,7 @@ class _BankIdSheetState extends State<_BankIdSheet> {
       setState(() {
         _qr = true;
         _notice = tr.bankIdFlowAppNotFound;
+        _localQr();
       });
     }
   }
@@ -184,6 +223,7 @@ class _BankIdSheetState extends State<_BankIdSheet> {
   void _useOtherPhone() => setState(() {
     _qr = true;
     _notice = null;
+    _localQr();
   });
 
   Future<void> _useThisPhone() async {
@@ -199,7 +239,9 @@ class _BankIdSheetState extends State<_BankIdSheet> {
 
   Future<void> _poll() async {
     final ref = _orderRef;
-    if (ref == null || _polling || _done) return;
+    if (ref == null || _done) return;
+    if (_qr && !_serverQr && mounted) setState(_localQr);
+    if (_polling) return;
     // På samma telefon räcker varannan sekund; QR-koden behöver varje.
     if (!_qr && (_tick++).isOdd) return;
     if (_startedAt != null &&
@@ -237,7 +279,11 @@ class _BankIdSheetState extends State<_BankIdSheet> {
       }
       final hint = data['hintCode']?.toString();
       setState(() {
-        _qrData = data['qrData']?.toString() ?? _qrData;
+        final qr = data['qrData']?.toString();
+        if (qr != null) {
+          _serverQr = true;
+          _qrData = qr;
+        }
         // "Öppna BankID-appen" är redan instruktionen; visa bara det som
         // händer sedan (t.ex. "Skriv in din säkerhetskod").
         _status = (hint == 'outstandingTransaction' || hint == 'noClient')
