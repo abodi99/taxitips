@@ -1839,3 +1839,82 @@ a.store-badge:focus-visible { outline: 2px solid var(--guld); outline-offset: 3p
     bottom: 1.5rem;
   }
 }
+
+/* ---------- App-först: en väg till nedladdning ---------- */
+
+.btn-lg {
+  min-height: 60px;
+  padding: 1rem 2rem;
+  font-size: 1.1rem;
+}
+
+.hero-promise {
+  margin-top: 0.85rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--on-dark-soft);
+}
+
+.hero-qr {
+  display: none;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.85rem;
+  line-height: 1.35;
+  color: var(--on-dark-soft);
+}
+
+.hero-qr img {
+  width: 64px;
+  height: 64px;
+  padding: 4px;
+  border-radius: 8px;
+  background: #fff;
+}
+
+/* QR-koden bara där den behövs: på datorn, inte i telefonen. */
+@media (min-width: 960px) and (hover: hover) and (pointer: fine) {
+  .hero-qr { display: inline-flex; }
+}
+
+.hero-demo {
+  display: inline-block;
+  margin-top: 1.25rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--on-dark);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  text-decoration-color: rgba(245, 247, 250, 0.35);
+}
+
+.hero-demo:hover { text-decoration-color: var(--guld); }
+
+.tip-side .cta-row { padding-left: 1rem; }
+
+@media (min-width: 900px) {
+  .tip-grid { align-items: center; }
+}
+
+.cta-row-center { justify-content: center; }
+
+.capture-qr {
+  display: none;
+  margin-top: 1.5rem;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.92rem;
+  color: var(--ink-soft);
+}
+
+.capture-qr img { width: 96px; height: 96px; }
+.capture-qr p { margin: 0; max-width: 14rem; }
+
+@media (min-width: 960px) and (hover: hover) and (pointer: fine) {
+  .capture-qr { display: flex; }
+}
+
+.capture-card-lead {
+  margin: 0.35rem 0 1.25rem;
+  color: var(--ink-soft);
+}

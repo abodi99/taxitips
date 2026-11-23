@@ -22,6 +22,25 @@ loadRuntimeConfig().finally(() => {
 const footerYear = document.getElementById("footerYear");
 if (footerYear) footerYear.textContent = String(new Date().getFullYear());
 
+// ---------- "Hämta appen": telefonen går direkt till sin butik ----------
+// Knapparna pekar på /appen, som väljer butik och visar QR-kod vid datorn.
+// I telefonen hoppar vi över det steget och länkar direkt till butiken.
+
+const STORE_IOS = "https://apps.apple.com/se/app/taxitips/id6821288601";
+const STORE_ANDROID = "https://play.google.com/store/apps/details?id=se.taxitips.app";
+const ua = navigator.userAgent || "";
+const isAndroid = /Android/i.test(ua);
+const isIos = !isAndroid && (/iPhone|iPad|iPod/i.test(ua) ||
+  (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
+const storeUrl = isIos ? STORE_IOS : isAndroid ? STORE_ANDROID : null;
+
+if (storeUrl) {
+  document.querySelectorAll("[data-store-link]").forEach((a) => {
+    a.href = storeUrl;
+    a.rel = "noopener";
+  });
+}
+
 // ---------- CTA click tracking ----------
 
 document.querySelectorAll("[data-track]").forEach((el) => {
@@ -94,7 +113,7 @@ if (nav) {
 }
 
 // ---------- Sticky mobile CTA: appears once the hero is behind you,
-// hides again at the contact form (which is where it points) ----------
+// hides again at the download section at the bottom ----------
 
 const stickyCta = document.getElementById("stickyCta");
 const hero = document.querySelector(".hero");
