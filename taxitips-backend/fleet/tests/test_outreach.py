@@ -181,7 +181,8 @@ class TemplateTests(OutreachCase):
             subject, body = outreach_templates.render(step, ctx)
             self.assertIn("https://taxitips.se/avregistrera?t=abc", body)
             self.assertIn("A2M Tech AB", body)
-            self.assertIn("/registrera?utm_source=mejl&utm_campaign=test", body)
+            self.assertIn("https://taxitips.se/appen?utm_source=mejl&utm_campaign=test", body)
+            self.assertNotIn("/registrera", body)
             self.assertIn("Abbe\nGrundare, Taxi Tips", body)
             self.assertEqual(subject.startswith("Re: "), step > 1)
         subject, body = outreach_templates.render(1, ctx)
@@ -277,10 +278,11 @@ class TemplateTests(OutreachCase):
         html = outreach_templates.html_from_text(outreach_templates.render(1, ctx)[1])
         self.assertIn("Malmö &lt;Taxi&gt; AB", html)
         self.assertIn(
-            '<a href="https://taxitips.se/registrera?utm_source=mejl&amp;utm_campaign=saljmejl"', html,
+            '<a href="https://taxitips.se/appen?utm_source=mejl&amp;utm_campaign=saljmejl"', html,
         )
         self.assertIn(outreach_templates.BUTTON_LABEL, html)
-        self.assertEqual(html.count("/registrera"), 1)      # knappen ersätter länkraden
+        self.assertEqual(html.count("/appen"), 1)           # knappen ersätter länkraden
+        self.assertIn(">Hämta appen</a>", html)
         self.assertIn("<strong", html)                        # signaturen
         self.assertIn(">taxitips.se/avregistrera</a>", html)
         self.assertNotIn("<img", html)

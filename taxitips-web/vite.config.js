@@ -40,6 +40,7 @@ export default defineConfig({
         raderaKonto: resolve(__dirname, "radera-konto.html"),
         angerratt: resolve(__dirname, "angerratt.html"),
         avregistrera: resolve(__dirname, "avregistrera.html"),
+        appen: resolve(__dirname, "appen.html"),
       },
     },
   },
