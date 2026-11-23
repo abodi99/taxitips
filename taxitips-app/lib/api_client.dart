@@ -600,6 +600,11 @@ class ApiClient {
     // true = kör själv utan eget företag: servern använder namnet från BankID
     // och kräver inget företagsnamn (fleet/registration.py).
     bool private = false,
+    // Namnet från BankID. Skickas som företagsnamn för den som kör själv, så
+    // att även en server utan `accountKind` (före 2026-11-22) godtar
+    // registreringen i stället för att svara "Skriv företagets namn" -- ett
+    // fel föraren inte kan rätta, eftersom hen aldrig får den frågan.
+    String personName = '',
   }) => _reported('bankid_register', () async {
     await ensureInitialized();
     try {
@@ -608,7 +613,7 @@ class ApiClient {
         'email': email.trim(),
         'password': password,
         'contactPhone': phone.trim(),
-        'companyName': private ? '' : companyName.trim(),
+        'companyName': private ? personName.trim() : companyName.trim(),
         'accountKind': private ? 'private' : 'company',
       });
     } catch (e) {

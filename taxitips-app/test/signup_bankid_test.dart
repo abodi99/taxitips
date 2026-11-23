@@ -11,6 +11,30 @@ import 'package:taxitips_app/screens/signup_screen.dart';
 /// Registreringen med BankID: först bara BankID-knappen och beskedet att det
 /// inte binder till något; efter BankID en fråga per steg, inget
 /// organisationsnummer, och ingen behöver ett företag.
+/// Fångar vad registreringen skickar, utan server.
+class _RegisterSpy extends ApiClient {
+  _RegisterSpy() : super(supabaseUrl: 'http://localhost', supabaseAnonKey: 'x');
+
+  final calls = <Map<String, Object?>>[];
+
+  @override
+  Future<void> bankIdRegister({
+    required String ticket,
+    required String email,
+    required String password,
+    required String phone,
+    String companyName = '',
+    bool private = false,
+    String personName = '',
+  }) async {
+    calls.add({
+      'companyName': companyName,
+      'private': private,
+      'personName': personName,
+    });
+  }
+}
+
 void main() {
   setUp(() => SharedPreferences.setMockInitialValues({}));
 
@@ -266,6 +290,42 @@ void main() {
     );
     expect(ltrRuns('تابع باستخدام BankID'), 'تابع باستخدام BankID');
   });
+
+  testWidgets(
+    'föraren skickas med sitt BankID-namn, och får aldrig frågan om företag',
+    (tester) async {
+      tester.view.physicalSize = const Size(1170, 2532);
+      tester.view.devicePixelRatio = 3;
+      addTearDown(tester.view.reset);
+      final api = _RegisterSpy();
+      var done = 0;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: SignupScreen(
+            api: api,
+            onDone: () => done++,
+            onLogin: () {},
+            initialIdentity: anna,
+          ),
+        ),
+      );
+      await tester.pump();
+      await tapText(tester, 'Jag är förare');
+      await tester.enterText(find.byType(TextField), '070 812 34 91');
+      await tapText(tester, 'Nästa');
+      await tester.enterText(find.byType(TextField), 'anna@gmail.com');
+      await tapText(tester, 'Nästa');
+      await tester.enterText(find.byType(TextField), 'hemligt-123');
+      await tapText(tester, 'Skapa kontot');
+      expect(api.calls, hasLength(1));
+      // En äldre server kräver ett företagsnamn: personens namn från BankID
+      // gör att registreringen går igenom även där.
+      expect(api.calls.single['private'], isTrue);
+      expect(api.calls.single['personName'], 'Anna Andersson');
+      expect(done, 1);
+      expect(find.text('Skriv företagets namn.'), findsNothing);
+    },
+  );
 
   test('BankID-texterna säljer ingenting', () {
     for (final text in kBankIdPromises) {

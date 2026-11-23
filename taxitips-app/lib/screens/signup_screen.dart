@@ -317,6 +317,7 @@ class SignupScreenState extends State<SignupScreen> {
         phone: _phone.text,
         companyName: _company.text,
         private: _private == true,
+        personName: identity.name,
       );
       widget.onDone();
     } on ApiException catch (e) {
