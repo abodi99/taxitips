@@ -187,6 +187,17 @@ def build_outreach(row, *, connection=None) -> EmailMultiAlternatives:
     return message
 
 
+def wire_bytes(message) -> bytes:
+    """
+    Mejlet som byte med CRLF-radslut, så som IMAP vill ha det i APPEND.
+
+    Django 6 bygger mejlet med Pythons nya e-postklasser, och deras `as_bytes`
+    tar radslutet ur en policy, inte ur ett `linesep`-argument.
+    """
+    built = message.message()
+    return built.as_bytes(policy=built.policy.clone(linesep="\r\n"))
+
+
 def _domain(address: str) -> str:
     return address.rsplit("@", 1)[-1] if "@" in address else "taxitips.se"
 
@@ -206,6 +217,6 @@ def send_outreach(row) -> None:
     try:
         from fleet import outreach_inbox
 
-        outreach_inbox.append_sent(message.message().as_bytes(linesep="\r\n"))
+        outreach_inbox.append_sent(wire_bytes(message))
     except Exception as exc:  # pragma: no cover - nätverksfel
         log.warning("fleet.mailer: kunde inte spara kopia i Skickat: %s", exc)

@@ -111,7 +111,7 @@ class Command(BaseCommand):
             message = mailer.build_outreach(row, connection=mailer._outreach_connection())
             mailer._deliver(message)
             thread = thread or message.extra_headers["Message-ID"]
-            saved = outreach_inbox.append_sent(message.message().as_bytes(linesep="\r\n"))
+            saved = outreach_inbox.append_sent(mailer.wire_bytes(message))
             self.stdout.write(
                 f"Mejl {step} skickat till {to} från {mailer.outreach_from()}"
                 + (" (kopia i Skickat)" if saved else " (ingen kopia i Skickat)")
