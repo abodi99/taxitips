@@ -181,13 +181,16 @@ class TemplateTests(OutreachCase):
             subject, body = outreach_templates.render(step, ctx)
             self.assertIn("https://taxitips.se/avregistrera?t=abc", body)
             self.assertIn("A2M Tech AB", body)
-            self.assertIn("https://taxitips.se/appen?utm_source=mejl&utm_campaign=test", body)
+            self.assertIn(
+                f"https://taxitips.se/appen?utm_source=mejl&utm_medium=steg{step}&utm_campaign=test", body,
+            )
             self.assertNotIn("/registrera", body)
             self.assertIn("Abbe\nGrundare, Taxi Tips", body)
             self.assertEqual(subject.startswith("Re: "), step > 1)
         subject, body = outreach_templates.render(1, ctx)
-        self.assertEqual(subject, "Var står era bilar när alla behöver taxi?")
+        self.assertEqual(subject, "Fråga om era bilar i Malmö")
         self.assertIn("Hej Anna,", body)
+        self.assertIn('Eller svara "visa"', body)
         self.assertIn("Vill ni på Malmö Taxi AB prova med en bil i Malmö?", body)
 
     @OUTREACH
@@ -199,14 +202,17 @@ class TemplateTests(OutreachCase):
 
         for size in outreach_templates.SIZES:
             for step in (1, 2, 3):
-                main = outreach_templates.render(step, replace(ctx, size=size))[1].split("\n-- \n")[0]
-                self.assertLess(len(main.split()), 90, f"mejl {step} ({size}) är för långt")
+                for event in (None, outreach_templates.SAMPLE_EVENT):
+                    body = outreach_templates.render(step, replace(ctx, size=size, event=event))[1]
+                    main = body.split("\n-- \n")[0]
+                    self.assertLess(len(main.split()), 90, f"mejl {step} ({size}) är för långt")
 
     def test_unknown_name_and_place_read_naturally(self):
         ctx = outreach_templates.Context(company="X AB", place="", first_name="", unsubscribe_url="u")
         subject, body = outreach_templates.render(1, ctx)
         self.assertTrue(body.startswith("Hej X,\n"))
-        self.assertIn("Vill ni på X AB prova med en bil? Det kostar inget", body)
+        self.assertIn("Vill ni på X AB prova med en bil? Första månaden kostar inget", body)
+        self.assertEqual(subject, "Fråga om era bilar")
         long_name = outreach_templates.Context(
             company="Norra Skånes Buss Och Taxi i Strövelstorp AB", place="", first_name="",
             unsubscribe_url="u",
@@ -220,10 +226,17 @@ class TemplateTests(OutreachCase):
         base = outreach_templates.Context(
             company="Malmö Taxi AB", place="Malmö", first_name="Anna", unsubscribe_url="u",
         )
+        long_station = outreach_templates.LocalEvent(
+            when="i torsdags", clock="06:05", station="Stockholm Centralstation",
+            title="SL Pendeltåg 2628 06:05 är inställt från Stockholm Centralstation",
+            county="Västra Götalands län",
+        )
+        events = (None, outreach_templates.SAMPLE_EVENT, long_station)
         for size in outreach_templates.SIZES:
-            for variant in range(3):
+            for variant, event in ((v, e) for v in range(3) for e in events):
                 for step in (1, 2, 3):
-                    body = outreach_templates.render(step, replace(base, size=size, variant=variant))[1]
+                    ctx = replace(base, size=size, variant=variant, event=event)
+                    body = outreach_templates.render(step, ctx)[1]
                     text = outreach_templates.prose(body)
                     where = f"mejl {step} ({size}, bild {variant}): {text!r}"
                     self.assertLess(outreach_templates.lix(text), outreach_templates.LIX_MAX, where)
@@ -244,15 +257,16 @@ class TemplateTests(OutreachCase):
             company="Ranj Taxi AB", place="Malmö", first_name="Aziz", unsubscribe_url="u", size=size,
         )
         solo_subject, solo = outreach_templates.render(1, make(outreach_templates.SOLO))
-        self.assertEqual(solo_subject, "Var står du när alla behöver taxi?")
+        self.assertEqual(solo_subject, "Fråga om din bil i Malmö")
         self.assertIn("Vill du prova med din bil i Malmö?", solo)
         self.assertNotIn("era förare", solo)
         fleet_subject, fleet = outreach_templates.render(1, make(outreach_templates.FLEET))
-        self.assertEqual(fleet_subject, "Var står era bilar när alla behöver taxi?")
+        self.assertEqual(fleet_subject, "Fråga om era bilar i Malmö")
         self.assertIn("Vill ni på Ranj Taxi AB prova med en bil i Malmö?", fleet)
         _, large = outreach_templates.render(1, make(outreach_templates.LARGE))
         self.assertIn("visar jag det på tio minuter", large)
-        self.assertIn("Ni har många bilar ute samtidigt", large)
+        self.assertIn("Hur många av era bilar står rätt just då?", large)
+        self.assertIn("Vill ni hellre prata?", outreach_templates.render(3, make(outreach_templates.FLEET))[1])
         self.assertIn("din telefon", outreach_templates.render(2, make(outreach_templates.SOLO))[1])
         self.assertIn("Du kan börja när du vill", outreach_templates.render(3, make(outreach_templates.SOLO))[1])
 
@@ -270,7 +284,7 @@ class TemplateTests(OutreachCase):
         })
 
     @OUTREACH
-    def test_html_has_a_button_a_signature_and_no_images(self):
+    def test_html_looks_like_a_personal_mail(self):
         ctx = outreach_templates.Context(
             company="Malmö <Taxi> AB", place="Malmö", first_name="Anna",
             unsubscribe_url="https://taxitips.se/avregistrera?t=abc",
@@ -278,16 +292,34 @@ class TemplateTests(OutreachCase):
         html = outreach_templates.html_from_text(outreach_templates.render(1, ctx)[1])
         self.assertIn("Malmö &lt;Taxi&gt; AB", html)
         self.assertIn(
-            '<a href="https://taxitips.se/appen?utm_source=mejl&amp;utm_campaign=saljmejl"', html,
+            '<a href="https://taxitips.se/appen?utm_source=mejl&amp;utm_medium=steg1'
+            '&amp;utm_campaign=saljmejl">taxitips.se/appen</a>', html,
         )
-        self.assertIn(outreach_templates.BUTTON_LABEL, html)
-        self.assertEqual(html.count("/appen"), 1)           # knappen ersätter länkraden
-        self.assertIn(">Hämta appen</a>", html)
-        self.assertIn("<strong", html)                        # signaturen
+        self.assertEqual(html.count("/appen"), 2)            # href + synlig text, en länk
         self.assertIn(">taxitips.se/avregistrera</a>", html)
-        self.assertNotIn("<img", html)
-        tip = outreach_templates.html_from_text(outreach_templates.render(2, ctx)[1])
-        self.assertIn("Tips i appen", tip)
+        for marketing in ("<img", "<table", "Hämta appen</a>", "background"):
+            self.assertNotIn(marketing, html)
+        tip = outreach_templates.html_from_text(outreach_templates.render(
+            2, outreach_templates.Context(
+                company="X AB", place="", first_name="", unsubscribe_url="u",
+                event=outreach_templates.SAMPLE_EVENT,
+            ),
+        )[1])
+        self.assertIn("border-left", tip)
+        self.assertIn("Öresundståg 1132 21:21 är inställt från Triangeln", tip)
+
+    def test_recent_event_in_the_county_opens_the_mail(self):
+        ctx = outreach_templates.Context(
+            company="Malmö Taxi AB", place="Malmö", first_name="Anna", unsubscribe_url="u",
+            event=outreach_templates.SAMPLE_EVENT,
+        )
+        subject, body = outreach_templates.render(1, ctx)
+        self.assertIn("I går klockan 21:21 ställdes ett tåg in från Triangeln.", body)
+        self.assertIn("Taxi Tips såg det direkt", body)
+        self.assertEqual(subject, "Fråga om era bilar i Malmö")   # ämnet följer inte dagens händelse
+        follow_up = outreach_templates.render(2, ctx)[1]
+        self.assertIn("Så här såg ett tips i Skåne län ut i går:", follow_up)
+        self.assertIn('"Öresundståg 1132 21:21 är inställt från Triangeln"', follow_up)
 
     def test_opening_scene_varies_but_stays_the_same_for_one_recipient(self):
         base = dict(company="X AB", place="", first_name="", unsubscribe_url="u")
@@ -401,7 +433,8 @@ class TickTests(OutreachCase):
         row = sender.rows[0]
         recipient = self.campaign.recipients.get()
         self.assertEqual(row.category, "outreach_2")
-        self.assertTrue(row.subject.startswith("Re: "))
+        first = OutboxMessage.objects.get(category="outreach_1")
+        self.assertEqual(row.subject, f"Re: {first.subject}")
         self.assertEqual(row.payload["thread"], recipient.thread_message_id)
         self.assertEqual(recipient.step, 2)
 
@@ -489,10 +522,68 @@ class TickTests(OutreachCase):
                 campaign=self.campaign, email=f"a{i}@b.test", state=State.BOUNCED,
                 stopped_at=TUESDAY - timedelta(hours=3),
             )
-        self.assertIn("2 studsar på 20 mejl", outreach.guard(self.campaign, TUESDAY))
+        # Två studsar är slump (det som pausade kampanjen 2026-11-24), tre är ett mönster.
+        self.assertEqual(outreach.guard(self.campaign, TUESDAY), "")
+        CrmCampaignRecipient.objects.create(
+            campaign=self.campaign, email="a2@b.test", state=State.BOUNCED,
+            stopped_at=TUESDAY - timedelta(hours=3),
+        )
+        self.assertIn("3 studsar på 20 mejl", outreach.guard(self.campaign, TUESDAY))
         with mock.patch("fleet.outreach._alert"):
             report, _ = self.tick()
         self.assertEqual(report["skipped"], "no_active_campaign")
+
+
+class LocalEventTests(OutreachCase):
+    def opportunity(self, *, county="12", title="Öresundståg 1132 21:21 är inställt från Triangeln",
+                    station="Triangeln", departure=None, notified=True, suppressed=False, kind="transit"):
+        from core.models import Opportunity
+
+        self.n += 1
+        departure = departure or TUESDAY - timedelta(hours=13)
+        return Opportunity.objects.create(
+            external_id=f"test-{self.n}", kind=kind, title=title, station=station,
+            county_code=county, departure_at=departure, demand_score=50,
+            notified_at=departure - timedelta(minutes=2) if notified else None,
+            suppressed_at=TUESDAY if suppressed else None,
+        )
+
+    def setUp(self):
+        super().setUp()
+        from django.core.cache import cache
+
+        cache.clear()
+
+    def test_latest_pushed_cancellation_in_the_county(self):
+        self.opportunity(departure=TUESDAY - timedelta(days=2), title="Pågatåg 1 08:00 är inställt från Lund C",
+                         station="Lund C")
+        self.opportunity()                                              # i går 21:00
+        self.opportunity(notified=False, departure=TUESDAY - timedelta(hours=1), station="Malmö C")
+        self.opportunity(suppressed=True, departure=TUESDAY - timedelta(hours=2), station="Ystad")
+        self.opportunity(county="01", departure=TUESDAY - timedelta(hours=1), station="Tumba")
+        self.opportunity(departure=TUESDAY - timedelta(days=6), station="Gammal")
+        self.opportunity(title="Störningar i tågtrafiken", departure=TUESDAY - timedelta(minutes=30))
+        event = outreach.local_event("Skåne län", TUESDAY)
+        self.assertEqual(
+            (event.when, event.clock, event.station, event.county), ("i går", "21:00", "Triangeln", "Skåne län"),
+        )
+        self.assertIsNone(outreach.local_event("Hallands län", TUESDAY))
+        self.assertIsNone(outreach.local_event("", TUESDAY))
+
+    def test_day_words(self):
+        today = TUESDAY.date()
+        self.assertEqual(outreach.day_word(today, today), "i dag")
+        self.assertEqual(outreach.day_word(today - timedelta(days=1), today), "i går")
+        self.assertEqual(outreach.day_word(today - timedelta(days=3), today), "i lördags")
+
+    @OUTREACH
+    def test_sent_mail_names_the_event(self):
+        self.opportunity()
+        self.prospect()
+        self.enroll()
+        self.tick()
+        body = OutboxMessage.objects.get().body
+        self.assertIn("I går klockan 21:00 ställdes ett tåg in från Triangeln.", body)
 
 
 class UnsubscribeTests(OutreachCase):

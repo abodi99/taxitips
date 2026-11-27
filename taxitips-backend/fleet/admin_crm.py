@@ -7,6 +7,7 @@ Ingen automatisk synk från Stripe/självregistrering.
 
 from __future__ import annotations
 
+from django.utils import timezone
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_GET, require_POST
 
@@ -619,10 +620,12 @@ def outreach_overview(request):
     offset = max(0, _int_param(request, "offset", 0))
     # Texterna för ett exempelbolag, i alla tre tilltal (bolagets storlek).
     templates = []
+    event = outreach.local_event("Skåne län", timezone.now()) or outreach_templates.SAMPLE_EVENT
     for size in outreach_templates.SIZES:
         sample = outreach_templates.Context(
             company="Exempel Taxi AB", place="Malmö", first_name="Anna",
             unsubscribe_url="https://taxitips.se/avregistrera?t=exempel", size=size,
+            event=event,
         )
         for step in range(1, outreach_templates.STEP_COUNT + 1):
             subject, body = outreach_templates.render(step, sample)

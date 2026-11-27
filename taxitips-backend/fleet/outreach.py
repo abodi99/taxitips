@@ -95,6 +95,9 @@ STEP3_DAYS = 9
 # Automatisk broms, räknad på de senaste sju dagarnas utskick.
 GUARD_MIN_SENT = 20
 GUARD_BOUNCE_RATE = 0.05
+# Två studsar på de första 26 mejlen pausade kampanjen 2026-11-24 (en död
+# Yahoo-adress och en nedlagd domän). Under tre studsar är andelen slump.
+GUARD_MIN_BOUNCES = 3
 GUARD_UNSUBSCRIBE_RATE = 0.03
 
 # Röda dagar med fast datum. Rörliga helgdagar (påsk, midsommar) faller oftast
@@ -476,7 +479,68 @@ def size_for(recipient: CrmCampaignRecipient) -> str:
     return outreach_templates.FLEET
 
 
-def context_for(recipient: CrmCampaignRecipient) -> outreach_templates.Context:
+# --- Något som hände nyss i bolagets län ------------------------------------
+
+EVENT_MAX_AGE = timedelta(days=4)
+EVENT_STATION_MAX = 28
+_WEEKDAY_WORDS = (
+    "i måndags", "i tisdags", "i onsdags", "i torsdags", "i fredags", "i lördags", "i söndags",
+)
+
+
+def day_word(day: date, today: date) -> str:
+    if day == today:
+        return "i dag"
+    if day == today - timedelta(days=1):
+        return "i går"
+    return _WEEKDAY_WORDS[day.weekday()]
+
+
+def local_event(county: str, now: datetime) -> outreach_templates.LocalEvent | None:
+    """
+    Det senaste inställda tåget i länet som appen skickade ett tips om, de
+    senaste dagarna. Bara rader som faktiskt pushades (notified_at) och som
+    personalen inte har tagit bort -- mejlet säger att appen tipsade om det.
+    """
+    from core.areas import COUNTIES
+    from core.models import Opportunity
+
+    code = {name: code for code, name in COUNTIES}.get((county or "").strip())
+    if not code:
+        return None
+    key = f"fleet:outreach:event:{code}:{_local(now):%Y%m%d%H}"
+    cached = cache.get(key)
+    if cached is not None:
+        return cached or None
+    rows = (
+        Opportunity.objects.filter(
+            county_code=code, kind="transit", notified_at__isnull=False,
+            suppressed_at__isnull=True, title__icontains="är inställt från",
+            departure_at__gte=now - EVENT_MAX_AGE, departure_at__lte=now,
+        )
+        .exclude(station="")
+        .order_by("-departure_at")
+        .values("title", "station", "departure_at")[:10]
+    )
+    event = None
+    for row in rows:
+        station = (row["station"] or "").strip()
+        if len(station) > EVENT_STATION_MAX:
+            continue
+        local = timezone.localtime(row["departure_at"])
+        event = outreach_templates.LocalEvent(
+            when=day_word(local.date(), _local(now).date()),
+            clock=f"{local:%H:%M}",
+            station=station,
+            title=" ".join((row["title"] or "").split()),
+            county=county.strip(),
+        )
+        break
+    cache.set(key, event or "", 60 * 60)
+    return event
+
+
+def context_for(recipient: CrmCampaignRecipient, now: datetime | None = None) -> outreach_templates.Context:
     account = recipient.account
     page_url, _ = unsubscribe_urls(recipient)
     return outreach_templates.Context(
@@ -487,7 +551,18 @@ def context_for(recipient: CrmCampaignRecipient) -> outreach_templates.Context:
         campaign=recipient.campaign.slug,
         variant=recipient.id.int % 3,
         size=size_for(recipient),
+        event=local_event(account.county if account else "", now or timezone.now()),
     )
+
+
+def thread_subject(recipient: CrmCampaignRecipient) -> str:
+    """Ämnet som första mejlet fick, så att "Re: " stämmer även om mallen har ändrats."""
+    row = (
+        OutboxMessage.objects.filter(
+            category=f"{CATEGORY_PREFIX}1", payload__recipient_id=str(recipient.id),
+        ).order_by("created_at").values_list("subject", flat=True).first()
+    )
+    return row or ""
 
 
 # --- Takt --------------------------------------------------------------------
@@ -631,7 +706,7 @@ def guard(campaign: CrmCampaign, now: datetime) -> str:
     stopped = CrmCampaignRecipient.objects.filter(campaign=campaign, stopped_at__gte=since)
     bounced = stopped.filter(state=State.BOUNCED).count()
     unsubscribed = stopped.filter(state=State.UNSUBSCRIBED).count()
-    if bounced / sent > GUARD_BOUNCE_RATE:
+    if bounced >= GUARD_MIN_BOUNCES and bounced / sent > GUARD_BOUNCE_RATE:
         return f"{bounced} studsar på {sent} mejl de senaste sju dagarna"
     if unsubscribed / sent > GUARD_UNSUBSCRIBE_RATE:
         return f"{unsubscribed} avregistreringar på {sent} mejl de senaste sju dagarna"
@@ -749,7 +824,10 @@ def send_step(recipient: CrmCampaignRecipient, now: datetime, *, sender=None) ->
     if step > STEP_COUNT:
         stop(recipient, State.FINISHED)
         return "finished"
-    subject, body = outreach_templates.render(step, context_for(recipient))
+    subject, body = outreach_templates.render(
+        step, context_for(recipient, now),
+        thread_subject=thread_subject(recipient) if step > 1 else "",
+    )
     _, one_click = unsubscribe_urls(recipient)
     account = recipient.account
     # Raden och mottagarens steg skrivs i samma transaktion som utskicket.

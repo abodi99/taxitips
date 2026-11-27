@@ -15,6 +15,16 @@ varje taxiägare känner igen -- perrongen full av folk, bilen på fel ställe -
 och säger sedan en sak om vad appen gör åt det. Datakällor, tipsstyrkor och
 annat som hör hemma på webbplatsen står inte här.
 
+**Helst något som hände nyss, där mottagaren kör.** Finns ett inställt tåg i
+bolagets län de senaste dagarna, som appen skickade ett tips om
+(outreach.local_event), börjar mejlet med det: "I går klockan 21:21 ställdes ett tåg
+in från Triangeln." Det är sant, det är deras trakt, och det står inte i
+hundra andra mejl. Annars används en av de tre allmänna bilderna.
+
+**Ett vanligt mejl, inte ett utskick.** Ingen knapp, ingen färg, ingen logga:
+en länk i texten och en signatur som i ett mejl man skriver själv. Ämnesraden
+är en fråga om just deras bilar, och man kan svara med ett ord ("visa").
+
 **Inga siffror vi inte kan stå för.** Texterna säger vad provet är (en månad,
 en bil, inget kort -- samma som taxitips.se), inte vad ett bolag "tjänar".
 Tipsexemplet i mejl 2 är det som står på startsidan.
@@ -50,6 +60,26 @@ class Context:
     variant: int = 0
     # Bolagets storlek: SOLO, FLEET eller LARGE. Styr tilltal och erbjudande.
     size: str = "fleet"
+    # Ett inställt tåg i bolagets län som appen tipsade om; None = allmän bild.
+    event: "LocalEvent | None" = None
+    # Vilket mejl i serien (1-3). Sätts av render(); syns i länkens utm_medium.
+    step: int = 1
+
+
+@dataclass(frozen=True)
+class LocalEvent:
+    when: str       # "i dag", "i går", "i tisdags"
+    clock: str      # "21:21"
+    station: str    # "Triangeln"
+    title: str      # tipset som föraren såg
+    county: str     # "Skåne län"
+
+
+# Exemplet i adminwebben och i test-send när länet inte har något färskt.
+SAMPLE_EVENT = LocalEvent(
+    when="i går", clock="21:21", station="Triangeln",
+    title="Öresundståg 1132 21:21 är inställt från Triangeln", county="Skåne län",
+)
 
 
 # Tre tilltal, efter hur många bilar bolaget har (CRM-segmentet).
@@ -71,7 +101,7 @@ def site() -> str:
 
 def app_url(ctx: Context) -> str:
     # utm_* säger bara vilken kampanj länken kom ifrån -- ingen mottagare pekas ut.
-    return f"{site()}{APP_PATH}?utm_source=mejl&utm_campaign={ctx.campaign}"
+    return f"{site()}{APP_PATH}?utm_source=mejl&utm_medium=steg{ctx.step}&utm_campaign={ctx.campaign}"
 
 
 def sender_name() -> str:
@@ -123,22 +153,35 @@ def _where(ctx: Context) -> str:
 
 
 def subject(ctx: Context) -> str:
+    """
+    Samma för hela tråden (uppföljningarna får "Re: " framför ämnet som gick i
+    första mejlet, se outreach.send_step). Därför bara bolagets ort, aldrig
+    dagens händelse.
+    """
     if ctx.size == SOLO:
-        return "Var står du när alla behöver taxi?"
-    return "Var står era bilar när alla behöver taxi?"
+        return f"Fråga om din bil{_where(ctx)}"
+    return f"Fråga om era bilar{_where(ctx)}"
 
 
 def _offer(ctx: Context) -> str:
     you = "Du" if ctx.size == SOLO else "Ni"
     return (
-        f"Det kostar inget i en månad. {you} behöver inget kort. "
-        f"{you} börjar i appen:\n{app_url(ctx)}"
+        f"Första månaden kostar inget. {you} behöver inget kort. "
+        f"Hämta appen här:\n{app_url(ctx)}"
     )
 
 
-# Tre öppningsbilder, en per mottagare. Hundra likadana mejl om dagen ser ut som
-# ett massutskick för ett skräppostfilter; tre varianter gör det inte, och
-# ingen av dem är mindre sann än de andra.
+def _reply_ask(ctx: Context) -> str:
+    return 'Eller svara "visa", så visar jag hur det ser ut.'
+
+
+def _sentence(text: str) -> str:
+    return text[:1].upper() + text[1:]
+
+
+# Tre öppningsbilder när länet inte har någon färsk händelse. Hundra likadana
+# mejl om dagen ser ut som ett massutskick för ett skräppostfilter; tre
+# varianter gör det inte, och ingen av dem är mindre sann än de andra.
 _SCENES = (
     "Ett tåg ställs in en kväll. Många står på stationen och vill hem.",
     "Sista planet landar sent en kväll. Inga bussar går. Alla vill hem.",
@@ -146,48 +189,64 @@ _SCENES = (
 )
 
 
+def _opening(ctx: Context) -> str:
+    event = ctx.event
+    if event:
+        return (
+            f"{_sentence(event.when)} klockan {event.clock} ställdes ett tåg in från "
+            f"{event.station}. Då behöver många taxi på en gång."
+        )
+    return _SCENES[ctx.variant % len(_SCENES)]
+
+
 def _step1(ctx: Context) -> str:
-    scene = _SCENES[ctx.variant % len(_SCENES)]
+    seen = (
+        "Taxi Tips såg det direkt och skickade ett tips i appen."
+        if ctx.event else "Appen Taxi Tips säger till när många behöver taxi."
+    )
     if ctx.size == SOLO:
         middle = [
-            "De flesta förare får veta det för sent. Du kan få veta det direkt.",
-            "Appen Taxi Tips säger till när många behöver taxi. Du ser var och "
-            "varför. Då står du där kunderna är.",
+            f"{seen} Du ser var och varför. Då står du där kunderna är.",
             f"Vill du prova med din bil{_where(ctx)}? " + _offer(ctx),
+            _reply_ask(ctx),
         ]
     elif ctx.size == LARGE:
         middle = [
-            "Ni har många bilar ute samtidigt. Hur många står på rätt plats just då?",
-            "Appen Taxi Tips säger till era förare när många behöver taxi. De ser "
-            "var och varför.",
+            f"{seen} Era förare ser var och varför. Hur många av era bilar står rätt just då?",
             f"Vill ni på {ctx.company} se det? Svara på mejlet, så visar jag det "
             "på tio minuter. Eller prova med en bil. " + _offer(ctx),
         ]
     else:
         middle = [
-            "De flesta förare får veta det för sent. Era kan få veta det direkt.",
-            "Appen Taxi Tips säger till föraren när många behöver taxi. Föraren ser "
-            "var och varför. Då står bilen där kunderna är.",
+            f"{seen} Föraren ser var och varför. Då står bilen där kunderna är.",
             f"Vill ni på {ctx.company} prova med en bil{_where(ctx)}? " + _offer(ctx),
+            _reply_ask(ctx),
         ]
-    return "\n\n".join([_greeting(ctx), scene, *middle, "Vänliga hälsningar\n" + _signature()])
+    return "\n\n".join([_greeting(ctx), _opening(ctx), *middle, "Vänliga hälsningar\n" + _signature()])
+
+
+DEFAULT_TIP = "Avgången 18:42 från Uppsala C är inställd. Nästa avgång 19:30."
 
 
 def _step2(ctx: Context) -> str:
+    phone = "din telefon" if ctx.size == SOLO else "förarens telefon"
+    if ctx.event:
+        intro, tip = f"Så här såg ett tips i {ctx.event.county} ut {ctx.event.when}:", ctx.event.title
+    else:
+        intro, tip = f"Så här ser ett tips ut i {phone}:", DEFAULT_TIP
     if ctx.size == SOLO:
-        phone, ask = "din telefon", f"Vill du prova med din bil{_where(ctx)}? " + _offer(ctx)
+        ask = "Du skapar kontot i appen. " + _offer(ctx)
     elif ctx.size == LARGE:
-        phone = "förarens telefon"
         ask = (
             "Ska jag visa det på tio minuter? Svara på mejlet. Ni kan också prova "
             "med en bil. " + _offer(ctx)
         )
     else:
-        phone, ask = "förarens telefon", f"Vill ni prova med en bil{_where(ctx)}? " + _offer(ctx)
+        ask = "Ni skapar kontot i appen. " + _offer(ctx)
     return "\n\n".join([
         _greeting(ctx, again=True),
-        f"Så här ser ett tips ut i {phone}:",
-        "\"Avgången 18:42 från Uppsala C är inställd. Nästa avgång 19:30.\"",
+        intro,
+        f'"{tip}"',
         "Den som ser det först kommer dit först.",
         ask,
         "Vänliga hälsningar\n" + _signature(),
@@ -196,15 +255,15 @@ def _step2(ctx: Context) -> str:
 
 def _step3(ctx: Context) -> str:
     if ctx.size == SOLO:
-        helps, start = "hjälper dig att hitta rätt", "Du kan börja när du vill"
+        helps, start, talk = "hjälper dig att hitta rätt", "Du kan börja när du vill", "Vill du"
     else:
-        helps, start = "hjälper era förare att hitta rätt", "Ni kan börja när ni vill"
+        helps, start, talk = "hjälper era förare att hitta rätt", "Ni kan börja när ni vill", "Vill ni"
     return "\n\n".join([
         _greeting(ctx),
-        "Det här är mitt sista mejl.",
+        "Det här är mitt sista mejl om Taxi Tips. Passar det inte nu, hör jag inte av mig igen.",
         f"En förare vet inte var nästa kund står. Taxi Tips {helps}.",
-        "Vill du hellre prata? Svara med ditt telefonnummer, så ringer jag.",
-        f"{start}. Hämta appen här:\n{app_url(ctx)}",
+        f"{talk} hellre prata? Svara med ett telefonnummer, så ringer jag.",
+        f"{start}. Första månaden kostar inget:\n{app_url(ctx)}",
         "Vänliga hälsningar\n" + _signature(),
     ])
 
@@ -212,10 +271,16 @@ def _step3(ctx: Context) -> str:
 _BODIES = {1: _step1, 2: _step2, 3: _step3}
 
 
-def render(step: int, ctx: Context) -> tuple[str, str]:
-    """(ämne, text) för steg 1-3. Uppföljningarna svarar i samma tråd."""
+def render(step: int, ctx: Context, *, thread_subject: str = "") -> tuple[str, str]:
+    """
+    (ämne, text) för steg 1-3. Uppföljningarna svarar i samma tråd, med ämnet
+    som första mejlet faktiskt fick (`thread_subject`) när det finns.
+    """
+    from dataclasses import replace
+
+    ctx = replace(ctx, step=step)
     body = _BODIES[step](ctx) + "\n\n-- \n" + _footer(ctx)
-    title = subject(ctx)
+    title = thread_subject or subject(ctx)
     return (title if step == 1 else f"Re: {title}"), body
 
 
@@ -270,22 +335,17 @@ def lix_label(value: int) -> str:
 
 # --- HTML -----------------------------------------------------------------
 #
-# Ren och lätt, utan bilder. En logga eller en banderoll hade sett proffsigare
-# ut i en skärmdump, men mejlklienter blockerar bilder från okända avsändare
-# och filtren läser bildtunga mejl som reklam. Formen bärs i stället av
-# typografin: luft, en tydlig knapp, ett tipskort och en signatur med kant i
-# varumärkets färg. Texten är densamma som i textversionen.
+# Så som ett mejl man skriver själv ser ut i Gmail eller Outlook: vanlig text,
+# en länk i texten, en signatur på tre rader. Ingen knapp, ingen färgad ram,
+# ingen bild -- det är det som får ett säljmejl att se ut som ytterligare ett
+# utskick, och filtren läser det likadant. Texten är densamma som i textversionen.
 
 _URL = re.compile(r"https?://[^\s<>\"]+")
-_FONT = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif"
-_INK = "#1f2937"
-_MUTED = "#6b7280"
-_MIDNATT = "#14213d"
-_GULD = "#fca311"
-_LINE = "#e3e7ee"
-_PANEL = "#f5f7fa"
-BUTTON_LABEL = "Hämta appen"
-_P = f"margin:0 0 16px 0;font-family:{_FONT};font-size:16px;line-height:1.6;color:{_INK}"
+_FONT = "Arial,Helvetica,sans-serif"
+_INK = "#222222"
+_MUTED = "#777777"
+_LINE = "#dddddd"
+_P = f"margin:0 0 14px 0;font-family:{_FONT};font-size:15px;line-height:1.5;color:{_INK}"
 
 
 def _linkify(escaped: str) -> str:
@@ -294,7 +354,7 @@ def _linkify(escaped: str) -> str:
     def link(match: re.Match) -> str:
         url = match.group(0)
         shown = re.sub(r"^https?://", "", url).split("?", 1)[0].rstrip("/")
-        return f'<a href="{url}" style="color:{_MIDNATT}">{shown}</a>'
+        return f'<a href="{url}">{shown}</a>'
 
     return _URL.sub(link, escaped)
 
@@ -303,85 +363,39 @@ def _lines(lines: list[str]) -> str:
     return "<br>".join(_linkify(html.escape(line)) for line in lines)
 
 
-def _button(url: str) -> str:
-    """Tabell runt länken: Outlook ritar annars ingen bakgrund bakom texten."""
-    href = html.escape(url, quote=True)
+def _quote(text: str) -> str:
     return (
-        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" '
-        'style="margin:0 0 20px 0"><tr>'
-        f'<td bgcolor="{_MIDNATT}" style="background:{_MIDNATT};border-radius:8px">'
-        f'<a href="{href}" style="display:inline-block;padding:12px 22px;font-family:{_FONT};'
-        'font-size:16px;font-weight:600;line-height:1.2;color:#ffffff;text-decoration:none">'
-        f"{BUTTON_LABEL}</a></td></tr></table>"
-    )
-
-
-def _tip_card(text: str) -> str:
-    return (
-        '<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" '
-        'style="margin:0 0 16px 0"><tr>'
-        f'<td style="background:{_PANEL};border-left:3px solid {_GULD};border-radius:0 10px 10px 0;'
-        f'padding:14px 16px;font-family:{_FONT};font-size:16px;line-height:1.5;color:{_INK}">'
-        f'<span style="display:block;margin-bottom:4px;font-size:12px;font-weight:600;'
-        f'letter-spacing:0.04em;text-transform:uppercase;color:{_MUTED}">Tips i appen</span>'
-        f"{html.escape(text)}</td></tr></table>"
-    )
-
-
-def _signature_block(lines: list[str]) -> str:
-    name, rest = (lines[0], lines[1:]) if lines else ("", [])
-    detail = "<br>".join(html.escape(line) for line in rest)
-    return (
-        f'<p style="{_P};margin-bottom:10px">Vänliga hälsningar</p>'
-        '<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>'
-        f'<td style="border-left:3px solid {_GULD};padding:2px 0 2px 12px;font-family:{_FONT};'
-        f'font-size:15px;line-height:1.5;color:{_INK}">'
-        f'<strong style="font-weight:600">{html.escape(name)}</strong>'
-        + (f'<br><span style="color:{_MUTED}">{detail}</span>' if detail else "")
-        + "</td></tr></table>"
+        f'<p style="{_P};margin-left:2px;padding-left:10px;border-left:2px solid {_LINE};'
+        f'color:#444444">{html.escape(text)}</p>'
     )
 
 
 def html_from_text(body: str) -> str:
     """
-    Samma text som HTML. Raden som bara är länken till appen blir en knapp,
-    tipset i citattecken ett kort, signaturen får en kant och sidfoten (efter
-    "-- ") blir liten och grå under en linje.
+    Samma text som enkel HTML: stycken, länken som en vanlig länk, tipset i
+    citattecken som ett citat och sidfoten (efter "-- ") liten och grå.
     """
     main, _, footer = (body or "").replace("\r\n", "\n").partition("\n-- \n")
     blocks: list[str] = []
     for raw in re.split(r"\n\s*\n", main.strip()):
-        lines = [line for line in raw.split("\n") if line.strip()]
+        lines = [line.strip() for line in raw.split("\n") if line.strip()]
         if not lines:
             continue
-        last = lines[-1].strip()
-        if lines[0].strip() == "Vänliga hälsningar":
-            blocks.append(_signature_block([line.strip() for line in lines[1:]]))
-        elif _URL.fullmatch(last) and APP_PATH in last:
-            if lines[:-1]:
-                blocks.append(f'<p style="{_P};margin-bottom:12px">{_lines(lines[:-1])}</p>')
-            blocks.append(_button(last))
-        elif len(lines) == 1 and last.startswith('"') and last.endswith('"') and len(last) > 2:
-            blocks.append(_tip_card(last[1:-1]))
+        if len(lines) == 1 and lines[0].startswith('"') and lines[0].endswith('"') and len(lines[0]) > 2:
+            blocks.append(_quote(lines[0][1:-1]))
         else:
             blocks.append(f'<p style="{_P}">{_lines(lines)}</p>')
     content = "\n".join(blocks)
     if footer.strip():
-        small = (
-            f"margin:0 0 6px 0;font-family:{_FONT};font-size:12px;line-height:1.5;color:{_MUTED}"
-        )
+        small = f"margin:0 0 4px 0;font-family:{_FONT};font-size:12px;line-height:1.4;color:{_MUTED}"
         parts = "".join(
             f'<p style="{small}">{_linkify(html.escape(line))}</p>'
             for line in footer.strip().split("\n") if line.strip()
         )
-        content += (
-            f'\n<div style="margin-top:28px;padding-top:14px;border-top:1px solid {_LINE}">'
-            f"{parts}</div>"
-        )
+        content += f'\n<div style="margin-top:24px">{parts}</div>'
     return (
         '<!doctype html><html lang="sv"><head><meta charset="utf-8">'
-        '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        '<meta name="color-scheme" content="light"></head>'
-        '<body style="margin:0;padding:0;background:#ffffff">'
-        f'<div style="max-width:560px;padding:8px 4px">\n{content}\n</div></body></html>'
+        '<meta name="viewport" content="width=device-width,initial-scale=1"></head>'
+        '<body style="margin:0;padding:0">'
+        f'<div style="max-width:600px;padding:4px">\n{content}\n</div></body></html>'
     )

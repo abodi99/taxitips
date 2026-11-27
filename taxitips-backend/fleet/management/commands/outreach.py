@@ -78,12 +78,20 @@ class Command(BaseCommand):
             campaign.save(update_fields=["daily_cap", "updated_at"])
         return campaign
 
+    def _sample(self):
+        from dataclasses import replace
+
+        from django.utils import timezone
+
+        event = outreach.local_event("Skåne län", timezone.now()) or outreach_templates.SAMPLE_EVENT
+        return replace(SAMPLE, event=event)
+
     def _preview(self, opts):
         from dataclasses import replace
 
         for size in outreach_templates.SIZES:
             for step in self._steps(opts):
-                subject, body = outreach_templates.render(step, replace(SAMPLE, size=size))
+                subject, body = outreach_templates.render(step, replace(self._sample(), size=size))
                 self.stdout.write(
                     f"\n===== Mejl {step}, {outreach_templates.SIZE_LABEL[size]} =====\n"
                     f"Ämne: {subject}\n\n{body}\n"
@@ -99,7 +107,7 @@ class Command(BaseCommand):
             raise CommandError("Avsändarens namn saknas (OUTREACH_SENDER_NAME)")
         thread = ""
         for step in self._steps(opts):
-            subject, body = outreach_templates.render(step, SAMPLE)
+            subject, body = outreach_templates.render(step, self._sample())
             row = SimpleNamespace(
                 category=f"{outreach.CATEGORY_PREFIX}{step}", to_address=to,
                 subject=subject, body=body,
